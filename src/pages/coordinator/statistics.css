@@ -1,0 +1,19 @@
+.chart-container {
+    width: 100%;
+    max-width: 1200px; /* optional: cap it if you don't want it too wide on big screens */
+    margin: 40px auto;
+    display: flex;
+    justify-content: center;
+  }
+  
+  
+  .recharts-wrapper {
+    background: white;
+  }
+  .chart-wrapper {
+    width: 100%;
+    height: 100%;
+    margin: 0 auto;
+    padding: 40px;  /* optional: adjust if you want */
+  }
+  

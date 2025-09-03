@@ -1,0 +1,429 @@
+  /* ---------------------------
+    Layout and Global Styles
+  ----------------------------*/
+  .tracker-container {
+    min-height: 100vh;
+    background-color: #a9dce3;
+    padding: 40px 0;
+    box-sizing: border-box;
+  }
+
+  .tracker-inner {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    position: relative;
+    color: #164B87;
+  }
+
+  /* ---------------------------
+    Header Section
+  ----------------------------*/
+  .tracker-header {
+    background-color: #ffffff;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    margin-bottom: 8px;
+  }
+
+  .form-title {
+    cursor: pointer;
+  }
+
+  .form-title:hover {
+    color: #2d4e85;
+    text-decoration: underline;
+    transition: all 0.2s ease;
+  }
+
+  .form-title-input {
+    font-size: 24px;
+    font-weight: bold;
+    border: none;
+    outline: none;
+    width: 100%;
+    background-color: transparent;
+    margin-bottom: 8px;
+    color: #2d4e85;
+  }
+
+  .form-description-textarea {
+    font-size: 0.95rem;
+    font-weight: normal;
+    font-family: inherit;
+    border: none;
+    outline: none;
+    width: 100%;
+    resize: none;
+    background-color: transparent;
+    color: #164B87;
+  }
+
+  /* ---------------------------
+    Navigation Tabs
+  ----------------------------*/
+  .tracker-tabs {
+    margin-top: 16px;
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+  }
+
+  .tracker-tabs a {
+    color: #2d4e85;
+    font-weight: 500;
+    font-size: 1rem;
+    text-decoration: none;
+  }
+
+  .tracker-tabs a.active {
+    color: #2d4e85;
+    text-decoration: underline;
+    font-weight: bold;
+  }
+
+  /* ---------------------------
+    Card Styles
+  ----------------------------*/
+  .card {
+    background: #f4f8fb;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(30, 76, 122, 0.08);
+    padding: 14px 16px;
+    margin-bottom: 18px;
+    border: 1px solid #dbeafe;
+    color: #1e4c7a;
+  }
+
+  .card.question-box {
+    background: #eaf3fb;
+    border: 1px solid #b6d0ee;
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin-bottom: 18px;
+  }
+
+  .card.question-box.editing,
+  .card.question-box.adding {
+    background: #e0ecfa;
+    border: 2px solid #1e4c7a;
+  }
+
+  /* Main blue button style for all major actions */
+  .action-button, .button-edit, .button-delete, .button-update, .button-cancel, .button-add, .button-preview {
+    background: #1e4c7a;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 20px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    margin-bottom: 4px;
+    margin-right: 8px;
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+    box-shadow: 0 1px 4px rgba(30, 76, 122, 0.08);
+  }
+  .action-button:hover, .button-edit:hover, .button-delete:hover, .button-update:hover, .button-cancel:hover, .button-add:hover, .button-preview:hover {
+    background: #406b94;
+  }
+
+  input, textarea, select {
+    border: 1px solid #b6d0ee;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 1rem;
+    font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
+    margin-bottom: 8px;
+    background: #f7fbff;
+    color: #164B87;
+  }
+
+  label {
+    color: #1e4c7a;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  h2, h3 {
+    color: #1e4c7a;
+    font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
+    font-size: 1.1rem;
+    margin-bottom: 6px;
+  }
+
+  /* ---------------------------
+    Question Page Styles
+  ----------------------------*/
+  .form-description h3,
+  .question-box h3 {
+    color: #164B87;
+    font-size: 1.2rem;
+    font-weight: 600;
+  }
+
+  .form-description p,
+  .question-box p {
+    color: #164B87;
+    font-size: 0.95rem;
+    margin-top: 8px;
+  }
+
+  /* ---------------------------
+    Floating Button Group
+  ----------------------------*/
+  .icon-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background-color: white;
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    color: #2d4e85;
+  }
+
+  .icon-button:hover {
+    background-color: #f0f0f0;
+  }
+
+  .floating-button-group {
+    position: fixed;
+    top: 20px;
+    right: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 1000;
+  }
+
+  /* ---------------------------
+    Response and Table Styling
+  ----------------------------*/
+  .response-header-card {
+    padding-bottom: 0;
+  }
+
+  .response-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .response-header h3 {
+    margin: 0;
+    color: #164B87;
+    font-weight: 600;
+  }
+
+  .status {
+    color: #2d4e85;
+    font-weight: 500;
+  }
+
+  .response-tabs {
+    display: flex;
+    justify-content: center;
+    border-bottom: 1px solid #ccc;
+    margin-top: 16px;
+    gap: 40px;
+  }
+
+  .response-tabs button {
+    background: none;
+    border: none;
+    font-weight: 500;
+    font-size: 1rem;
+    color: #164B87;
+    padding: 8px 0;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+  }
+
+  .response-tabs button.active {
+    border-color: #69a9e3;
+  }
+
+  /* ---------------------------
+    Buttons, Charts, Misc
+  ----------------------------*/
+  .toggle-button {
+    background-color: #e0f0ff;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-weight: 500;
+    color: #2d4e85;
+    cursor: pointer;
+  }
+
+  .toggle-button.inactive {
+    background-color: #f5dada;
+    color: #a33;
+  }
+
+  .bar-group {
+    margin-top: 10px;
+  }
+
+  .bar-container {
+    width: 100%;
+    height: 10px;
+    background: #ddd;
+    border-radius: 6px;
+    margin-top: 4px;
+  }
+
+  .bar-fill {
+    height: 100%;
+    background-color: #2d4e85;
+    border-radius: 6px;
+  }
+
+  .message-header,
+  .users-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .border-button {
+    border: 1.5px solid #2d4e85;
+    background: none;
+    color: #2d4e85;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .user-table {
+    width: 100%;
+    margin-top: 10px;
+    border-collapse: collapse;
+  }
+
+  .user-table th,
+  .user-table td {
+    padding: 12px 8px;
+    text-align: left;
+  }
+
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .user-info img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+  }
+
+  .message-textarea {
+    width: 100%;
+    min-height: 240px;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 15px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    margin-top: 10px;
+    box-sizing: border-box;
+  }
+
+/* File upload styles */
+.file-upload-container {
+  margin-top: 8px;
+}
+
+.file-upload-container input[type="file"] {
+  width: 100%;
+  padding: 8px;
+  border: 2px dashed #ccc;
+  border-radius: 4px;
+  background-color: #fafafa;
+  cursor: pointer;
+  transition: border-color 0.3s ease;
+}
+
+.file-upload-container input[type="file"]:hover {
+  border-color: #1e4c7a;
+  background-color: #f0f8ff;
+}
+
+.file-upload-container input[type="file"]:focus {
+  outline: none;
+  border-color: #1e4c7a;
+  box-shadow: 0 0 0 2px rgba(30, 76, 122, 0.2);
+}
+
+.file-info {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: #e8f5e8;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #2d5a2d;
+  border: 1px solid #c3e6c3;
+}
+
+.file-info strong {
+  color: #1e4c7a;
+}
+
+.file-error {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: #ffeaea;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #d32f2f;
+  border: 1px solid #ffcdd2;
+}
+
+/* File display in responses */
+.file-display {
+  margin-top: 4px;
+  padding: 8px 12px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+.file-display .file-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-display .file-link {
+  color: #1e4c7a;
+  text-decoration: underline;
+  font-weight: 500;
+}
+
+.file-display .file-link:hover {
+  color: #0d2b4a;
+}
+
+.file-display .file-size {
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.file-display .file-date {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6c757d;
+}
