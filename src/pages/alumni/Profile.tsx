@@ -836,6 +836,11 @@ const AlumniProfile: React.FC = () => {
           )}
 
           {/* Posts List for this profile */}
+          {posts.length === 0 && !isOwnProfile && (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#666', fontSize: '16px' }}>
+              This user has not posted anything yet.
+            </div>
+          )}
           {posts.map((post) => {
             const repostInfo = post.reposts && post.reposts.length > 0 ? post.reposts[0] : null;
             const repostedBy = repostInfo ? `${repostInfo.user.f_name} ${repostInfo.user.l_name}` : null;

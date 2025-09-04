@@ -126,6 +126,8 @@ interface PostItem {
   };
   comments?: CommentItem[];
   reposts?: RepostItem[];
+  likes?: { user_id: number }[]; // Added likes property
+  liked_by_user?: boolean; // Added liked_by_user property
 }
 
 interface SuggestedUser {
@@ -240,36 +242,73 @@ const AlumniDashboard: React.FC = () => {
     const userObj = JSON.parse(userStr);
     setUser(userObj);
 
-    // Fix: Ensure posts are properly fetched and displayed
-    getPosts().then((list: any[]) => {
-      console.log('Fetched posts:', list); // Log the fetched posts
-      // Ensure posts are properly fetched and displayed
-      setPosts(list || []);
-        // Track liked posts for current user
-        const currentUserId = currentUser?.user_id || currentUser?.id;
-        const liked: { [key: number]: boolean } = {};
-        (list || []).forEach(post => {
-          if (post.likes && Array.isArray(post.likes)) {
-            liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-          } else if (post.liked_by_user !== undefined) {
-            liked[post.post_id] = !!post.liked_by_user;
-          }
-        });
-        setLikedPosts(liked);
+    // Fetch posts and followed users to filter posts
+    Promise.all([
+      getPosts(),
+      api.get('users_list_view/', { params: { current_user_id: userObj.id } })
+    ]).then(async ([postsList, usersResponse]) => {
+      console.log('Fetched posts:', postsList); // Log the fetched posts
+      console.log('Fetched users:', usersResponse.data); // Log the fetched users
 
-        // Track reposted posts for current user
-        const reposted: { [key: number]: boolean } = {};
-        (list || []).forEach(post => {
-          if (post.reposts && Array.isArray(post.reposts)) {
-            reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
-          }
-        });
-        setRepostedPosts(reposted);
-      })
-      .catch((error) => {
-        console.error('Error fetching posts:', error);
-        setPosts([]);
+      let filteredPosts = postsList || [];
+
+      // If users data is available, get follow status and filter posts
+      if (usersResponse.data.success && usersResponse.data.users) {
+        // Get follow status for each user
+        const usersWithFollowStatus = await Promise.all(
+          usersResponse.data.users.map(async (usr: any) => {
+            try {
+              const followStatus = await checkFollowStatus(usr.id);
+              return { ...usr, isFollowing: followStatus.is_following };
+            } catch {
+              return { ...usr, isFollowing: false };
+            }
+          })
+        );
+
+        const followedUserIds = usersWithFollowStatus
+          .filter((usr: any) => usr.isFollowing)
+          .map((usr: any) => Number(usr.id));
+
+        console.log('Followed user IDs:', followedUserIds);
+
+        filteredPosts = (postsList || []).filter((post: PostItem) =>
+          post.user && post.user.user_id && (
+            followedUserIds.includes(Number(post.user.user_id)) ||
+            Number(post.user.user_id) === Number(userObj.id)
+          )
+        );
+
+        console.log('Filtered posts:', filteredPosts);
+      }
+
+      setPosts(filteredPosts);
+
+      // Track liked posts for current user
+      const currentUserId = currentUser?.user_id || currentUser?.id;
+      const liked: { [key: number]: boolean } = {};
+      filteredPosts.forEach((post: PostItem) => {
+        if (post.likes && Array.isArray(post.likes)) {
+          liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+        } else if (post.liked_by_user !== undefined) {
+          liked[post.post_id] = !!post.liked_by_user;
+        }
       });
+      setLikedPosts(liked);
+
+      // Track reposted posts for current user
+      const reposted: { [key: number]: boolean } = {};
+      filteredPosts.forEach((post: PostItem) => {
+        if (post.reposts && Array.isArray(post.reposts)) {
+          reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+        }
+      });
+      setRepostedPosts(reposted);
+    })
+    .catch((error) => {
+      console.error('Error fetching posts or users:', error);
+      setPosts([]);
+    });
   }, [navigate]);
 
   const handlePosted = async () => {
