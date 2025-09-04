@@ -194,10 +194,11 @@ export const trackerUtils = {
 
   /**
    * Validate if a user's batch year matches the target year
+   * Removed batch year restriction - any batch year can now answer the form
    */
   validateBatchYear(userYear: number): boolean {
-    const targetYear = this.getTargetBatchYear();
-    return userYear === targetYear;
+    // Always return true to allow any batch year
+    return true;
   },
 
   /**
