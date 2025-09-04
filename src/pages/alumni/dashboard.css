@@ -1,0 +1,344 @@
+/* Container for the whole page */
+.page-container {
+  background: #f5f7fa;
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
+}
+
+/* Main content wrapper */
+.main-content {
+  max-width: 1200px;
+  margin: 24px auto;
+  display: flex;
+  gap: 24px;
+  padding: 0 24px;
+}
+
+/* Left sidebar */
+.left-sidebar {
+  flex: 1;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Profile card */
+
+.profile-card:hover {
+  transform: scale(1.02);
+}
+
+/* Orange header bar */
+.orange-header-bar {
+  background: #ff6b35;
+  height: 40px;
+  width: 100%;
+}
+
+/* Profile content inside card */
+.profile-content {
+  padding: 8px 8px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Profile name */
+.profile-name {
+  font-weight: bold;
+  font-size: 16px;
+  margin-bottom: 4px;
+  color: #333;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+/* Profile university */
+.profile-university {
+  font-size: 14px;
+  color: #666;
+  text-align: center;
+}
+
+/* Quick links container */
+.quick-links {
+  display: flex;
+  gap: 12px;
+}
+
+/* Quick link card */
+.quick-link-card {
+  flex: 1;
+  background: white;
+  border-radius: 12px;
+  text-align: center;
+  color: #333;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+  overflow: hidden;
+  height: 100px;
+  max-width: 280px;
+}
+
+/* Quick link orange header */
+.quick-link-orange-header {
+  background: #ff6b35;
+  height: 30px;
+  width: 100%;
+}
+
+/* Quick link content */
+.quick-link-content {
+  padding: 8px 8px;
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Quick link icon circle */
+.quick-link-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+/* CCICT icon */
+.ccict-icon {
+  background: #2d5016;
+  color: #90ee90;
+}
+
+/* PESO icon */
+.peso-icon {
+  background: #ffd700;
+  color: #000080;
+}
+
+/* Forum link */
+.forum-link {
+  background: white;
+  border-radius: 12px;
+  text-align: center;
+  color: #333;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+  overflow: hidden;
+  height: 140px;
+}
+
+.forum-link-orange-header {
+  background: #ff6b35;
+  height: 30px;
+  width: 100%;
+}
+
+.forum-link-content {
+  padding: 12px 8px;
+}
+
+/* Center content */
+.center-content {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  max-height: calc(100vh - 120px); /* Account for navbar and padding */
+  /* Hide scrollbar but keep functionality */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.center-content::-webkit-scrollbar {
+  display: none;
+}
+
+/* Post start container */
+.post-start {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+}
+
+/* Post start input container */
+.post-start-input-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Post start profile image */
+.post-start-profile-image {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+/* Post start input */
+.post-start-input {
+  flex: 1;
+  border-radius: 20px;
+  border: 1px solid #e0e0e0;
+  padding: 10px 16px;
+  font-size: 14px;
+}
+
+/* Post feed card */
+.post-feed-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+  margin-bottom: 16px;
+}
+
+/* Post header */
+.post-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+/* Post header left */
+.post-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Post header profile image */
+.post-header-profile-image {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+/* Post author info */
+.post-author-info {
+  font-weight: bold;
+  font-size: 14px;
+}
+
+/* Post author details */
+.post-author-details {
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Post actions */
+.post-actions {
+  display: flex;
+  gap: 24px;
+  font-size: 13px;
+  color: #666;
+}
+
+/* Post action item */
+.post-action-item {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Right sidebar */
+.right-sidebar {
+  flex: 1;
+  max-width: 280px;
+}
+
+/* People you may know card */
+.people-you-may-know-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+}
+
+/* People you may know title */
+.people-you-may-know-title {
+  font-weight: bold;
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+
+/* Suggested user item */
+.suggested-user-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.suggested-user-item:hover {
+  background-color: #f5f7fa;
+}
+
+/* Suggested user profile image */
+.suggested-user-profile-image {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+/* Suggested user name */
+.suggested-user-name {
+  flex: 1;
+  font-size: 14px;
+  color: #666;
+}
+
+/* Suggested user follow button */
+.suggested-user-follow-button {
+  background: #174f84;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.suggested-user-follow-button:hover {
+  background: #0d3a5f;
+}
+
+.suggested-user-follow-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.suggested-user-follow-button.following {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.suggested-user-follow-button.following:hover {
+  background: #d0d0d0;
+}

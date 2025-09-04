@@ -1,0 +1,1037 @@
+/* Profile container */
+.profile-container {
+  background: #f5f7fa;
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
+}
+
+/* Main content wrapper */
+.profile-main-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  gap: 24px;
+  padding: 24px;
+}
+
+/* Left sidebar */
+.profile-left-sidebar {
+  flex: 1;
+  max-width: 280px;
+}
+
+/* Card style */
+.profile-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+  margin-bottom: 16px;
+}
+
+/* Introduction title */
+.profile-intro-title {
+  font-weight: bold;
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+
+/* Introduction bio container */
+.profile-bio-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Bio text */
+.profile-bio-text {
+  background: #f5f7fa;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Bio edit button */
+.profile-bio-edit-btn {
+  margin-left: 8px;
+  background: #eee;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* Add bio button */
+.profile-add-bio-btn {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+/* Resume link */
+.profile-resume-link {
+  font-size: 14px;
+  color: #174f84;
+}
+
+/* Resume delete button */
+.profile-resume-delete-btn {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* Resume upload button */
+.profile-resume-upload-btn {
+  background: #174f84;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* Followers card */
+.profile-followers-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+}
+
+/* Followers header */
+.profile-followers-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+/* Followers title */
+.profile-followers-title {
+  font-weight: bold;
+  font-size: 16px;
+}
+
+/* Followers see all */
+.profile-followers-seeall {
+  color: #174f84;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Followers list */
+.profile-followers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Followers row */
+.profile-followers-row {
+  display: flex;
+  gap: 8px;
+}
+
+/* Follower item */
+.profile-follower-item {
+  text-align: center;
+  flex: 1;
+}
+
+/* Follower image */
+.profile-follower-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 4px;
+}
+
+/* Follower name */
+.profile-follower-name {
+  font-size: 12px;
+  color: #666;
+}
+
+/* Center content */
+.profile-center-content {
+  flex: 2;
+  overflow-y: auto;
+  max-height: calc(100vh - 120px); /* Account for navbar and padding */
+  /* Hide scrollbar but keep functionality */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.profile-center-content::-webkit-scrollbar {
+  display: none;
+}
+
+/* Orange banner */
+.profile-orange-banner {
+  background: #ff6b35;
+  height: 160px;
+  width: 100%;
+  border-radius: 12px;
+  position: relative;
+  margin-bottom: 60px;
+}
+
+/* Edit profile button */
+.profile-edit-profile-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: white;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+
+/* Profile info section */
+.profile-info-section {
+  position: relative;
+  margin-top: -80px;
+  margin-bottom: 24px;
+}
+
+/* Profile info card */
+.profile-info-card {
+  background: white;
+  border-radius: 12px;
+  padding: 60px 20px 20px 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+  text-align: center;
+}
+
+/* Profile image */
+.profile-image {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 3px solid white;
+  margin-bottom: 12px;
+  margin-top: -60px;
+}
+
+/* Profile name */
+.profile-name {
+  font-weight: bold;
+  font-size: 18px;
+  color: #333;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+/* Profile university */
+.profile-university {
+  font-size: 14px;
+  color: #666;
+}
+
+/* Start a post card */
+.profile-start-post-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+  margin-bottom: 16px;
+}
+
+/* Start a post input container */
+.profile-start-post-input-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Start a post profile image */
+.profile-start-post-profile-image {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+/* Start a post input */
+.profile-start-post-input {
+  flex: 1;
+  border-radius: 20px;
+  border: 1px solid #e0e0e0;
+  padding: 10px 16px;
+  font-size: 14px;
+}
+
+/* Social media post card */
+.profile-social-post-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+  margin-bottom: 16px;
+}
+
+/* Post header */
+.profile-post-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* Post profile image */
+.profile-post-profile-image {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+/* Post user name */
+.profile-post-user-name {
+  font-weight: bold;
+  font-size: 14px;
+  color: #333;
+  text-transform: uppercase;
+}
+
+/* Post meta */
+.profile-post-meta {
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Post content */
+.profile-post-content {
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+/* Post actions */
+.profile-post-actions {
+  display: flex;
+  gap: 24px;
+  font-size: 13px;
+  color: #666;
+}
+
+/* Post action item */
+.profile-post-action-item {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Comment input container */
+.comment-input-container {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px;
+  border-top: 1px solid #eee;
+}
+
+.comment-input-container input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  font-size: 14px;
+}
+
+.comment-input-container button {
+  padding: 8px 12px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.comment-input-container button:hover {
+  background: #0056b3;
+}
+
+/* Bio modal overlay */
+.profile-bio-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+/* Bio modal content */
+.profile-bio-modal-content {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  width: 400px;
+  max-width: 90%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+/* Bio modal title */
+.profile-bio-modal-title {
+  margin-bottom: 12px;
+}
+
+/* Bio textarea */
+.profile-bio-textarea {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  margin-bottom: 16px;
+}
+
+/* Bio modal buttons container */
+.profile-bio-modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* Bio modal cancel button */
+.profile-bio-cancel-btn {
+  padding: 8px 16px;
+  border: none;
+  background: #ccc;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* Bio modal delete button */
+.profile-bio-delete-btn {
+  padding: 8px 16px;
+  border: none;
+  background: #e74c3c;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* Bio modal save button */
+.profile-bio-save-btn {
+  padding: 8px 16px;
+  border: none;
+  background: #174f84;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* Edit profile modal overlay */
+.profile-edit-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+/* Edit profile modal content */
+.profile-edit-modal-content {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18);
+  padding: 32px;
+  min-width: 340px;
+  max-width: 480px;
+  width: 90%;
+  position: relative;
+}
+
+/* Edit profile modal close button */
+.profile-edit-modal-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: #888;
+}
+
+/* Edit profile modal title */
+.profile-edit-modal-title {
+  margin-bottom: 16px;
+  font-size: 24px;
+}
+
+/* Edit profile picture label */
+.profile-edit-pic-label {
+  font-weight: 600;
+}
+
+/* Edit profile picture preview */
+.profile-edit-pic-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid #eee;
+  margin: 8px 0;
+}
+
+/* Edit profile picture input and remove button container */
+.profile-edit-pic-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Edit profile picture remove button */
+.profile-edit-pic-remove-btn {
+  background: #eee;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+/* Edit profile modal buttons container */
+.profile-edit-modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Edit profile modal cancel button */
+.profile-edit-modal-cancel-btn {
+  background: #eee;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 20px;
+  cursor: pointer;
+}
+
+/* Edit profile modal save button */
+.profile-edit-modal-save-btn {
+  background: #174f84;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 20px;
+  cursor: pointer;
+}
+
+/* Added CSS classes for inline styles in return JSX of Profile.tsx */
+
+.profile-main-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  gap: 24px;
+  padding: 24px;
+}
+
+.profile-left-sidebar-container {
+  flex: 1;
+  max-width: 280px;
+}
+
+.profile-intro-section {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+  margin-bottom: 16px;
+}
+
+.profile-intro-title {
+  font-weight: bold;
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+
+.profile-bio-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-bio-text {
+  background: #f5f7fa;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.profile-bio-edit-button {
+  margin-left: 8px;
+  background: #eee;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.profile-add-bio-button {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.profile-resume-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-resume-link {
+  font-size: 14px;
+  color: #174f84;
+}
+
+.profile-resume-delete-button {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.profile-resume-upload-button {
+  background: #174f84;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.profile-followers-section {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+}
+
+.profile-followers-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.profile-followers-title {
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.profile-followers-seeall {
+  color: #174f84;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.profile-followers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profile-followers-row {
+  display: flex;
+  gap: 8px;
+}
+
+.profile-follower-item {
+  text-align: center;
+  flex: 1;
+}
+
+.profile-follower-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 4px;
+}
+
+.profile-follower-name {
+  font-size: 12px;
+  color: #666;
+}
+
+
+.profile-orange-banner {
+  background: #ff6b35;
+  height: 160px;
+  width: 100%;
+  border-radius: 12px;
+  position: relative;
+  margin-bottom: 60px;
+}
+
+.profile-edit-profile-button {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: white;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+
+.profile-info-section {
+  position: relative;
+  margin-top: -80px;
+  margin-bottom: 24px;
+}
+
+.profile-info-card {
+  background: white;
+  border-radius: 12px;
+  padding: 60px 20px 20px 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+  text-align: center;
+}
+
+.profile-image {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 3px solid white;
+  margin-bottom: 12px;
+  margin-top: -60px;
+}
+
+.profile-name {
+  font-weight: bold;
+  font-size: 18px;
+  color: #333;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.profile-university {
+  font-size: 14px;
+  color: #666;
+}
+
+.profile-start-post-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+  margin-bottom: 16px;
+}
+
+.profile-start-post-input-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-start-post-profile-image {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.profile-start-post-input {
+  flex: 1;
+  border-radius: 20px;
+  border: 1px solid #e0e0e0;
+  padding: 10px 16px;
+  font-size: 14px;
+}
+
+.profile-social-post-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+}
+
+.profile-post-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.profile-post-profile-image {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.profile-post-user-name {
+  font-weight: bold;
+  font-size: 14px;
+  color: #333;
+  text-transform: uppercase;
+}
+
+.profile-post-meta {
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.profile-post-content {
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.profile-post-actions {
+  display: flex;
+  gap: 24px;
+  font-size: 13px;
+  color: #666;
+}
+
+.profile-post-action-item {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Follow button styles */
+.profile-follow-button {
+  background: #174f84;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.profile-follow-button:hover {
+  background: #0d3a5f;
+}
+
+.profile-follow-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.profile-follow-button.following {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.profile-follow-button.following:hover {
+  background: #d0d0d0;
+}
+
+/* Suggested user follow button styles */
+.suggested-user-follow-button {
+  background: #174f84;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.suggested-user-follow-button:hover {
+  background: #0d3a5f;
+}
+
+.suggested-user-follow-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.suggested-user-follow-button.following {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.suggested-user-follow-button.following:hover {
+  background: #d0d0d0;
+}
+
+/* Followers Modal Styles */
+.profile-followers-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.profile-followers-modal-content {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.profile-followers-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.profile-followers-modal-title {
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  margin: 0;
+}
+
+.profile-followers-modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #666;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s ease;
+}
+
+.profile-followers-modal-close-btn:hover {
+  background-color: #f0f0f0;
+}
+
+.profile-followers-modal-list {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.profile-followers-modal-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}
+
+.profile-followers-modal-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.profile-followers-modal-item:hover {
+  background-color: #f8f9fa;
+}
+
+.profile-followers-modal-item:last-child {
+  border-bottom: none;
+}
+
+.profile-followers-modal-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile-followers-modal-info {
+  flex: 1;
+}
+
+.profile-followers-modal-name {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.profile-followers-modal-course {
+  font-size: 14px;
+  color: #666;
+}
