@@ -356,6 +356,12 @@ export const fetchNotifications = async (userId: number) => {
   return response.data;
 };
 
+// Fetch notification count for a user
+export const fetchNotificationCount = async (userId: number) => {
+  const response = await api.get(`notifications/count/?user_id=${userId}`);
+  return response.data;
+};
+
 // Delete notifications by IDs
 export const deleteNotifications = async (notificationIds: number[]) => {
   const response = await api.post('notifications/delete/', { notification_ids: notificationIds });
@@ -423,5 +429,25 @@ export const repostPost = async (postId: number) => {
 
 export const deleteRepost = async (repostId: number) => {
   const response = await api.delete(`reposts/${repostId}/`);
+  return response.data;
+};
+
+export const deletePost = async (postId: number) => {
+  const response = await api.delete(`posts/${postId}/`);
+  return response.data;
+};
+
+export const editPost = async (postId: number, postData: { post_content: string }) => {
+  const response = await api.put(`posts/${postId}/`, postData);
+  return response.data;
+};
+
+export const deleteComment = async (postId: number, commentId: number) => {
+  const response = await api.delete(`posts/${postId}/comments/${commentId}/`);
+  return response.data;
+};
+
+export const editComment = async (postId: number, commentId: number, commentData: { comment_content: string }) => {
+  const response = await api.put(`posts/${postId}/comments/${commentId}/`, commentData);
   return response.data;
 };
