@@ -24,6 +24,23 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   const [searchResults, setSearchResults] = React.useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = React.useState(false);
 
+  // New state for notification count
+  const [notificationCount, setNotificationCount] = React.useState(0);
+
+  React.useEffect(() => {
+    // Fetch notification count from API
+    fetch('http://127.0.0.1:8000/api/notifications/count')
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data.count === 'number') {
+          setNotificationCount(data.count);
+        }
+      })
+      .catch(() => {
+        setNotificationCount(0);
+      });
+  }, []);
+
   React.useEffect(() => {
     const delayDebounce = setTimeout(() => {
       if (searchValue.trim() !== '') {
@@ -56,6 +73,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
 
     return () => clearTimeout(delayDebounce);
   }, [searchValue]);
+
 
   const handleSearchSelect = (userId: number) => {
     setShowSuggestions(false);
@@ -196,21 +214,44 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           <span style={{ color: 'white', fontSize: 20 }}>✉️</span>
           <span style={{ color: 'white', fontSize: 12 }}>Messages</span>
         </div>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 4,
-            cursor: 'pointer',
-          }}
-          onClick={() =>
-            isAdmin ? navigate('/ccict/notification') : navigate('/alumni/notifications')
-          }
-        >
-          <span style={{ color: 'white', fontSize: 20 }}>🔔</span>
-          <span style={{ color: 'white', fontSize: 12 }}>Notification</span>
-        </div>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 4,
+          cursor: 'pointer',
+          position: 'relative', // for badge positioning
+        }}
+        onClick={() =>
+          isAdmin ? navigate('/ccict/notification') : navigate('/alumni/notifications')
+        }
+      >
+        <span style={{ color: 'white', fontSize: 20 }}>🔔</span>
+        {notificationCount > 0 && (
+          <span
+            style={{
+              position: 'absolute',
+              top: -4,
+              right: -4,
+              backgroundColor: 'red',
+              color: 'white',
+              borderRadius: '50%',
+              padding: '2px 6px',
+              fontSize: 10,
+              fontWeight: 'bold',
+              minWidth: 16,
+              textAlign: 'center',
+              lineHeight: 1,
+              pointerEvents: 'none',
+              userSelect: 'none',
+            }}
+          >
+            {notificationCount}
+          </span>
+        )}
+        <span style={{ color: 'white', fontSize: 12 }}>Notification</span>
+      </div>
         {isAdmin && (
           <div
             style={{

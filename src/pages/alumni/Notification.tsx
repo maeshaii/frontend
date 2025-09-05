@@ -3,20 +3,38 @@ import { fetchNotifications, deleteNotifications } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 
-function formatTimeAgo(iso?: string | null): string {
-  if (!iso) return '';
-  const then = new Date(iso);
-  const now = new Date();
-  const diffMs = now.getTime() - then.getTime();
-  const sec = Math.floor(diffMs / 1000);
-  const min = Math.floor(sec / 60);
-  const hr = Math.floor(min / 60);
+function formatHybrid(iso?: string | null): string {
+  if (!iso) return 'Unknown time';
+
+  // Parse date string as UTC by appending 'Z' if no timezone info present
+  let dateStr = iso;
+  if (!iso.endsWith('Z') && !iso.match(/[+\-]\d{2}:\d{2}$/)) {
+    dateStr = iso + 'Z';
+  }
+
+  const ms = Date.parse(dateStr);
+  if (Number.isNaN(ms)) return 'Unknown time';
+
+  const diffMs = Date.now() - ms;
+  const min = Math.floor(diffMs / 60000);
+  const hr  = Math.floor(min / 60);
   const day = Math.floor(hr / 24);
-  if (day >= 2) return `${day} days ago`;
-  if (day === 1) return 'Yesterday';
-  if (hr >= 1) return hr === 1 ? '1 hour ago' : `${hr} hours ago`;
-  if (min >= 1) return min === 1 ? '1 min ago' : `${min} mins ago`;
+
+  if (day >= 1) {
+    return new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+  if (hr  >= 1) return hr  === 1 ? '1 hour ago'   : `${hr} hours ago`;
+  if (min >= 1) return min === 1 ? '1 minute ago' : `${min} minutes ago`;
   return 'Just now';
+}
+
+// New hook to force re-render every minute for real-time timestamp updates
+function useInterval(callback: () => void, delay: number | null) {
+  React.useEffect(() => {
+    if (delay === null) return;
+    const id = setInterval(callback, delay);
+    return () => clearInterval(id);
+  }, [callback, delay]);
 }
 
 const NotificationPage: React.FC = () => {
@@ -26,7 +44,13 @@ const NotificationPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [showProfile, setShowProfile] = useState(false);
   const [openNotif, setOpenNotif] = useState<any | null>(null);
+  const [, setTick] = React.useState(0); // state to trigger re-render
   const navigate = useNavigate();
+
+  // Use interval to update every minute for real-time timestamps
+  useInterval(() => {
+    setTick(tick => tick + 1);
+  }, 60000);
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
@@ -39,7 +63,7 @@ const NotificationPage: React.FC = () => {
     if (selected.length === 0) return;
     const result = await deleteNotifications(selected);
     if (result.success) {
-      setNotifications(notifications.filter((n) => !selected.includes(n.id)));
+      setNotifications(notifications.filter((n: any) => !selected.includes(n.id)));
       setSelected([]);
     } else {
       alert('Failed to delete notifications.');
@@ -62,19 +86,19 @@ const NotificationPage: React.FC = () => {
       .finally(() => setLoading(false));
   }, [navigate]);
 
-  const filteredNotifications = notifications.filter((n) =>
+  const filteredNotifications = notifications.filter((n: any) =>
     n.content.toLowerCase().includes(search.toLowerCase())
   );
 
   const toggleSelect = (id: number) => {
-    setSelected((sel) => (sel.includes(id) ? sel.filter((i) => i !== id) : [...sel, id]));
+    setSelected((sel: any[]) => (sel.includes(id) ? sel.filter((i: number) => i !== id) : [...sel, id]));
   };
 
   const selectAll = () => {
     if (selected.length === filteredNotifications.length) {
       setSelected([]);
     } else {
-      setSelected(filteredNotifications.map((n) => n.id));
+      setSelected(filteredNotifications.map((n: any) => n.id));
     }
   };
 
@@ -196,7 +220,7 @@ const NotificationPage: React.FC = () => {
               ) : filteredNotifications.length === 0 ? (
                 <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#888' }}>No notifications found.</td></tr>
               ) : (
-                filteredNotifications.map((notif) => (
+                filteredNotifications.map((notif: any) => (
                   <tr
                     key={notif.id}
                     style={{
@@ -230,7 +254,7 @@ const NotificationPage: React.FC = () => {
                       minWidth: '80px',
                       width: '1%',
                     }}>
-                      {formatTimeAgo(notif.date)}
+                      {formatHybrid(notif.date)}
                     </td>
                   </tr>
                 ))

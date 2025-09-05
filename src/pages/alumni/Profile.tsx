@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+  import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import ctulogo from '../../images/ctulogo.png';
 import './profile.css';
-import { fetchFollowers, followUser, unfollowUser, checkFollowStatus } from '../../services/api';
-import { getPosts, likePost, unlikePost, commentOnPost, repostPost } from '../../services/api';
+import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api } from '../../services/api';
+import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment } from '../../services/api';
 import PostCreate from './PostCreate';
 
 function formatTimeAgo(iso?: string | null): string {
@@ -105,6 +105,14 @@ const AlumniProfile: React.FC = () => {
   const [repostedPosts, setRepostedPosts] = useState<{ [key: number]: boolean }>({});
   const [repostError, setRepostError] = useState<string | null>(null);
   const [showFollowersModal, setShowFollowersModal] = useState(false); // Add this for followers modal
+  const [showFollowingModal, setShowFollowingModal] = useState(false); // Add this for following modal
+  const [following, setFollowing] = useState<any[]>([]);
+  const [showOptions, setShowOptions] = useState<{ [key: string | number]: boolean }>({});
+  const [editingPost, setEditingPost] = useState<{ [key: number]: boolean }>({});
+  const [editingComment, setEditingComment] = useState<{ [key: number]: boolean }>({});
+  const [editPostContent, setEditPostContent] = useState<{ [key: number]: string }>({});
+  const [editCommentContent, setEditCommentContent] = useState<{ [key: number]: string }>({});
+  const [selectedPost, setSelectedPost] = useState<PostItem | null>(null);
 
   // Get current user ID
   const currentUserObj = JSON.parse(localStorage.getItem('user') || '{}');
@@ -172,6 +180,17 @@ const AlumniProfile: React.FC = () => {
               })
               .catch(() => setFollowers([]));
 
+            // Following list
+            api.get(`alumni/${numericUserId}/following/`)
+              .then((response) => {
+                if (response.data.success && response.data.following) {
+                  setFollowing(response.data.following);
+                } else {
+                  setFollowing([]);
+                }
+              })
+              .catch(() => setFollowing([]));
+
             // Check follow status - only if viewing someone else's profile
             const viewingOwn = Number(numericUserId) === Number(currentUserId);
             console.log('Profile: Checking follow status, viewingOwn:', viewingOwn, 'numericUserId:', numericUserId, 'currentUserId:', currentUserId);
@@ -194,39 +213,47 @@ const AlumniProfile: React.FC = () => {
             }
 
             // Load posts for this user
-            getPosts()
-              .then((all: any[]) => {
-                console.log('Profile posts fetched:', all);
-                const subset = (all || []).filter(p => 
-                  p.user?.user_id === Number(numericUserId) || 
-                  (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === Number(numericUserId)))
-                );
-                setPosts(subset);
-                
-                // Track liked posts for current user
-                const liked: { [key: number]: boolean } = {};
-                subset.forEach(post => {
-                  if (post.likes && Array.isArray(post.likes)) {
-                    liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentId);
-                  } else if (post.liked_by_user !== undefined) {
-                    liked[post.post_id] = !!post.liked_by_user;
-                  }
-                });
-                setLikedPosts(liked);
+getPosts()
+  .then((all: any[]) => {
+    console.log('Profile posts fetched:', all);
+    const subset = (all || []).filter(p => 
+      p.user?.user_id === Number(numericUserId) || 
+      (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === Number(numericUserId)))
+    );
 
-                // Track reposted posts for current user
-                const reposted: { [key: number]: boolean } = {};
-                subset.forEach(post => {
-                  if (post.reposts && Array.isArray(post.reposts)) {
-                    reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentId);
-                  }
-                });
-                setRepostedPosts(reposted);
-              })
-              .catch((error) => {
-                console.error('Error fetching profile posts:', error);
-                setPosts([]);
-              });
+    // Sort posts by most recent date considering repost_date for reposts and created_at for original posts
+    subset.sort((a, b) => {
+      const aDate = a.reposts && a.reposts.length > 0 ? new Date(a.reposts[0].repost_date) : new Date(a.created_at || 0);
+      const bDate = b.reposts && b.reposts.length > 0 ? new Date(b.reposts[0].repost_date) : new Date(b.created_at || 0);
+      return bDate.getTime() - aDate.getTime();
+    });
+
+    setPosts(subset);
+    
+    // Track liked posts for current user
+    const liked: { [key: number]: boolean } = {};
+    subset.forEach(post => {
+      if (post.likes && Array.isArray(post.likes)) {
+        liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentId);
+      } else if (post.liked_by_user !== undefined) {
+        liked[post.post_id] = !!post.liked_by_user;
+      }
+    });
+    setLikedPosts(liked);
+
+    // Track reposted posts for current user
+    const reposted: { [key: number]: boolean } = {};
+    subset.forEach(post => {
+      if (post.reposts && Array.isArray(post.reposts)) {
+        reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentId);
+      }
+    });
+    setRepostedPosts(reposted);
+  })
+  .catch((error) => {
+    console.error('Error fetching profile posts:', error);
+    setPosts([]);
+  });
           } else {
             setFollowers([]);
             setPosts([]);
@@ -410,14 +437,51 @@ const AlumniProfile: React.FC = () => {
         setCommentInput(prev => ({ ...prev, [postId]: '' }));
         const updatedPosts: PostItem[] = await getPosts();
         const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
-        const subset = (updatedPosts || []).filter((p: PostItem) => 
-          p.user?.user_id === currentUserId || 
+        const subset = (updatedPosts || []).filter((p: PostItem) =>
+          p.user?.user_id === currentUserId ||
           (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === currentUserId))
         );
         setPosts(subset);
       }
     } catch (error) {
       console.error('Error submitting comment:', error);
+    }
+  };
+
+  // New state for repost caption modal
+  const [repostCaptionModalOpen, setRepostCaptionModalOpen] = useState(false);
+  const [repostCaption, setRepostCaption] = useState('');
+  const [repostTargetPostId, setRepostTargetPostId] = useState<number | null>(null);
+
+  const openRepostCaptionModal = (postId: number) => {
+    setRepostTargetPostId(postId);
+    setRepostCaption('');
+    setRepostCaptionModalOpen(true);
+  };
+
+  const closeRepostCaptionModal = () => {
+    setRepostTargetPostId(null);
+    setRepostCaption('');
+    setRepostCaptionModalOpen(false);
+  };
+
+  const handleRepostWithCaption = async () => {
+    if (repostTargetPostId === null) return;
+    setRepostError(null);
+    try {
+      // For now, just repost without caption since API doesn't support it yet
+      await repostPost(repostTargetPostId);
+      setRepostedPosts(prev => ({ ...prev, [repostTargetPostId]: true }));
+      const updatedPosts: PostItem[] = await getPosts();
+      const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
+      const subset = (updatedPosts || []).filter((p: PostItem) =>
+        p.user?.user_id === currentUserId ||
+        (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === currentUserId))
+      );
+      setPosts(subset);
+      closeRepostCaptionModal();
+    } catch (error: any) {
+      setRepostError(error?.response?.data?.error || error?.message || 'Failed to repost');
     }
   };
 
@@ -428,8 +492,8 @@ const AlumniProfile: React.FC = () => {
       setRepostedPosts(prev => ({ ...prev, [postId]: true }));
       const updatedPosts: PostItem[] = await getPosts();
       const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
-      const subset = (updatedPosts || []).filter((p: PostItem) => 
-        p.user?.user_id === currentUserId || 
+      const subset = (updatedPosts || []).filter((p: PostItem) =>
+        p.user?.user_id === currentUserId ||
         (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === currentUserId))
       );
       setPosts(subset);
@@ -711,9 +775,9 @@ const AlumniProfile: React.FC = () => {
           {/* Followers */}
           <div className="profile-followers-card">
             <div className="profile-followers-header">
-              <div className="profile-followers-title">Followers</div>
-              <div 
-                className="profile-followers-seeall" 
+              <div className="profile-followers-title">Followers ({followers.length})</div>
+              <div
+                className="profile-followers-seeall"
                 onClick={() => {
                   setShowFollowersModal(true);
                 }}
@@ -722,22 +786,22 @@ const AlumniProfile: React.FC = () => {
                 See all
               </div>
             </div>
-            <div className="profile-followers-list">
+            <div className="profile-followers-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
               {followers.length === 0 ? (
                 <div>No followers yet.</div>
               ) : (
                 <>
-                  {/* Render followers in rows of 3 */}
-                  {Array.from({ length: Math.ceil(followers.length / 3) }).map((_, rowIndex) => (
+                  {/* Render followers in rows of 3, max 9 users */}
+                  {Array.from({ length: Math.ceil(Math.min(followers.length, 9) / 3) }).map((_, rowIndex) => (
                     <div key={`row-${rowIndex}`} className="profile-followers-row">
-                      {followers.slice(rowIndex * 3, rowIndex * 3 + 3).map((follower) => (
+                      {followers.slice(rowIndex * 3, Math.min(rowIndex * 3 + 3, 9)).map((follower) => (
                         <div
                           key={follower.user_id ?? follower.id}
                           className="profile-follower-item"
                           onClick={(e) => {
                             e.stopPropagation();
                             const destId = follower.user_id ?? follower.id;
-                            
+
                             // Always navigate to the follower's profile if we have a valid ID
                             if (destId && !isNaN(Number(destId))) {
                               console.log('Followers: Navigating to follower profile:', destId);
@@ -759,6 +823,66 @@ const AlumniProfile: React.FC = () => {
                             }}
                           />
                           <div className="profile-follower-name">{follower.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Following */}
+          <div className="profile-followers-card">
+            <div className="profile-followers-header">
+              <div className="profile-followers-title">Following ({following.length})</div>
+              <div
+                className="profile-followers-seeall"
+                onClick={() => {
+                  setShowFollowingModal(true);
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                See all
+              </div>
+            </div>
+            <div className="profile-followers-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+              {following.length === 0 ? (
+                <div>No following yet.</div>
+              ) : (
+                <>
+                  {/* Render following in rows of 3, max 9 users */}
+                  {Array.from({ length: Math.ceil(Math.min(following.length, 9) / 3) }).map((_, rowIndex) => (
+                    <div key={`following-row-${rowIndex}`} className="profile-followers-row">
+                      {following.slice(rowIndex * 3, Math.min(rowIndex * 3 + 3, 9)).map((followedUser) => (
+                        <div
+                          key={followedUser.user_id ?? followedUser.id}
+                          className="profile-follower-item"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const destId = followedUser.user_id ?? followedUser.id;
+
+                            // Always navigate to the followed user's profile if we have a valid ID
+                            if (destId && !isNaN(Number(destId))) {
+                              console.log('Following: Navigating to followed user profile:', destId);
+                              navigate(`/alumni/profile/${destId}`);
+                            } else {
+                              console.log('Following: Invalid followed user ID:', destId);
+                            }
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <img
+                            src={followedUser.profile_pic ? (String(followedUser.profile_pic).startsWith('http') ? followedUser.profile_pic : `http://127.0.0.1:8000${followedUser.profile_pic}`) : ctulogo}
+                            alt={followedUser.name}
+                            className="profile-follower-img"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.onerror = null;
+                              target.src = ctulogo as unknown as string;
+                            }}
+                          />
+                          <div className="profile-follower-name">{followedUser.name}</div>
                         </div>
                       ))}
                     </div>
@@ -849,6 +973,64 @@ const AlumniProfile: React.FC = () => {
             const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
             const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
 
+            // State for showing options menu for this post
+            // Move showOptions state outside of map to avoid hook call inside callback
+            // Use a state object keyed by post_id to track which post's options are shown
+            // This requires lifting state up to component level, so we will define showOptions state there
+
+            // Handlers for edit and delete
+            const handleEditPost = () => {
+              setEditPostContent(prev => ({ ...prev, [post.post_id]: post.post_content }));
+              setEditingPost(prev => ({ ...prev, [post.post_id]: true }));
+              setShowOptions(prev => ({ ...prev, [post.post_id]: false }));
+            };
+
+            const handleDeletePost = async () => {
+              if (window.confirm('Are you sure you want to delete this post?')) {
+                try {
+                  await deletePost(post.post_id);
+                  // Refresh posts
+                  const updatedPosts: PostItem[] = await getPosts();
+                  const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
+                  const subset = (updatedPosts || []).filter((p: PostItem) =>
+                    p.user?.user_id === currentUserId ||
+                    (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === currentUserId))
+                  );
+                  setPosts(subset);
+                  alert('Post deleted successfully');
+                } catch (error) {
+                  console.error('Error deleting post:', error);
+                  alert('Failed to delete post');
+                }
+              }
+              setShowOptions(prev => ({ ...prev, [post.post_id]: false }));
+            };
+
+            const handleSaveEditPost = async () => {
+              if (!editPostContent[post.post_id]?.trim()) return;
+              try {
+                await editPost(post.post_id, { post_content: editPostContent[post.post_id] });
+                setEditingPost(prev => ({ ...prev, [post.post_id]: false }));
+                // Refresh posts
+                const updatedPosts: PostItem[] = await getPosts();
+                const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
+                const subset = (updatedPosts || []).filter((p: PostItem) =>
+                  p.user?.user_id === currentUserId ||
+                  (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === currentUserId))
+                );
+                setPosts(subset);
+                alert('Post updated successfully');
+              } catch (error) {
+                console.error('Error editing post:', error);
+                alert('Failed to update post');
+              }
+            };
+
+            const handleCancelEditPost = () => {
+              setEditingPost(prev => ({ ...prev, [post.post_id]: false }));
+              setEditPostContent(prev => ({ ...prev, [post.post_id]: post.post_content }));
+            };
+
             // If repostInfo exists, show repost card
             if (repostInfo) {
               const reposterAvatar = repostInfo.user.profile_pic
@@ -860,7 +1042,7 @@ const AlumniProfile: React.FC = () => {
               return (
                 <div key={post.post_id + '_repost'} className="post-feed-card" style={{ background: '#f5f6fa', border: '1px solid #dedede', marginBottom: 24, borderRadius: 12, padding: 0 }}>
                   {/* Reposter info */}
-                  <div style={{ display: 'flex', alignItems: 'center', padding: '16px 16px 0 16px', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', padding: '16px 16px 0 16px', gap: 12, position: 'relative' }}>
                     <img
                       src={reposterAvatar}
                       alt="Reposter"
@@ -871,15 +1053,45 @@ const AlumniProfile: React.FC = () => {
                         target.src = ctulogo as unknown as string;
                       }}
                     />
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 700, fontSize: 17 }}>{reposterName}</div>
                       <div style={{ fontSize: 13, color: '#888' }}>{formatTimeAgo(repostInfo.repost_date)}</div>
                       <div style={{ fontSize: 13, color: '#b0b3b8', marginTop: 2 }}>reposted</div>
                     </div>
+                    {/* Three dots menu for repost */}
+                    {repostInfo.user.user_id === currentId && (
+                      <div style={{ position: 'absolute', top: 8, right: 8, cursor: 'pointer' }}>
+                        <div onClick={() => setShowOptions(prev => ({ ...prev, [post.post_id + '_repost']: !prev[post.post_id + '_repost'] }))} style={{ fontSize: 24, userSelect: 'none' }}>⋯</div>
+                        {showOptions[post.post_id + '_repost'] && (
+                          <div style={{
+                            position: 'absolute',
+                            top: 24,
+                            right: 0,
+                            backgroundColor: 'white',
+                            border: '1px solid #ccc',
+                            borderRadius: 4,
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                            zIndex: 1000,
+                            width: 100,
+                          }}>
+                            <div
+                              onClick={handleDeletePost}
+                              style={{ padding: '8px 12px', cursor: 'pointer' }}
+                              onMouseDown={e => e.preventDefault()}
+                            >
+                              Delete
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   {/* Inner card: original post */}
-                  <div style={{ margin: 16, background: '#fff', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', padding: 0 }}>
-                    <div className="post-header" style={{ padding: '16px 16px 0 16px' }}>
+                  <div
+                    style={{ margin: 16, background: '#fff', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', padding: 0, cursor: 'pointer' }}
+                    onClick={() => setSelectedPost(post)}
+                  >
+                    <div className="post-header" style={{ padding: '16px 16px 0 16px', position: 'relative' }}>
                       <div className="post-header-left">
                         <img 
                           src={displayAvatar} 
@@ -898,6 +1110,40 @@ const AlumniProfile: React.FC = () => {
                           </div>
                         </div>
                       </div>
+                      {/* Three dots menu */}
+                      {isOwn && (
+                        <div style={{ position: 'absolute', top: 8, right: 8, cursor: 'pointer' }}>
+                          <div onClick={() => setShowOptions(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))} style={{ fontSize: 24, userSelect: 'none' }}>⋯</div>
+                          {showOptions[post.post_id] && (
+                            <div style={{
+                              position: 'absolute',
+                              top: 24,
+                              right: 0,
+                              backgroundColor: 'white',
+                              border: '1px solid #ccc',
+                              borderRadius: 4,
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                              zIndex: 1000,
+                              width: 100,
+                            }}>
+                              <div
+                                onClick={handleEditPost}
+                                style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #eee' }}
+                                onMouseDown={e => e.preventDefault()}
+                              >
+                                Edit
+                              </div>
+                              <div
+                                onClick={handleDeletePost}
+                                style={{ padding: '8px 12px', cursor: 'pointer' }}
+                                onMouseDown={e => e.preventDefault()}
+                              >
+                                Delete
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="post-content" style={{ padding: '0 16px 8px 16px' }}>{post.post_content}</div>
                     {post.post_image && (
@@ -918,49 +1164,49 @@ const AlumniProfile: React.FC = () => {
                         />
                       </div>
                     )}
-                    {/* Repost actions (like, comment, repost) */}
-                    <div className="post-actions" style={{ display: 'flex', gap: 16, marginTop: 8, padding: '0 16px 16px 16px' }}>
-                      <button
-                        onClick={() => likedPosts[post.post_id] ? handleUnlike(post.post_id) : handleLike(post.post_id)}
-                        className="post-action-item"
-                        style={{
-                          color: likedPosts[post.post_id] ? '#e0245e' : '#555',
-                          fontWeight: likedPosts[post.post_id] ? 'bold' : 'normal',
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {likedPosts[post.post_id] ? '❤️' : '🤍'} Like
-                      </button>
-                      <button
-                        onClick={() => setShowCommentInput(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
-                        className="post-action-item"
-                      >
-                        💬 Comment
-                      </button>
-                      <button
-                        onClick={() => handleRepost(post.post_id)}
-                        className="post-action-item"
-                        disabled={repostedPosts[post.post_id]}
-                        style={{
-                          color: repostedPosts[post.post_id] ? '#007bff' : '#555',
-                          fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
-                          background: 'none',
-                          border: 'none',
-                          cursor: repostedPosts[post.post_id] ? 'not-allowed' : 'pointer'
-                        }}
-                      >
-                        🔄 Repost
-                      </button>
-                    </div>
-                    {/* Show error message if repost failed */}
-                    {repostError && (
-                      <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-                        {repostError}
-                      </div>
-                    )}
                   </div>
+                  {/* Repost actions (like, comment, repost) - moved to outer card */}
+                  <div className="post-actions" style={{ display: 'flex', gap: 16, marginTop: 8, padding: '0 16px 16px 16px' }}>
+                    <button
+                      onClick={() => likedPosts[post.post_id] ? handleUnlike(post.post_id) : handleLike(post.post_id)}
+                      className="post-action-item"
+                      style={{
+                        color: likedPosts[post.post_id] ? '#e0245e' : '#555',
+                        fontWeight: likedPosts[post.post_id] ? 'bold' : 'normal',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {likedPosts[post.post_id] ? '❤️' : '🤍'} Like ({post.likes?.length || 0})
+                    </button>
+                    <button
+                      onClick={() => setShowCommentInput(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
+                      className="post-action-item"
+                    >
+                      💬 Comment ({post.comments?.length || 0})
+                    </button>
+                    <button
+                      onClick={() => openRepostCaptionModal(post.post_id)}
+                      className="post-action-item"
+                      disabled={repostedPosts[post.post_id]}
+                      style={{
+                        color: repostedPosts[post.post_id] ? '#007bff' : '#555',
+                        fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
+                        background: 'none',
+                        border: 'none',
+                        cursor: repostedPosts[post.post_id] ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      🔄 Repost ({post.reposts?.length || 0})
+                    </button>
+                  </div>
+                  {/* Show error message if repost failed */}
+                  {repostError && (
+                    <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
+                      {repostError}
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -968,11 +1214,11 @@ const AlumniProfile: React.FC = () => {
             // Normal post card (not a repost)
             return (
               <div key={post.post_id} className="post-feed-card">
-                <div className="post-header">
+                <div className="post-header" style={{ position: 'relative' }}>
                   <div className="post-header-left">
-                    <img 
-                      src={displayAvatar} 
-                      alt="Profile" 
+                    <img
+                      src={displayAvatar}
+                      alt="Profile"
                       className="post-header-profile-image"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
@@ -987,6 +1233,40 @@ const AlumniProfile: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                  {/* Three dots menu */}
+                  {isOwn && (
+                    <div style={{ position: 'absolute', top: 8, right: 8, cursor: 'pointer' }}>
+                      <div onClick={() => setShowOptions(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))} style={{ fontSize: 24, userSelect: 'none' }}>⋯</div>
+                      {showOptions[post.post_id] && (
+                        <div style={{
+                          position: 'absolute',
+                          top: 24,
+                          right: 0,
+                          backgroundColor: 'white',
+                          border: '1px solid #ccc',
+                          borderRadius: 4,
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                          zIndex: 1000,
+                          width: 100,
+                        }}>
+                          <div
+                            onClick={handleEditPost}
+                            style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #eee' }}
+                            onMouseDown={e => e.preventDefault()}
+                          >
+                            Edit
+                          </div>
+                          <div
+                            onClick={handleDeletePost}
+                            style={{ padding: '8px 12px', cursor: 'pointer' }}
+                            onMouseDown={e => e.preventDefault()}
+                          >
+                            Delete
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="post-content">{post.post_content}</div>
                 {post.post_image && (
@@ -1019,11 +1299,11 @@ const AlumniProfile: React.FC = () => {
                       cursor: 'pointer'
                     }}
                   >
-                    {likedPosts[post.post_id] ? '❤️' : '🤍'} Like
+                    {likedPosts[post.post_id] ? '❤️' : '🤍'} Like ({post.likes?.length || 0})
                   </button>
-                  <button onClick={() => setShowCommentInput(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))} className="post-action-item">💬 Comment</button>
+                  <button onClick={() => setShowCommentInput(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))} className="post-action-item">💬 Comment ({post.comments?.length || 0})</button>
                   <button
-                    onClick={() => handleRepost(post.post_id)}
+                    onClick={() => openRepostCaptionModal(post.post_id)}
                     className="post-action-item"
                     disabled={repostedPosts[post.post_id]}
                     style={{
@@ -1034,7 +1314,7 @@ const AlumniProfile: React.FC = () => {
                       cursor: repostedPosts[post.post_id] ? 'not-allowed' : 'pointer'
                     }}
                   >
-                    🔄 Repost
+                    🔄 Repost ({post.reposts?.length || 0})
                   </button>
                 </div>
                 {showCommentInput[post.post_id] && (
@@ -1238,6 +1518,292 @@ const AlumniProfile: React.FC = () => {
                     </div>
                   </div>
                 ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Following Modal */}
+      {showFollowingModal && (
+        <div className="profile-followers-modal-overlay">
+          <div className="profile-followers-modal-content">
+            <div className="profile-followers-modal-header">
+              <h3 className="profile-followers-modal-title">Following</h3>
+              <button
+                onClick={() => setShowFollowingModal(false)}
+                className="profile-followers-modal-close-btn"
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="profile-followers-modal-list">
+              {following.length === 0 ? (
+                <div className="profile-followers-modal-empty">No following yet.</div>
+              ) : (
+                following.map((followedUser) => (
+                  <div
+                    key={followedUser.user_id ?? followedUser.id}
+                    className="profile-followers-modal-item"
+                    onClick={() => {
+                      const destId = followedUser.user_id ?? followedUser.id;
+                      const me = JSON.parse(localStorage.getItem('user') || '{}');
+                      const meId = me.user_id || me.id;
+                      if (destId && Number(destId) !== Number(meId)) {
+                        navigate(`/alumni/profile/${destId}`);
+                        setShowFollowingModal(false);
+                      }
+                    }}
+                  >
+                    <img
+                      src={followedUser.profile_pic ? (String(followedUser.profile_pic).startsWith('http') ? followedUser.profile_pic : `http://127.0.0.1:8000${followedUser.profile_pic}`) : ctulogo}
+                      alt={followedUser.name}
+                      className="profile-followers-modal-img"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.onerror = null;
+                        target.src = ctulogo as unknown as string;
+                      }}
+                    />
+                    <div className="profile-followers-modal-info">
+                      <div className="profile-followers-modal-name">{followedUser.name}</div>
+                      <div className="profile-followers-modal-course">{followedUser.course || ''}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Post Modal */}
+      {selectedPost && (
+        <div
+          className="profile-post-modal-overlay"
+          onClick={() => setSelectedPost(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+          }}
+        >
+          <div
+            className="profile-post-modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: 12,
+              maxWidth: '600px',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              width: '90%',
+              position: 'relative',
+            }}
+          >
+            <button
+              onClick={() => setSelectedPost(null)}
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                background: 'none',
+                border: 'none',
+                fontSize: 24,
+                cursor: 'pointer',
+                zIndex: 1001,
+              }}
+            >
+              ×
+            </button>
+            <div style={{ padding: 24 }}>
+              {/* Post Header */}
+              <div className="post-header" style={{ marginBottom: 16 }}>
+                <div className="post-header-left">
+                  <img
+                    src={
+                      selectedPost.user?.profile_pic
+                        ? (String(selectedPost.user.profile_pic).startsWith('http')
+                          ? selectedPost.user.profile_pic
+                          : `http://127.0.0.1:8000${selectedPost.user.profile_pic}`)
+                        : ctulogo
+                    }
+                    alt="Profile"
+                    className="post-header-profile-image"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.onerror = null;
+                      target.src = ctulogo as unknown as string;
+                    }}
+                  />
+                  <div>
+                    <div className="post-author-info">
+                      {selectedPost.user?.f_name && selectedPost.user?.l_name
+                        ? `${selectedPost.user.f_name} ${selectedPost.user.l_name}`
+                        : selectedPost.user?.name || 'User'}
+                    </div>
+                    <div className="post-author-details" style={{ color: '#666', fontSize: '12px' }}>
+                      <span>{formatTimeAgo(selectedPost.created_at) || 'Unknown time'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Post Content */}
+              <div className="post-content" style={{ marginBottom: 16 }}>
+                {selectedPost.post_content}
+              </div>
+
+              {/* Post Image */}
+              {selectedPost.post_image && (
+                <div style={{ marginBottom: 16 }}>
+                  <img
+                    src={
+                      selectedPost.post_image.startsWith('/media/')
+                        ? `http://127.0.0.1:8000${selectedPost.post_image}`
+                        : selectedPost.post_image
+                    }
+                    alt="post"
+                    style={{
+                      maxWidth: '100%',
+                      borderRadius: 8,
+                      maxHeight: '400px',
+                      objectFit: 'cover'
+                    }}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      console.error('Failed to load post image:', selectedPost.post_image);
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Post Actions */}
+              <div className="post-actions" style={{ display: 'flex', gap: 16, marginTop: 16 }}>
+                <button
+                  onClick={() => likedPosts[selectedPost.post_id] ? handleUnlike(selectedPost.post_id) : handleLike(selectedPost.post_id)}
+                  className="post-action-item"
+                  style={{
+                    color: likedPosts[selectedPost.post_id] ? '#e0245e' : '#555',
+                    fontWeight: likedPosts[selectedPost.post_id] ? 'bold' : 'normal',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {likedPosts[selectedPost.post_id] ? '❤️' : '🤍'} Like
+                </button>
+                <button
+                  onClick={() => setShowCommentInput(prev => ({ ...prev, [selectedPost.post_id]: !prev[selectedPost.post_id] }))}
+                  className="post-action-item"
+                >
+                  💬 Comment
+                </button>
+                <button
+                  onClick={() => handleRepost(selectedPost.post_id)}
+                  className="post-action-item"
+                  disabled={repostedPosts[selectedPost.post_id]}
+                  style={{
+                    color: repostedPosts[selectedPost.post_id] ? '#007bff' : '#555',
+                    fontWeight: repostedPosts[selectedPost.post_id] ? 'bold' : 'normal',
+                    background: 'none',
+                    border: 'none',
+                    cursor: repostedPosts[selectedPost.post_id] ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  🔄 Repost
+                </button>
+              </div>
+
+              {/* Comment Input */}
+              {showCommentInput[selectedPost.post_id] && (
+                <div className="comment-input-container" style={{ marginTop: 16 }}>
+                  <input
+                    type="text"
+                    placeholder="Type your comment..."
+                    value={commentInput[selectedPost.post_id] || ''}
+                    onChange={(e) => setCommentInput(prev => ({ ...prev, [selectedPost.post_id]: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #ccc',
+                      borderRadius: 4,
+                      marginBottom: 8
+                    }}
+                  />
+                  <button
+                    onClick={() => handleCommentSubmit(selectedPost.post_id)}
+                    style={{
+                      padding: '6px 12px',
+                      background: '#174f84',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 4,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ➡️
+                  </button>
+                </div>
+              )}
+
+              {/* Comments */}
+              {selectedPost.comments && selectedPost.comments.length > 0 && (
+                <div className="comments-section" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #eee' }}>
+                  {(showAllComments[selectedPost.post_id] ? selectedPost.comments : selectedPost.comments.slice(0, 2)).map((comment) => (
+                    <div key={comment.comment_id} className="comment-item" style={{ display: 'flex', gap: '8px', marginBottom: '8px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                      <img
+                        src={comment.user.profile_pic ? (String(comment.user.profile_pic).startsWith('http') ? comment.user.profile_pic : `http://127.0.0.1:8000${comment.user.profile_pic}`) : ctulogo}
+                        alt="Profile"
+                        className="comment-profile-image"
+                        style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.onerror = null;
+                          target.src = ctulogo as unknown as string;
+                        }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333' }}>
+                          {comment.user.f_name} {comment.user.l_name}
+                        </div>
+                        <div style={{ fontSize: '14px', color: '#555' }}>
+                          {comment.comment_content}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
+                          {formatTimeAgo(comment.date_created)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {selectedPost.comments.length > 2 && !showAllComments[selectedPost.post_id] && (
+                    <button
+                      className="view-all-comments-btn"
+                      style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
+                      onClick={() => setShowAllComments(prev => ({ ...prev, [selectedPost.post_id]: true }))}
+                    >
+                      View all comments ({selectedPost.comments.length})
+                    </button>
+                  )}
+                  {selectedPost.comments.length > 2 && showAllComments[selectedPost.post_id] && (
+                    <button
+                      className="hide-comments-btn"
+                      style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
+                      onClick={() => setShowAllComments(prev => ({ ...prev, [selectedPost.post_id]: false }))}
+                    >
+                      Hide comments
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>

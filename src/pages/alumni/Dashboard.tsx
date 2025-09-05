@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { fetchNotifications, followUser, unfollowUser, checkFollowStatus, getPosts, commentOnPost } from '../../services/api';
 import AlumniTopBar from './AlumniTopBar';
 import PostCreate from './PostCreate';
+import PostCard from '../../components/PostCard';
 import ctulogo from '../../images/ctulogo.png';
 import './dashboard.css';
-import { likePost, repostPost, unlikePost } from '../../services/api';
+import { likePost, repostPost, unlikePost, deletePost, editPost, deleteRepost, editComment, deleteComment } from '../../services/api';
 import { api } from '../../services/api';
 // 1) Grab the created time from ANY common key and normalize it to ISO
 function getPostTimestamp(post: PostItem): string | null {
@@ -152,6 +153,11 @@ const AlumniDashboard: React.FC = () => {
   const [repostedPosts, setRepostedPosts] = useState<{ [key: number]: boolean }>({});
   const [repostError, setRepostError] = useState<string | null>(null);
   const [refreshSuggestedUsers, setRefreshSuggestedUsers] = useState(0); // Add this to trigger refresh
+  const [showOptions, setShowOptions] = useState<{ [key: string | number]: boolean }>({});
+  const [editingPost, setEditingPost] = useState<{ [key: number]: boolean }>({});
+  const [editPostContent, setEditPostContent] = useState<{ [key: number]: string }>({});
+  const [editingComment, setEditingComment] = useState<{ [key: number]: boolean }>({});
+  const [editCommentContent, setEditCommentContent] = useState<{ [key: number]: string }>({});
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -371,32 +377,101 @@ const handleRepost = async (postId: number) => {
   setRepostError(null);
   setRepostLoading(prev => ({ ...prev, [postId]: true }));
   try {
-    // Try to get the newly created repost feed item directly
-    const created = await repostPost(postId); // <- should return the repost feed item
-
-    if (created && created.post_id) {
-      // Prepend new repost without touching the original
-      setPosts(prev => {
-        // Avoid duplicates if this repost is already present
-        const already = prev.some(p =>
-          (p.reposts && p.reposts[0]?.repost_id) === (created.reposts && created.reposts[0]?.repost_id)
-        );
-        return already ? prev : [created, ...prev];
-      });
-    } else {
-      // Graceful fallback: re-fetch the list if API didn't return the item
-      const updatedPosts = await getPosts();
-      setPosts(updatedPosts || []);
-    }
-
-    // Disable the Repost button for the original post
+    await repostPost(postId);
     setRepostedPosts(prev => ({ ...prev, [postId]: true }));
-  } catch (error: any) {
-    setRepostError(error?.response?.data?.error || error?.message || 'Failed to repost');
+    const updatedPosts = await getPosts();
+    setPosts(updatedPosts || []);
+  } catch (error) {
+    setRepostError('Failed to repost');
   } finally {
     setRepostLoading(prev => ({ ...prev, [postId]: false }));
   }
 };
+
+const handleEditPost = (post: PostItem) => {
+  setEditPostContent(prev => ({ ...prev, [post.post_id]: post.post_content }));
+  setEditingPost(prev => ({ ...prev, [post.post_id]: true }));
+  setShowOptions(prev => ({ ...prev, [post.post_id]: false }));
+};
+
+const handleDeletePost = async (post: PostItem) => {
+  if (window.confirm('Are you sure you want to delete this post?')) {
+    try {
+      await deletePost(post.post_id);
+      // Refresh posts
+      const updatedPosts = await getPosts();
+      setPosts(updatedPosts || []);
+      alert('Post deleted successfully');
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      alert('Failed to delete post');
+    }
+  }
+  setShowOptions(prev => ({ ...prev, [post.post_id]: false }));
+};
+
+const handleSaveEditPost = async (post: PostItem) => {
+  if (!editPostContent[post.post_id]?.trim()) return;
+  try {
+    await editPost(post.post_id, { post_content: editPostContent[post.post_id] });
+    setEditingPost(prev => ({ ...prev, [post.post_id]: false }));
+    // Refresh posts
+    const updatedPosts = await getPosts();
+    setPosts(updatedPosts || []);
+    alert('Post updated successfully');
+  } catch (error) {
+    console.error('Error editing post:', error);
+    alert('Failed to update post');
+  }
+};
+
+const handleCancelEditPost = (post: PostItem) => {
+  setEditingPost(prev => ({ ...prev, [post.post_id]: false }));
+  setEditPostContent(prev => ({ ...prev, [post.post_id]: post.post_content }));
+};
+
+const handleEditComment = (comment: CommentItem) => {
+  setEditCommentContent(prev => ({ ...prev, [comment.comment_id]: comment.comment_content }));
+  setEditingComment(prev => ({ ...prev, [comment.comment_id]: true }));
+  setShowOptions(prev => ({ ...prev, [comment.comment_id]: false }));
+};
+
+const handleDeleteComment = async (comment: CommentItem, postId: number) => {
+  if (window.confirm('Are you sure you want to delete this comment?')) {
+    try {
+      await deleteComment(postId, comment.comment_id);
+      // Refresh posts
+      const updatedPosts = await getPosts();
+      setPosts(updatedPosts || []);
+      alert('Comment deleted successfully');
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      alert('Failed to delete comment');
+    }
+  }
+  setShowOptions(prev => ({ ...prev, [comment.comment_id]: false }));
+};
+
+const handleSaveEditComment = async (comment: CommentItem, postId: number) => {
+  if (!editCommentContent[comment.comment_id]?.trim()) return;
+  try {
+    await editComment(postId, comment.comment_id, { comment_content: editCommentContent[comment.comment_id] });
+    setEditingComment(prev => ({ ...prev, [comment.comment_id]: false }));
+    // Refresh posts
+    const updatedPosts = await getPosts();
+    setPosts(updatedPosts || []);
+    alert('Comment updated successfully');
+  } catch (error) {
+    console.error('Error editing comment:', error);
+    alert('Failed to update comment');
+  }
+};
+
+const handleCancelEditComment = (comment: CommentItem) => {
+  setEditingComment(prev => ({ ...prev, [comment.comment_id]: false }));
+  setEditCommentContent(prev => ({ ...prev, [comment.comment_id]: comment.comment_content }));
+};
+
 // Flatten posts into a feed that contains BOTH:
 // - the original post item
 // - one item per repost (so originals never get replaced)
@@ -523,11 +598,76 @@ const [selectedPost, setSelectedPost] = useState<PostItem | null>(null);
               target.src = ctulogo as unknown as string;
             }}
           />
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: 17 }}>{reposterName}</div>
             <div style={{ fontSize: 13, color: '#888' }}>{formatHybrid(repost.repost_date)}</div>
             <div style={{ fontSize: 13, color: '#b0b3b8', marginTop: 2 }}>reposted</div>
           </div>
+          {/* Three dots menu for repost */}
+          {currentId && repost.user.user_id === currentId && (
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowOptions(prev => ({ ...prev, [item.key]: !prev[item.key] }))}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '18px',
+                  color: '#666',
+                  padding: '4px'
+                }}
+              >
+                ⋯
+              </button>
+              {showOptions[item.key] && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    background: '#fff',
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                    zIndex: 1000,
+                    minWidth: '120px'
+                  }}
+                >
+                  <button
+                    onClick={async () => {
+                      if (window.confirm('Are you sure you want to delete this repost?')) {
+                        try {
+                          await deleteRepost(repost.repost_id);
+                          alert('Repost deleted successfully');
+                          // Refresh posts
+                          const updatedPosts = await getPosts();
+                          setPosts(updatedPosts || []);
+                        } catch (error) {
+                          console.error('Error deleting repost:', error);
+                          alert('Failed to delete repost');
+                        }
+                      }
+                      setShowOptions(prev => ({ ...prev, [item.key]: false }));
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      background: 'none',
+                      border: 'none',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      color: '#333',
+                      fontSize: '14px'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Inner card: original author's name + content + image (CLICKABLE) */}
@@ -545,12 +685,36 @@ const [selectedPost, setSelectedPost] = useState<PostItem | null>(null);
             cursor: 'pointer'
           }}
         >
-          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>
-            {post.user?.f_name} {post.user?.l_name}
-          </div>
+          <div className="post-header" style={{ marginBottom: 8 }}>
+            <div className="post-header-left">
+              {(() => {
+                const isOwn = currentId && post.user?.user_id && Number(post.user.user_id) === Number(currentId);
+                const displayName = isOwn && user?.name ? user.name : `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim();
+                const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
+                const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
 
-          <div style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>
-            {formatHybrid(getPostTimestamp(post))}
+                return (
+                  <>
+                    <img
+                      src={displayAvatar}
+                      alt="Profile"
+                      className="post-header-profile-image"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.onerror = null;
+                        target.src = ctulogo as unknown as string;
+                      }}
+                    />
+                    <div>
+                      <div className="post-author-info">{displayName || 'User'}</div>
+                      <div className="post-author-details" style={{ color: '#666', fontSize: '12px' }}>
+                        <span>{formatHybrid(getPostTimestamp(post))}</span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
           </div>
 
           <div className="post-content" style={{ fontSize: 14, color: '#333' }}>
@@ -577,9 +741,8 @@ const [selectedPost, setSelectedPost] = useState<PostItem | null>(null);
           )}
         </div>
 
-
-        {/* Actions attached to the repost */}
-        {/* <div className="post-actions" style={{ display: 'flex', gap: 16, marginTop: 8, padding: '0 16px 16px 16px' }}>
+        {/* Repost actions (like, comment, repost) - moved to outer card */}
+        <div className="post-actions" style={{ display: 'flex', gap: 16, marginTop: 8, padding: '0 16px 16px 16px' }}>
           <button
             onClick={() => likedPosts[post.post_id] ? handleUnlike(post.post_id) : handleLike(post.post_id)}
             className="post-action-item"
@@ -591,31 +754,30 @@ const [selectedPost, setSelectedPost] = useState<PostItem | null>(null);
               cursor: 'pointer'
             }}
           >
-            {likedPosts[post.post_id] ? '❤️' : '🤍'} Like
+            {likedPosts[post.post_id] ? '❤️' : '🤍'} Like ({post.likes?.length || 0})
           </button>
           <button
             onClick={() => setShowCommentInput(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
             className="post-action-item"
           >
-            💬 Comment
+            💬 Comment ({post.comments?.length || 0})
           </button>
           <button
             onClick={() => handleRepost(post.post_id)}
             className="post-action-item"
-            disabled={repostedPosts[post.post_id]}
+            disabled={repostedPosts[post.post_id] || repostLoading[post.post_id]}
             style={{
               color: repostedPosts[post.post_id] ? '#007bff' : '#555',
               fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
               background: 'none',
               border: 'none',
-              cursor: repostedPosts[post.post_id] ? 'not-allowed' : 'pointer'
+              cursor: repostedPosts[post.post_id] || repostLoading[post.post_id] ? 'not-allowed' : 'pointer'
             }}
           >
-            🔄 Repost
+            🔄 {repostLoading[post.post_id] ? 'Reposting...' : `Repost (${post.reposts?.length || 0})`}
           </button>
-        </div> */}
+        </div>
 
- 
         {repostError && (
           <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
             {repostError}
@@ -631,266 +793,389 @@ const [selectedPost, setSelectedPost] = useState<PostItem | null>(null);
   const displayName = isOwn && user?.name ? user.name : `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim();
   const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
   const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
-  const tsISO = getPostTimestamp(post);
- 
+
   return (
-
-    <div key={item.key} id={`post-${post.post_id}`} className="post-feed-card">
-      <div className="post-header">
-        <div className="post-header-left">
-          <img
-            src={displayAvatar}
-            alt="Profile"
-            className="post-header-profile-image"
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.onerror = null;
-              target.src = ctulogo as unknown as string;
+          <PostCard
+            key={item.key}
+            post={post}
+            currentUserId={currentId}
+            isOwn={isOwn}
+            displayName={displayName}
+            displayAvatar={displayAvatar}
+            formatTime={formatHybrid}
+            onPostUpdate={() => {
+              // Refresh posts from backend after a new post is created
+              getPosts().then(updatedPosts => setPosts(updatedPosts || []));
             }}
+            showOptions={showOptions}
+            setShowOptions={setShowOptions}
+            editingPost={editingPost}
+            setEditingPost={setEditingPost}
+            editPostContent={editPostContent}
+            setEditPostContent={setEditPostContent}
+            likedPosts={likedPosts}
+            setLikedPosts={setLikedPosts}
+            repostedPosts={repostedPosts}
+            setRepostedPosts={setRepostedPosts}
+            showCommentInput={showCommentInput}
+            setShowCommentInput={setShowCommentInput}
+            showAllComments={showAllComments}
+            setShowAllComments={setShowAllComments}
+            commentInput={commentInput}
+            setCommentInput={setCommentInput}
+            editingComment={editingComment}
+            setEditingComment={setEditingComment}
+            editCommentContent={editCommentContent}
+            setEditCommentContent={setEditCommentContent}
           />
-          <div>
-            <div className="post-author-info">{displayName || 'User'}</div>
-            <div className="post-author-details" style={{ color: '#666', fontSize: '12px' }}>
-            <span>{formatHybrid(tsISO)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="post-content">{post.post_content}</div>
-
-      {post.post_image && (
-        <div style={{ marginTop: 8 }}>
-          <img
-            src={
-              typeof post.post_image === 'string' && post.post_image.startsWith('/media/')
-                ? `http://127.0.0.1:8000${post.post_image}`
-                : (post.post_image as string)
-            }
-            alt="post"
-            style={{ maxWidth: '100%', borderRadius: 8, maxHeight: '400px', objectFit: 'cover' }}
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              console.error('Failed to load post image:', post.post_image);
-            }}
-          />
-        </div>
-      )}
-
-      <div className="post-actions" style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-        <button
-          onClick={() => likedPosts[post.post_id] ? handleUnlike(post.post_id) : handleLike(post.post_id)}
-          className="post-action-item"
-          style={{
-            color: likedPosts[post.post_id] ? '#e0245e' : '#555',
-            fontWeight: likedPosts[post.post_id] ? 'bold' : 'normal',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer'
-          }}
-        >
-          {likedPosts[post.post_id] ? '❤️' : '🤍'} Like
-        </button>
-        <button
-          onClick={() => setShowCommentInput(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
-          className="post-action-item"
-        >
-          💬 Comment
-        </button>
-        <button
-          onClick={() => handleRepost(post.post_id)}
-          className="post-action-item"
-          disabled={repostedPosts[post.post_id]}
-          style={{
-            color: repostedPosts[post.post_id] ? '#007bff' : '#555',
-            fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
-            background: 'none',
-            border: 'none',
-            cursor: repostedPosts[post.post_id] ? 'not-allowed' : 'pointer'
-          }}
-        >
-          🔄 Repost
-        </button>
-      </div>
-
-      {showCommentInput[post.post_id] && (
-        <div className="comment-input-container">
-          <input
-            type="text"
-            placeholder="Type your comment..."
-            value={commentInput[post.post_id] || ''}
-            onChange={(e) => setCommentInput(prev => ({ ...prev, [post.post_id]: e.target.value }))}
-          />
-          <button onClick={() => handleCommentSubmit(post.post_id)}>➡️</button>
-        </div>
-      )}
-
-      {post.comments && post.comments.length > 0 && (
-        <div className="comments-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
-          {(showAllComments[post.post_id] ? post.comments : post.comments.slice(0, 2)).map((comment) => (
-            <div key={comment.comment_id} className="comment-item" style={{ display: 'flex', gap: '8px', marginBottom: '8px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-              
-              <img
-                src={comment.user.profile_pic ? (String(comment.user.profile_pic).startsWith('http') ? comment.user.profile_pic : `http://127.0.0.1:8000${comment.user.profile_pic}`) : ctulogo}
-                alt="Profile"
-                className="comment-profile-image"
-                style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.onerror = null;
-                  target.src = ctulogo as unknown as string;
-                }}
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333' }}>
-                  {comment.user.f_name} {comment.user.l_name}
-                </div>
-                <div style={{ fontSize: '14px', color: '#555' }}>
-                  {comment.comment_content}
-                </div>
-                <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
-                  {formatHybrid(comment.date_created)}
-                </div>
-              </div>
-            </div>
-          ))}
-          {post.comments.length > 2 && !showAllComments[post.post_id] && (
-            <button
-              className="view-all-comments-btn"
-              style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
-              onClick={() => setShowAllComments(prev => ({ ...prev, [post.post_id]: true }))}
-            >
-              View all comments ({post.comments.length})
-            </button>
-          )}
-          {post.comments.length > 2 && showAllComments[post.post_id] && (
-            <button
-              className="hide-comments-btn"
-              style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
-              onClick={() => setShowAllComments(prev => ({ ...prev, [post.post_id]: false }))}
-            >
-              Hide comments
-            </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+  );
+})}
+          {/* Post Modal */}
           {selectedPost && (
-        <div
-          className="modal-overlay"
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 9999,
-          }}
-          onClick={() => setSelectedPost(null)}
-        >
-          <div
-            className="modal-card"
-            style={{
-              background: "#fff",
-              borderRadius: 12,
-              padding: 20,
-              width: "min(680px, 92vw)",
-              maxHeight: "90vh",
-              overflowY: "auto",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Original post UI in modal */}
-            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 6 }}>
-              {selectedPost.user?.f_name} {selectedPost.user?.l_name}
-            </div>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>
-              {formatHybrid(getPostTimestamp(selectedPost))}
-            </div>
-            <div className="post-content" style={{ fontSize: 14, color: "#333" }}>
-              {selectedPost.post_content}
-            </div>
-            {selectedPost.post_image && (
-              <div style={{ marginTop: 10 }}>
-                <img
-                  src={
-                    typeof selectedPost.post_image === "string" && selectedPost.post_image.startsWith("/media/")
-                      ? `http://127.0.0.1:8000${selectedPost.post_image}`
-                      : (selectedPost.post_image as string)
-                  }
-                  alt="post"
-                  style={{ width: "100%", borderRadius: 8, maxHeight: "400px", objectFit: "cover" }}
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-              </div>
-            )}
-            {selectedPost.comments && selectedPost.comments.length > 0 && (
-              <div style={{ marginTop: 16 }}>
-                {selectedPost.comments.map((comment) => (
-                  <div
-                    key={comment.comment_id}
-                    style={{
-                      display: "flex",
-                      gap: "8px",
-                      marginBottom: "8px",
-                      padding: "8px",
-                      backgroundColor: "#f9f9f9",
-                      borderRadius: "8px",
-                    }}
-                  >
-                    <img
-                      src={
-                        comment.user.profile_pic
-                          ? (String(comment.user.profile_pic).startsWith("http")
-                              ? comment.user.profile_pic
-                              : `http://127.0.0.1:8000${comment.user.profile_pic}`)
-                          : ctulogo
-                      }
-                      alt="Profile"
-                      style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }}
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.onerror = null;
-                        target.src = ctulogo as unknown as string;
-                      }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, fontWeight: "bold", color: "#333" }}>
-                        {comment.user.f_name} {comment.user.l_name}
-                      </div>
-                      <div style={{ fontSize: 14, color: "#555" }}>
-                        {comment.comment_content}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
-                        {formatHybrid(comment.date_created)}
+            <div
+              className="profile-post-modal-overlay"
+              onClick={() => setSelectedPost(null)}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 2000,
+              }}
+            >
+              <div
+                className="profile-post-modal-content"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  backgroundColor: '#fff',
+                  borderRadius: 12,
+                  maxWidth: '600px',
+                  maxHeight: '80vh',
+                  overflowY: 'auto',
+                  width: '90%',
+                  position: 'relative',
+                }}
+              >
+                <button
+                  onClick={() => setSelectedPost(null)}
+                  style={{
+                    position: 'absolute',
+                    top: 16,
+                    right: 16,
+                    background: 'none',
+                    border: 'none',
+                    fontSize: 24,
+                    cursor: 'pointer',
+                    zIndex: 1001,
+                  }}
+                >
+                  x
+                </button>
+                <div style={{ padding: 24 }}>
+                  {/* Post Header */}
+                  <div className="post-header" style={{ marginBottom: 16 }}>
+                    <div className="post-header-left">
+                      <img
+                        src={
+                          selectedPost.user?.profile_pic
+                            ? (String(selectedPost.user.profile_pic).startsWith('http')
+                              ? selectedPost.user.profile_pic
+                              : `http://127.0.0.1:8000${selectedPost.user.profile_pic}`)
+                            : ctulogo
+                        }
+                        alt="Profile"
+                        className="post-header-profile-image"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.onerror = null;
+                          target.src = ctulogo as unknown as string;
+                        }}
+                      />
+                      <div>
+                        <div className="post-author-info">
+                          {selectedPost.user?.f_name && selectedPost.user?.l_name
+                            ? `${selectedPost.user.f_name} ${selectedPost.user.l_name}`
+                            : selectedPost.user?.name || 'User'}
+                        </div>
+                        <div className="post-author-details" style={{ color: '#666', fontSize: '12px' }}>
+                          <span>{formatHybrid(getPostTimestamp(selectedPost)) || 'Unknown time'}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                ))}
+
+                  {/* Post Content */}
+                  <div className="post-content" style={{ marginBottom: 16 }}>
+                    {selectedPost.post_content}
+                  </div>
+
+                  {/* Post Image */}
+                  {selectedPost.post_image && (
+                    <div style={{ marginBottom: 16 }}>
+                      <img
+                        src={
+                          typeof selectedPost.post_image === 'string' && selectedPost.post_image.startsWith('/media/')
+                            ? `http://127.0.0.1:8000${selectedPost.post_image}`
+                            : (selectedPost.post_image as string)
+                        }
+                        alt="post"
+                        style={{
+                          maxWidth: '100%',
+                          borderRadius: 8,
+                          maxHeight: '400px',
+                          objectFit: 'cover'
+                        }}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          console.error('Failed to load post image:', selectedPost.post_image);
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Post Actions */}
+                  <div className="post-actions" style={{ display: 'flex', gap: 16, marginTop: 16 }}>
+                    <button
+                      onClick={() => likedPosts[selectedPost.post_id] ? handleUnlike(selectedPost.post_id) : handleLike(selectedPost.post_id)}
+                      className="post-action-item"
+                      style={{
+                        color: likedPosts[selectedPost.post_id] ? '#e0245e' : '#555',
+                        fontWeight: likedPosts[selectedPost.post_id] ? 'bold' : 'normal',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {likedPosts[selectedPost.post_id] ? '❤️' : '🤍'} Like
+                    </button>
+                    <button
+                      onClick={() => setShowCommentInput(prev => ({ ...prev, [selectedPost.post_id]: !prev[selectedPost.post_id] }))}
+                      className="post-action-item"
+                    >
+                      💬 Comment
+                    </button>
+                    <button
+                      onClick={() => handleRepost(selectedPost.post_id)}
+                      className="post-action-item"
+                      disabled={repostedPosts[selectedPost.post_id]}
+                      style={{
+                        color: repostedPosts[selectedPost.post_id] ? '#007bff' : '#555',
+                        fontWeight: repostedPosts[selectedPost.post_id] ? 'bold' : 'normal',
+                        background: 'none',
+                        border: 'none',
+                        cursor: repostedPosts[selectedPost.post_id] ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      🔄 Repost
+                    </button>
+                  </div>
+
+                  {/* Comment Input */}
+                  {showCommentInput[selectedPost.post_id] && (
+                    <div className="comment-input-container" style={{ marginTop: 16 }}>
+                      <input
+                        type="text"
+                        placeholder="Type your comment..."
+                        value={commentInput[selectedPost.post_id] || ''}
+                        onChange={(e) => setCommentInput(prev => ({ ...prev, [selectedPost.post_id]: e.target.value }))}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          border: '1px solid #ccc',
+                          borderRadius: 4,
+                          marginBottom: 8
+                        }}
+                      />
+                      <button
+                        onClick={() => handleCommentSubmit(selectedPost.post_id)}
+                        style={{
+                          padding: '6px 12px',
+                          background: '#174f84',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: 4,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ➡️
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Comments */}
+                  {selectedPost.comments && selectedPost.comments.length > 0 && (
+                    <div className="comments-section" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #eee' }}>
+                      {(showAllComments[selectedPost.post_id] ? selectedPost.comments : selectedPost.comments.slice(0, 2)).map((comment) => (
+                        <div key={comment.comment_id} className="comment-item" style={{ display: 'flex', gap: '8px', marginBottom: '8px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '8px', position: 'relative' }}>
+                          <img
+                            src={comment.user.profile_pic ? (String(comment.user.profile_pic).startsWith('http') ? comment.user.profile_pic : `http://127.0.0.1:8000${comment.user.profile_pic}`) : ctulogo}
+                            alt="Profile"
+                            className="comment-profile-image"
+                            style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.onerror = null;
+                              target.src = ctulogo as unknown as string;
+                            }}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333' }}>
+                              {comment.user.f_name} {comment.user.l_name}
+                            </div>
+                            {editingComment[comment.comment_id] ? (
+                              <div style={{ marginTop: '4px' }}>
+                                <input
+                                  type="text"
+                                  value={editCommentContent[comment.comment_id] || ''}
+                                  onChange={(e) => setEditCommentContent(prev => ({ ...prev, [comment.comment_id]: e.target.value }))}
+                                  style={{
+                                    width: '100%',
+                                    padding: '4px 8px',
+                                    border: '1px solid #ccc',
+                                    borderRadius: 4,
+                                    fontSize: '14px',
+                                    marginBottom: '4px'
+                                  }}
+                                />
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button
+                                    onClick={() => handleSaveEditComment(comment, selectedPost.post_id)}
+                                    style={{
+                                      padding: '4px 8px',
+                                      background: '#174f84',
+                                      color: '#fff',
+                                      border: 'none',
+                                      borderRadius: 4,
+                                      cursor: 'pointer',
+                                      fontSize: '12px'
+                                    }}
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={() => handleCancelEditComment(comment)}
+                                    style={{
+                                      padding: '4px 8px',
+                                      background: '#ccc',
+                                      color: '#333',
+                                      border: 'none',
+                                      borderRadius: 4,
+                                      cursor: 'pointer',
+                                      fontSize: '12px'
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: '14px', color: '#555' }}>
+                                {comment.comment_content}
+                              </div>
+                            )}
+                            <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
+                              {formatHybrid(comment.date_created)}
+                            </div>
+                          </div>
+                          {currentId && comment.user.user_id === currentId && !editingComment[comment.comment_id] && (
+                            <div style={{ position: 'relative' }}>
+                              <button
+                                onClick={() => setShowOptions(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  fontSize: '16px',
+                                  color: '#666',
+                                  padding: '4px'
+                                }}
+                              >
+                                ⋯
+                              </button>
+                              {showOptions[comment.comment_id] && (
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    right: 0,
+                                    background: '#fff',
+                                    border: '1px solid #ddd',
+                                    borderRadius: '8px',
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                    zIndex: 1000,
+                                    minWidth: '120px'
+                                  }}
+                                >
+                                  <button
+                                    onClick={() => handleEditComment(comment)}
+                                    style={{
+                                      width: '100%',
+                                      padding: '8px 12px',
+                                      background: 'none',
+                                      border: 'none',
+                                      textAlign: 'left',
+                                      cursor: 'pointer',
+                                      color: '#333',
+                                      fontSize: '14px'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteComment(comment, selectedPost.post_id)}
+                                    style={{
+                                      width: '100%',
+                                      padding: '8px 12px',
+                                      background: 'none',
+                                      border: 'none',
+                                      textAlign: 'left',
+                                      cursor: 'pointer',
+                                      color: '#333',
+                                      fontSize: '14px'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {selectedPost.comments.length > 2 && !showAllComments[selectedPost.post_id] && (
+                        <button
+                          className="view-all-comments-btn"
+                          style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
+                          onClick={() => setShowAllComments(prev => ({ ...prev, [selectedPost.post_id]: true }))}
+                        >
+                          View all comments ({selectedPost.comments.length})
+                        </button>
+                      )}
+                      {selectedPost.comments.length > 2 && showAllComments[selectedPost.post_id] && (
+                        <button
+                          className="hide-comments-btn"
+                          style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
+                          onClick={() => setShowAllComments(prev => ({ ...prev, [selectedPost.post_id]: false }))}
+                        >
+                          Hide comments
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-              <button
-                onClick={() => setSelectedPost(null)}
-                style={{
-                  background: "#007bff",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 6,
-                  padding: "8px 16px",
-                  cursor: "pointer",
-                }}
-              >
-                Close
-              </button>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
         </div>
 

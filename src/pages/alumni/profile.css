@@ -114,6 +114,7 @@
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   border: 1px solid #e0e0e0;
+  margin-bottom: 24px;
 }
 
 /* Followers header */
@@ -1034,4 +1035,9 @@
 .profile-followers-modal-course {
   font-size: 14px;
   color: #666;
+}
+
+/* Post feed card for consistent spacing in profile */
+.post-feed-card {
+  margin-bottom: 16px;
 }
