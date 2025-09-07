@@ -1,10 +1,15 @@
 import axios from 'axios';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000/api/';
+function ensureApiSuffix(url: string | undefined): string {
+  const base = (url || 'http://127.0.0.1:8000').replace(/\/$/, '');
+  return `${base}/api/`;
+}
+
+const API_BASE = ensureApiSuffix(process.env.REACT_APP_API_URL);
 
 const api = axios.create({
   baseURL: API_BASE,
-  withCredentials: true,
+  withCredentials: false,
 });
 
 // Attach Authorization automatically with dev logging
@@ -373,6 +378,7 @@ export const fetchAlumniDetails = async (userId: string | number) => {
   const response = await api.get(`alumni/${userId}/`);
   return response.data;
 };
+
 // -------- Posts API --------
 export const getPostCategories = async () => {
   try {
