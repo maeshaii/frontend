@@ -55,19 +55,41 @@ const AlumniTracker: React.FC = () => {
   if (isAuthenticated === null) {
     return (
       <div style={{ background: '#add8e6', minHeight: '100vh', padding: '0', margin: '0' }}>
-        <h2
-          style={{
-            textAlign: 'center',
-            fontWeight: 'bold',
-            color: '#164B87',
-            margin: '0',
-            padding: '32px 0 8px 0',
-            fontSize: '2rem',
-            letterSpacing: '1px',
-          }}
-        >
-          CTU MAIN ALUMNI TRACKER
-        </h2>
+        <div style={{ position: 'relative', padding: '32px 20px 8px 20px' }}>
+          <button
+            onClick={() => navigate('/alumni/notifications')}
+            style={{
+              position: 'absolute',
+              left: 20,
+              top: 20,
+              background: '#174f84',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            ← Back
+          </button>
+          <h2
+            style={{
+              textAlign: 'center',
+              fontWeight: 'bold',
+              color: '#164B87',
+              margin: '0',
+              fontSize: '2rem',
+              letterSpacing: '1px',
+            }}
+          >
+            CTU MAIN ALUMNI TRACKER
+          </h2>
+        </div>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div
             style={{
@@ -97,19 +119,41 @@ const AlumniTracker: React.FC = () => {
   if (state.loading) {
     return (
       <div style={{ background: '#add8e6', minHeight: '100vh', padding: '0', margin: '0' }}>
-        <h2
-          style={{
-            textAlign: 'center',
-            fontWeight: 'bold',
-            color: '#164B87',
-            margin: '0',
-            padding: '32px 0 8px 0',
-            fontSize: '2rem',
-            letterSpacing: '1px',
-          }}
-        >
-          CTU MAIN ALUMNI TRACKER
-        </h2>
+        <div style={{ position: 'relative', padding: '32px 20px 8px 20px' }}>
+          <button
+            onClick={() => navigate('/alumni/notifications')}
+            style={{
+              position: 'absolute',
+              left: 20,
+              top: 20,
+              background: '#174f84',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            ← Back
+          </button>
+          <h2
+            style={{
+              textAlign: 'center',
+              fontWeight: 'bold',
+              color: '#164B87',
+              margin: '0',
+              fontSize: '2rem',
+              letterSpacing: '1px',
+            }}
+          >
+            CTU MAIN ALUMNI TRACKER
+          </h2>
+        </div>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div
             style={{
@@ -133,19 +177,41 @@ const AlumniTracker: React.FC = () => {
   if (state.error) {
     return (
       <div style={{ background: '#add8e6', minHeight: '100vh', padding: '0', margin: '0' }}>
-        <h2
-          style={{
-            textAlign: 'center',
-            fontWeight: 'bold',
-            color: '#164B87',
-            margin: '0',
-            padding: '32px 0 8px 0',
-            fontSize: '2rem',
-            letterSpacing: '1px',
-          }}
-        >
-          CTU MAIN ALUMNI TRACKER
-        </h2>
+        <div style={{ position: 'relative', padding: '32px 20px 8px 20px' }}>
+          <button
+            onClick={() => navigate('/alumni/notifications')}
+            style={{
+              position: 'absolute',
+              left: 20,
+              top: 20,
+              background: '#174f84',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            ← Back
+          </button>
+          <h2
+            style={{
+              textAlign: 'center',
+              fontWeight: 'bold',
+              color: '#164B87',
+              margin: '0',
+              fontSize: '2rem',
+              letterSpacing: '1px',
+            }}
+          >
+            CTU MAIN ALUMNI TRACKER
+          </h2>
+        </div>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div
             style={{
@@ -172,19 +238,41 @@ const AlumniTracker: React.FC = () => {
   if (state.showMessage) {
     return (
       <div style={{ background: '#add8e6', minHeight: '100vh', padding: '0', margin: '0' }}>
-        <h2
-          style={{
-            textAlign: 'center',
-            fontWeight: 'bold',
-            color: '#164B87',
-            margin: '0',
-            padding: '32px 0 8px 0',
-            fontSize: '2rem',
-            letterSpacing: '1px',
-          }}
-        >
-          CTU MAIN ALUMNI TRACKER
-        </h2>
+        <div style={{ position: 'relative', padding: '32px 20px 8px 20px' }}>
+          <button
+            onClick={() => navigate('/alumni/notifications')}
+            style={{
+              position: 'absolute',
+              left: 20,
+              top: 20,
+              background: '#174f84',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            ← Back
+          </button>
+          <h2
+            style={{
+              textAlign: 'center',
+              fontWeight: 'bold',
+              color: '#164B87',
+              margin: '0',
+              fontSize: '2rem',
+              letterSpacing: '1px',
+            }}
+          >
+            CTU MAIN ALUMNI TRACKER
+          </h2>
+        </div>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div
             style={{
@@ -212,19 +300,41 @@ const AlumniTracker: React.FC = () => {
   if (state.accepting === false) {
     return (
       <div style={{ background: '#add8e6', minHeight: '100vh', padding: '0', margin: '0' }}>
-        <h2
-          style={{
-            textAlign: 'center',
-            fontWeight: 'bold',
-            color: '#164B87',
-            margin: '0',
-            padding: '32px 0 8px 0',
-            fontSize: '2rem',
-            letterSpacing: '1px',
-          }}
-        >
-          CTU MAIN ALUMNI TRACKER
-        </h2>
+        <div style={{ position: 'relative', padding: '32px 20px 8px 20px' }}>
+          <button
+            onClick={() => navigate('/alumni/notifications')}
+            style={{
+              position: 'absolute',
+              left: 20,
+              top: 20,
+              background: '#174f84',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            ← Back
+          </button>
+          <h2
+            style={{
+              textAlign: 'center',
+              fontWeight: 'bold',
+              color: '#164B87',
+              margin: '0',
+              fontSize: '2rem',
+              letterSpacing: '1px',
+            }}
+          >
+            CTU MAIN ALUMNI TRACKER
+          </h2>
+        </div>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div
             style={{
@@ -250,20 +360,42 @@ const AlumniTracker: React.FC = () => {
 
   return (
     <div style={{ background: '#add8e6', minHeight: '100vh', padding: '0', margin: '0' }}>
-      {/* Title at the very top, above everything else */}
-      <h2
-        style={{
-          textAlign: 'center',
-          fontWeight: 'bold',
-          color: '#164B87',
-          margin: '0',
-          padding: '32px 0 8px 0',
-          fontSize: '2rem',
-          letterSpacing: '1px',
-        }}
-      >
-        CTU MAIN ALUMNI TRACKER
-      </h2>
+      {/* Header with back button and title */}
+      <div style={{ position: 'relative', padding: '32px 20px 8px 20px' }}>
+        <button
+          onClick={() => navigate('/alumni/notifications')}
+          style={{
+            position: 'absolute',
+            left: 20,
+            top: 20,
+            background: '#174f84',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            padding: '8px 16px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          ← Back
+        </button>
+        <h2
+          style={{
+            textAlign: 'center',
+            fontWeight: 'bold',
+            color: '#164B87',
+            margin: '0',
+            fontSize: '2rem',
+            letterSpacing: '1px',
+          }}
+        >
+          CTU MAIN ALUMNI TRACKER
+        </h2>
+      </div>
       <div style={{ maxWidth: 900, margin: '0 auto' }}>
         <Question previewModeFromParent={true} userId={userId} />
       </div>
