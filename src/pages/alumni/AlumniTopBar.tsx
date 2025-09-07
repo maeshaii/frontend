@@ -8,6 +8,7 @@ interface AlumniTopBarProps {
   handleLogout: () => void;
   isAdmin?: boolean;
   onTrackerClick?: () => void;
+  onHomeClick?: () => void;
 }
 
 const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
@@ -16,6 +17,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   handleLogout,
   isAdmin,
   onTrackerClick,
+  onHomeClick,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -197,7 +199,19 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             gap: 4,
             cursor: 'pointer',
           }}
-          onClick={() => (isAdmin ? navigate('/ccict/dashboard') : navigate('/alumni/dashboard'))}
+          onClick={() => {
+            const dashboardPath = isAdmin ? '/ccict/dashboard' : '/alumni/dashboard';
+            if (location.pathname === dashboardPath) {
+              const centerContent = document.querySelector('.center-content') as HTMLElement;
+              if (centerContent) {
+                centerContent.scrollTo({ top: 0, behavior: 'smooth' });
+              } else {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }
+            } else {
+              navigate(dashboardPath);
+            }
+          }}
         >
           <span style={{ color: 'white', fontSize: 20 }}>🏠</span>
           <span style={{ color: 'white', fontSize: 12 }}>Home</span>

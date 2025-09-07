@@ -547,6 +547,28 @@ const [selectedPost, setSelectedPost] = useState<PostItem | null>(null);
               </div>
             </div>
           </div>
+          <div className="quick-links">
+            <div
+              className="quick-link-card"
+              onClick={() => navigate('/alumni/forum')}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+              style={{ cursor: 'pointer', transition: 'transform 0.2s ease-in-out' }}
+            >
+              <div className="quick-link-orange-header"></div>
+              <div className="quick-link-content">
+                <div className="quick-link-icon forum-icon">C</div>
+                <div className="quick-link-text">FORUM</div>
+              </div>
+            </div>
+            <div className="quick-link-card">
+              <div className="quick-link-orange-header"></div>
+              <div className="quick-link-content">
+                <div className="quick-link-icon peso-icon">✱</div>
+                <div className="quick-link-text">DONATION</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="center-content">

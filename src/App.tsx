@@ -13,6 +13,7 @@ import Logout from './pages/admin/Logout/index';
 import AlumniDashboard from './pages/alumni/Dashboard';
 import NotificationPage from './pages/alumni/Notification';
 import AlumniTracker from './pages/alumni/Tracker';
+import ForumPage from './pages/alumni/forum';
 
 import AlumniProfile from './pages/alumni/Profile';
 import AdminDashboard from './pages/admin/dashboard/AdminDashboard';
@@ -80,6 +81,14 @@ const App: React.FC = () => {
             element={
               <PrivateRoute>
                 <AlumniProfile />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/alumni/forum"
+            element={
+              <PrivateRoute>
+                <ForumPage />
               </PrivateRoute>
             }
           />
