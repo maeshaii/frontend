@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
+import { api } from '../../services/api';
 
 interface AlumniTopBarProps {
   showProfile: boolean;
@@ -30,10 +31,11 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   const [notificationCount, setNotificationCount] = React.useState(0);
 
   React.useEffect(() => {
-    // Fetch notification count from API
-    fetch('http://127.0.0.1:8000/api/notifications/count')
-      .then(res => res.json())
-      .then(data => {
+    // Fetch notification count from API (uses axios instance with auth)
+    api
+      .get('notifications/count')
+      .then(res => {
+        const data = res.data;
         if (data && typeof data.count === 'number') {
           setNotificationCount(data.count);
         }
@@ -46,9 +48,10 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   React.useEffect(() => {
     const delayDebounce = setTimeout(() => {
       if (searchValue.trim() !== '') {
-        fetch(`http://127.0.0.1:8000/api/alumni/search/?q=${encodeURIComponent(searchValue)}`)
-          .then((res) => res.json())
-          .then((data) => {
+        api
+          .get(`alumni/search/`, { params: { q: searchValue } })
+          .then((res) => {
+            const data = res.data;
             const raw = Array.isArray(data) ? data : (data.results || data.users || []);
             const userStr = localStorage.getItem('user');
             let filteredData = raw;
