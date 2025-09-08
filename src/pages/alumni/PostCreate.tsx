@@ -169,8 +169,8 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, user }) => 
             {postImage && (
               <div className="image-preview">
                 <img src={postImage} alt="Preview" className="preview-image" />
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="remove-image"
                   onClick={() => setPostImage('')}
                 >
