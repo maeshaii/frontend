@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-// import { fetchNotifications, deleteNotifications } from '../../services/api';
+import { fetchNotifications } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from '../../alumni/AlumniTopBar';
 
@@ -30,22 +30,25 @@ const AdminNotificationPage: React.FC = () => {
   //     }
   //   };
 
-  //   useEffect(() => {
-  //     const userStr = localStorage.getItem('user');
-  //     if (!userStr) {
-  //       navigate('/login');
-  //       return;
-  //     }
-  //     const user = JSON.parse(userStr);
-  //     if (!user.id) return;
-  //     setLoading(true);
-  //     fetchNotifications(user.id).then((data) => {
-  //       setNotifications(data.notifications || []);
-  //     }).finally(() => setLoading(false));
-  //   }, [navigate]);
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (!userStr) {
+      navigate('/login');
+      return;
+    }
+    const user = JSON.parse(userStr);
+    const id = user?.user_id || user?.id;
+    if (!id) return;
+    setLoading(true);
+    fetchNotifications(id)
+      .then((data: any) => {
+        setNotifications(data.notifications || []);
+      })
+      .finally(() => setLoading(false));
+  }, [navigate]);
 
-  const filteredNotifications = notifications.filter((n) =>
-    n.content.toLowerCase().includes(search.toLowerCase())
+  const filteredNotifications = notifications.filter((n: any) =>
+    (n.content || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const toggleSelect = (id: number) => {

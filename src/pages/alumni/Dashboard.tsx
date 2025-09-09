@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { fetchNotifications, followUser, unfollowUser, checkFollowStatus, getPosts, commentOnPost } from '../../services/api';
 import AlumniTopBar from './AlumniTopBar';
 import PostCreate from './PostCreate';
@@ -248,73 +248,35 @@ const AlumniDashboard: React.FC = () => {
     const userObj = JSON.parse(userStr);
     setUser(userObj);
 
-    // Fetch posts and followed users to filter posts
-    Promise.all([
-      getPosts(),
-      api.get('users_list_view/', { params: { current_user_id: userObj.id } })
-    ]).then(async ([postsList, usersResponse]) => {
-      console.log('Fetched posts:', postsList); // Log the fetched posts
-      console.log('Fetched users:', usersResponse.data); // Log the fetched users
+    // Fetch posts from backend (backend already includes followed + PESO + admin)
+    getPosts()
+      .then((postsList) => {
+        const fetchedPosts = postsList || [];
+        setPosts(fetchedPosts);
 
-      let filteredPosts = postsList || [];
+        const currentUserId = currentUser?.user_id || currentUser?.id;
+        const liked: { [key: number]: boolean } = {};
+        fetchedPosts.forEach((post: PostItem) => {
+          if (post.likes && Array.isArray(post.likes)) {
+            liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+          } else if (post.liked_by_user !== undefined) {
+            liked[post.post_id] = !!post.liked_by_user;
+          }
+        });
+        setLikedPosts(liked);
 
-      // If users data is available, get follow status and filter posts
-      if (usersResponse.data.success && usersResponse.data.users) {
-        // Get follow status for each user
-        const usersWithFollowStatus = await Promise.all(
-          usersResponse.data.users.map(async (usr: any) => {
-            try {
-              const followStatus = await checkFollowStatus(usr.id);
-              return { ...usr, isFollowing: followStatus.is_following };
-            } catch {
-              return { ...usr, isFollowing: false };
-            }
-          })
-        );
-
-        const followedUserIds = usersWithFollowStatus
-          .filter((usr: any) => usr.isFollowing)
-          .map((usr: any) => Number(usr.id));
-
-        console.log('Followed user IDs:', followedUserIds);
-
-        filteredPosts = (postsList || []).filter((post: PostItem) =>
-          post.user && post.user.user_id && (
-            followedUserIds.includes(Number(post.user.user_id)) ||
-            Number(post.user.user_id) === Number(userObj.id)
-          )
-        );
-
-        console.log('Filtered posts:', filteredPosts);
-      }
-
-      setPosts(filteredPosts);
-
-      // Track liked posts for current user
-      const currentUserId = currentUser?.user_id || currentUser?.id;
-      const liked: { [key: number]: boolean } = {};
-      filteredPosts.forEach((post: PostItem) => {
-        if (post.likes && Array.isArray(post.likes)) {
-          liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-        } else if (post.liked_by_user !== undefined) {
-          liked[post.post_id] = !!post.liked_by_user;
-        }
+        const reposted: { [key: number]: boolean } = {};
+        fetchedPosts.forEach((post: PostItem) => {
+          if (post.reposts && Array.isArray(post.reposts)) {
+            reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+          }
+        });
+        setRepostedPosts(reposted);
+      })
+      .catch((error) => {
+        console.error('Error fetching posts:', error);
+        setPosts([]);
       });
-      setLikedPosts(liked);
-
-      // Track reposted posts for current user
-      const reposted: { [key: number]: boolean } = {};
-      filteredPosts.forEach((post: PostItem) => {
-        if (post.reposts && Array.isArray(post.reposts)) {
-          reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
-        }
-      });
-      setRepostedPosts(reposted);
-    })
-    .catch((error) => {
-      console.error('Error fetching posts or users:', error);
-      setPosts([]);
-    });
   }, [navigate]);
 
   const handlePosted = async () => {
@@ -512,17 +474,40 @@ const feed = useMemo(() => {
 
 const [selectedPost, setSelectedPost] = useState<PostItem | null>(null);
 
+  // Detect admin for navbar routing (admin Home/Notifications/Tracker)
+  const isAdmin = !!(currentUser && currentUser.account_type && currentUser.account_type.admin);
+
   return (
     <div className="page-container">
       <AlumniTopBar
         showProfile={showProfile}
         setShowProfile={setShowProfile}
         handleLogout={handleLogout}
+        isAdmin={isAdmin}
+        isPeso={!isAdmin && !!(currentUser && currentUser.account_type && currentUser.account_type.peso)}
+        onTrackerClick={isAdmin ? () => navigate('/tracker') : undefined}
       />
 
       <div className="main-content">
         <div className="left-sidebar">
-          <div className="profile-card" onClick={() => navigate('/alumni/profile')} onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}>
+          <div
+            className="profile-card"
+            onClick={() => {
+              if (currentUser && currentUser.account_type) {
+                if (currentUser.account_type.peso) {
+                  navigate('/peso/profile');
+                } else if (currentUser.account_type.ccict) {
+                  navigate('/ccict/profile');
+                } else {
+                  navigate('/alumni/profile');
+                }
+              } else {
+                navigate('/alumni/profile');
+              }
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+          >
             <div className="orange-header-bar"></div>
             <div className="profile-content">
               <img src={user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo} alt="Profile" className="profile-image" />
@@ -531,22 +516,24 @@ const [selectedPost, setSelectedPost] = useState<PostItem | null>(null);
             </div>
           </div>
 
-          <div className="quick-links">
-            <div className="quick-link-card">
-              <div className="quick-link-orange-header"></div>
-              <div className="quick-link-content">
-                <div className="quick-link-icon ccict-icon">C</div>
-                <div className="quick-link-text">CCICT</div>
-              </div>
+          {!(isAdmin || (!!(currentUser && currentUser.account_type && currentUser.account_type.peso))) && (
+            <div className="quick-links">
+              <Link to="/ccict/profile" className="quick-link-card" style={{ cursor: 'pointer', textDecoration: 'none' }}>
+                <div className="quick-link-orange-header"></div>
+                <div className="quick-link-content">
+                  <div className="quick-link-icon ccict-icon">C</div>
+                  <div className="quick-link-text">CCICT</div>
+                </div>
+              </Link>
+              <Link to="/peso/profile" className="quick-link-card" style={{ cursor: 'pointer', textDecoration: 'none' }}>
+                <div className="quick-link-orange-header"></div>
+                <div className="quick-link-content">
+                  <div className="quick-link-icon peso-icon">✱</div>
+                  <div className="quick-link-text">PESO</div>
+                </div>
+              </Link>
             </div>
-            <div className="quick-link-card">
-              <div className="quick-link-orange-header"></div>
-              <div className="quick-link-content">
-                <div className="quick-link-icon peso-icon">✱</div>
-                <div className="quick-link-text">PESO</div>
-              </div>
-            </div>
-          </div>
+          )}
           <div className="quick-links">
             <div
               className="quick-link-card"

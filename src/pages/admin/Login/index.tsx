@@ -14,19 +14,21 @@ const Login = () => {
     const data = await loginUser(acc_username, acc_password);
     if (data.success) {
       localStorage.setItem('user', JSON.stringify(data.user));
-      if (data.user && data.user.account_type) {
-        if (data.user.account_type.admin) {
-          navigate('/dashboard');
-        } else if (data.user.account_type.user) {
-          navigate('/alumni/dashboard');
-        } else if (data.user.account_type.coordinator) {
-          navigate('/coordinator/dashboard');
+        if (data.user && data.user.account_type) {
+          if (data.user.account_type.admin) {
+            navigate('/dashboard');
+          } else if (data.user.account_type.peso) {
+            navigate('/peso/dashboard');
+          } else if (data.user.account_type.user) {
+            navigate('/alumni/dashboard');
+          } else if (data.user.account_type.coordinator) {
+            navigate('/coordinator/dashboard');
+          } else {
+            navigate('/dashboard');
+          }
         } else {
           navigate('/dashboard');
         }
-      } else {
-        navigate('/dashboard');
-      }
     } else {
       setError(data.message || 'Invalid credentials');
     }

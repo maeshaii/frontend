@@ -8,6 +8,7 @@ interface AlumniTopBarProps {
   setShowProfile: (v: boolean) => void;
   handleLogout: () => void;
   isAdmin?: boolean;
+  isPeso?: boolean;
   onTrackerClick?: () => void;
   onHomeClick?: () => void;
 }
@@ -17,6 +18,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   setShowProfile,
   handleLogout,
   isAdmin,
+  isPeso,
   onTrackerClick,
   onHomeClick,
 }) => {
@@ -84,7 +86,14 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     setShowSuggestions(false);
     setSearchValue('');
     if (!userId || Number.isNaN(Number(userId))) return;
-    navigate(`/alumni/profile/${userId}`);
+    // Navigate to profile based on current path prefix
+    if (location.pathname.startsWith('/peso')) {
+      navigate(`/peso/profile/${userId}`);
+    } else if (location.pathname.startsWith('/ccict')) {
+      navigate(`/ccict/profile/${userId}`);
+    } else {
+      navigate(`/alumni/profile/${userId}`);
+    }
   };
 
   return (
@@ -203,7 +212,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             cursor: 'pointer',
           }}
           onClick={() => {
-            const dashboardPath = isAdmin ? '/ccict/dashboard' : '/alumni/dashboard';
+            const dashboardPath = isAdmin ? '/ccict/dashboard' : (isPeso ? '/peso/dashboard' : '/alumni/dashboard');
             if (location.pathname === dashboardPath) {
               const centerContent = document.querySelector('.center-content') as HTMLElement;
               if (centerContent) {
@@ -240,9 +249,10 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           cursor: 'pointer',
           position: 'relative', // for badge positioning
         }}
-        onClick={() =>
-          isAdmin ? navigate('/ccict/notification') : navigate('/alumni/notifications')
-        }
+        onClick={() => {
+          const notifPath = isAdmin ? '/ccict/notification' : (isPeso ? '/peso/notifications' : '/alumni/notifications');
+          navigate(notifPath);
+        }}
       >
         <span style={{ color: 'white', fontSize: 20 }}>🔔</span>
         {notificationCount > 0 && (

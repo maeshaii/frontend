@@ -11,11 +11,13 @@ import Tracker from './pages/admin/tracker/index';
 import Users from './pages/admin/users/index';
 import Logout from './pages/admin/Logout/index';
 import AlumniDashboard from './pages/alumni/Dashboard';
+import PesoDashboard from './pages/peso/Dashboard';
 import NotificationPage from './pages/alumni/Notification';
 import AlumniTracker from './pages/alumni/Tracker';
 import ForumPage from './pages/alumni/forum';
 
 import AlumniProfile from './pages/alumni/Profile';
+import PesoProfile from './pages/peso/Profile';
 import AdminDashboard from './pages/admin/dashboard/AdminDashboard';
 import AdminNotificationPage from './pages/admin/dashboard/AdminNotification';
 import AdminProfilePage from './pages/admin/dashboard/AdminProfilePage';
@@ -77,6 +79,30 @@ const App: React.FC = () => {
             }
           />
           <Route
+            path="/peso/dashboard"
+            element={
+              <PrivateRoute>
+                <PesoDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/peso/notifications"
+            element={
+              <PrivateRoute>
+                <NotificationPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/peso/profile"
+            element={
+              <PrivateRoute>
+                <PesoProfile />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/alumni/profile"
             element={
               <PrivateRoute>
@@ -112,7 +138,7 @@ const App: React.FC = () => {
             path="/ccict/dashboard"
             element={
               <PrivateRoute>
-                <AdminDashboard />
+                <AlumniDashboard />
               </PrivateRoute>
             }
           />
@@ -128,7 +154,7 @@ const App: React.FC = () => {
             path="/ccict/profile"
             element={
               <PrivateRoute>
-                <AdminProfilePage />
+                <AlumniDashboard />
               </PrivateRoute>
             }
           />

@@ -140,11 +140,21 @@ const NotificationPage: React.FC = () => {
 
   return (
     <div style={{ background: '#f5f7fa', minHeight: '100vh', fontFamily: 'Arial, sans-serif' }}>
-      <AlumniTopBar
+      {(() => {
+        const currentUserRaw = localStorage.getItem('user');
+        const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
+        const isAdmin = !!(currentUser && currentUser.account_type && currentUser.account_type.admin);
+        const isPeso = !!(currentUser && currentUser.account_type && currentUser.account_type.peso);
+        return (
+          <AlumniTopBar
         showProfile={showProfile}
         setShowProfile={setShowProfile}
         handleLogout={handleLogout}
+        isAdmin={isAdmin}
+        isPeso={!isAdmin && isPeso}
       />
+        );
+      })()}
       <div
         style={{
           maxWidth: 900,
@@ -155,8 +165,15 @@ const NotificationPage: React.FC = () => {
           padding: 24,
         }}
       >
-        <button
-          onClick={() => navigate('/alumni/dashboard')}
+        {(() => {
+          const currentUserRaw = localStorage.getItem('user');
+          const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
+          const isAdmin = !!(currentUser && currentUser.account_type && currentUser.account_type.admin);
+          const isPeso = !!(currentUser && currentUser.account_type && currentUser.account_type.peso);
+          const backPath = isAdmin ? '/ccict/dashboard' : (isPeso ? '/peso/dashboard' : '/alumni/dashboard');
+          return (
+            <button
+          onClick={() => navigate(backPath)}
           style={{
             marginBottom: 16,
             background: '#174f84',
@@ -169,6 +186,8 @@ const NotificationPage: React.FC = () => {
         >
           ← Back to Dashboard
         </button>
+          );
+        })()}
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ flex: 1 }}>Notifications</h2>
           <input
