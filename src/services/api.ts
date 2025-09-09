@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000/api/';
+const API_BASE = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8082/api/';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -391,6 +391,11 @@ export const getPosts = async () => {
   return response.data?.posts || [];
 };
 
+export const getPostsView = async () => {
+  const response = await api.get('posts_view/');
+  return response.data?.posts || [];
+};
+
 export const createPost = async (postData: {
   post_title: string;
   post_content: string;
@@ -433,7 +438,14 @@ export const deleteRepost = async (repostId: number) => {
 };
 
 export const deletePost = async (postId: number) => {
-  const response = await api.delete(`posts/${postId}/`);
+  // Prefer dedicated delete endpoint to avoid method routing collisions
+  let response;
+  try {
+    response = await api.delete(`posts/delete/${postId}/`);
+  } catch (e) {
+    // Fallback to legacy DELETE on edit endpoint if needed
+    response = await api.delete(`posts/${postId}/`);
+  }
   return response.data;
 };
 

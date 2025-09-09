@@ -72,12 +72,19 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, user }) => 
     setError('');
 
     try {
+      // Determine post type based on logged-in account role
+      const raw = localStorage.getItem('user');
+      const storedUser = raw ? JSON.parse(raw) : null;
+      const isAdmin = !!(storedUser && storedUser.account_type && storedUser.account_type.admin);
+      const isPeso = !!(storedUser && storedUser.account_type && storedUser.account_type.peso);
+      const postType = isAdmin ? 'admin' : (isPeso ? 'peso' : 'personal');
+
       await createPost({
         post_title: postTitle,
         post_content: postContent,
         post_image: postImage,
         post_cat_id: selectedCategory,
-        type: 'personal'
+        type: postType
       });
 
       onPosted();
