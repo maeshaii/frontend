@@ -60,6 +60,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     { value: 'CHED', label: 'CHED Statistics' },
     { value: 'SUC', label: 'SUC Statistics' },
     { value: 'AACUP', label: 'AACUP Statistics' },
+    { value: 'HIGH_POSITION', label: 'High Position Statistics' },
   ];
 
   // Color schemes for charts
@@ -520,6 +521,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.getCell(`C${rowIdx}`).value =
               `${pct(stats.unemployed_count, stats.total_alumni)}`;
             rowIdx++;
+            worksheet.getCell(`A${rowIdx}`).value = 'Untracked Count';
+            worksheet.getCell(`B${rowIdx}`).value = stats.untracked_count;
+            worksheet.getCell(`C${rowIdx}`).value =
+              `${pct(stats.untracked_count, stats.total_alumni)}`;
+            rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Unemployment Rate';
             worksheet.getCell(`B${rowIdx}`).value =
               `${pct(stats.unemployed_count, stats.total_alumni)}`;
@@ -572,6 +578,26 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.getCell(`B${rowIdx}`).value =
               `${pct(stats.high_position_count, stats.total_alumni)}`;
             rowIdx++;
+            worksheet.getCell(`A${rowIdx}`).value = 'Public Count';
+            worksheet.getCell(`B${rowIdx}`).value = stats.public_count;
+            worksheet.getCell(`C${rowIdx}`).value =
+              `${pct(stats.public_count, stats.total_alumni)}`;
+            rowIdx++;
+            worksheet.getCell(`A${rowIdx}`).value = 'Private Count';
+            worksheet.getCell(`B${rowIdx}`).value = stats.private_count;
+            worksheet.getCell(`C${rowIdx}`).value =
+              `${pct(stats.private_count, stats.total_alumni)}`;
+            rowIdx++;
+            worksheet.getCell(`A${rowIdx}`).value = 'Local Count';
+            worksheet.getCell(`B${rowIdx}`).value = stats.local_count;
+            worksheet.getCell(`C${rowIdx}`).value =
+              `${pct(stats.local_count, stats.total_alumni)}`;
+            rowIdx++;
+            worksheet.getCell(`A${rowIdx}`).value = 'International Count';
+            worksheet.getCell(`B${rowIdx}`).value = stats.international_count;
+            worksheet.getCell(`C${rowIdx}`).value =
+              `${pct(stats.international_count, stats.total_alumni)}`;
+            rowIdx++;
           } else if (stats?.type === 'AACUP') {
             worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
             worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni;
@@ -613,6 +639,50 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.getCell(`B${rowIdx}`).value =
               `${pct(stats.high_position_count, stats.total_alumni)}`;
             rowIdx++;
+          } else if (stats?.type === 'HIGH_POSITION') {
+            worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
+            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni;
+            worksheet.getCell(`C${rowIdx}`).value = '100%';
+            rowIdx++;
+            worksheet.getCell(`A${rowIdx}`).value = 'High Position Alumni';
+            worksheet.getCell(`B${rowIdx}`).value = stats.high_position_count;
+            worksheet.getCell(`C${rowIdx}`).value = `${pct(stats.high_position_count, stats.total_alumni)}`;
+            rowIdx++;
+            worksheet.getCell(`A${rowIdx}`).value = 'High Position Rate';
+            worksheet.getCell(`B${rowIdx}`).value = `${stats.high_position_rate}%`;
+            worksheet.getCell(`C${rowIdx}`).value = `${stats.high_position_rate}%`;
+            rowIdx++;
+            
+            // Add detailed high position alumni data
+            if (stats.high_position_data && stats.high_position_data.length > 0) {
+              worksheet.getCell(`A${rowIdx}`).value = '=== HIGH POSITION ALUMNI DETAILS ===';
+              rowIdx++;
+              worksheet.getCell(`A${rowIdx}`).value = 'CTU ID';
+              worksheet.getCell(`B${rowIdx}`).value = 'Name';
+              worksheet.getCell(`C${rowIdx}`).value = 'Position';
+              worksheet.getCell(`D${rowIdx}`).value = 'Company';
+              worksheet.getCell(`E${rowIdx}`).value = 'Sector';
+              worksheet.getCell(`F${rowIdx}`).value = 'Course';
+              worksheet.getCell(`G${rowIdx}`).value = 'Year Graduated';
+              worksheet.getCell(`H${rowIdx}`).value = 'Email';
+              worksheet.getCell(`I${rowIdx}`).value = 'Phone';
+              worksheet.getCell(`J${rowIdx}`).value = 'Address';
+              rowIdx++;
+              
+              stats.high_position_data.forEach((alumnus: any) => {
+                worksheet.getCell(`A${rowIdx}`).value = alumnus.ctu_id || '';
+                worksheet.getCell(`B${rowIdx}`).value = alumnus.name || '';
+                worksheet.getCell(`C${rowIdx}`).value = alumnus.position || '';
+                worksheet.getCell(`D${rowIdx}`).value = alumnus.company || '';
+                worksheet.getCell(`E${rowIdx}`).value = alumnus.sector || '';
+                worksheet.getCell(`F${rowIdx}`).value = alumnus.course || '';
+                worksheet.getCell(`G${rowIdx}`).value = alumnus.year_graduated || '';
+                worksheet.getCell(`H${rowIdx}`).value = alumnus.email || '';
+                worksheet.getCell(`I${rowIdx}`).value = alumnus.phone || '';
+                worksheet.getCell(`J${rowIdx}`).value = alumnus.address || '';
+                rowIdx++;
+              });
+            }
           } else {
             worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
             worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni;
@@ -910,7 +980,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           });
           rowIdx++;
           // Also add as a separate worksheet
-          const detailSheet = workbook.addWorksheet(`${generatedStats.type} Detailed Alumni Data`);
+          const worksheetName = generatedStats.type === 'HIGH_POSITION' 
+            ? 'High Position Alumni' 
+            : `${generatedStats.type} Detailed Alumni Data`;
+          const detailSheet = workbook.addWorksheet(worksheetName);
           detailSheet.addRow(nonEmptyColumns);
           const seenDetailRows = new Set<string>();
           rows.forEach((row: any) => {
@@ -1026,6 +1099,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                   <td style={td}>{stats.employment_rate}%</td>
                 </tr>
                 <tr>
+                  <td style={td}>Untracked</td>
+                  <td style={td}>{stats.untracked_count}</td>
+                  <td style={td}>{pct(stats.untracked_count, stats.total_alumni)}</td>
+                </tr>
+                <tr>
                   <td style={td}>Total Alumni</td>
                   <td style={td}>{stats.total_alumni}</td>
                   <td style={td}>{pct(stats.total_alumni, stats.total_alumni)}</td>
@@ -1085,6 +1163,26 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                   <td style={td}>{stats.high_position_rate}%</td>
                 </tr>
                 <tr>
+                  <td style={td}>Public</td>
+                  <td style={td}>{stats.public_count}</td>
+                  <td style={td}>{pct(stats.public_count, stats.total_alumni)}</td>
+                </tr>
+                <tr>
+                  <td style={td}>Private</td>
+                  <td style={td}>{stats.private_count}</td>
+                  <td style={td}>{pct(stats.private_count, stats.total_alumni)}</td>
+                </tr>
+                <tr>
+                  <td style={td}>Local</td>
+                  <td style={td}>{stats.local_count}</td>
+                  <td style={td}>{pct(stats.local_count, stats.total_alumni)}</td>
+                </tr>
+                <tr>
+                  <td style={td}>International</td>
+                  <td style={td}>{stats.international_count}</td>
+                  <td style={td}>{pct(stats.international_count, stats.total_alumni)}</td>
+                </tr>
+                <tr>
                   <td style={td}>Total Alumni</td>
                   <td style={td}>{stats.total_alumni}</td>
                   <td style={td}>{pct(stats.total_alumni, stats.total_alumni)}</td>
@@ -1117,6 +1215,25 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                   <td style={td}>Absorption Rate</td>
                   <td style={td}></td>
                   <td style={td}>{stats.absorption_rate}%</td>
+                </tr>
+                <tr>
+                  <td style={td}>High Position Rate</td>
+                  <td style={td}></td>
+                  <td style={td}>{stats.high_position_rate}%</td>
+                </tr>
+                <tr>
+                  <td style={td}>Total Alumni</td>
+                  <td style={td}>{stats.total_alumni}</td>
+                  <td style={td}>{pct(stats.total_alumni, stats.total_alumni)}</td>
+                </tr>
+              </>
+            )}
+            {type === 'HIGH_POSITION' && (
+              <>
+                <tr>
+                  <td style={td}>High Position Alumni</td>
+                  <td style={td}>{stats.high_position_count}</td>
+                  <td style={td}>{pct(stats.high_position_count, stats.total_alumni)}</td>
                 </tr>
                 <tr>
                   <td style={td}>High Position Rate</td>

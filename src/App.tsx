@@ -7,6 +7,9 @@ import Statistics from './pages/admin/statistics/index';
 import ViewStats from './pages/admin/statistics/ViewStats';
 import AlumniData from './pages/admin/statistics/AlumniData';
 import Login from './pages/admin/Login/index';
+import ForgotPassword from './pages/admin/ForgotPassword/index';
+import TemporaryPassword from './pages/admin/TemporaryPassword/index';
+import FirstLoginChangePassword from './pages/admin/TemporaryPassword/FirstLoginChangePassword';
 import Tracker from './pages/admin/tracker/index';
 import Users from './pages/admin/users/index';
 import Logout from './pages/admin/Logout/index';
@@ -35,11 +38,14 @@ const App: React.FC = () => {
 
           {/* Actual routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/temporary-password" element={<TemporaryPassword />} />
+          <Route path="/first-login-change-password" element={<FirstLoginChangePassword />} />
           <Route path="/logout" element={<Logout />} />
           <Route
             path="/dashboard"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['admin']}>
                 <Dashboard />
               </PrivateRoute>
             }
@@ -52,8 +58,22 @@ const App: React.FC = () => {
               </PrivateRoute>
             }
           />
-          <Route path="/ViewStats" element={<ViewStats />} />
-          <Route path="/AlumniData/:year" element={<AlumniData />} />
+          <Route
+            path="/ViewStats"
+            element={
+              <PrivateRoute roles={['admin']}>
+                <ViewStats />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/AlumniData/:year"
+            element={
+              <PrivateRoute roles={['admin']}>
+                <AlumniData />
+              </PrivateRoute>
+            }
+          />
           <Route
             path="/tracker/*"
             element={
@@ -65,7 +85,7 @@ const App: React.FC = () => {
           <Route
             path="/users"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['admin']}>
                 <Users />
               </PrivateRoute>
             }
@@ -73,7 +93,7 @@ const App: React.FC = () => {
           <Route
             path="/alumni/dashboard"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['user']}>
                 <AlumniDashboard />
               </PrivateRoute>
             }
@@ -81,7 +101,7 @@ const App: React.FC = () => {
           <Route
             path="/peso/dashboard"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['peso']}>
                 <PesoDashboard />
               </PrivateRoute>
             }
@@ -162,7 +182,7 @@ const App: React.FC = () => {
           <Route
             path="/coordinator/dashboard"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['coordinator']}>
                 <CoordinatorDashboard />
               </PrivateRoute>
             }

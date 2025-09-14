@@ -1,4 +1,4 @@
-export type StatsType = 'ALL' | 'QPRO' | 'CHED' | 'SUC' | 'AACUP';
+export type StatsType = 'ALL' | 'QPRO' | 'CHED' | 'SUC' | 'AACUP' | 'HIGH_POSITION';
 
 export interface BaseStats {
   type: StatsType;
@@ -17,6 +17,7 @@ export interface QPROStats extends BaseStats {
   employment_rate: number;
   employed_count: number;
   unemployed_count: number;
+  untracked_count: number;
 }
 
 export interface CHEDStats extends BaseStats {
@@ -32,6 +33,10 @@ export interface SUCStats extends BaseStats {
   type: 'SUC';
   high_position_count: number;
   average_salary?: number;
+  public_count: number;
+  private_count: number;
+  local_count: number;
+  international_count: number;
 }
 
 export interface AACUPStats extends BaseStats {
@@ -44,4 +49,27 @@ export interface AACUPStats extends BaseStats {
   high_position_rate: number;
 }
 
-export type AnyStats = AllStats | QPROStats | CHEDStats | SUCStats | AACUPStats;
+export interface HighPositionStats extends BaseStats {
+  type: 'HIGH_POSITION';
+  high_position_count: number;
+  high_position_rate: number;
+  high_position_data: Array<{
+    ctu_id: string;
+    name: string;
+    position: string | null;
+    company: string | null;
+    sector: string | null;
+    course: string | null;
+    year_graduated: number | null;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+  }>;
+  most_common_position?: string;
+  most_common_company?: string;
+  most_common_sector?: string;
+  most_common_course?: string;
+  average_salary?: number;
+}
+
+export type AnyStats = AllStats | QPROStats | CHEDStats | SUCStats | AACUPStats | HighPositionStats;

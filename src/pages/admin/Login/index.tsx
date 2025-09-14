@@ -8,12 +8,18 @@ const Login = () => {
   const [acc_username, setUsername] = useState('');
   const [acc_password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [show, setShow] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const data = await loginUser(acc_username, acc_password);
     if (data.success) {
       localStorage.setItem('user', JSON.stringify(data.user));
+      if (data.must_change_password) {
+        // Redirect to change password screen for first-time login
+        navigate('/first-login-change-password', { state: { acc_username } });
+        return;
+      }
         if (data.user && data.user.account_type) {
           if (data.user.account_type.admin) {
             navigate('/dashboard');
@@ -59,18 +65,30 @@ const Login = () => {
           <label htmlFor="password" style={styles.label}>
             Password
           </label>
+          <div style={{ position: 'relative' }}>
           <input
-            type="password"
+            type={show ? 'text' : 'password'}
             id="password"
             required
             value={acc_password}
             onChange={(e) => setPassword(e.target.value)}
             style={styles.input}
           />
+          <button type="button" onClick={() => setShow((s) => !s)} style={{ position: 'absolute', right: 10, top: 10, background: 'none', border: 'none', cursor: 'pointer' }}>{show ? '🙈' : '👁️'}</button>
+          </div>
           {error && <p style={{ color: 'red', marginBottom: 10 }}>{error}</p>}
           <button type="submit" style={styles.button}>
             Log In
           </button>
+          <div style={styles.forgotPasswordContainer}>
+            <button 
+              type="button" 
+              onClick={() => navigate('/forgot-password')}
+              style={styles.forgotPasswordLink}
+            >
+              Forgot Password?
+            </button>
+          </div>
         </form>
       </div>
     </div>
@@ -121,6 +139,7 @@ const styles: Record<string, React.CSSProperties> = {
   label: {
     marginBottom: 5,
     textAlign: 'left',
+    color: 'white',
   },
   input: {
     padding: 10,
@@ -140,6 +159,20 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 5,
     cursor: 'pointer',
     alignSelf: 'center',
+  },
+  forgotPasswordContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginTop: 15,
+  },
+  forgotPasswordLink: {
+    background: 'none',
+    border: 'none',
+    color: 'white',
+    fontSize: '0.9rem',
+    cursor: 'pointer',
+    textDecoration: 'underline',
+    padding: 5,
   },
 };
 

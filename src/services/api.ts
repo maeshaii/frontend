@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8082/api/';
 function ensureApiSuffix(url: string | undefined): string {
   const base = (url || 'http://127.0.0.1:8000').replace(/\/$/, '');
   return `${base}/api/`;
@@ -193,6 +192,16 @@ export const loginUser = async (acc_username: string, acc_password: string) => {
     }
     
     return { success: false, message: 'Login failed - please try again' };
+  }
+};
+
+export const changePassword = async (old_password: string, new_password: string) => {
+  try {
+    const response = await api.post('change-password/', { old_password, new_password });
+    return response.data;
+  } catch (error: any) {
+    const message = error.response?.data?.message || 'Password change failed';
+    return { success: false, message };
   }
 };
 
