@@ -333,6 +333,21 @@ export const fetchOJTByYear = async (year: string, coordinatorUsername?: string)
   return response.data;
 };
 
+// Clear OJT data by batch year (and optional coordinator/course)
+export const clearOJT = async (batchYear: string, course?: string, coordinatorUsername?: string) => {
+  const body: any = { batch_year: batchYear };
+  if (course) body.course = course;
+  if (coordinatorUsername) body.coordinator = coordinatorUsername;
+  const response = await api.post('ojt/clear/', body);
+  return response.data;
+};
+
+// Update OJT status for a specific user
+export const updateOJTStatus = async (userId: number, status: string) => {
+  const response = await api.post('ojt/status/', { user_id: userId, status });
+  return response.data;
+};
+
 // Fetch tracker responses
 export const fetchTrackerResponses = async () => {
   const response = await api.get('tracker/list-responses/');

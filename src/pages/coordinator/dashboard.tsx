@@ -18,6 +18,7 @@ export default function Dashboard() {
   const [importLoading, setImportLoading] = useState(false);
   const [coordinatorUsername, setCoordinatorUsername] = useState('');
   const [activePage, setActivePage] = useState('dashboard'); // 'dashboard' or 'imports'
+  const [detailsSearch, setDetailsSearch] = useState('');
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -30,7 +31,7 @@ export default function Dashboard() {
     const loadOJTData = async () => {
       try {
         console.log('Loading OJT data for coordinator:', coordinatorUsername);
-        const data = await fetchOJTStatistics(coordinatorUsername);
+        const data = await fetchOJTStatistics();
         console.log('OJT data received:', data);
         setOjtYears(data.years || []);
       } catch (error) {
@@ -79,11 +80,44 @@ export default function Dashboard() {
     }
   };
 
+  const downloadOJTTemplate = () => {
+    // Build CSV template with exact columns shown in the screenshot
+    const headers = [
+      'CTU_ID',
+      'First_Name',
+      'Middle_Name',
+      'Last_Name',
+      'Gender',
+      'Birthdate',
+      'Contact_No',
+      'Email',
+      'Address',
+      'Course',
+      'Company',
+      'Start_Date',
+      'End_Date',
+      'Status',
+    ];
+
+    // Only headers, no sample data rows
+    const csvLines = [headers.join(',')];
+    const csvContent = csvLines.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ojt_import_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
   const refreshOJTData = async () => {
     setLoading(true);
     try {
       console.log('Refreshing OJT data for coordinator:', coordinatorUsername);
-      const data = await fetchOJTStatistics(coordinatorUsername);
+      const data = await fetchOJTStatistics();
       console.log('Refreshed OJT data:', data);
       setOjtYears(data.years || []);
     } catch (error) {
@@ -184,6 +218,13 @@ export default function Dashboard() {
     },
     actions: {
       display: 'flex',
+    },
+    headerSearchInput: {
+      padding: '10px 14px',
+      borderRadius: '9999px',
+      border: '1px solid #E5E7EB',
+      width: '360px',
+      background: '#F6FAFF',
     },
     btn: {
       marginLeft: '10px',
@@ -374,21 +415,27 @@ export default function Dashboard() {
         <div style={styles.header}>
           <h1>OJT Imports</h1>
           <div style={styles.actions}>
-            {activePage === 'imports' && (
+            {activePage === 'imports' && !selectedCard && (
               <>
-                <button style={styles.statsBtn} onClick={() => setShowStats(!showStats)}>
-                  {showStats ? 'Hide Statistics' : 'View Statistics'}
-                </button>
                 <button style={styles.importBtn} onClick={() => setShowModal(true)}>
                   Import OJT
                 </button>
                 <button
                   style={{ ...styles.importBtn, marginLeft: '10px' }}
-                  onClick={refreshOJTData}
+                  onClick={downloadOJTTemplate}
                 >
-                  Refresh
+                  Download Template
                 </button>
               </>
+            )}
+            {activePage === 'imports' && selectedCard && (
+              <input
+                type="text"
+                placeholder="Search by name or company..."
+                style={styles.headerSearchInput}
+                value={detailsSearch}
+                onChange={(e) => setDetailsSearch(e.target.value)}
+              />
             )}
           </div>
         </div>
@@ -398,7 +445,7 @@ export default function Dashboard() {
         {/* ============== Cards OR Details Table OR Statistics ============== */}
         {!showStats ? (
           selectedCard ? (
-            <DetailsTable onBack={() => setSelectedCard(null)} selectedYear={selectedCard} />
+            <DetailsTable onBack={() => setSelectedCard(null)} selectedYear={selectedCard} searchQuery={detailsSearch} />
           ) : (
             <div style={styles.cards}>
               {loading ? (
@@ -418,7 +465,7 @@ export default function Dashboard() {
                   >
                     <div style={styles.cardImage}></div>
                     <p style={styles.cardText}>CLASS OF {yearData.year}</p>
-                    <p style={styles.cardText}>Alumni: {yearData.count}</p>
+                    <p style={styles.cardText}>OJT: {yearData.count}</p>
                   </div>
                 ))
               )}
@@ -444,16 +491,7 @@ export default function Dashboard() {
               onChange={(e) => setBatchYear(e.target.value)}
             />
 
-            <label style={styles.modalLabel}>Course</label>
-            <select
-              style={styles.modalInput}
-              value={course}
-              onChange={(e) => setCourse(e.target.value)}
-            >
-              <option value="BSIT">BSIT</option>
-              <option value="BSCS">BSCS</option>
-              <option value="BSIS">BSIS</option>
-            </select>
+            {/* Course selection removed; default course state will be used */}
 
             <label style={styles.modalLabel}>Upload File</label>
             <label style={styles.fileLabel}>
@@ -484,3 +522,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
