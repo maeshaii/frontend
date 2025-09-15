@@ -2,6 +2,10 @@ import axios from 'axios';
 
 function ensureApiSuffix(url: string | undefined): string {
   const base = (url || 'http://127.0.0.1:8000').replace(/\/$/, '');
+  // Avoid double /api/ suffix
+  if (base.endsWith('/api')) {
+    return base + '/';
+  }
   return `${base}/api/`;
 }
 
@@ -9,7 +13,7 @@ const API_BASE = ensureApiSuffix(process.env.REACT_APP_API_URL);
 
 const api = axios.create({
   baseURL: API_BASE,
-  withCredentials: false,
+  withCredentials: false, 
 });
 
 // Attach Authorization automatically with dev logging
