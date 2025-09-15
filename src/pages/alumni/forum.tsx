@@ -10,7 +10,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { Favorite, FavoriteBorder, Comment, Repeat } from '@mui/icons-material';
+import Favorite from '@mui/icons-material/Favorite';
+import FavoriteBorder from '@mui/icons-material/FavoriteBorder';
+import Comment from '@mui/icons-material/Comment';
+import Repeat from '@mui/icons-material/Repeat';
 import ctulogo from '../../images/ctulogo.png';
 
 const ForumPage: React.FC = () => {
