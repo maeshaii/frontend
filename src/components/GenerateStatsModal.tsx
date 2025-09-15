@@ -449,6 +449,68 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     return images;
   };
 
+  // QPRO export helpers (placed before export to avoid hoist issues)
+  const qproHeaders = [
+    'Course',
+    'First_Name',
+    'Middle_Name',
+    'Last_Name',
+    'Status',
+    'Current Company Name',
+    'Position_Current',
+    'Current Salary Range',
+    'Sector_Current',
+    'Please specify post graduate/degree',
+  ];
+
+  const mapQPRORow = (row: any) => {
+    const safe = (v: any) => (v === undefined || v === null ? '' : v);
+    const pick = (keys: string[]) => {
+      for (const k of keys) {
+        if (row[k] !== undefined && row[k] !== null && `${row[k]}` !== '') return row[k];
+      }
+      return '';
+    };
+
+    const statusRaw = `${row['Status'] || row['user_status'] || ''}`.toLowerCase();
+    let status = '';
+    if (statusRaw.includes('employ')) status = 'Employed';
+    else if (statusRaw.includes('unemploy')) status = 'Unemployed';
+    if (!status) {
+      if (row['Company_Name_Current'] || row['Position_Current'] || row['Salary_Current']) status = 'Employed';
+      else if (row['Unemployment_Reason']) status = 'Unemployed';
+      else status = 'Not Tracked';
+    }
+
+    return [
+      safe(row['Course']),
+      safe(row['First_Name']),
+      safe(row['Middle_Name']),
+      safe(row['Last_Name']),
+      status,
+      safe(pick(['Current Company Name', 'Company_Name_Current'])),
+      safe(pick(['Position_Current'])),
+      safe(pick(['Current Salary range', 'Current Salary Range', 'Salary Range', 'Salary_Current'])),
+      safe(pick(['Sector_Current', 'Current Company Sector', 'Sector'])),
+      safe(pick(['Please specify post graduate/degree', 'Please specify postgraduate/degree', 'Post graduate/degree', 'Post Graduate/Degree', 'Program', 'Pursue_Further_Study'])),
+    ];
+  };
+
+  const addQPRODetailedSheet = (workbook: ExcelJS.Workbook, rows: any[], sheetName = 'QPRO Detailed Alumni Data') => {
+    const detail = workbook.addWorksheet(sheetName);
+    detail.addRow(qproHeaders);
+    const mapped = (rows || []).map(mapQPRORow);
+    mapped
+      .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1))
+      .forEach((vals) => detail.addRow(vals));
+    // Move to first position
+    const idx = workbook.worksheets.indexOf(detail);
+    if (idx > 0) {
+      workbook.worksheets.splice(idx, 1);
+      workbook.worksheets.splice(0, 0, detail);
+    }
+  };
+
   const handleExportCompleteData = async () => {
     if (!generatedStats && !allStats) return;
     setExporting(true);
@@ -475,7 +537,350 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
       // Create a new Excel workbook and worksheet
       const workbook = new ExcelJS.Workbook();
+
+      // If exporting only QPRO, produce a single-tab workbook with summary + details (no charts)
+      if (!allStats && generatedStats?.type === 'QPRO') {
+        const sheet = workbook.addWorksheet('QPRO Report');
+        let r = 1;
+        sheet.getCell(`A${r}`).value = 'QPRO Complete Statistics Report'; r++;
+        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
+        sheet.getCell(`A${r}`).value = 'Course Filter'; sheet.getCell(`B${r}`).value = selectedCourse || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
+        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
+        // Employed
+        sheet.getCell(`A${r}`).value = 'Employed';
+        sheet.getCell(`B${r}`).value = generatedStats.employed_count;
+        sheet.getCell(`C${r}`).value = `${pct(generatedStats.employed_count, generatedStats.total_alumni)}`; r++;
+        // Unemployed
+        sheet.getCell(`A${r}`).value = 'Unemployed';
+        sheet.getCell(`B${r}`).value = generatedStats.unemployed_count;
+        sheet.getCell(`C${r}`).value = `${pct(generatedStats.unemployed_count, generatedStats.total_alumni)}`; r++;
+        // Employment Rate (percentage only)
+        sheet.getCell(`A${r}`).value = 'Employment Rate';
+        sheet.getCell(`C${r}`).value = `${pct(generatedStats.employed_count, generatedStats.total_alumni)}`; r++;
+        // Untracked
+        const untracked = Number(generatedStats.untracked_count) || Math.max(
+          (Number(generatedStats.total_alumni) || 0) - (Number(generatedStats.employed_count) || 0) - (Number(generatedStats.unemployed_count) || 0),
+          0
+        );
+        sheet.getCell(`A${r}`).value = 'Untracked';
+        sheet.getCell(`B${r}`).value = untracked;
+        sheet.getCell(`C${r}`).value = `${pct(untracked, generatedStats.total_alumni)}`; r++;
+        // Total Alumni
+        sheet.getCell(`A${r}`).value = 'Total Alumni';
+        sheet.getCell(`B${r}`).value = generatedStats.total_alumni;
+        sheet.getCell(`C${r}`).value = '100%'; r += 2;
+
+        sheet.getCell(`A${r}`).value = 'QPRO Detailed Alumni Data'; r++;
+        sheet.addRow(qproHeaders); r++;
+        const mapped = (detailedDataByType['QPRO'] || []).map(mapQPRORow)
+          .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
+        mapped.forEach((vals) => { sheet.addRow(vals); r++; });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `QPRO_Complete_Report_${selectedYear}_${selectedCourse}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setExporting(false);
+        return;
+      }
+
+      // If exporting only CHED, produce a single-tab workbook with CHED matrix + details
+      if (!allStats && generatedStats?.type === 'CHED') {
+        const sheet = workbook.addWorksheet('CHED Report');
+        let r = 1;
+        sheet.getCell(`A${r}`).value = 'CHED Complete Statistics Report'; r++;
+        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
+        sheet.getCell(`A${r}`).value = 'Course Filter'; sheet.getCell(`B${r}`).value = selectedCourse || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
+        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
+        // Pursuing Further Study
+        const pursuing = Number(generatedStats.pursuing_further_study) || 0;
+        sheet.getCell(`A${r}`).value = 'Pursuing Further Study';
+        sheet.getCell(`B${r}`).value = pursuing;
+        sheet.getCell(`C${r}`).value = `${pct(pursuing, generatedStats.total_alumni)}`; r++;
+        // Job Alignment
+        const jobAligned = Number(generatedStats.job_aligned_count) || 0;
+        sheet.getCell(`A${r}`).value = 'Job Alignment';
+        sheet.getCell(`B${r}`).value = jobAligned;
+        sheet.getCell(`C${r}`).value = `${pct(jobAligned, generatedStats.total_alumni)}`; r++;
+        // Self-Employed
+        const selfEmp = Number(generatedStats.self_employed_count) || 0;
+        sheet.getCell(`A${r}`).value = 'Self-Employed';
+        sheet.getCell(`B${r}`).value = selfEmp;
+        sheet.getCell(`C${r}`).value = `${pct(selfEmp, generatedStats.total_alumni)}`; r++;
+        // Further Study Rate (percentage only)
+        sheet.getCell(`A${r}`).value = 'Further Study Rate';
+        sheet.getCell(`C${r}`).value = `${generatedStats.further_study_rate}%`; r++;
+        // Not Pursuing (derived)
+        const notPursuing = Math.max((Number(generatedStats.total_alumni) || 0) - pursuing, 0);
+        sheet.getCell(`A${r}`).value = 'Not Pursuing';
+        sheet.getCell(`B${r}`).value = notPursuing;
+        sheet.getCell(`C${r}`).value = `${pct(notPursuing, generatedStats.total_alumni)}`; r++;
+        // Total Alumni
+        sheet.getCell(`A${r}`).value = 'Total Alumni';
+        sheet.getCell(`B${r}`).value = generatedStats.total_alumni;
+        sheet.getCell(`C${r}`).value = '100%'; r += 2;
+
+        // Detailed
+        sheet.getCell(`A${r}`).value = 'CHED Detailed Alumni Data'; r++;
+        sheet.addRow(qproHeaders); r++;
+        const mapped = (detailedDataByType['CHED'] || []).map(mapQPRORow)
+          .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
+        mapped.forEach((vals) => { sheet.addRow(vals); r++; });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `CHED_Complete_Report_${selectedYear}_${selectedCourse}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setExporting(false);
+        return;
+      }
+
+      // If exporting only AACUP, produce a single-tab workbook with AACUP matrix + details
+      if (!allStats && generatedStats?.type === 'AACUP') {
+        const sheet = workbook.addWorksheet('AACUP Report');
+        let r = 1;
+        sheet.getCell(`A${r}`).value = 'AACUP Complete Statistics Report'; r++;
+        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
+        sheet.getCell(`A${r}`).value = 'Course Filter'; sheet.getCell(`B${r}`).value = selectedCourse || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
+        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
+        // Employed
+        const employed = Number(generatedStats.employed_count) || 0;
+        sheet.getCell(`A${r}`).value = 'Employed';
+        sheet.getCell(`B${r}`).value = employed;
+        sheet.getCell(`C${r}`).value = `${pct(employed, generatedStats.total_alumni)}`; r++;
+        // Absorbed
+        const absorbed = Number(generatedStats.absorbed_count) || 0;
+        sheet.getCell(`A${r}`).value = 'Absorbed';
+        sheet.getCell(`B${r}`).value = absorbed;
+        sheet.getCell(`C${r}`).value = `${pct(absorbed, generatedStats.total_alumni)}`; r++;
+        // High Position
+        const highPos = Number(generatedStats.high_position_count) || 0;
+        sheet.getCell(`A${r}`).value = 'High Position';
+        sheet.getCell(`B${r}`).value = highPos;
+        sheet.getCell(`C${r}`).value = `${pct(highPos, generatedStats.total_alumni)}`; r++;
+        // Employment/Absorption/High Position Rates (percent only)
+        sheet.getCell(`A${r}`).value = 'Employment Rate';
+        sheet.getCell(`C${r}`).value = `${generatedStats.employment_rate || pct(employed, generatedStats.total_alumni)}%`; r++;
+        sheet.getCell(`A${r}`).value = 'Absorption Rate';
+        sheet.getCell(`C${r}`).value = `${generatedStats.absorption_rate || pct(absorbed, generatedStats.total_alumni)}%`; r++;
+        sheet.getCell(`A${r}`).value = 'High Position Rate';
+        sheet.getCell(`C${r}`).value = `${generatedStats.high_position_rate || pct(highPos, generatedStats.total_alumni)}%`; r++;
+        // Total
+        sheet.getCell(`A${r}`).value = 'Total Alumni';
+        sheet.getCell(`B${r}`).value = generatedStats.total_alumni;
+        sheet.getCell(`C${r}`).value = '100%'; r += 2;
+
+        // Detailed
+        sheet.getCell(`A${r}`).value = 'AACUP Detailed Alumni Data'; r++;
+        sheet.addRow(qproHeaders); r++;
+        const mapped2 = (detailedDataByType['AACUP'] || []).map(mapQPRORow)
+          .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
+        mapped2.forEach((vals) => { sheet.addRow(vals); r++; });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `AACUP_Complete_Report_${selectedYear}_${selectedCourse}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setExporting(false);
+        return;
+      }
+
+      // If exporting only HIGH_POSITION, produce a single-tab workbook with summary + filtered details
+      if (!allStats && generatedStats?.type === 'HIGH_POSITION') {
+        const sheet = workbook.addWorksheet('High Position Report');
+        let r = 1;
+        sheet.getCell(`A${r}`).value = 'HIGH POSITION Complete Statistics Report'; r++;
+        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
+        sheet.getCell(`A${r}`).value = 'Course Filter'; sheet.getCell(`B${r}`).value = selectedCourse || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
+        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
+        // High Position metrics
+        const hpCount = Number(generatedStats.high_position_count) || 0;
+        sheet.getCell(`A${r}`).value = 'High Position Alumni';
+        sheet.getCell(`B${r}`).value = hpCount;
+        sheet.getCell(`C${r}`).value = `${pct(hpCount, generatedStats.total_alumni)}`; r++;
+        sheet.getCell(`A${r}`).value = 'High Position Rate';
+        sheet.getCell(`C${r}`).value = `${generatedStats.high_position_rate || pct(hpCount, generatedStats.total_alumni)}%`; r++;
+        sheet.getCell(`A${r}`).value = 'Total Alumni';
+        sheet.getCell(`B${r}`).value = generatedStats.total_alumni;
+        sheet.getCell(`C${r}`).value = '100%'; r += 2;
+
+        // Detailed: only high-position alumni with limited columns
+        const headersHP = ['Course','First_Name','Middle_Name','Last_Name','Company_Name_Current','Position_Current'];
+        sheet.getCell(`A${r}`).value = 'High Position Detailed Alumni Data'; r++;
+        sheet.addRow(headersHP); r++;
+
+        const rows: any[] = [];
+        if (generatedStats.high_position_data && Array.isArray(generatedStats.high_position_data)) {
+          generatedStats.high_position_data.forEach((alumnus: any) => {
+            const course = alumnus.course || '';
+            const name = (alumnus.name || '').trim();
+            const parts = name.split(/\s+/);
+            const first = parts[0] || '';
+            const last = parts.length > 1 ? parts[parts.length - 1] : '';
+            const middle = parts.length > 2 ? parts.slice(1, parts.length - 1).join(' ') : '';
+            rows.push([
+              course,
+              first,
+              middle,
+              last,
+              alumnus.company || '',
+              alumnus.position || '',
+            ]);
+          });
+        } else {
+          const raw = detailedDataByType['HIGH_POSITION'] || [];
+          raw.forEach((row: any) => {
+            if (row['Position_Current']) {
+              rows.push([
+                row['Course'] || '',
+                row['First_Name'] || '',
+                row['Middle_Name'] || '',
+                row['Last_Name'] || '',
+                row['Company_Name_Current'] || '',
+                row['Position_Current'] || '',
+              ]);
+            }
+          });
+        }
+        // Respondents first: defined by having company or position
+        rows.sort((a, b) => {
+          const aAns = (a[4] && `${a[4]}`.trim()) || (a[5] && `${a[5]}`.trim()) ? 1 : 0;
+          const bAns = (b[4] && `${b[4]}`.trim()) || (b[5] && `${b[5]}`.trim()) ? 1 : 0;
+          return bAns - aAns;
+        });
+        rows.forEach((vals) => { sheet.addRow(vals); r++; });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `HIGH_POSITION_Complete_Report_${selectedYear}_${selectedCourse}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setExporting(false);
+        return;
+      }
+
+      // If exporting only SUC, produce a single-tab workbook with SUC matrix + details
+      if (!allStats && generatedStats?.type === 'SUC') {
+        const sheet = workbook.addWorksheet('SUC Report');
+        let r = 1;
+        sheet.getCell(`A${r}`).value = 'SUC Complete Statistics Report'; r++;
+        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
+        sheet.getCell(`A${r}`).value = 'Course Filter'; sheet.getCell(`B${r}`).value = selectedCourse || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
+        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
+        // High Position
+        const highPos = Number(generatedStats.high_position_count) || 0;
+        sheet.getCell(`A${r}`).value = 'High Position';
+        sheet.getCell(`B${r}`).value = highPos;
+        sheet.getCell(`C${r}`).value = `${pct(highPos, generatedStats.total_alumni)}`; r++;
+        // Other Positions (derived)
+        const otherPos = Math.max((Number(generatedStats.total_alumni) || 0) - highPos, 0);
+        sheet.getCell(`A${r}`).value = 'Other Positions';
+        sheet.getCell(`B${r}`).value = otherPos;
+        sheet.getCell(`C${r}`).value = `${pct(otherPos, generatedStats.total_alumni)}`; r++;
+        // Leadership Rate (percent only)
+        sheet.getCell(`A${r}`).value = 'Leadership Rate';
+        sheet.getCell(`C${r}`).value = `${pct(highPos, generatedStats.total_alumni)}`; r++;
+        // Public/Private/Local/International
+        const publicCnt = Number(generatedStats.public_count) || 0;
+        const privateCnt = Number(generatedStats.private_count) || 0;
+        const localCnt = Number(generatedStats.local_count) || 0;
+        const intlCnt = Number(generatedStats.international_count) || 0;
+        sheet.getCell(`A${r}`).value = 'Public'; sheet.getCell(`B${r}`).value = publicCnt; sheet.getCell(`C${r}`).value = `${pct(publicCnt, generatedStats.total_alumni)}`; r++;
+        sheet.getCell(`A${r}`).value = 'Private'; sheet.getCell(`B${r}`).value = privateCnt; sheet.getCell(`C${r}`).value = `${pct(privateCnt, generatedStats.total_alumni)}`; r++;
+        sheet.getCell(`A${r}`).value = 'Local'; sheet.getCell(`B${r}`).value = localCnt; sheet.getCell(`C${r}`).value = `${pct(localCnt, generatedStats.total_alumni)}`; r++;
+        sheet.getCell(`A${r}`).value = 'International'; sheet.getCell(`B${r}`).value = intlCnt; sheet.getCell(`C${r}`).value = `${pct(intlCnt, generatedStats.total_alumni)}`; r++;
+        // Total
+        sheet.getCell(`A${r}`).value = 'Total Alumni';
+        sheet.getCell(`B${r}`).value = generatedStats.total_alumni;
+        sheet.getCell(`C${r}`).value = '100%'; r += 2;
+
+        // Detailed
+        sheet.getCell(`A${r}`).value = 'SUC Detailed Alumni Data'; r++;
+        sheet.addRow(qproHeaders); r++;
+        const mapped = (detailedDataByType['SUC'] || []).map(mapQPRORow)
+          .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
+        mapped.forEach((vals) => { sheet.addRow(vals); r++; });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `SUC_Complete_Report_${selectedYear}_${selectedCourse}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setExporting(false);
+        return;
+      }
+
       const worksheet = workbook.addWorksheet('Alumni Statistics');
+
+      // Helper for QPRO detailed export with limited columns and derived Status
+      const addQPRODetailedSheet = (rows: any[], sheetName: string = 'QPRO Detailed Alumni Data') => {
+        const detail = workbook.addWorksheet(sheetName);
+        const headers = [
+          'Course',
+          'First_Name',
+          'Middle_Name',
+          'Last_Name',
+          'Status',
+          'Current Company Name',
+          'Position_Current',
+          'Current Salary Range',
+          'Sector_Current',
+          'Please specify post graduate/degree',
+        ];
+        detail.addRow(headers);
+        const safe = (v: any) => (v === undefined || v === null ? '' : v);
+        rows.forEach((row) => {
+          const statusRaw = `${row['Status'] || row['user_status'] || ''}`.toLowerCase();
+          let status = '';
+          if (statusRaw.includes('employ')) status = 'Employed';
+          else if (statusRaw.includes('unemploy')) status = 'Unemployed';
+          if (!status) {
+            if (row['Company_Name_Current'] || row['Position_Current'] || row['Salary_Current']) status = 'Employed';
+            else if (row['Unemployment_Reason']) status = 'Unemployed';
+            else status = 'Not Tracked';
+          }
+          detail.addRow([
+            safe(row['Course']),
+            safe(row['First_Name']),
+            safe(row['Middle_Name']),
+            safe(row['Last_Name']),
+            status,
+            safe(row['Company_Name_Current']),
+            safe(row['Position_Current']),
+            safe(row['Salary_Current']),
+            safe(row['Sector_Current']),
+            safe(row['Program'] || row['Pursue_Further_Study']),
+          ]);
+        });
+      };
 
       let rowIdx = 1;
       if (allStats) {
@@ -696,36 +1101,25 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             });
           }
           rowIdx++;
-          // Generate chart images for this section using the robust method
-          const chartImagesForType: { barChart?: string; pieChart?: string } =
-            await renderAndCaptureChartImages(type, stats);
-          worksheet.getCell(`A${rowIdx}`).value = '=== CHART IMAGES ===';
-          rowIdx++;
-          if (chartImagesForType.barChart) {
-            const barImgId = workbook.addImage({
-              base64: chartImagesForType.barChart,
-              extension: 'png',
-            });
-            worksheet.addImage(barImgId, {
-              tl: { col: 0, row: rowIdx },
-              ext: { width: 500, height: 300 },
-            });
-            rowIdx += 18; // Add more space after bar chart
+          // Skip chart images for QPRO section; keep for others
+          if (type !== 'QPRO') {
+            const chartImagesForType: { barChart?: string; pieChart?: string } =
+              await renderAndCaptureChartImages(type, stats);
+            worksheet.getCell(`A${rowIdx}`).value = '=== CHART IMAGES ===';
+            rowIdx++;
+            if (chartImagesForType.barChart) {
+              const barImgId = workbook.addImage({ base64: chartImagesForType.barChart, extension: 'png' });
+              worksheet.addImage(barImgId, { tl: { col: 0, row: rowIdx }, ext: { width: 500, height: 300 } });
+              rowIdx += 18;
+            }
+            if (chartImagesForType.pieChart) {
+              const pieImgId = workbook.addImage({ base64: chartImagesForType.pieChart, extension: 'png' });
+              worksheet.addImage(pieImgId, { tl: { col: 0, row: rowIdx }, ext: { width: 500, height: 300 } });
+              rowIdx += 18;
+            }
+            rowIdx += 3;
+            rowIdx = worksheet.lastRow ? Math.max(worksheet.lastRow.number + 2, rowIdx) : rowIdx + 2;
           }
-          if (chartImagesForType.pieChart) {
-            const pieImgId = workbook.addImage({
-              base64: chartImagesForType.pieChart,
-              extension: 'png',
-            });
-            worksheet.addImage(pieImgId, {
-              tl: { col: 0, row: rowIdx },
-              ext: { width: 500, height: 300 },
-            });
-            rowIdx += 18; // Add more space after pie chart
-          }
-          // Add extra buffer rows to prevent overlap
-          rowIdx += 3;
-          rowIdx = worksheet.lastRow ? Math.max(worksheet.lastRow.number + 2, rowIdx) : rowIdx + 2;
           // Add detailed data for this section (same as ALL export)
           let lastHeader: string[] | null = null;
           const rows = detailedDataByType[type] as any[];
