@@ -194,11 +194,12 @@ const PostCard: React.FC<PostCardProps> = ({
   };
 
   const handleEditComment = (commentId: number) => {
-    if (!setEditCommentContent || !setEditingComment) return;
+    if (!setEditCommentContent || !setEditingComment || !setShowOptions) return;
     const comment = post.comments?.find(c => c.comment_id === commentId);
     if (comment) {
       setEditCommentContent(prev => ({ ...prev, [commentId]: comment.comment_content }));
       setEditingComment(prev => ({ ...prev, [commentId]: true }));
+      setShowOptions(prev => ({ ...prev, [commentId]: false })); // Close the menu
     }
   };
 
@@ -463,7 +464,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span>{comment.user.f_name} {comment.user.l_name}</span>
-                            {String(currentUserId) === String(comment.user.user_id) && setEditingComment && setEditCommentContent && setShowOptions && (
+                            {String(currentUserId) === String(comment.user.user_id) && setEditingComment && setEditCommentContent && setShowOptions && !editingComment[comment.comment_id] && (
                               <div style={{ position: 'relative' }}>
                                 <button
                                   onClick={() => setShowOptions?.(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
