@@ -79,7 +79,7 @@ const Sidebar = () => {
     { to: '/dashboard', label: 'Dashboard', icon: <FaTh style={styles.icon} /> },
     { to: '/statistics', label: 'Statistics', icon: <FaChartBar style={styles.icon} /> },
     { to: '/users', label: 'Users', icon: <FaUser style={styles.icon} /> },
-    { to: '/ccict/profile', label: 'Profile', icon: <FaUserCircle style={styles.icon} /> },
+    { to: '/ccict/dashboard', label: 'Profile', icon: <FaUserCircle style={styles.icon} /> },
     { to: '/tracker', label: 'Tracker', icon: <LuLocateFixed style={styles.icon} /> },
   ];
 
