@@ -1,8 +1,8 @@
 import React from 'react';
-import AlumniProfile from '../alumni/Profile';
+import UnifiedProfile from '../shared/UnifiedProfile';
 
 const PesoProfile: React.FC = () => {
-  return <AlumniProfile />;
+  return <UnifiedProfile />;
 };
 
 export default PesoProfile;

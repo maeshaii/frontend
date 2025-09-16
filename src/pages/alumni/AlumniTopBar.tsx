@@ -96,6 +96,61 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     }
   };
 
+  // Refactored admin URLs
+  const getAdminUrl = (path: string) => `/ccict/${path}`;
+
+  // Default tracker click for admin
+  const handleTrackerClick = onTrackerClick || (() => {
+    if (isAdmin) {
+      navigate('/tracker/questions');
+    }
+  });
+
+  // Refactored navigation for admin
+  const handleHomeClick = () => {
+    if (isAdmin) {
+      navigate(getAdminUrl('dashboard'));
+    } else if (isPeso) {
+      navigate('/peso/dashboard');
+    } else {
+      navigate('/alumni/dashboard');
+    }
+    setTimeout(() => {
+      const selectors = ['.center-content', '.profile-center-content', '.main-content'];
+      let scrolled = false;
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el) {
+          el.scrollTo({ top: 0, behavior: 'smooth' });
+          scrolled = true;
+        }
+      }
+      if (!scrolled) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 200);
+  };
+
+  const handleNotificationClick = () => {
+    if (isAdmin) {
+      navigate(getAdminUrl('notification'));
+    } else if (isPeso) {
+      navigate('/peso/notifications');
+    } else {
+      navigate('/alumni/notifications');
+    }
+  };
+
+  const handleProfileClick = () => {
+    if (isAdmin) {
+      navigate(getAdminUrl('profile'));
+    } else if (isPeso) {
+      navigate('/peso/profile');
+    } else {
+      navigate('/alumni/profile');
+    }
+  };
+
   return (
     <div
       style={{
@@ -211,19 +266,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             gap: 4,
             cursor: 'pointer',
           }}
-          onClick={() => {
-            const dashboardPath = isAdmin ? '/ccict/dashboard' : (isPeso ? '/peso/dashboard' : '/alumni/dashboard');
-            if (location.pathname === dashboardPath) {
-              const centerContent = document.querySelector('.center-content') as HTMLElement;
-              if (centerContent) {
-                centerContent.scrollTo({ top: 0, behavior: 'smooth' });
-              } else {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }
-            } else {
-              navigate(dashboardPath);
-            }
-          }}
+          onClick={handleHomeClick}
         >
           <span style={{ color: 'white', fontSize: 20 }}>🏠</span>
           <span style={{ color: 'white', fontSize: 12 }}>Home</span>
@@ -249,10 +292,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           cursor: 'pointer',
           position: 'relative', // for badge positioning
         }}
-        onClick={() => {
-          const notifPath = isAdmin ? '/ccict/notification' : (isPeso ? '/peso/notifications' : '/alumni/notifications');
-          navigate(notifPath);
-        }}
+        onClick={handleNotificationClick}
       >
         <span style={{ color: 'white', fontSize: 20 }}>🔔</span>
         {notificationCount > 0 && (
@@ -288,7 +328,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               gap: 4,
               cursor: 'pointer',
             }}
-            onClick={onTrackerClick}
+            onClick={handleTrackerClick}
           >
             <span style={{ color: 'white', fontSize: 20 }}>📋</span>
             <span style={{ color: 'white', fontSize: 12 }}>Tracker</span>

@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import AlumniTopBar from '../alumni/AlumniTopBar';
 import PostCreate from '../alumni/PostCreate';
 import PostCard from '../../components/PostCard';
 import ctulogo from '../../images/ctulogo.png';
-import '../alumni/dashboard.css';
+import './UnifiedDashboard.css';
 import { likePost, repostPost, unlikePost, deletePost, editPost, deleteRepost, editComment, deleteComment, getPosts, followUser, unfollowUser, checkFollowStatus, commentOnPost } from '../../services/api';
+import axios from 'axios';
 
 interface UnifiedDashboardProps {
   userType: 'alumni' | 'peso' | 'admin' | 'ojt';
@@ -56,7 +57,7 @@ interface PostItem {
     l_name?: string;
     profile_pic?: string;
     name?: string;
-    account_type?: { ccict?: boolean; peso?: boolean };
+    account_type?: { admin?: boolean; peso?: boolean };
   };
   comments?: CommentItem[];
   reposts?: RepostItem[];
@@ -149,6 +150,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
   const [editCommentContent, setEditCommentContent] = useState<{ [key: number]: string }>({});
   const [following, setFollowing] = useState<any[]>([]);
   const navigate = useNavigate();
+  const mainContentRef = useRef<HTMLDivElement>(null);
+  const [pesoId, setPesoId] = useState<number | null>(null);
+  const [adminId, setAdminId] = useState<number | null>(null);
 
   const isAdmin = userType === 'admin';
   const isPeso = userType === 'peso';
@@ -205,6 +209,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
         })
         .catch((error) => console.error('Error fetching users:', error));
     });
+    axios.get('/api/peso/main').then(res => setPesoId(res.data.id)).catch(() => setPesoId(null));
+    axios.get('/api/ccict/main').then(res => setAdminId(res.data.id)).catch(() => setAdminId(null));
   }, [navigate]);
 
   useEffect(() => {
@@ -260,19 +266,19 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
         }}
         isAdmin={isAdmin}
         isPeso={isPeso}
-        onTrackerClick={isAdmin ? () => navigate('/tracker') : undefined}
+        onTrackerClick={isAdmin ? () => navigate('/tracker/questions') : undefined}
       />
-      <div className="main-content">
+      <div className="main-content" ref={mainContentRef}>
         {/* Left Sidebar */}
         <div className="left-sidebar">
           <div
             className="profile-card"
             onClick={() => {
               if (user && (user as any).account_type) {
-                if ((user as any).account_type.peso) {
-                  navigate('/peso/profile');
-                } else if ((user as any).account_type.ccict) {
-                  navigate('/ccict/profile');
+                if ((user as any).account_type.peso && pesoId) {
+                  navigate(`/peso/profile/${pesoId}`);
+                } else if ((user as any).account_type.admin && adminId) {
+                  navigate(`/ccict/profile/${adminId}`);
                 } else if ((user as any).account_type.ojt) {
                   navigate('/ojt/profile');
                 } else {
@@ -296,14 +302,14 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
           {isOjt && (
             <div className="quick-links" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8 }}>
-                <Link to="/ccict/profile" className="quick-link-card" style={{ flex: 1, cursor: 'pointer', textDecoration: 'none' }}>
+                <Link to={adminId ? `/ccict/profile/${adminId}` : '/ccict/profile'} className="quick-link-card" style={{ flex: 1, cursor: 'pointer', textDecoration: 'none' }}>
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
                     <div className="quick-link-icon ccict-icon">C</div>
                     <div className="quick-link-text">CCICT</div>
                   </div>
                 </Link>
-                <Link to="/peso/profile" className="quick-link-card" style={{ flex: 1, cursor: 'pointer', textDecoration: 'none' }}>
+                <Link to={pesoId ? `/peso/profile/${pesoId}` : '/peso/profile'} className="quick-link-card" style={{ flex: 1, cursor: 'pointer', textDecoration: 'none' }}>
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
                     <div className="quick-link-icon peso-icon">✱</div>
@@ -325,14 +331,14 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
           {userType === 'alumni' && (
             <div className="quick-links" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8 }}>
-                <Link to="/ccict/profile" className="quick-link-card" style={{ flex: 1, cursor: 'pointer', textDecoration: 'none' }}>
+                <Link to={adminId ? `/ccict/profile/${adminId}` : '/ccict/profile'} className="quick-link-card" style={{ flex: 1, cursor: 'pointer', textDecoration: 'none' }}>
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
                     <div className="quick-link-icon ccict-icon">C</div>
                     <div className="quick-link-text">CCICT</div>
                   </div>
                 </Link>
-                <Link to="/peso/profile" className="quick-link-card" style={{ flex: 1, cursor: 'pointer', textDecoration: 'none' }}>
+                <Link to={pesoId ? `/peso/profile/${pesoId}` : '/peso/profile'} className="quick-link-card" style={{ flex: 1, cursor: 'pointer', textDecoration: 'none' }}>
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
                     <div className="quick-link-icon peso-icon">✱</div>
@@ -405,7 +411,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
                 }
                 let isCcict = false, isPeso = false;
                 if (post.user && post.user.account_type) {
-                  isCcict = !!post.user.account_type.ccict;
+                  isCcict = !!post.user.account_type.admin;
                   isPeso = !!post.user.account_type.peso;
                 }
                 return isOwn || isFollowed || isCcict || isPeso;
@@ -490,7 +496,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
         </div>
         {/* Right Sidebar */}
         <div className="right-sidebar">
-          <div className="people-you-may-know-card">
+          <div className="people-you-may-know-card"> 
             <div className="people-you-may-know-title">People you may know</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {suggestedUsers.length > 0 ? (
