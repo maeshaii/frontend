@@ -348,6 +348,31 @@ export const updateOJTStatus = async (userId: number, status: string) => {
   return response.data;
 };
 
+// Send completed OJT list to admin (returns count)
+export const sendCompletedOJTToAdmin = async (year?: number | string, userIds?: number[]) => {
+  const response = await api.post('ojt/send-to-admin/', { year, user_ids: userIds || [] });
+  return response.data;
+};
+
+// Approve coordinator request for a batch year
+export const approveCoordinatorRequest = async (year: number | string) => {
+  const response = await api.post('ojt/coordinator-requests/approve/', { year });
+  return response.data as { success: boolean; approved: number; year: number };
+};
+
+// Get coordinator requests count for admin dashboard
+export const fetchCoordinatorRequestsCount = async (year?: number | string) => {
+  const path = year ? `ojt/coordinator-requests/?year=${year}` : 'ojt/coordinator-requests/';
+  const response = await api.get(path);
+  return response.data;
+};
+
+// List requested batches with counts for admin cards
+export const fetchCoordinatorRequestsList = async () => {
+  const response = await api.get('ojt/coordinator-requests/list/');
+  return response.data;
+};
+
 // Fetch tracker responses
 export const fetchTrackerResponses = async () => {
   const response = await api.get('tracker/list-responses/');

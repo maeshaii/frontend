@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchOJTByYear, updateOJTStatus } from '../../services/api';
+import { fetchOJTByYear, updateOJTStatus, sendCompletedOJTToAdmin } from '../../services/api';
 
 interface DetailsTableProps {
   onBack: () => void;
@@ -124,26 +124,48 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
     },
     modal: {
       background: 'white',
-      width: '480px',
-      maxWidth: '95%',
-      borderRadius: '12px',
-      padding: '20px 24px',
-      boxShadow: '0 12px 30px rgba(0,0,0,0.2)'
+      width: '560px',
+      maxWidth: '96%',
+      borderRadius: '14px',
+      padding: '22px 24px',
+      boxShadow: '0 20px 40px rgba(0,0,0,0.25)'
     },
     modalTitle: {
+      fontSize: '18px',
       fontWeight: 700,
       marginBottom: '12px'
     },
-    modalItem: {
-      margin: '6px 0',
-      fontSize: '14px'
+    modalDivider: {
+      height: 1,
+      background: '#e5e7eb',
+      margin: '8px 0 16px'
+    },
+    modalGrid: {
+      display: 'grid',
+      gridTemplateColumns: '160px 1fr',
+      rowGap: '10px',
+      columnGap: '16px',
+      fontSize: '14px',
+      lineHeight: 1.4
+    },
+    modalLabel: {
+      color: '#6b7280',
+      fontWeight: 600
+    },
+    modalValue: {
+      color: '#111827',
+      fontWeight: 500
+    },
+    modalActionsRow: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      marginTop: '18px'
     },
     closeBtn: {
-      marginTop: '12px',
-      padding: '6px 14px',
-      borderRadius: '6px',
-      border: '1px solid #ccc',
-      background: '#eef2ff',
+      padding: '8px 16px',
+      borderRadius: '8px',
+      border: '1px solid #d1d5db',
+      background: '#f3f4f6',
       cursor: 'pointer'
     }
   };
@@ -158,7 +180,8 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
     const first = normalized(ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : ''));
     const last = normalized(ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : ''));
     const company = normalized(ojt.company);
-    return first.includes(q) || last.includes(q) || company.includes(q);
+    const ctuId = normalized(ojt.ctu_id || ojt.id);
+    return first.includes(q) || last.includes(q) || company.includes(q) || ctuId.includes(q);
   });
 
   if (loading) {
@@ -171,7 +194,16 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
 
   return (
     <div style={styles.detailsTable}>
-      {/* Search input removed per request */}
+      {/* Search input */}
+      <div style={styles.searchRow}>
+        <input
+          type="text"
+          placeholder="Search by name, company, or CTU ID..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={styles.searchInput}
+        />
+      </div>
       <table style={styles.table}>
         <thead>
           <tr>
@@ -200,7 +232,9 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
                 <td style={styles.td}>{ojt.company || ''}</td>
                 <td style={styles.td}>
                   <select
-                    value={ojt.ojt_status || 'Pending'}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    value={ojt.ojt_status || 'Ongoing'}
                     onChange={async (e) => {
                       const newStatus = e.target.value;
                       try {
@@ -215,7 +249,6 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
                     <option value="Completed">Completed</option>
                     <option value="Ongoing">Ongoing</option>
                     <option value="Incomplete">Incomplete</option>
-                    <option value="Pending">Pending</option>
                   </select>
                 </td>
               </tr>
@@ -228,26 +261,62 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
         <button style={styles.backBtn} onClick={onBack}>
           Back
         </button>
-        <button style={styles.sendBtn}>Send to Admin</button>
+        <button
+          style={styles.sendBtn}
+          onClick={async (e) => {
+            e.stopPropagation();
+            try {
+              const completedIds = ojtData.filter((r) => (r.ojt_status || 'Ongoing') === 'Completed').map((r) => r.id);
+              const res = await sendCompletedOJTToAdmin(selectedYear, completedIds);
+              if (res?.success) {
+                alert(`Sent to Admin. Completed: ${res.completed_count || completedIds.length}`);
+              } else {
+                alert(res?.message || 'Failed to send to admin');
+              }
+            } catch (err) {
+              console.error('Send to admin failed', err);
+              alert('Failed to send to admin');
+            }
+          }}
+        >
+          Send to Admin
+        </button>
       </div>
 
       {selected && (
         <div style={styles.modalOverlay} onClick={() => setSelected(null)}>
           <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div style={styles.modalTitle}>OJT Details</div>
-            <div style={styles.modalItem}><strong>CTU ID:</strong> {selected.ctu_id || ''}</div>
-            <div style={styles.modalItem}><strong>First Name:</strong> {selected.first_name || (selected.name ? selected.name.split(' ')[0] : '')}</div>
-            <div style={styles.modalItem}><strong>Middle Name:</strong> {selected.middle_name || ''}</div>
-            <div style={styles.modalItem}><strong>Last Name:</strong> {selected.last_name || (selected.name ? selected.name.split(' ').slice(-1)[0] : '')}</div>
-            <div style={styles.modalItem}><strong>Gender:</strong> {selected.gender || ''}</div>
-            <div style={styles.modalItem}><strong>Birthdate:</strong> {selected.birthdate || ''}</div>
-            <div style={styles.modalItem}><strong>Phone Number:</strong> {selected.phone_number || ''}</div>
-            <div style={styles.modalItem}><strong>Address:</strong> {selected.address || ''}</div>
-            <div style={styles.modalItem}><strong>Company:</strong> {selected.company || ''}</div>
-            <div style={styles.modalItem}><strong>Start Date:</strong> {selected.ojt_start_date || selected.date_started || ''}</div>
-            <div style={styles.modalItem}><strong>End Date:</strong> {selected.ojt_end_date || ''}</div>
-            <div style={styles.modalItem}><strong>Status:</strong> {selected.ojt_status || 'Pending'}</div>
-            <button style={styles.closeBtn} onClick={() => setSelected(null)}>Close</button>
+            <div style={styles.modalDivider}></div>
+            <div style={styles.modalGrid}>
+              <div style={styles.modalLabel}>CTU ID</div>
+              <div style={styles.modalValue}>{selected.ctu_id || ''}</div>
+              <div style={styles.modalLabel}>First Name</div>
+              <div style={styles.modalValue}>{selected.first_name || (selected.name ? selected.name.split(' ')[0] : '')}</div>
+              <div style={styles.modalLabel}>Middle Name</div>
+              <div style={styles.modalValue}>{selected.middle_name || ''}</div>
+              <div style={styles.modalLabel}>Last Name</div>
+              <div style={styles.modalValue}>{selected.last_name || (selected.name ? selected.name.split(' ').slice(-1)[0] : '')}</div>
+              <div style={styles.modalLabel}>Gender</div>
+              <div style={styles.modalValue}>{selected.gender || ''}</div>
+              <div style={styles.modalLabel}>Birthdate</div>
+              <div style={styles.modalValue}>{selected.birthdate || ''}</div>
+              <div style={styles.modalLabel}>Phone Number</div>
+              <div style={styles.modalValue}>{selected.phone_number || ''}</div>
+              <div style={styles.modalLabel}>Address</div>
+              <div style={styles.modalValue}>{selected.address || ''}</div>
+              <div style={styles.modalLabel}>Company</div>
+              <div style={styles.modalValue}>{selected.company || ''}</div>
+              <div style={styles.modalLabel}>Start Date</div>
+              <div style={styles.modalValue}>{selected.ojt_start_date || selected.date_started || ''}</div>
+              <div style={styles.modalLabel}>End Date</div>
+              <div style={styles.modalValue}>{selected.ojt_end_date || ''}</div>
+              <div style={styles.modalLabel}>Status</div>
+              <div style={styles.modalValue}>{selected.ojt_status || 'Ongoing'}</div>
+            </div>
+            <div style={styles.modalActionsRow}>
+              <button style={styles.closeBtn} onClick={() => setSelected(null)}>Close</button>
+            </div>
           </div>
         </div>
       )}
