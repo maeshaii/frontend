@@ -511,6 +511,31 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     }
   };
 
+  // High Position helpers for ALL export reuse
+  const headersHighPosition = ['Course','First_Name','Middle_Name','Last_Name','Company_Name_Current','Position_Current'];
+  const mapHighPositionRow = (alumnusOrRow: any) => {
+    // Supports both high_position_data shape and detailed row shape
+    const course = alumnusOrRow.course || alumnusOrRow['Course'] || '';
+    const company = alumnusOrRow.company || alumnusOrRow['Company_Name_Current'] || '';
+    const position = alumnusOrRow.position || alumnusOrRow['Position_Current'] || '';
+    if (alumnusOrRow.name) {
+      const name = (alumnusOrRow.name || '').trim();
+      const parts = name.split(/\s+/);
+      const first = parts[0] || '';
+      const last = parts.length > 1 ? parts[parts.length - 1] : '';
+      const middle = parts.length > 2 ? parts.slice(1, parts.length - 1).join(' ') : '';
+      return [course, first, middle, last, company, position];
+    }
+    return [
+      course,
+      alumnusOrRow['First_Name'] || '',
+      alumnusOrRow['Middle_Name'] || '',
+      alumnusOrRow['Last_Name'] || '',
+      company,
+      position,
+    ];
+  };
+
   const handleExportCompleteData = async () => {
     if (!generatedStats && !allStats) return;
     setExporting(true);
@@ -520,10 +545,34 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       let statsByType: Record<string, any> = {};
       if (allStats) {
         // For ALL, fetch for each type
-        for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP']) {
+        for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
           const res = await exportDetailedAlumniData(selectedYear, selectedCourse, type);
           detailedDataByType[type] = res.detailed_data || [];
-          statsByType[type] = allStats[type];
+          
+          // Use stats from allStats if available, otherwise use stats from the API response
+          let stats = allStats[type] || res.stats || null;
+          
+          // For HIGH_POSITION, generate stats from detailed data if not available
+          if (type === 'HIGH_POSITION' && !stats && res.detailed_data) {
+            const totalAlumni = res.detailed_data.length;
+            const highPositionCount = res.detailed_data.filter((alumnus: any) => {
+              const position = (alumnus.Position_Current || alumnus.position_current || '').toLowerCase();
+              return position.includes('manager') || position.includes('director') || 
+                     position.includes('ceo') || position.includes('president') || 
+                     position.includes('vp') || position.includes('vice president') ||
+                     position.includes('head') || position.includes('chief') ||
+                     position.includes('executive') || position.includes('senior');
+            }).length;
+            
+            stats = {
+              type: 'HIGH_POSITION',
+              total_alumni: totalAlumni,
+              high_position_count: highPositionCount,
+              high_position_rate: totalAlumni > 0 ? ((highPositionCount / totalAlumni) * 100).toFixed(1) : '0.0'
+            };
+          }
+          
+          statsByType[type] = stats;
         }
       } else {
         const res = await exportDetailedAlumniData(
@@ -895,8 +944,12 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         worksheet.getCell(`A${rowIdx}`).value = `Course Filter`;
         worksheet.getCell(`B${rowIdx}`).value = selectedCourse || 'All';
         rowIdx += 2;
-        for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP']) {
+        for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
           const stats = statsByType[type];
+          if (!stats) {
+            console.warn(`No stats found for type: ${type}`);
+            continue;
+          }
           worksheet.getCell(`A${rowIdx}`).value = `${type} Statistics`;
           rowIdx++;
           worksheet.getCell(`A${rowIdx}`).value = 'Metric';
@@ -909,7 +962,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           // Add summary rows for each type
           if (stats?.type === 'QPRO') {
             worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
-            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni;
+            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni || 0;
             worksheet.getCell(`C${rowIdx}`).value = '100%';
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Employment Rate';
@@ -919,34 +972,34 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.getCell(`A${rowIdx}`).value = 'Employed Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.employed_count;
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.employed_count, stats.total_alumni)}`;
+              `${pct(stats.employed_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Unemployed Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.unemployed_count;
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.unemployed_count, stats.total_alumni)}`;
+              `${pct(stats.unemployed_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Untracked Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.untracked_count;
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.untracked_count, stats.total_alumni)}`;
+              `${pct(stats.untracked_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Unemployment Rate';
             worksheet.getCell(`B${rowIdx}`).value =
-              `${pct(stats.unemployed_count, stats.total_alumni)}`;
+              `${pct(stats.unemployed_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Employment Success Rate';
             worksheet.getCell(`B${rowIdx}`).value = `${stats.employment_rate}%`;
             rowIdx++;
           } else if (stats?.type === 'CHED') {
             worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
-            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni;
+            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni || 0;
             worksheet.getCell(`C${rowIdx}`).value = '100%';
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Pursuing Further Study';
             worksheet.getCell(`B${rowIdx}`).value = stats.pursuing_further_study;
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.pursuing_further_study, stats.total_alumni)}`;
+              `${pct(stats.pursuing_further_study || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Further Study Rate';
             worksheet.getCell(`B${rowIdx}`).value =
@@ -956,9 +1009,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Not Pursuing Further Study';
             worksheet.getCell(`B${rowIdx}`).value =
-              stats.total_alumni - stats.pursuing_further_study;
+              (stats.total_alumni || 0) - (stats.pursuing_further_study || 0);
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.total_alumni - stats.pursuing_further_study, stats.total_alumni)}`;
+              `${pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Academic Advancement Rate';
             worksheet.getCell(`B${rowIdx}`).value =
@@ -966,87 +1019,87 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             rowIdx++;
           } else if (stats?.type === 'SUC') {
             worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
-            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni;
+            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni || 0;
             worksheet.getCell(`C${rowIdx}`).value = '100%';
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'High Position Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.high_position_count;
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.high_position_count, stats.total_alumni)}`;
+              `${pct(stats.high_position_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Other Positions';
-            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni - stats.high_position_count;
+            worksheet.getCell(`B${rowIdx}`).value = (stats.total_alumni || 0) - (stats.high_position_count || 0);
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.total_alumni - stats.high_position_count, stats.total_alumni)}`;
+              `${pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Leadership Rate';
             worksheet.getCell(`B${rowIdx}`).value =
-              `${pct(stats.high_position_count, stats.total_alumni)}`;
+              `${pct(stats.high_position_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Public Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.public_count;
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.public_count, stats.total_alumni)}`;
+              `${pct(stats.public_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Private Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.private_count;
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.private_count, stats.total_alumni)}`;
+              `${pct(stats.private_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Local Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.local_count;
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.local_count, stats.total_alumni)}`;
+              `${pct(stats.local_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'International Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.international_count;
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.international_count, stats.total_alumni)}`;
+              `${pct(stats.international_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
           } else if (stats?.type === 'AACUP') {
             worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
-            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni;
+            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni || 0;
             worksheet.getCell(`C${rowIdx}`).value = '100%';
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Employed Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.employed_count;
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.employed_count, stats.total_alumni)}`;
+              `${pct(stats.employed_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Absorbed Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.absorbed_count;
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.absorbed_count, stats.total_alumni)}`;
+              `${pct(stats.absorbed_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'High Position Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.high_position_count;
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.high_position_count, stats.total_alumni)}`;
+              `${pct(stats.high_position_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Others';
             worksheet.getCell(`B${rowIdx}`).value =
-              stats.total_alumni -
-              stats.employed_count -
-              stats.absorbed_count -
-              stats.high_position_count;
+              (stats.total_alumni || 0) -
+              (stats.employed_count || 0) -
+              (stats.absorbed_count || 0) -
+              (stats.high_position_count || 0);
             worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.total_alumni - stats.employed_count - stats.absorbed_count - stats.high_position_count, stats.total_alumni)}`;
+              `${pct((stats.total_alumni || 0) - (stats.employed_count || 0) - (stats.absorbed_count || 0) - (stats.high_position_count || 0), stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Employment Rate';
             worksheet.getCell(`B${rowIdx}`).value =
-              `${pct(stats.employed_count, stats.total_alumni)}`;
+              `${pct(stats.employed_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Absorption Rate';
             worksheet.getCell(`B${rowIdx}`).value =
-              `${pct(stats.absorbed_count, stats.total_alumni)}`;
+              `${pct(stats.absorbed_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Leadership Rate';
             worksheet.getCell(`B${rowIdx}`).value =
-              `${pct(stats.high_position_count, stats.total_alumni)}`;
+              `${pct(stats.high_position_count || 0, stats.total_alumni || 0)}`;
             rowIdx++;
           } else if (stats?.type === 'HIGH_POSITION') {
             worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
-            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni;
+            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni || 0;
             worksheet.getCell(`C${rowIdx}`).value = '100%';
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'High Position Alumni';
@@ -1090,77 +1143,55 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             }
           } else {
             worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
-            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni;
+            worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni || 0;
             worksheet.getCell(`C${rowIdx}`).value = '100%';
             rowIdx++;
             Object.entries(stats.status_counts || {}).forEach(([status, count]) => {
               worksheet.getCell(`A${rowIdx}`).value = status;
               worksheet.getCell(`B${rowIdx}`).value = count as number;
-              worksheet.getCell(`C${rowIdx}`).value = `${pct(count as number, stats.total_alumni)}`;
+              worksheet.getCell(`C${rowIdx}`).value = `${pct(count as number, stats.total_alumni || 0)}`;
               rowIdx++;
             });
           }
           rowIdx++;
-          // Skip chart images for QPRO section; keep for others
-          if (type !== 'QPRO') {
-            const chartImagesForType: { barChart?: string; pieChart?: string } =
-              await renderAndCaptureChartImages(type, stats);
-            worksheet.getCell(`A${rowIdx}`).value = '=== CHART IMAGES ===';
-            rowIdx++;
-            if (chartImagesForType.barChart) {
-              const barImgId = workbook.addImage({ base64: chartImagesForType.barChart, extension: 'png' });
-              worksheet.addImage(barImgId, { tl: { col: 0, row: rowIdx }, ext: { width: 500, height: 300 } });
-              rowIdx += 18;
-            }
-            if (chartImagesForType.pieChart) {
-              const pieImgId = workbook.addImage({ base64: chartImagesForType.pieChart, extension: 'png' });
-              worksheet.addImage(pieImgId, { tl: { col: 0, row: rowIdx }, ext: { width: 500, height: 300 } });
-              rowIdx += 18;
-            }
-            rowIdx += 3;
-            rowIdx = worksheet.lastRow ? Math.max(worksheet.lastRow.number + 2, rowIdx) : rowIdx + 2;
-          }
-          // Add detailed data for this section (same as ALL export)
-          let lastHeader: string[] | null = null;
+          // Skip all chart images in ALL export
+          // Build tailored detailed tables per type
           const rows = detailedDataByType[type] as any[];
           if (Array.isArray(rows) && rows.length > 0) {
-            // Determine which columns are non-empty for at least one row
-            const currentHeader = Object.keys(rows[0]);
-            const nonEmptyColumns = currentHeader.filter((key) =>
-              rows.some((row) => row[key] !== '' && row[key] !== null && row[key] !== undefined)
-            );
             worksheet.getCell(`A${rowIdx}`).value = `${type} Detailed Alumni Data`;
             rowIdx++;
-            // Only add header if different from lastHeader
-            if (!lastHeader || JSON.stringify(nonEmptyColumns) !== JSON.stringify(lastHeader)) {
-              worksheet.addRow(nonEmptyColumns);
-              rowIdx++;
-              lastHeader = nonEmptyColumns;
+            if (type === 'HIGH_POSITION') {
+              // Filter to only high-position alumni if high_position_data is not available
+              let highPositionRows = rows;
+              if (!stats.high_position_data || !Array.isArray(stats.high_position_data)) {
+                highPositionRows = rows.filter((alumnus: any) => {
+                  const position = (alumnus.Position_Current || alumnus.position_current || '').toLowerCase();
+                  return position.includes('manager') || position.includes('director') || 
+                         position.includes('ceo') || position.includes('president') || 
+                         position.includes('vp') || position.includes('vice president') ||
+                         position.includes('head') || position.includes('chief') ||
+                         position.includes('executive') || position.includes('senior');
+                });
+              } else {
+                highPositionRows = stats.high_position_data;
+              }
+              
+              const mappedHP = highPositionRows.map(mapHighPositionRow);
+              worksheet.addRow(headersHighPosition); rowIdx++;
+              mappedHP.forEach((vals: (string | number)[]) => { worksheet.addRow(vals); rowIdx++; });
+              // Excel sheet names must be <= 31 chars; use a concise, clear name
+              const detailSheet = workbook.addWorksheet('High Position Details');
+              detailSheet.addRow(headersHighPosition);
+              mappedHP.forEach((vals: (string | number)[]) => detailSheet.addRow(vals));
+            } else {
+              const mapped = rows.map(mapQPRORow)
+                .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
+              worksheet.addRow(qproHeaders); rowIdx++;
+              mapped.forEach((vals) => { worksheet.addRow(vals); rowIdx++; });
+              const detailSheet = workbook.addWorksheet(`${type} Detailed Alumni Data`);
+              detailSheet.addRow(qproHeaders);
+              mapped.forEach((vals) => detailSheet.addRow(vals));
             }
-            // Deduplicate rows for this section (basic details + tracker answers)
-            const seenRows = new Set<string>();
-            rows.forEach((row: any) => {
-              const rowValues = nonEmptyColumns.map((key) => row[key]);
-              const rowString = JSON.stringify(rowValues);
-              if (!seenRows.has(rowString)) {
-                worksheet.addRow(rowValues);
-                rowIdx++;
-                seenRows.add(rowString);
-              }
-            });
-            rowIdx++;
-            // Also add as a separate worksheet
-            const detailSheet = workbook.addWorksheet(`${type} Detailed Alumni Data`);
-            detailSheet.addRow(nonEmptyColumns);
-            const seenDetailRows = new Set<string>();
-            rows.forEach((row: any) => {
-              const rowValues = nonEmptyColumns.map((key) => row[key]);
-              const rowString = JSON.stringify(rowValues);
-              if (!seenDetailRows.has(rowString)) {
-                detailSheet.addRow(rowValues);
-                seenDetailRows.add(rowString);
-              }
-            });
           }
         }
       } else {

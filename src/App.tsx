@@ -25,6 +25,7 @@ import AdminDashboard from './pages/admin/dashboard/AdminDashboard';
 import AdminNotificationPage from './pages/admin/dashboard/AdminNotification';
 import AdminProfilePage from './pages/admin/dashboard/AdminProfilePage';
 import CoordinatorDashboard from './pages/coordinator/dashboard';
+import Messaging from './pages/messaging/Messaging';
 // import other pages like Statistics, Users, etc.
 import { PrivateRoute } from './components/PrivateRoute';
 
@@ -192,6 +193,16 @@ const App: React.FC = () => {
             element={
               <PrivateRoute>
                 <AlumniProfile />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Messaging routes - available to alumni and OJT users */}
+          <Route
+            path="/messages"
+            element={
+              <PrivateRoute roles={['user', 'ojt']}>
+                <Messaging />
               </PrivateRoute>
             }
           />

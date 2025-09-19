@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
-import { api } from '../../services/api';
+import { api, getUserInfo, fetchNotificationCount } from '../../services/api';
 
 interface AlumniTopBarProps {
   showProfile: boolean;
@@ -33,13 +33,18 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   const [notificationCount, setNotificationCount] = React.useState(0);
 
   React.useEffect(() => {
-    // Fetch notification count from API (uses axios instance with auth)
-    api
-      .get('notifications/count')
-      .then(res => {
-        const data = res.data;
+    const user = getUserInfo();
+    if (!user || !(user.user_id || user.id)) {
+      setNotificationCount(0);
+      return;
+    }
+    const uid = Number(user.user_id || user.id);
+    fetchNotificationCount(uid)
+      .then((data) => {
         if (data && typeof data.count === 'number') {
           setNotificationCount(data.count);
+        } else {
+          setNotificationCount(0);
         }
       })
       .catch(() => {
@@ -236,6 +241,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             gap: 4,
             cursor: 'pointer',
           }}
+          onClick={() => navigate('/messages')}
         >
           <span style={{ color: 'white', fontSize: 20 }}>✉️</span>
           <span style={{ color: 'white', fontSize: 12 }}>Messages</span>
