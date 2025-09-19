@@ -498,3 +498,111 @@ export const editComment = async (postId: number, commentId: number, commentData
   const response = await api.put(`posts/${postId}/comments/${commentId}/`, commentData);
   return response.data;
 };
+
+// -------- Messaging API (web) --------
+export type ConversationSummary = {
+  conversation_id: number;
+  updated_at: string;
+  unread_count: number;
+  last_message?: {
+    content: string;
+    created_at: string;
+    sender_id: number;
+    message_type: 'text' | 'image' | 'file' | 'system';
+  } | null;
+  other_participant?: {
+    user_id: number;
+    name: string;
+    avatar_url?: string | null;
+  } | null;
+};
+
+export type MessageItem = {
+  message_id: number;
+  content: string;
+  message_type: 'text' | 'image' | 'file' | 'system';
+  sender: { user_id: number; name: string; avatar_url?: string | null };
+  is_read: boolean;
+  created_at: string;
+};
+
+export const listConversations = async (): Promise<ConversationSummary[]> => {
+  const { data } = await api.get('messaging/conversations/');
+  return data as ConversationSummary[];
+};
+
+export const createConversation = async (participant_id: number): Promise<ConversationSummary> => {
+  const { data } = await api.post('messaging/conversations/', { participant_id });
+  return data as ConversationSummary;
+};
+
+export const listMessages = async (
+  conversationId: number,
+  params?: { cursor?: string; limit?: number }
+): Promise<{ results: MessageItem[]; next_cursor?: string | null }> => {
+  const qs: string[] = [];
+  if (params?.cursor) qs.push(`cursor=${encodeURIComponent(params.cursor)}`);
+  if (params?.limit) qs.push(`limit=${params.limit}`);
+  const url = `messaging/conversations/${conversationId}/messages/${qs.length ? `?${qs.join('&')}` : ''}`;
+  const { data } = await api.get(url);
+  return data as { results: MessageItem[]; next_cursor?: string | null };
+};
+
+export const sendMessage = async (
+  conversationId: number,
+  payload: { content?: string; message_type?: 'text' | 'image' | 'file' | 'system'; attachment_id?: number }
+): Promise<MessageItem> => {
+  const body: any = {
+    message: payload.content ?? '',
+    message_type: payload.message_type ?? 'text',
+    attachment_id: payload.attachment_id,
+  };
+  const { data } = await api.post(`messaging/conversations/${conversationId}/messages/`, body);
+  return data as MessageItem;
+};
+
+export const markConversationRead = async (conversationId: number) => {
+  const { data } = await api.post(`messaging/conversations/${conversationId}/read/`, {});
+  return data as { status: string; messages_marked_read: number; timestamp: string };
+};
+
+export const deleteMessageApi = async (conversationId: number, messageId: number) => {
+  const { data } = await api.delete(`messaging/conversations/${conversationId}/messages/${messageId}/`);
+  return data as { status: string };
+};
+
+export const searchUsersForMessaging = async (q: string) => {
+  const { data } = await api.get(`messaging/users/search/?q=${encodeURIComponent(q)}`);
+  return data as { users: Array<{ user_id: number; f_name: string; l_name: string }>; count: number; query: string };
+};
+
+export const uploadAttachment = async (file: File): Promise<{
+  attachment_id: number;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  file_url: string;
+  uploaded_at: string;
+}> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post('messaging/attachments/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+};
+
+// WebSocket helpers
+export const getWebSocketBase = (): string => {
+  const http = API_BASE.replace('/api/', '');
+  if (http.startsWith('https://')) return `wss://${http.slice('https://'.length)}`;
+  if (http.startsWith('http://')) return `ws://${http.slice('http://'.length)}`;
+  return `ws://${http}`;
+};
+
+export const getConversationWsUrl = (conversationId: number): string => {
+  const token = localStorage.getItem('accessToken');
+  const base = getWebSocketBase();
+  const url = `${base}/ws/chat/${conversationId}/`;
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+};
