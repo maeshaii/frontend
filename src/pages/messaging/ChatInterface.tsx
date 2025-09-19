@@ -5,7 +5,8 @@ import {
   listMessages, 
   sendMessage, 
   markConversationRead,
-  getUserInfo 
+  getUserInfo,
+  uploadAttachment 
 } from '../../services/api';
 import { ConversationWebSocket, TypingIndicator, WsEvent } from '../../services/websocketHelper';
 import './Messaging.css';
@@ -23,6 +24,8 @@ type UiMessage = {
   created_at: string;
   is_read: boolean;
   tempId?: string;
+  message_type?: string;
+  attachment_url?: string | null;
 };
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) => {
@@ -33,9 +36,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMarkedAsRead, setHasMarkedAsRead] = useState(false);
+  const hasMarkedRef = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const wsRef = useRef<ConversationWebSocket | null>(null);
   const typingIndicatorRef = useRef<TypingIndicator | null>(null);
   const typingTimeoutRef = useRef<number | null>(null);
@@ -57,16 +62,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
         sender_name: m.sender.name,
         created_at: m.created_at,
         is_read: m.is_read,
+        message_type: (m as any).message_type,
+        attachment_url: (() => {
+          const url = ((m as any).attachments && (m as any).attachments[0]?.file_url) || null;
+          if (!url) return null;
+          return url.startsWith('http') ? url : `${window.location.origin}${url}`;
+        })(),
       }));
 
-      if (cursor) {
-        // Loading more messages (prepend)
-        setMessages(prev => [...mapped, ...prev]);
-      } else {
-        // Initial load
-        setMessages(mapped);
-        setTimeout(scrollToBottom, 100);
-      }
+      setMessages(prev => {
+        const joined = cursor ? [...mapped, ...prev] : [...prev.filter(p => !mapped.some(m => m.id === p.id)), ...mapped];
+        const byId: Record<string, UiMessage> = {};
+        joined.forEach(m => { byId[m.id] = m; });
+        const unique = Object.values(byId).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        if (!cursor) setTimeout(scrollToBottom, 100);
+        return unique;
+      });
       
       setNextCursor(data.next_cursor ?? null);
     } catch (error) {
@@ -85,26 +96,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
 
     ws.onStatus((status) => {
       setConnectionStatus(status);
-      if (status === 'connected' && !hasMarkedAsRead) {
+      if (status === 'connected' && !hasMarkedRef.current) {
         markConversationRead(conversation.conversation_id).catch(() => {});
+        hasMarkedRef.current = true;
         setHasMarkedAsRead(true);
       }
     });
 
     ws.onMessage((event: WsEvent) => {
+      const myId = currentUser?.user_id ?? (currentUser as any)?.id;
       switch (event.type) {
         case 'message':
-          setMessages((prev) => {
-            // Remove temp message if it exists
-            const filtered = prev.filter(m => m.tempId !== event.temp_id);
-            return [...filtered, {
-              id: String(event.message_id),
+          // If this is our own echo via websocket, skip because REST already updated UI
+          if (event.sender_id === myId) break;
+          setMessages(prev => {
+            const id = String(event.message_id);
+            const map: Record<string, UiMessage> = {};
+            prev.forEach(m => { map[m.id] = m; });
+            map[id] = {
+              id,
               content: event.content,
               sender_id: event.sender_id,
               sender_name: event.sender_name,
               created_at: event.created_at,
               is_read: false,
-            }];
+            };
+            return Object.values(map);
           });
           setTimeout(scrollToBottom, 100);
           break;
@@ -126,13 +143,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
     });
 
     ws.connect();
-  }, [conversation, hasMarkedAsRead, scrollToBottom]);
+  }, [conversation]);
 
   useEffect(() => {
     if (conversation) {
       setMessages([]);
       setNextCursor(null);
       setHasMarkedAsRead(false);
+      hasMarkedRef.current = false;
       setTypingUsers(new Set());
       loadMessages();
       connectWebSocket();
@@ -171,8 +189,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
     }
 
     try {
-      await sendMessage(conversation.conversation_id, { content: text, message_type: 'text' });
-      wsRef.current?.send({ type: 'message', message: text, message_type: 'text', temp_id: tempId });
+      const saved = await sendMessage(conversation.conversation_id, { content: text, message_type: 'text' });
+      // Replace temp with saved message
+      setMessages(prev => prev.map(m => m.tempId === tempId ? {
+        id: String(saved.message_id),
+        content: saved.content,
+        sender_id: saved.sender.user_id,
+        sender_name: saved.sender.name,
+        created_at: saved.created_at,
+        is_read: saved.is_read,
+        message_type: (saved as any).message_type,
+        attachment_url: ((saved as any).attachments && (saved as any).attachments[0]?.file_url) || null,
+      } : m));
     } catch (error) {
       console.error('Send failed:', error);
       setMessages(prev => prev.filter(m => m.tempId !== tempId));
@@ -227,7 +255,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
   };
 
   const isOwnMessage = (message: UiMessage) => {
-    return message.sender_id === currentUser?.user_id;
+    const myId = currentUser?.user_id ?? (currentUser as any)?.id;
+    return message.sender_id === myId;
   };
 
   if (!conversation) {
@@ -256,13 +285,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
           <h3 className="chat-header-name">
             {conversation.other_participant?.name || 'Unknown User'}
           </h3>
-          <div className="chat-header-status">
-            <div className={`status-dot ${connectionStatus}`}></div>
-            <span>
-              {connectionStatus === 'connected' ? 'Online' : 
-               connectionStatus === 'connecting' ? 'Connecting...' : 'Offline'}
-            </span>
-          </div>
+          {/* Presence indicator removed per request */}
         </div>
       </div>
 
@@ -279,14 +302,31 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
           </div>
         )}
 
-        {messages.map((message) => (
-          <div key={message.id} className={`message ${isOwnMessage(message) ? 'sent' : 'received'}`}>
-            <div className="message-bubble">
-              <div>{message.content}</div>
-              <div className="message-time">{formatTime(message.created_at)}</div>
+        {messages.map((message) => {
+          const own = isOwnMessage(message);
+          return (
+            <div key={message.id} className={`message ${own ? 'sent' : 'received'}`}>
+              <div className="message-bubble">
+                {!own && (
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                    {message.sender_name || 'Them'}
+                  </div>
+                )}
+                {own && (
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, opacity: 0.85 }}>
+                    You
+                  </div>
+                )}
+                <div>
+                  {message.attachment_url && /\.(png|jpe?g|gif|webp)$/i.test(message.attachment_url)
+                    ? (<img src={message.attachment_url} alt={message.content} style={{ maxWidth: '240px', borderRadius: 8 }} />)
+                    : message.content}
+                </div>
+                <div className="message-time">{formatTime(message.created_at)}</div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {typingUsers.size > 0 && (
           <div className="typing-indicator">
@@ -306,6 +346,50 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
 
       <div className="chat-input-container">
         <div className="chat-input-wrapper">
+          <input
+            type="file"
+            id="chat-file-input"
+            style={{ display: 'none' }}
+            ref={fileInputRef}
+            onChange={async () => {
+              const inputEl = fileInputRef.current;
+              const file = inputEl?.files?.[0] || null;
+              if (!file || !conversation) return;
+              try {
+                const uploaded = await uploadAttachment(file);
+                const isImage = (uploaded.file_type || '').startsWith('image/');
+                const saved = await sendMessage(conversation.conversation_id, { content: uploaded.file_name, message_type: isImage ? 'image' : 'file', attachment_id: uploaded.attachment_id });
+                setMessages(prev => [...prev, {
+                  id: String(saved.message_id),
+                  content: saved.content,
+                  sender_id: saved.sender.user_id,
+                  sender_name: saved.sender.name,
+                  created_at: saved.created_at,
+                  is_read: saved.is_read,
+                  message_type: (saved as any).message_type,
+                  attachment_url: (() => {
+                    const fromSaved = (saved as any).attachments && (saved as any).attachments[0]?.file_url;
+                    const url = fromSaved || (uploaded as any).file_url || null;
+                    if (!url) return null;
+                    return url.startsWith('http') ? url : `${window.location.origin}${url}`;
+                  })(),
+                }]);
+                setTimeout(scrollToBottom, 100);
+              } catch (err) {
+                console.error('Attachment send failed:', err);
+              } finally {
+                if (inputEl) inputEl.value = '';
+              }
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="send-button"
+            title="Attach file"
+            style={{ backgroundColor: '#e0e0e0', color: '#333' }}
+          >
+            📎
+          </button>
           <textarea
             ref={inputRef}
             className="chat-input"

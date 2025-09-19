@@ -43,40 +43,41 @@ const Messaging: React.FC = () => {
     window.location.href = '/logout';
   };
 
-  return (
-    <div className="messaging-page">
+	return (
+		<div className="messaging-page">
       {/* Global Top Bar (matches the second image) */}
       <AlumniTopBar
         showProfile={showProfile}
         setShowProfile={setShowProfile}
         handleLogout={handleLogout}
       />
-      {/* Top Bar */}
-      <div className="messaging-top-bar">
-        <div className="top-bar-left">
-          <h1 className="messaging-title">Messaging</h1>
-        </div>
-        <div className="top-bar-center">
-          <div className="search-container">
-            <span className="search-icon">🔍</span>
-            <input
-              type="text"
-              placeholder="Search messages"
-              className="search-input"
-            />
-          </div>
-        </div>
-        <div className="top-bar-right">
-          <button className="new-message-btn" onClick={() => setShowUserSearch(true)}>
-            ✏️
-          </button>
-          <div className="unread-dropdown">
-            <button className="unread-btn">Unread ▼</button>
-          </div>
-        </div>
-      </div>
 
-      <div className="messaging-container">
+			{/* Messaging Top Bar */}
+			<div className="messaging-top-bar">
+				<div className="top-bar-left">
+					<h1 className="messaging-title">Messaging</h1>
+				</div>
+				<div className="top-bar-center">
+					<div className="search-container">
+						<span className="search-icon">🔍</span>
+						<input
+							type="text"
+							placeholder="Search messages"
+							className="search-input"
+						/>
+					</div>
+				</div>
+				<div className="top-bar-right">
+					<button className="new-message-btn" onClick={() => setShowUserSearch(true)}>
+						✏️
+					</button>
+					<div className="unread-dropdown">
+						<button className="unread-btn">Unread ▼</button>
+					</div>
+				</div>
+			</div>
+
+			<div className="messaging-container">
         {(!isMobile || !selectedConversation) && (
           <ConversationList
             onSelectConversation={handleSelectConversation}
@@ -91,21 +92,21 @@ const Messaging: React.FC = () => {
           />
         )}
 
-        {!selectedConversation && !isMobile && (
-          <div className="welcome-message">
-            <div className="welcome-content">
-              <h2>Welcome to Messages</h2>
-              <p>Select a conversation from the list to start messaging, or start a new conversation.</p>
-              <button 
-                onClick={() => setShowUserSearch(true)}
-                className="start-conversation-button"
-              >
-                Start New Conversation
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+					{!selectedConversation && !isMobile && (
+						<div className="welcome-message">
+							<div className="welcome-content">
+								<h2>Welcome to Messages</h2>
+								<p>Select a conversation from the list to start messaging, or start a new conversation.</p>
+								<button 
+									onClick={() => setShowUserSearch(true)}
+									className="start-conversation-button"
+								>
+									Start New Conversation
+								</button>
+							</div>
+						</div>
+					)}
+			</div>
 
       {showUserSearch && (
         <UserSearch

@@ -532,7 +532,8 @@ export const listConversations = async (): Promise<ConversationSummary[]> => {
 };
 
 export const createConversation = async (participant_id: number): Promise<ConversationSummary> => {
-  const { data } = await api.post('messaging/conversations/', { participant_id });
+  // Backend accepts either participant_id or participant_ids
+  const { data } = await api.post('messaging/conversations/', { participant_id, participant_ids: [participant_id] });
   return data as ConversationSummary;
 };
 
@@ -553,7 +554,7 @@ export const sendMessage = async (
   payload: { content?: string; message_type?: 'text' | 'image' | 'file' | 'system'; attachment_id?: number }
 ): Promise<MessageItem> => {
   const body: any = {
-    message: payload.content ?? '',
+    content: payload.content ?? '',
     message_type: payload.message_type ?? 'text',
     attachment_id: payload.attachment_id,
   };

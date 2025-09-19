@@ -6,7 +6,7 @@ import PostCard from '../../components/PostCard';
 import ctulogo from '../../images/ctulogo.png';
 import './UnifiedDashboard.css';
 import { likePost, repostPost, unlikePost, deletePost, editPost, deleteRepost, editComment, deleteComment, getPosts, followUser, unfollowUser, checkFollowStatus, commentOnPost } from '../../services/api';
-import axios from 'axios';
+// axios removed; use backend API helpers instead where needed
 
 interface UnifiedDashboardProps {
   userType: 'alumni' | 'peso' | 'admin' | 'ojt';
@@ -209,8 +209,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
         })
         .catch((error) => console.error('Error fetching users:', error));
     });
-    axios.get('/api/peso/main').then(res => setPesoId(res.data.id)).catch(() => setPesoId(null));
-    axios.get('/api/ccict/main').then(res => setAdminId(res.data.id)).catch(() => setAdminId(null));
+    // These legacy endpoints do not exist; default to null and use generic routes
+    setPesoId(null);
+    setAdminId(null);
   }, [navigate]);
 
   useEffect(() => {
