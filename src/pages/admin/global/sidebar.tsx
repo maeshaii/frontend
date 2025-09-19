@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaComments } from 'react-icons/fa';
+import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaComments, FaGift, FaPaperPlane } from 'react-icons/fa';
 import { LuLocateFixed } from 'react-icons/lu';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -84,6 +84,8 @@ const Sidebar = () => {
     { to: '/ccict/profile', label: 'Profile', icon: <FaUserCircle style={styles.icon} /> },
 
     { to: '/tracker', label: 'Tracker', icon: <LuLocateFixed style={styles.icon} /> },
+    { to: '/requests', label: 'Requests', icon: <FaPaperPlane style={styles.icon} /> },
+    { to: '/rewards', label: 'Rewards', icon: <FaGift style={styles.icon} /> },
   ];
 
   return (

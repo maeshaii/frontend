@@ -25,6 +25,9 @@ import AdminDashboard from './pages/admin/dashboard/AdminDashboard';
 import AdminNotificationPage from './pages/admin/dashboard/AdminNotification';
 import AdminProfilePage from './pages/admin/dashboard/AdminProfilePage';
 import CoordinatorDashboard from './pages/coordinator/dashboard';
+import RequestsPage from './pages/admin/pages/RequestsPage';
+import RequestDetailsPage from './pages/admin/pages/RequestDetailsPage';
+import RewardsPage from './pages/admin/pages/RewardsPage';
 import Messaging from './pages/messaging/Messaging';
 // import other pages like Statistics, Users, etc.
 import { PrivateRoute } from './components/PrivateRoute';
@@ -51,6 +54,30 @@ const App: React.FC = () => {
             element={
               <PrivateRoute roles={['admin']}>
                 <Dashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/requests"
+            element={
+              <PrivateRoute roles={['admin']}>
+                <RequestsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/admin/requests/:year"
+            element={
+              <PrivateRoute roles={['admin']}>
+                <RequestDetailsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/rewards"
+            element={
+              <PrivateRoute roles={['admin']}>
+                <RewardsPage />
               </PrivateRoute>
             }
           />

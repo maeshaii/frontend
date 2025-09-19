@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
-import { generateSpecificStats, fetchAlumniEmploymentStats } from '../../../services/api';
+import { generateSpecificStats, fetchAlumniEmploymentStats, fetchCoordinatorRequestsCount } from '../../../services/api';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -16,6 +16,7 @@ const Dashboard = () => {
   const [unemployedCount, setUnemployedCount] = useState(0);
   const [totalAlumni, setTotalAlumni] = useState(0);
   const [today, setToday] = useState(new Date());
+  const [coordinatorReqCount, setCoordinatorReqCount] = useState(0);
 
   useEffect(() => {
     const fetchUntrackedCount = async () => {
@@ -30,6 +31,21 @@ const Dashboard = () => {
     };
 
     fetchUntrackedCount();
+  }, []);
+
+  // Fetch coordinator requests count (Completed sent by coordinators)
+  useEffect(() => {
+    const loadCoordinatorReq = async () => {
+      try {
+        const res = await fetchCoordinatorRequestsCount();
+        setCoordinatorReqCount(Number(res?.count) || 0);
+      } catch (e) {
+        console.error('Error fetching coordinator requests count:', e);
+      }
+    };
+    loadCoordinatorReq();
+    const interval = setInterval(loadCoordinatorReq, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   // Fetch employment stats for charts (employed, absorbed, unemployed)
@@ -216,6 +232,7 @@ const Dashboard = () => {
 
               <div
                 style={{ ...cardStyle, backgroundColor: '#143a6d', color: 'white' }}
+                onClick={() => navigate('/requests')}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-2px)';
                   e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
@@ -226,7 +243,7 @@ const Dashboard = () => {
                 }}
               >
                 <div style={{ fontSize: 16, opacity: 0.9 }}>Coordinator Request</div>
-                <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>40</div>
+                <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>{coordinatorReqCount}</div>
               </div>
 
               <div

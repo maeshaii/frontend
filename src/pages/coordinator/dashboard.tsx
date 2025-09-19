@@ -18,7 +18,6 @@ export default function Dashboard() {
   const [importLoading, setImportLoading] = useState(false);
   const [coordinatorUsername, setCoordinatorUsername] = useState('');
   const [activePage, setActivePage] = useState('dashboard'); // 'dashboard' or 'imports'
-  const [detailsSearch, setDetailsSearch] = useState('');
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -428,15 +427,7 @@ export default function Dashboard() {
                 </button>
               </>
             )}
-            {activePage === 'imports' && selectedCard && (
-              <input
-                type="text"
-                placeholder="Search by name or company..."
-                style={styles.headerSearchInput}
-                value={detailsSearch}
-                onChange={(e) => setDetailsSearch(e.target.value)}
-              />
-            )}
+            {/* Header search removed */}
           </div>
         </div>
 
@@ -445,7 +436,7 @@ export default function Dashboard() {
         {/* ============== Cards OR Details Table OR Statistics ============== */}
         {!showStats ? (
           selectedCard ? (
-            <DetailsTable onBack={() => setSelectedCard(null)} selectedYear={selectedCard} searchQuery={detailsSearch} />
+            <DetailsTable onBack={() => setSelectedCard(null)} selectedYear={selectedCard} />
           ) : (
             <div style={styles.cards}>
               {loading ? (
