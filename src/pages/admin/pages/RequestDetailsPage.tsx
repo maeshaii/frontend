@@ -1,27 +1,46 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Sidebar from '../global/sidebar';
 import { fetchOJTByYear, approveCoordinatorRequest } from '../../../services/api';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 
 const RequestDetailsPage: React.FC = () => {
   const { year } = useParams<{ year: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [ojtRows, setOjtRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+  
+  // Get course filter from URL parameters
+  const urlParams = new URLSearchParams(location.search);
+  const selectedCourse = urlParams.get('course') || 'ALL';
 
   const filteredRows = useMemo(() => {
+    let filtered = ojtRows;
+    
+    // Filter by course
+    if (selectedCourse !== 'ALL') {
+      filtered = filtered.filter((r) => {
+        const course = (r.course || '').toLowerCase();
+        return course.includes(selectedCourse.toLowerCase());
+      });
+    }
+    
+    // Filter by search query
     const q = (search || '').toLowerCase().trim();
-    if (!q) return ojtRows;
-    return ojtRows.filter((r) => {
-      const first = (r.first_name || (r.name ? r.name.split(' ')[0] : '') || '').toLowerCase();
-      const last = (r.last_name || (r.name ? r.name.split(' ').slice(-1)[0] : '') || '').toLowerCase();
-      const company = (r.company || '').toLowerCase();
-      const ctu = String(r.ctu_id || r.id || '').toLowerCase();
-      return first.includes(q) || last.includes(q) || company.includes(q) || ctu.includes(q);
-    });
-  }, [ojtRows, search]);
+    if (q) {
+      filtered = filtered.filter((r) => {
+        const first = (r.first_name || (r.name ? r.name.split(' ')[0] : '') || '').toLowerCase();
+        const last = (r.last_name || (r.name ? r.name.split(' ').slice(-1)[0] : '') || '').toLowerCase();
+        const company = (r.company || '').toLowerCase();
+        const ctu = String(r.ctu_id || r.id || '').toLowerCase();
+        return first.includes(q) || last.includes(q) || company.includes(q) || ctu.includes(q);
+      });
+    }
+    
+    return filtered;
+  }, [ojtRows, search, selectedCourse]);
 
   useEffect(() => {
     const loadOJTData = async () => {
@@ -96,8 +115,13 @@ const RequestDetailsPage: React.FC = () => {
       <div style={{ flex: 1, padding: '24px 32px', backgroundColor: '#f5f6fa', marginLeft: 240 }}>
         <h2 style={{ margin: 0, color: '#0b2a55' }}>Class of {year} - OJT Details</h2>
         
-        {/* Search input */}
-        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+        {/* Search and Course Info */}
+        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontWeight: 600, color: '#0b2a55' }}>
+              {selectedCourse !== 'ALL' ? `Filtered by: ${selectedCourse}` : 'All Courses'}
+            </span>
+          </div>
           <input
             type="text"
             placeholder="Search by name, company, or CTU ID..."

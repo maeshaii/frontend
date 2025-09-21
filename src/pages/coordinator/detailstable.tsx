@@ -308,7 +308,7 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
               <div style={styles.modalLabel}>Company</div>
               <div style={styles.modalValue}>{selected.company || ''}</div>
               <div style={styles.modalLabel}>Start Date</div>
-              <div style={styles.modalValue}>{selected.ojt_start_date || selected.date_started || ''}</div>
+              <div style={styles.modalValue}>{selected.ojt_start_date || selected.date_started || 'Not specified'}</div>
               <div style={styles.modalLabel}>End Date</div>
               <div style={styles.modalValue}>{selected.ojt_end_date || ''}</div>
               <div style={styles.modalLabel}>Status</div>
