@@ -248,6 +248,7 @@ const Dashboard = () => {
 
               <div
                 style={{ ...cardStyle, backgroundColor: '#143a6d', color: 'white' }}
+                onClick={() => navigate('/rewards')}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-2px)';
                   e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
@@ -258,7 +259,7 @@ const Dashboard = () => {
                 }}
               >
                 <div style={{ fontSize: 16, opacity: 0.9 }}>Awards</div>
-                <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>2</div>
+                <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>0</div>
               </div>
             </div>
           </div>
