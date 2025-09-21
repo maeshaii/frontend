@@ -1,7 +1,7 @@
 import { getConversationWsUrl } from './api';
 
 export type WsEvent = 
-  | { type: 'message'; message_id: number; content: string; sender_id: number; sender_name: string; message_type: string; created_at: string; temp_id?: string }
+  | { type: 'message'; message_id: number; content: string; sender_id: number; sender_name: string; message_type: string; created_at: string; attachment_url?: string | null; temp_id?: string }
   | { type: 'typing'; user_id: number; user_name: string; is_typing: boolean; timestamp: string }
   | { type: 'read_receipt'; message_id: number; read_by: number; read_at: string }
   | { type: 'connection_established'; conversation_id: string; user_id: number; timestamp: string }
