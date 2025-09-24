@@ -59,7 +59,10 @@ const Login = () => {
             placeholder="Enter your CTU ID"
             required
             value={acc_username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+            pattern="[A-Za-z0-9]+"
+            title="Only letters and numbers are allowed"
+            inputMode="text"
             style={styles.input}
           />
           <label htmlFor="password" style={styles.label}>

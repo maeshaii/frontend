@@ -260,14 +260,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
   };
 
   if (!conversation) {
-    return (
-      <div className="chat-container">
-        <div className="empty-state">
-          <h3>Select a conversation</h3>
-          <p>Choose a conversation from the list to start messaging</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (

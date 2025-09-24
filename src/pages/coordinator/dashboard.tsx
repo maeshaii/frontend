@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
 import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaFileImport } from 'react-icons/fa';
 import Statistics from './statistics';
@@ -127,13 +128,9 @@ export default function Dashboard() {
     }
   };
 
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const handleLogout = () => {
-    // Clear localStorage
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    // Navigate to login
-    navigate('/login');
+    setShowLogoutConfirm(true);
   };
 
   // Inline styles
@@ -467,7 +464,7 @@ export default function Dashboard() {
         )}
       </main>
 
-      {/* ===================== Modal ===================== */}
+      {/* ===================== Import Modal ===================== */}
       {showModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
@@ -510,6 +507,23 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* ===================== Logout Confirm Modal ===================== */}
+      <ConfirmModal
+        open={showLogoutConfirm}
+        title="Log out"
+        message="Are you sure you want to log out?"
+        confirmText="Yes"
+        cancelText="Cancel"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('user');
+          navigate('/login');
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   );
 }
