@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { createPost, getPostCategories } from '../../services/api';
+import { createPost, getPostCategories, createForumPost } from '../../services/api';
 import ctulogo from '../../images/ctulogo.png';
 import './postcreate.css';
 
 export interface PostCreateProps {
   onPosted: () => void | Promise<void>;
   onCancel?: () => void;
+  postType?: string; // 'forum' for forum posts
   user?: {
     name: string;
     profile_pic?: string;
@@ -20,7 +21,7 @@ interface PostCategory {
   personal: boolean;
 }
 
-const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, user }) => {
+const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, user }) => {
   const [postContent, setPostContent] = useState('');
   const [postTitle, setPostTitle] = useState('');
   const [postImage, setPostImage] = useState<string>('');
@@ -72,20 +73,28 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, user }) => 
     setError('');
 
     try {
-      // Determine post type based on logged-in account role
-      const raw = localStorage.getItem('user');
-      const storedUser = raw ? JSON.parse(raw) : null;
-      const isAdmin = !!(storedUser && storedUser.account_type && storedUser.account_type.admin);
-      const isPeso = !!(storedUser && storedUser.account_type && storedUser.account_type.peso);
-      const postType = isAdmin ? 'admin' : (isPeso ? 'peso' : 'personal');
+      if (postType === 'forum') {
+        // Create forum post
+        await createForumPost({
+          content: postContent,
+          image: postImage
+        });
+      } else {
+        // Determine post type based on logged-in account role
+        const raw = localStorage.getItem('user');
+        const storedUser = raw ? JSON.parse(raw) : null;
+        const isAdmin = !!(storedUser && storedUser.account_type && storedUser.account_type.admin);
+        const isPeso = !!(storedUser && storedUser.account_type && storedUser.account_type.peso);
+        const determinedPostType = isAdmin ? 'admin' : (isPeso ? 'peso' : 'personal');
 
-      await createPost({
-        post_title: postTitle,
-        post_content: postContent,
-        post_image: postImage,
-        post_cat_id: selectedCategory,
-        type: postType
-      });
+        await createPost({
+          post_title: postTitle || 'Untitled Post',
+          post_content: postContent,
+          post_image: postImage,
+          post_cat_id: selectedCategory,
+          type: determinedPostType
+        });
+      }
 
       onPosted();
       onCancel?.();

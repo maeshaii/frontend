@@ -13,11 +13,13 @@ import FirstLoginChangePassword from './pages/admin/TemporaryPassword/FirstLogin
 import Tracker from './pages/admin/tracker/index';
 import Users from './pages/admin/users/index';
 import Logout from './pages/admin/Logout/index';
-import AlumniDashboard from './pages/alumni/Dashboard';
+import AlumniDashboard from './pages/admin/dashboard/AdminDashboard';
 import PesoDashboard from './pages/peso/Dashboard';
 import NotificationPage from './pages/alumni/Notification';
 import AlumniTracker from './pages/alumni/Tracker';
 import ForumPage from './pages/alumni/forum';
+import DonationPage from './pages/alumni/Donation';
+import Settings from './pages/alumni/Settings';
 
 import AlumniProfile from './pages/alumni/Profile';
 import PesoProfile from './pages/peso/Profile';
@@ -91,7 +93,7 @@ const App: React.FC = () => {
             }
           />
           <Route
-            path="/alumni/dashboard"
+            path="/alumni/dashboard/:id"
             element={
               <PrivateRoute roles={['user']}>
                 <AlumniDashboard />
@@ -99,7 +101,7 @@ const App: React.FC = () => {
             }
           />
           <Route
-            path="/peso/dashboard"
+            path="/peso/dashboard/:id"
             element={
               <PrivateRoute roles={['peso']}>
                 <PesoDashboard />
@@ -123,6 +125,14 @@ const App: React.FC = () => {
             }
           />
           <Route
+            path="/peso/profile/:id"
+            element={
+              <PrivateRoute>
+                <PesoProfile />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/alumni/profile"
             element={
               <PrivateRoute>
@@ -135,6 +145,14 @@ const App: React.FC = () => {
             element={
               <PrivateRoute>
                 <ForumPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/alumni/donation"
+            element={
+              <PrivateRoute>
+                <DonationPage />
               </PrivateRoute>
             }
           />
@@ -155,7 +173,15 @@ const App: React.FC = () => {
             }
           />
           <Route
-            path="/ccict/dashboard"
+            path="/alumni/settings"
+            element={
+              <PrivateRoute>
+                <Settings />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/ccict/dashboard/:id"
             element={
               <PrivateRoute>
                 <AlumniDashboard />
@@ -174,13 +200,21 @@ const App: React.FC = () => {
             path="/ccict/profile"
             element={
               <PrivateRoute>
-                <AlumniDashboard />
+                <AdminDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/ccict/profile/:id"
+            element={
+              <PrivateRoute>
+                <AdminProfilePage />
               </PrivateRoute>
             }
           />
 
           <Route
-            path="/coordinator/dashboard"
+            path="/coordinator/dashboard/:id"
             element={
               <PrivateRoute roles={['coordinator']}>
                 <CoordinatorDashboard />

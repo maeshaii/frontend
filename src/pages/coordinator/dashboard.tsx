@@ -320,7 +320,7 @@ export default function Dashboard() {
   };
 
   const links = [
-    { to: '/coordinator/dashboard', label: 'Dashboard', icon: <FaTh style={styles.icon} /> },
+    { to: `/coordinator/dashboard/${coordinatorUsername}`, label: 'Dashboard', icon: <FaTh style={styles.icon} /> },
     { to: '/coordinator/imports', label: 'Imports', icon: <FaFileImport style={styles.icon} /> },
   ];
 

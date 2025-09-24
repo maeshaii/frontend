@@ -5,10 +5,11 @@ import PostCreate from '../alumni/PostCreate';
 import PostCard from '../../components/PostCard';
 import ctulogo from '../../images/ctulogo.png';
 import '../alumni/dashboard.css';
-import { likePost, repostPost, unlikePost, deletePost, editPost, deleteRepost, editComment, deleteComment, getPosts, followUser, unfollowUser, checkFollowStatus, commentOnPost } from '../../services/api';
+import { getPosts, followUser, getAdminPesoUsers } from '../../services/api';
 
 interface UnifiedDashboardProps {
   userType: 'alumni' | 'peso' | 'admin' | 'ojt';
+  userId?: string;
 }
 
 // Types from AlumniDashboard
@@ -44,6 +45,14 @@ interface CommentItem {
     profile_pic?: string;
   };
 }
+interface LikeItem {
+  user_id: number;
+  f_name: string;
+  l_name: string;
+  profile_pic?: string;
+  initials?: string;
+}
+
 interface PostItem {
   post_id: number;
   post_title?: string;
@@ -56,11 +65,11 @@ interface PostItem {
     l_name?: string;
     profile_pic?: string;
     name?: string;
-    account_type?: { ccict?: boolean; peso?: boolean };
+    account_type?: { ccict?: boolean; peso?: boolean; admin?: boolean };
   };
   comments?: CommentItem[];
   reposts?: RepostItem[];
-  likes?: { user_id: number }[];
+  likes?: LikeItem[];
   liked_by_user?: boolean;
 }
 interface SuggestedUser {
@@ -128,7 +137,7 @@ function getCurrentUserId(user: AlumniUser | null): number | null {
   return null;
 }
 
-const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
+const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId }) => {
   // All state and logic from AlumniDashboard, but use userType for admin/peso logic
   const [user, setUser] = useState<AlumniUser | null>(null);
   const [showProfile, setShowProfile] = useState(false);
@@ -136,6 +145,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
   const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
   const [followLoading, setFollowLoading] = useState<{ [key: number]: boolean }>({});
   const [showComposer, setShowComposer] = useState(false);
+  const [adminUserIds, setAdminUserIds] = useState<number[]>([]);
+  const [pesoUserIds, setPesoUserIds] = useState<number[]>([]);
+  const [adminUserData, setAdminUserData] = useState<AlumniUser | null>(null);
+  const [pesoUserData, setPesoUserData] = useState<AlumniUser | null>(null);
   const [commentInput, setCommentInput] = useState<{ [key: number]: string }>({});
   const [showCommentInput, setShowCommentInput] = useState<{ [key: number]: boolean }>({});
   const [showAllComments, setShowAllComments] = useState<{ [key: number]: boolean }>({});
@@ -150,9 +163,40 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
   const [following, setFollowing] = useState<any[]>([]);
   const navigate = useNavigate();
 
-  const isAdmin = userType === 'admin';
-  const isPeso = userType === 'peso';
-  const isOjt = userType === 'ojt';
+  // Determine user type from localStorage instead of props
+  const [actualUserType, setActualUserType] = useState<string>('');
+  
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const userObj = JSON.parse(userStr);
+      // Check account_type to determine actual user type
+      if (userObj.account_type) {
+        if (userObj.account_type.admin) {
+          setActualUserType('admin');
+        } else if (userObj.account_type.peso) {
+          setActualUserType('peso');
+        } else if (userObj.account_type.coordinator) {
+          setActualUserType('coordinator');
+        } else if (userObj.account_type.user) {
+          setActualUserType('alumni');
+        } else {
+          setActualUserType('alumni'); // default
+        }
+      } else {
+        setActualUserType('alumni'); // default
+      }
+    }
+  }, []);
+
+  const isAdmin = actualUserType === 'admin';
+  const isPeso = actualUserType === 'peso';
+  const isOjt = actualUserType === 'ojt' || actualUserType === 'alumni'; // OJT and alumni are similar
+  
+  // Debug logging for quicklinks
+  console.log('Quicklinks Debug - actualUserType:', actualUserType);
+  console.log('Quicklinks Debug - should show quicklinks:', actualUserType === 'alumni');
+  
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -207,6 +251,82 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
     });
   }, [navigate]);
 
+  // Fetch admin and PESO user IDs dynamically
+  const fetchAdminPesoUsers = async () => {
+    try {
+      const response = await getAdminPesoUsers();
+      if (response.success) {
+        setAdminUserIds(response.admin_user_ids || []);
+        setPesoUserIds(response.peso_user_ids || []);
+        console.log('Full API response:', response);
+        console.log('Dynamic admin IDs:', response.admin_user_ids);
+        console.log('Dynamic PESO IDs:', response.peso_user_ids);
+        console.log('Admin IDs length:', response.admin_user_ids?.length);
+        console.log('PESO IDs length:', response.peso_user_ids?.length);
+        
+        // Fetch admin user data
+        if (response.admin_user_ids && response.admin_user_ids.length > 0) {
+          console.log('Fetching admin user data for ID:', response.admin_user_ids[0]);
+          try {
+            const token = localStorage.getItem('accessToken');
+            const adminResponse = await fetch(`http://127.0.0.1:8000/api/alumni/${response.admin_user_ids[0]}/`, {
+              headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            });
+            console.log('Admin API response status:', adminResponse.status);
+            if (adminResponse.ok) {
+              const adminData = await adminResponse.json();
+              console.log('Admin API response data:', adminData);
+              if (adminData.success && adminData.alumni) {
+                console.log('Setting admin user data:', adminData.alumni);
+                console.log('Admin profile pic URL:', adminData.alumni.profile_pic);
+                setAdminUserData(adminData.alumni);
+              } else {
+                console.log('Admin API response not successful or no alumni data');
+              }
+            } else {
+              console.log('Admin API response not ok:', adminResponse.status);
+            }
+          } catch (error) {
+            console.error('Error fetching admin user data:', error);
+          }
+        } else {
+          console.log('No admin user IDs found in response');
+        }
+        
+        // Fetch PESO user data
+        if (response.peso_user_ids && response.peso_user_ids.length > 0) {
+          console.log('Fetching PESO user data for ID:', response.peso_user_ids[0]);
+          try {
+            const token = localStorage.getItem('accessToken');
+            const pesoResponse = await fetch(`http://127.0.0.1:8000/api/alumni/${response.peso_user_ids[0]}/`, {
+              headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            });
+            console.log('PESO API response status:', pesoResponse.status);
+            if (pesoResponse.ok) {
+              const pesoData = await pesoResponse.json();
+              console.log('PESO API response data:', pesoData);
+              if (pesoData.success && pesoData.alumni) {
+                console.log('Setting PESO user data:', pesoData.alumni);
+                console.log('PESO profile pic URL:', pesoData.alumni.profile_pic);
+                setPesoUserData(pesoData.alumni);
+              } else {
+                console.log('PESO API response not successful or no alumni data');
+              }
+            } else {
+              console.log('PESO API response not ok:', pesoResponse.status);
+            }
+          } catch (error) {
+            console.error('Error fetching PESO user data:', error);
+          }
+        } else {
+          console.log('No PESO user IDs found in response');
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching admin/PESO users:', error);
+    }
+  };
+
   useEffect(() => {
     const userStr = localStorage.getItem('user');
     if (!userStr) {
@@ -215,18 +335,59 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
     }
     const userObj = JSON.parse(userStr);
     setUser(userObj);
+    
+    // Fetch admin and PESO user IDs
+    fetchAdminPesoUsers();
+    
     // Fetch posts from backend (backend already includes followed + PESO + admin)
-    getPosts()
-      .then((postsList) => {
-        const fetchedPosts = postsList || [];
-        setPosts(fetchedPosts);
-        // ... (set likedPosts, repostedPosts, etc.)
-      })
-      .catch((error) => {
-        console.error('Error fetching posts:', error);
-        setPosts([]);
+    // Try both endpoints to see which one works better
+    Promise.all([
+      getPosts().catch(() => []),
+      import('../../services/api').then(({ getPostsView }) => getPostsView().catch(() => []))
+    ]).then(([postsList, postsViewList]) => {
+      // Use the endpoint that returns more data
+      const fetchedPosts = (postsViewList && postsViewList.length > 0) ? postsViewList : postsList;
+      
+      setPosts(fetchedPosts);
+      
+      // Initialize likedPosts state based on current user's likes
+      const currentUserId = getCurrentUserId(userObj);
+      const liked: { [key: number]: boolean } = {};
+      fetchedPosts.forEach((post: any) => {
+        if (post.likes && Array.isArray(post.likes)) {
+          liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+        }
       });
+      setLikedPosts(liked);
+
+      // Initialize repostedPosts state based on current user's reposts
+      const reposted: { [key: number]: boolean } = {};
+      fetchedPosts.forEach((post: any) => {
+        if (post.reposts && Array.isArray(post.reposts)) {
+          reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+        }
+      });
+      setRepostedPosts(reposted);
+    }).catch((error) => {
+      console.error('Error fetching posts:', error);
+      setPosts([]);
+    });
   }, [navigate]);
+
+  // Listen for user data updates from Settings
+  useEffect(() => {
+    const handleUserDataUpdate = (event: CustomEvent) => {
+      console.log('User data updated event received in UnifiedDashboard:', event.detail);
+      // Update the user state with new data
+      setUser(event.detail);
+    };
+
+    window.addEventListener('userDataUpdated', handleUserDataUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener('userDataUpdated', handleUserDataUpdate as EventListener);
+    };
+  }, []);
 
   // ... (all handlers from AlumniDashboard, unchanged)
 
@@ -292,71 +453,88 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
               <div className="profile-university">{user?.university}</div>
             </div>
           </div>
-          {/* Quick Links: show based on userType */}
-          {isOjt && (
+          {/* Quick Links: show based on actual user type */}
+          {actualUserType === 'alumni' && (
             <div className="quick-links" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8 }}>
-                <Link to="/ccict/profile" className="quick-link-card" style={{ flex: 1, cursor: 'pointer', textDecoration: 'none' }}>
+                <div 
+                  className="quick-link-card" 
+                  style={{ flex: 1, cursor: 'pointer' }}
+                  onClick={() => {
+                    // Use the first admin user ID from the dynamic list
+                    const adminId = adminUserIds.length > 0 ? adminUserIds[0] : null;
+                    if (adminId) {
+                      navigate(`/ccict/profile/${adminId}`);
+                    } else {
+                      console.log('No admin user found');
+                    }
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                >
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
-                    <div className="quick-link-icon ccict-icon">C</div>
+                    <img 
+                      src={adminUserData?.profile_pic ? (String(adminUserData.profile_pic).startsWith('http') ? adminUserData.profile_pic : `http://127.0.0.1:8000${adminUserData.profile_pic}`) : ctulogo} 
+                      alt="Admin Profile" 
+                      className="quick-link-icon"
+                      style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                    />
                     <div className="quick-link-text">CCICT</div>
                   </div>
-                </Link>
-                <Link to="/peso/profile" className="quick-link-card" style={{ flex: 1, cursor: 'pointer', textDecoration: 'none' }}>
+                </div>
+                <div 
+                  className="quick-link-card" 
+                  style={{ flex: 1, cursor: 'pointer' }}
+                  onClick={() => {
+                    // Use the first PESO user ID from the dynamic list
+                    const pesoId = pesoUserIds.length > 0 ? pesoUserIds[0] : null;
+                    if (pesoId) {
+                      navigate(`/peso/profile/${pesoId}`);
+                    } else {
+                      console.log('No PESO user found');
+                    }
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                >
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
-                    <div className="quick-link-icon peso-icon">✱</div>
+                    <img 
+                      src={pesoUserData?.profile_pic ? (String(pesoUserData.profile_pic).startsWith('http') ? pesoUserData.profile_pic : `http://127.0.0.1:8000${pesoUserData.profile_pic}`) : ctulogo} 
+                      alt="PESO Profile" 
+                      className="quick-link-icon"
+                      style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                    />
                     <div className="quick-link-text">PESO</div>
-                  </div>
-                </Link>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <div className="quick-link-card" style={{ flex: 1 }}>
-                  <div className="quick-link-orange-header"></div>
-                  <div className="quick-link-content">
-                    <div className="quick-link-icon peso-icon">✱</div>
-                    <div className="quick-link-text">DONATION</div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-          {userType === 'alumni' && (
-            <div className="quick-links" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8 }}>
-                <Link to="/ccict/profile" className="quick-link-card" style={{ flex: 1, cursor: 'pointer', textDecoration: 'none' }}>
-                  <div className="quick-link-orange-header"></div>
-                  <div className="quick-link-content">
-                    <div className="quick-link-icon ccict-icon">C</div>
-                    <div className="quick-link-text">CCICT</div>
+                {actualUserType === 'alumni' && (
+                  <div
+                    className="quick-link-card"
+                    onClick={() => navigate('/alumni/forum')}
+                    style={{ flex: 1, cursor: 'pointer', transition: 'transform 0.2s ease-in-out' }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                  >
+                    <div className="quick-link-orange-header"></div>
+                    <div className="quick-link-content">
+                      <div className="quick-link-icon forum-icon">C</div>
+                      <div className="quick-link-text">FORUM</div>
+                    </div>
                   </div>
-                </Link>
-                <Link to="/peso/profile" className="quick-link-card" style={{ flex: 1, cursor: 'pointer', textDecoration: 'none' }}>
-                  <div className="quick-link-orange-header"></div>
-                  <div className="quick-link-content">
-                    <div className="quick-link-icon peso-icon">✱</div>
-                    <div className="quick-link-text">PESO</div>
-                  </div>
-                </Link>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+                )}
                 <div
                   className="quick-link-card"
-                  onClick={() => navigate('/alumni/forum')}
+                  onClick={() => navigate('/alumni/donation')}
                   style={{ flex: 1, cursor: 'pointer', transition: 'transform 0.2s ease-in-out' }}
                   onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; }}
                   onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
                 >
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
-                    <div className="quick-link-icon forum-icon">C</div>
-                    <div className="quick-link-text">FORUM</div>
-                  </div>
-                </div>
-                <div className="quick-link-card" style={{ flex: 1 }}>
-                  <div className="quick-link-orange-header"></div>
-                  <div className="quick-link-content">
                     <div className="quick-link-icon peso-icon">✱</div>
                     <div className="quick-link-text">DONATION</div>
                   </div>
@@ -364,7 +542,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
               </div>
             </div>
           )}
-          {/* peso/admin: no quick links, just profile card */}
+          {/* admin: no quick links, just profile card */}
         </div>
         {/* Center Content */}
         <div className="center-content">
@@ -404,18 +582,97 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
                   });
                 }
                 let isCcict = false, isPeso = false;
+                
                 if (post.user && post.user.account_type) {
-                  isCcict = !!post.user.account_type.ccict;
+                  // Check for both possible field names (ccict/admin, peso)
+                  isCcict = !!(post.user.account_type.ccict || post.user.account_type.admin);
                   isPeso = !!post.user.account_type.peso;
                 }
+                
+                // DYNAMIC CHECK: Use fetched admin and PESO user IDs
+                const postUserIdForCheck = post.user?.user_id;
+                if (postUserIdForCheck && pesoUserIds.includes(postUserIdForCheck)) {
+                  isPeso = true;
+                  console.log('Dynamic PESO check - post from user', postUserIdForCheck);
+                } else if (postUserIdForCheck && adminUserIds.includes(postUserIdForCheck)) {
+                  isCcict = true;
+                  console.log('Dynamic admin check - post from user', postUserIdForCheck);
+                }
+                
+                // Show posts from: own posts, followed users, PESO posts, or admin posts
+                // PESO and admin posts are always visible regardless of follow status
                 return isOwn || isFollowed || isCcict || isPeso;
-              }).map(post => {
+              }).reduce((acc: any[], post) => {
                 const currentUserId = getCurrentUserId(user);
                 const isOwn = currentUserId !== null && post.user?.user_id && Number(post.user.user_id) === Number(currentUserId);
                 const displayName = isOwn && user?.name ? user.name : `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim();
                 const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
                 const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
-                return (
+                
+                // Check if this post has reposts and render them
+                if (post.reposts && post.reposts.length > 0) {
+                  const repostCards = post.reposts.map((repost: any) => (
+                    <PostCard
+                      key={`repost-${repost.repost_id}`}
+                      post={post}
+                      currentUserId={currentUserId}
+                      isOwn={false}
+                      displayName={displayName}
+                      displayAvatar={displayAvatar}
+                      formatTime={formatHybrid}
+                      isRepost={true}
+                      repostData={repost}
+                      onPostUpdate={() => {
+                        getPosts().then(updatedPosts => {
+                          setPosts(updatedPosts || []);
+                          
+                          // Update likedPosts state
+                          const currentUserId = getCurrentUserId(user);
+                          const liked: { [key: number]: boolean } = {};
+                          (updatedPosts || []).forEach((post: any) => {
+                            if (post.likes && Array.isArray(post.likes)) {
+                              liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                            }
+                          });
+                          setLikedPosts(liked);
+
+                          // Update repostedPosts state
+                          const reposted: { [key: number]: boolean } = {};
+                          (updatedPosts || []).forEach((post: any) => {
+                            if (post.reposts && Array.isArray(post.reposts)) {
+                              reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+                            }
+                          });
+                          setRepostedPosts(reposted);
+                        });
+                      }}
+                      showOptions={showOptions}
+                      setShowOptions={setShowOptions}
+                      editingPost={editingPost}
+                      setEditingPost={setEditingPost}
+                      editPostContent={editPostContent}
+                      setEditPostContent={setEditPostContent}
+                      likedPosts={likedPosts}
+                      setLikedPosts={setLikedPosts}
+                      repostedPosts={repostedPosts}
+                      setRepostedPosts={setRepostedPosts}
+                      showCommentInput={showCommentInput}
+                      setShowCommentInput={setShowCommentInput}
+                      showAllComments={showAllComments}
+                      setShowAllComments={setShowAllComments}
+                      commentInput={commentInput}
+                      setCommentInput={setCommentInput}
+                      editingComment={editingComment}
+                      setEditingComment={setEditingComment}
+                      editCommentContent={editCommentContent}
+                      setEditCommentContent={setEditCommentContent}
+                    />
+                  ));
+                  acc.push(...repostCards);
+                }
+                
+                // Also render original post
+                const originalPostCard = (
                   <PostCard
                     key={post.post_id}
                     post={post}
@@ -424,7 +681,30 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
                     displayName={displayName}
                     displayAvatar={displayAvatar}
                     formatTime={formatHybrid}
-                    onPostUpdate={() => getPosts().then(updatedPosts => setPosts(updatedPosts || []))}
+                    onPostUpdate={() => {
+                      getPosts().then(updatedPosts => {
+                        setPosts(updatedPosts || []);
+                        
+                        // Update likedPosts state
+                        const currentUserId = getCurrentUserId(user);
+                        const liked: { [key: number]: boolean } = {};
+                        (updatedPosts || []).forEach((post: any) => {
+                          if (post.likes && Array.isArray(post.likes)) {
+                            liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                          }
+                        });
+                        setLikedPosts(liked);
+
+                        // Update repostedPosts state
+                        const reposted: { [key: number]: boolean } = {};
+                        (updatedPosts || []).forEach((post: any) => {
+                          if (post.reposts && Array.isArray(post.reposts)) {
+                            reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+                          }
+                        });
+                        setRepostedPosts(reposted);
+                      });
+                    }}
                     showOptions={showOptions}
                     setShowOptions={setShowOptions}
                     editingPost={editingPost}
@@ -447,14 +727,81 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
                     setEditCommentContent={setEditCommentContent}
                   />
                 );
-              })
-            : posts.map(post => {
+                acc.push(originalPostCard);
+                
+                return acc;
+              }, [])
+            : posts.reduce((acc: any[], post) => {
                 const currentUserId = getCurrentUserId(user);
                 const isOwn = currentUserId !== null && post.user?.user_id && Number(post.user.user_id) === Number(currentUserId);
                 const displayName = isOwn && user?.name ? user.name : `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim();
                 const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
                 const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
-                return (
+                
+                // Check if this post has reposts and render them
+                if (post.reposts && post.reposts.length > 0) {
+                  const repostCards = post.reposts.map((repost: any) => (
+                    <PostCard
+                      key={`repost-${repost.repost_id}`}
+                      post={post}
+                      currentUserId={currentUserId}
+                      isOwn={false}
+                      displayName={displayName}
+                      displayAvatar={displayAvatar}
+                      formatTime={formatHybrid}
+                      isRepost={true}
+                      repostData={repost}
+                      onPostUpdate={() => {
+                        getPosts().then(updatedPosts => {
+                          setPosts(updatedPosts || []);
+                          
+                          // Update likedPosts state
+                          const currentUserId = getCurrentUserId(user);
+                          const liked: { [key: number]: boolean } = {};
+                          (updatedPosts || []).forEach((post: any) => {
+                            if (post.likes && Array.isArray(post.likes)) {
+                              liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                            }
+                          });
+                          setLikedPosts(liked);
+
+                          // Update repostedPosts state
+                          const reposted: { [key: number]: boolean } = {};
+                          (updatedPosts || []).forEach((post: any) => {
+                            if (post.reposts && Array.isArray(post.reposts)) {
+                              reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+                            }
+                          });
+                          setRepostedPosts(reposted);
+                        });
+                      }}
+                      showOptions={showOptions}
+                      setShowOptions={setShowOptions}
+                      editingPost={editingPost}
+                      setEditingPost={setEditingPost}
+                      editPostContent={editPostContent}
+                      setEditPostContent={setEditPostContent}
+                      likedPosts={likedPosts}
+                      setLikedPosts={setLikedPosts}
+                      repostedPosts={repostedPosts}
+                      setRepostedPosts={setRepostedPosts}
+                      showCommentInput={showCommentInput}
+                      setShowCommentInput={setShowCommentInput}
+                      showAllComments={showAllComments}
+                      setShowAllComments={setShowAllComments}
+                      commentInput={commentInput}
+                      setCommentInput={setCommentInput}
+                      editingComment={editingComment}
+                      setEditingComment={setEditingComment}
+                      editCommentContent={editCommentContent}
+                      setEditCommentContent={setEditCommentContent}
+                    />
+                  ));
+                  acc.push(...repostCards);
+                }
+                
+                // Also render original post
+                const originalPostCard = (
                   <PostCard
                     key={post.post_id}
                     post={post}
@@ -463,7 +810,30 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
                     displayName={displayName}
                     displayAvatar={displayAvatar}
                     formatTime={formatHybrid}
-                    onPostUpdate={() => getPosts().then(updatedPosts => setPosts(updatedPosts || []))}
+                    onPostUpdate={() => {
+                      getPosts().then(updatedPosts => {
+                        setPosts(updatedPosts || []);
+                        
+                        // Update likedPosts state
+                        const currentUserId = getCurrentUserId(user);
+                        const liked: { [key: number]: boolean } = {};
+                        (updatedPosts || []).forEach((post: any) => {
+                          if (post.likes && Array.isArray(post.likes)) {
+                            liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                          }
+                        });
+                        setLikedPosts(liked);
+
+                        // Update repostedPosts state
+                        const reposted: { [key: number]: boolean } = {};
+                        (updatedPosts || []).forEach((post: any) => {
+                          if (post.reposts && Array.isArray(post.reposts)) {
+                            reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+                          }
+                        });
+                        setRepostedPosts(reposted);
+                      });
+                    }}
                     showOptions={showOptions}
                     setShowOptions={setShowOptions}
                     editingPost={editingPost}
@@ -486,7 +856,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType }) => {
                     setEditCommentContent={setEditCommentContent}
                   />
                 );
-              })}
+                acc.push(originalPostCard);
+                
+                return acc;
+              }, [])}
         </div>
         {/* Right Sidebar */}
         <div className="right-sidebar">

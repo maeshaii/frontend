@@ -510,7 +510,14 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         const fileMessage =
           data.files_uploaded > 0 ? ` and ${data.files_uploaded} file(s) uploaded` : '';
         alert(`Form submitted successfully!${fileMessage}`);
-        navigate('/alumni/dashboard');
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          const userObj = JSON.parse(userStr);
+          const userId = userObj.user_id || userObj.id;
+          if (userId) {
+            navigate(`/alumni/dashboard/${userId}`);
+          }
+        }
       } else {
         alert('Submission failed: ' + (data.message || 'Unknown error'));
       }

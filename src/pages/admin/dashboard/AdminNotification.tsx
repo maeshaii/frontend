@@ -115,7 +115,16 @@ const AdminNotificationPage: React.FC = () => {
         }}
       >
         <button
-          onClick={() => navigate('/ccict/dashboard')}
+          onClick={() => {
+            const userStr = localStorage.getItem('user');
+            if (userStr) {
+              const userObj = JSON.parse(userStr);
+              const userId = userObj.user_id || userObj.id;
+              if (userId) {
+                navigate(`/ccict/dashboard/${userId}`);
+              }
+            }
+          }}
           style={{
             marginBottom: 16,
             background: '#174f84',

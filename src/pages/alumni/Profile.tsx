@@ -6,6 +6,7 @@ import './profile.css';
 import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api } from '../../services/api';
 import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment } from '../../services/api';
 import PostCreate from './PostCreate';
+import PostCard from '../../components/PostCard';
 
 function formatTimeAgo(iso?: string | null): string {
   if (!iso) return '';
@@ -38,6 +39,11 @@ interface AlumniUser {
   middle_name?: string;
   last_name?: string;
   year_graduated?: string | number;
+  account_type?: {
+    ccict?: boolean;
+    admin?: boolean;
+    peso?: boolean;
+  };
 }
 
 interface RepostItem {
@@ -63,6 +69,14 @@ interface CommentItem {
   };
 }
 
+interface LikeItem {
+  user_id: number;
+  f_name: string;
+  l_name: string;
+  profile_pic?: string;
+  initials?: string;
+}
+
 interface PostItem {
   post_id: number;
   post_title?: string;
@@ -78,7 +92,7 @@ interface PostItem {
   };
   comments?: CommentItem[];
   reposts?: RepostItem[];
-  likes?: any[];
+  likes?: LikeItem[];
   liked_by_user?: boolean;
 }
 
@@ -103,20 +117,21 @@ const AlumniProfile: React.FC = () => {
   const [showAllComments, setShowAllComments] = useState<{ [key: number]: boolean }>({});
   const [likedPosts, setLikedPosts] = useState<{ [key: number]: boolean }>({});
   const [repostedPosts, setRepostedPosts] = useState<{ [key: number]: boolean }>({});
-  const [repostError, setRepostError] = useState<string | null>(null);
-  const [showFollowersModal, setShowFollowersModal] = useState(false); // Add this for followers modal
-  const [showFollowingModal, setShowFollowingModal] = useState(false); // Add this for following modal
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [showFollowingModal, setShowFollowingModal] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
   const [following, setFollowing] = useState<any[]>([]);
+  const [allMembers, setAllMembers] = useState<any[]>([]);
   const [showOptions, setShowOptions] = useState<{ [key: string | number]: boolean }>({});
   const [editingPost, setEditingPost] = useState<{ [key: number]: boolean }>({});
   const [editingComment, setEditingComment] = useState<{ [key: number]: boolean }>({});
   const [editPostContent, setEditPostContent] = useState<{ [key: number]: string }>({});
   const [editCommentContent, setEditCommentContent] = useState<{ [key: number]: string }>({});
-  const [selectedPost, setSelectedPost] = useState<PostItem | null>(null);
 
   // Get current user ID
   const currentUserObj = JSON.parse(localStorage.getItem('user') || '{}');
   const currentId = currentUserObj.user_id || currentUserObj.id;
+
 
   // Load user data based on id param or localStorage user
   useEffect(() => {
@@ -162,6 +177,10 @@ const AlumniProfile: React.FC = () => {
           setUser(profile.alumni);
           setEditBio(profile.alumni.profile_bio || '');
           
+          // Debug: Log the user data to see account_type
+          console.log('Profile user data:', profile.alumni);
+          console.log('Account type:', profile.alumni.account_type);
+          
           // Update localStorage only if viewing own profile
           if (Number(userId) === Number(currentUserId)) {
             localStorage.setItem('user', JSON.stringify(profile.alumni));
@@ -190,6 +209,23 @@ const AlumniProfile: React.FC = () => {
                 }
               })
               .catch(() => setFollowing([]));
+
+            // Fetch all members for the forum (same batch only)
+            api.get('alumni/all/')
+              .then((response) => {
+                if (response.data.success && response.data.alumni) {
+                  // Filter to only show users from the same batch
+                  const currentUserBatch = userObj.year_graduated || userObj.batch;
+                  const batchMembers = response.data.alumni.filter((member: any) => {
+                    const memberBatch = member.batch;
+                    return memberBatch === currentUserBatch;
+                  });
+                  setAllMembers(batchMembers);
+                } else {
+                  setAllMembers([]);
+                }
+              })
+              .catch(() => setAllMembers([]));
 
             // Check follow status - only if viewing someone else's profile
             const viewingOwn = Number(numericUserId) === Number(currentUserId);
@@ -268,6 +304,22 @@ getPosts()
       }
     };
     loadUser();
+    
+    // Listen for user data updates from Settings
+    const handleUserDataUpdate = (event: CustomEvent) => {
+      console.log('User data updated event received:', event.detail);
+      // If this is the current user's profile, refresh the data
+      if (!id || id === String(event.detail.user_id || event.detail.id)) {
+        console.log('Refreshing profile data due to user update');
+        loadUser();
+      }
+    };
+
+    window.addEventListener('userDataUpdated', handleUserDataUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener('userDataUpdated', handleUserDataUpdate as EventListener);
+    };
   }, [id, navigate]);
 
   const [bioModalOpen, setBioModalOpen] = useState(false);
@@ -397,149 +449,11 @@ getPosts()
     }
   };
 
-  const handleLike = async (postId: number) => {
-    try {
-      await likePost(postId);
-      setLikedPosts(prev => ({ ...prev, [postId]: true }));
-      const updatedPosts: PostItem[] = await getPosts();
-      const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
-      const subset = (updatedPosts || []).filter((p: PostItem) => 
-        p.user?.user_id === currentUserId || 
-        (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === currentUserId))
-      );
-      setPosts(subset);
-    } catch (error) {
-      console.error('Error liking post:', error);
-    }
-  };
-
-  const handleUnlike = async (postId: number) => {
-    try {
-      await unlikePost(postId);
-      setLikedPosts(prev => ({ ...prev, [postId]: false }));
-      const updatedPosts: PostItem[] = await getPosts();
-      const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
-      const subset = (updatedPosts || []).filter((p: PostItem) => 
-        p.user?.user_id === currentUserId || 
-        (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === currentUserId))
-      );
-      setPosts(subset);
-    } catch (error) {
-      console.error('Error unliking post:', error);
-    }
-  };
-
-  const handleCommentSubmit = async (postId: number) => {
-    if (!commentInput[postId]) return;
-    try {
-      const result = await commentOnPost(postId, commentInput[postId]);
-      if (result.success) {
-        setCommentInput(prev => ({ ...prev, [postId]: '' }));
-        const updatedPosts: PostItem[] = await getPosts();
-        const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
-        const subset = (updatedPosts || []).filter((p: PostItem) =>
-          p.user?.user_id === currentUserId ||
-          (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === currentUserId))
-        );
-        setPosts(subset);
-      }
-    } catch (error) {
-      console.error('Error submitting comment:', error);
-    }
-  };
-
-  // New state for repost caption modal
-  const [repostCaptionModalOpen, setRepostCaptionModalOpen] = useState(false);
-  const [repostCaption, setRepostCaption] = useState('');
-  const [repostTargetPostId, setRepostTargetPostId] = useState<number | null>(null);
-
-  const openRepostCaptionModal = (postId: number) => {
-    setRepostTargetPostId(postId);
-    setRepostCaption('');
-    setRepostCaptionModalOpen(true);
-  };
-
-  const closeRepostCaptionModal = () => {
-    setRepostTargetPostId(null);
-    setRepostCaption('');
-    setRepostCaptionModalOpen(false);
-  };
-
-  const handleRepostWithCaption = async () => {
-    if (repostTargetPostId === null) return;
-    setRepostError(null);
-    try {
-      // For now, just repost without caption since API doesn't support it yet
-      await repostPost(repostTargetPostId);
-      setRepostedPosts(prev => ({ ...prev, [repostTargetPostId]: true }));
-      const updatedPosts: PostItem[] = await getPosts();
-      const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
-      const subset = (updatedPosts || []).filter((p: PostItem) =>
-        p.user?.user_id === currentUserId ||
-        (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === currentUserId))
-      );
-      setPosts(subset);
-      closeRepostCaptionModal();
-    } catch (error: any) {
-      setRepostError(error?.response?.data?.error || error?.message || 'Failed to repost');
-    }
-  };
-
-  const handleRepost = async (postId: number) => {
-    setRepostError(null);
-    try {
-      await repostPost(postId);
-      setRepostedPosts(prev => ({ ...prev, [postId]: true }));
-      const updatedPosts: PostItem[] = await getPosts();
-      const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
-      const subset = (updatedPosts || []).filter((p: PostItem) =>
-        p.user?.user_id === currentUserId ||
-        (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === currentUserId))
-      );
-      setPosts(subset);
-    } catch (error: any) {
-      setRepostError(error?.response?.data?.error || error?.message || 'Failed to repost');
-    }
-  };
-
-  useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      const userObj = JSON.parse(userStr);
-      setUser(userObj);
-      setBioInput(userObj.profile_bio || '');
-
-      // Fetch latest profile from backend with proper error handling
-      const userId = userObj.user_id || userObj.id;
-      const token = localStorage.getItem('accessToken');
-      fetch(`http://127.0.0.1:8000/api/alumni/${userId}/`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      })
-        .then(async (res) => {
-          if (res.status === 401) {
-            navigate('/login');
-            return null;
-          }
-          const profile = await res.json();
-          if (!profile || !profile.alumni) {
-            navigate('/login');
-            return null;
-          }
-          return profile;
-        })
-        .then((profile) => {
-          if (!profile || !profile.alumni) return;
-          setUser(profile.alumni);
-          setBioInput(profile.alumni.profile_bio || '');
-          localStorage.setItem('user', JSON.stringify(profile.alumni));
-        });
-    } else {
-      navigate('/login');
-    }
-  }, [navigate]);
 
   const handleEditProfile = () => {
-    setEditProfilePic(user?.profile_pic);
+    // Set the current user's profile picture as the initial edit value
+    setEditProfilePic(user?.profile_pic || undefined);
+    setEditBio(user?.profile_bio || '');
     setEditModalOpen(true);
   };
 
@@ -576,6 +490,7 @@ getPosts()
         const updatedUser = { ...userObj, profile_pic: null };
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
+        setEditModalOpen(false); // Close the modal after successful removal
         alert('Profile picture removed.');
       } else {
         const err = await res.json();
@@ -636,6 +551,10 @@ getPosts()
     } catch (error) {
       alert('Network error: ' + error);
     }
+  };
+
+  const handleSaveProfile = async () => {
+    await handleSave();
   };
 
   const handleSaveBio = async () => {
@@ -714,6 +633,26 @@ getPosts()
         const subset = (allPosts || []).filter((p: PostItem) => Number(p.user?.user_id) === currentUserId);
         console.log('Refreshed posts:', subset.length, 'posts for user', currentUserId);
         setPosts(subset);
+        
+        // Update likedPosts state
+        const liked: { [key: number]: boolean } = {};
+        subset.forEach(post => {
+          if (post.likes && Array.isArray(post.likes)) {
+            liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentId);
+          } else if (post.liked_by_user !== undefined) {
+            liked[post.post_id] = !!post.liked_by_user;
+          }
+        });
+        setLikedPosts(liked);
+
+        // Update repostedPosts state
+        const reposted: { [key: number]: boolean } = {};
+        subset.forEach(post => {
+          if (post.reposts && Array.isArray(post.reposts)) {
+            reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentId);
+          }
+        });
+        setRepostedPosts(reposted);
       }
     } catch (error) {
       console.error('Error refreshing profile posts:', error);
@@ -772,7 +711,12 @@ getPosts()
             </div>
           </div>
 
-          {/* Followers */}
+          {/* Followers - Hide for admin and PESO accounts */}
+          {!user?.account_type?.admin && 
+           !user?.account_type?.peso && 
+           !user?.account_type?.ccict &&
+           !user?.name?.toLowerCase().includes('admin') &&
+           !user?.name?.toLowerCase().includes('peso') && (
           <div className="profile-followers-card">
             <div className="profile-followers-header">
               <div className="profile-followers-title">Followers ({followers.length})</div>
@@ -831,8 +775,14 @@ getPosts()
               )}
             </div>
           </div>
+          )}
 
-          {/* Following */}
+          {/* Following - Hide for admin and PESO accounts */}
+          {!user?.account_type?.admin && 
+           !user?.account_type?.peso && 
+           !user?.account_type?.ccict &&
+           !user?.name?.toLowerCase().includes('admin') &&
+           !user?.name?.toLowerCase().includes('peso') && (
           <div className="profile-followers-card">
             <div className="profile-followers-header">
               <div className="profile-followers-title">Following ({following.length})</div>
@@ -891,6 +841,7 @@ getPosts()
               )}
             </div>
           </div>
+          )}
         </div>
 
         {/* Center Content */}
@@ -912,10 +863,14 @@ getPosts()
                 alt="Profile" 
                 className="profile-image"
               />
-              <div className="profile-name">{user?.name || 'Loading...'}</div>
-              <div className="profile-university">{user?.course || 'Loading...'}</div>
+              <div className="profile-name">{user?.name || 'no name detected'}</div>
+              
               <div className="profile-other-actions-below-university">
-                {!isOwnProfile && (
+                {!isOwnProfile && 
+                 !user?.account_type?.admin && 
+                 !user?.account_type?.peso && 
+                 !user?.name?.toLowerCase().includes('admin') &&
+                 !user?.name?.toLowerCase().includes('peso') && (
                   <button
                     className={`profile-follow-button ${isFollowing ? 'following' : ''}`}
                     onClick={isFollowing ? handleUnfollow : handleFollow}
@@ -965,457 +920,318 @@ getPosts()
               This user has not posted anything yet.
             </div>
           )}
-          {posts.map((post) => {
-            const repostInfo = post.reposts && post.reposts.length > 0 ? post.reposts[0] : null;
-            const repostedBy = repostInfo ? `${repostInfo.user.f_name} ${repostInfo.user.l_name}` : null;
+          {posts.reduce((acc: any[], post) => {
             const isOwn = currentId && post.user?.user_id && Number(post.user.user_id) === Number(currentId);
             const displayName = isOwn && user?.name ? user.name : `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim();
             const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
             const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
-
-            // State for showing options menu for this post
-            // Move showOptions state outside of map to avoid hook call inside callback
-            // Use a state object keyed by post_id to track which post's options are shown
-            // This requires lifting state up to component level, so we will define showOptions state there
-
-            // Handlers for edit and delete
-            const handleEditPost = () => {
-              setEditPostContent(prev => ({ ...prev, [post.post_id]: post.post_content }));
-              setEditingPost(prev => ({ ...prev, [post.post_id]: true }));
-              setShowOptions(prev => ({ ...prev, [post.post_id]: false }));
-            };
-
-            const handleDeletePost = async () => {
-              if (window.confirm('Are you sure you want to delete this post?')) {
-                try {
-                  await deletePost(post.post_id);
-                  // Refresh posts
-                  const updatedPosts: PostItem[] = await getPosts();
-                  const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
-                  const subset = (updatedPosts || []).filter((p: PostItem) =>
-                    p.user?.user_id === currentUserId ||
-                    (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === currentUserId))
-                  );
-                  setPosts(subset);
-                  alert('Post deleted successfully');
-                } catch (error) {
-                  console.error('Error deleting post:', error);
-                  alert('Failed to delete post');
-                }
-              }
-              setShowOptions(prev => ({ ...prev, [post.post_id]: false }));
-            };
-
-            const handleSaveEditPost = async () => {
-              if (!editPostContent[post.post_id]?.trim()) return;
-              try {
-                await editPost(post.post_id, { post_content: editPostContent[post.post_id] });
-                setEditingPost(prev => ({ ...prev, [post.post_id]: false }));
-                // Refresh posts
-                const updatedPosts: PostItem[] = await getPosts();
-                const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
-                const subset = (updatedPosts || []).filter((p: PostItem) =>
-                  p.user?.user_id === currentUserId ||
-                  (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === currentUserId))
-                );
-                setPosts(subset);
-                alert('Post updated successfully');
-              } catch (error) {
-                console.error('Error editing post:', error);
-                alert('Failed to update post');
-              }
-            };
-
-            const handleCancelEditPost = () => {
-              setEditingPost(prev => ({ ...prev, [post.post_id]: false }));
-              setEditPostContent(prev => ({ ...prev, [post.post_id]: post.post_content }));
-            };
-
-            // If repostInfo exists, show repost card
-            if (repostInfo) {
-              const reposterAvatar = repostInfo.user.profile_pic
-                ? (String(repostInfo.user.profile_pic).startsWith('http')
-                  ? repostInfo.user.profile_pic
-                  : `http://127.0.0.1:8000${repostInfo.user.profile_pic}`)
-                : ctulogo;
-              const reposterName = `${repostInfo.user.f_name} ${repostInfo.user.l_name}`;
-              return (
-                <div key={post.post_id + '_repost'} className="post-feed-card" style={{ background: '#f5f6fa', border: '1px solid #dedede', marginBottom: 24, borderRadius: 12, padding: 0 }}>
-                  {/* Reposter info */}
-                  <div style={{ display: 'flex', alignItems: 'center', padding: '16px 16px 0 16px', gap: 12, position: 'relative' }}>
-                    <img
-                      src={reposterAvatar}
-                      alt="Reposter"
-                      style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '2px solid #23272a' }}
-                      onError={e => {
-                        const target = e.target as HTMLImageElement;
-                        target.onerror = null;
-                        target.src = ctulogo as unknown as string;
-                      }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 17 }}>{reposterName}</div>
-                      <div style={{ fontSize: 13, color: '#888' }}>{formatTimeAgo(repostInfo.repost_date)}</div>
-                      <div style={{ fontSize: 13, color: '#b0b3b8', marginTop: 2 }}>reposted</div>
-                    </div>
-                    {/* Three dots menu for repost */}
-                    {repostInfo.user.user_id === currentId && (
-                      <div style={{ position: 'absolute', top: 8, right: 8, cursor: 'pointer' }}>
-                        <div onClick={() => setShowOptions(prev => ({ ...prev, [post.post_id + '_repost']: !prev[post.post_id + '_repost'] }))} style={{ fontSize: 24, userSelect: 'none' }}>⋯</div>
-                        {showOptions[post.post_id + '_repost'] && (
-                          <div style={{
-                            position: 'absolute',
-                            top: 24,
-                            right: 0,
-                            backgroundColor: 'white',
-                            border: '1px solid #ccc',
-                            borderRadius: 4,
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                            zIndex: 1000,
-                            width: 100,
-                          }}>
-                            <div
-                              onClick={handleDeletePost}
-                              style={{ padding: '8px 12px', cursor: 'pointer' }}
-                              onMouseDown={e => e.preventDefault()}
-                            >
-                              Delete
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {/* Inner card: original post */}
-                  <div
-                    style={{ margin: 16, background: '#fff', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', padding: 0, cursor: 'pointer' }}
-                    onClick={() => setSelectedPost(post)}
-                  >
-                    <div className="post-header" style={{ padding: '16px 16px 0 16px', position: 'relative' }}>
-                      <div className="post-header-left">
-                        <img 
-                          src={displayAvatar} 
-                          alt="Profile" 
-                          className="post-header-profile-image"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.onerror = null;
-                            target.src = ctulogo as unknown as string;
-                          }}
-                        />
-                        <div>
-                          <div className="post-author-info">{displayName || 'User'}</div>
-                          <div className="post-author-details" style={{ color: '#666', fontSize: '12px' }}>
-                            <span>{formatTimeAgo(post.created_at) || 'Unknown time'}</span>
-                          </div>
-                        </div>
-                      </div>
-                      {/* Three dots menu */}
-                      {isOwn && (
-                        <div style={{ position: 'absolute', top: 8, right: 8, cursor: 'pointer' }}>
-                          <div onClick={() => setShowOptions(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))} style={{ fontSize: 24, userSelect: 'none' }}>⋯</div>
-                          {showOptions[post.post_id] && (
-                            <div style={{
-                              position: 'absolute',
-                              top: 24,
-                              right: 0,
-                              backgroundColor: 'white',
-                              border: '1px solid #ccc',
-                              borderRadius: 4,
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                              zIndex: 1000,
-                              width: 100,
-                            }}>
-                              <div
-                                onClick={handleEditPost}
-                                style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #eee' }}
-                                onMouseDown={e => e.preventDefault()}
-                              >
-                                Edit
-                              </div>
-                              <div
-                                onClick={handleDeletePost}
-                                style={{ padding: '8px 12px', cursor: 'pointer' }}
-                                onMouseDown={e => e.preventDefault()}
-                              >
-                                Delete
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="post-content" style={{ padding: '0 16px 8px 16px' }}>{post.post_content}</div>
-                    {post.post_image && (
-                      <div style={{ marginTop: 8, padding: '0 16px 16px 16px' }}>
-                        <img 
-                          src={
-                            post.post_image.startsWith('/media/')
-                              ? `http://127.0.0.1:8000${post.post_image}`
-                              : post.post_image
-                          }
-                          alt="post" 
-                          style={{ maxWidth: '100%', borderRadius: 8, maxHeight: '400px', objectFit: 'cover' }}
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            console.error('Failed to load post image:', post.post_image);
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  {/* Repost actions (like, comment, repost) - moved to outer card */}
-                  <div className="post-actions" style={{ display: 'flex', gap: 16, marginTop: 8, padding: '0 16px 16px 16px' }}>
-                    <button
-                      onClick={() => likedPosts[post.post_id] ? handleUnlike(post.post_id) : handleLike(post.post_id)}
-                      className="post-action-item"
-                      style={{
-                        color: likedPosts[post.post_id] ? '#e0245e' : '#555',
-                        fontWeight: likedPosts[post.post_id] ? 'bold' : 'normal',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {likedPosts[post.post_id] ? '❤️' : '🤍'} Like ({post.likes?.length || 0})
-                    </button>
-                    <button
-                      onClick={() => setShowCommentInput(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
-                      className="post-action-item"
-                    >
-                      💬 Comment ({post.comments?.length || 0})
-                    </button>
-                    <button
-                      onClick={() => openRepostCaptionModal(post.post_id)}
-                      className="post-action-item"
-                      disabled={repostedPosts[post.post_id]}
-                      style={{
-                        color: repostedPosts[post.post_id] ? '#007bff' : '#555',
-                        fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
-                        background: 'none',
-                        border: 'none',
-                        cursor: repostedPosts[post.post_id] ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      🔄 Repost ({post.reposts?.length || 0})
-                    </button>
-                  </div>
-                  {/* Show error message if repost failed */}
-                  {repostError && (
-                    <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-                      {repostError}
-                    </div>
-                  )}
-                </div>
-              );
+            
+            // Check if this post has reposts and render them
+            if (post.reposts && post.reposts.length > 0) {
+              const repostCards = post.reposts.map((repost: any) => (
+                <PostCard
+                  key={`repost-${repost.repost_id}`}
+                  post={post}
+                  currentUserId={currentId}
+                  isOwn={false}
+                  displayName={displayName}
+                  displayAvatar={displayAvatar}
+                  formatTime={formatTimeAgo}
+                  isRepost={true}
+                  repostData={repost}
+                  onPostUpdate={onPosted}
+                  showOptions={showOptions}
+                  setShowOptions={setShowOptions}
+                  editingPost={editingPost}
+                  setEditingPost={setEditingPost}
+                  editPostContent={editPostContent}
+                  setEditPostContent={setEditPostContent}
+                  likedPosts={likedPosts}
+                  setLikedPosts={setLikedPosts}
+                  repostedPosts={repostedPosts}
+                  setRepostedPosts={setRepostedPosts}
+                  showCommentInput={showCommentInput}
+                  setShowCommentInput={setShowCommentInput}
+                  showAllComments={showAllComments}
+                  setShowAllComments={setShowAllComments}
+                  commentInput={commentInput}
+                  setCommentInput={setCommentInput}
+                  editingComment={editingComment}
+                  setEditingComment={setEditingComment}
+                  editCommentContent={editCommentContent}
+                  setEditCommentContent={setEditCommentContent}
+                />
+              ));
+              acc.push(...repostCards);
             }
-
-            // Normal post card (not a repost)
-            return (
-              <div key={post.post_id} className="post-feed-card">
-                <div className="post-header" style={{ position: 'relative' }}>
-                  <div className="post-header-left">
-                    <img
-                      src={displayAvatar}
-                      alt="Profile"
-                      className="post-header-profile-image"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.onerror = null;
-                        target.src = ctulogo as unknown as string;
-                      }}
-                    />
-                    <div>
-                      <div className="post-author-info">{displayName || 'User'}</div>
-                      <div className="post-author-details" style={{ color: '#666', fontSize: '12px' }}>
-                        <span>{formatTimeAgo(post.created_at) || 'Unknown time'}</span>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Three dots menu */}
-                  {isOwn && (
-                    <div style={{ position: 'absolute', top: 8, right: 8, cursor: 'pointer' }}>
-                      <div onClick={() => setShowOptions(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))} style={{ fontSize: 24, userSelect: 'none' }}>⋯</div>
-                      {showOptions[post.post_id] && (
-                        <div style={{
-                          position: 'absolute',
-                          top: 24,
-                          right: 0,
-                          backgroundColor: 'white',
-                          border: '1px solid #ccc',
-                          borderRadius: 4,
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                          zIndex: 1000,
-                          width: 100,
-                        }}>
-                          <div
-                            onClick={handleEditPost}
-                            style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #eee' }}
-                            onMouseDown={e => e.preventDefault()}
-                          >
-                            Edit
-                          </div>
-                          <div
-                            onClick={handleDeletePost}
-                            style={{ padding: '8px 12px', cursor: 'pointer' }}
-                            onMouseDown={e => e.preventDefault()}
-                          >
-                            Delete
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="post-content">{post.post_content}</div>
-                {post.post_image && (
-                  <div style={{ marginTop: 8 }}>
-                    <img 
-                      src={
-                        post.post_image.startsWith('/media/')
-                          ? `http://127.0.0.1:8000${post.post_image}`
-                          : post.post_image
-                      }
-                      alt="post" 
-                      style={{ maxWidth: '100%', borderRadius: 8, maxHeight: '400px', objectFit: 'cover' }}
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        console.error('Failed to load post image:', post.post_image);
-                      }}
-                    />
-                  </div>
-                )}
-                <div className="post-actions" style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-                  <button
-                    onClick={() => likedPosts[post.post_id] ? handleUnlike(post.post_id) : handleLike(post.post_id)}
-                    className="post-action-item"
-                    style={{
-                      color: likedPosts[post.post_id] ? '#e0245e' : '#555',
-                      fontWeight: likedPosts[post.post_id] ? 'bold' : 'normal',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {likedPosts[post.post_id] ? '❤️' : '🤍'} Like ({post.likes?.length || 0})
-                  </button>
-                  <button onClick={() => setShowCommentInput(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))} className="post-action-item">💬 Comment ({post.comments?.length || 0})</button>
-                  <button
-                    onClick={() => openRepostCaptionModal(post.post_id)}
-                    className="post-action-item"
-                    disabled={repostedPosts[post.post_id]}
-                    style={{
-                      color: repostedPosts[post.post_id] ? '#007bff' : '#555',
-                      fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
-                      background: 'none',
-                      border: 'none',
-                      cursor: repostedPosts[post.post_id] ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    🔄 Repost ({post.reposts?.length || 0})
-                  </button>
-                </div>
-                {showCommentInput[post.post_id] && (
-                  <div className="comment-input-container">
-                    <input 
-                        type="text" 
-                        placeholder="Type your comment..." 
-                        value={commentInput[post.post_id] || ''} 
-                        onChange={(e) => setCommentInput(prev => ({ ...prev, [post.post_id]: e.target.value }))} 
-                    />
-                    <button onClick={() => handleCommentSubmit(post.post_id)}>➡️</button>
-                  </div>
-                )}
-                
-                {/* Display comments */}
-                {post.comments && post.comments.length > 0 && (
-                  <div className="comments-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
-                    {(showAllComments[post.post_id] ? post.comments : post.comments.slice(0, 2)).map((comment) => (
-                      <div key={comment.comment_id} className="comment-item" style={{ display: 'flex', gap: '8px', marginBottom: '8px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-                        <img 
-                          src={comment.user.profile_pic ? (String(comment.user.profile_pic).startsWith('http') ? comment.user.profile_pic : `http://127.0.0.1:8000${comment.user.profile_pic}`) : ctulogo} 
-                          alt="Profile" 
-                          className="comment-profile-image"
-                          style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.onerror = null;
-                            target.src = ctulogo as unknown as string;
-                          }}
-                        />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333' }}>
-                            {comment.user.f_name} {comment.user.l_name}
-                          </div>
-                          <div style={{ fontSize: '14px', color: '#555' }}>
-                            {comment.comment_content}
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
-                            {formatTimeAgo(comment.date_created)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {post.comments.length > 2 && !showAllComments[post.post_id] && (
-                      <button
-                        className="view-all-comments-btn"
-                        style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
-                        onClick={() => setShowAllComments(prev => ({ ...prev, [post.post_id]: true }))}
-                      >
-                        View all comments ({post.comments.length})
-                      </button>
-                    )}
-                    {post.comments.length > 2 && showAllComments[post.post_id] && (
-                      <button
-                        className="hide-comments-btn"
-                        style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
-                        onClick={() => setShowAllComments(prev => ({ ...prev, [post.post_id]: false }))}
-                      >
-                        Hide comments
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
+            
+            // Also render original post
+            const originalPostCard = (
+              <PostCard
+                key={post.post_id}
+                post={post}
+                currentUserId={currentId}
+                isOwn={!!isOwn}
+                displayName={displayName}
+                displayAvatar={displayAvatar}
+                formatTime={formatTimeAgo}
+                onPostUpdate={onPosted}
+                showOptions={showOptions}
+                setShowOptions={setShowOptions}
+                editingPost={editingPost}
+                setEditingPost={setEditingPost}
+                editPostContent={editPostContent}
+                setEditPostContent={setEditPostContent}
+                likedPosts={likedPosts}
+                setLikedPosts={setLikedPosts}
+                repostedPosts={repostedPosts}
+                setRepostedPosts={setRepostedPosts}
+                showCommentInput={showCommentInput}
+                setShowCommentInput={setShowCommentInput}
+                showAllComments={showAllComments}
+                setShowAllComments={setShowAllComments}
+                commentInput={commentInput}
+                setCommentInput={setCommentInput}
+                editingComment={editingComment}
+                setEditingComment={setEditingComment}
+                editCommentContent={editCommentContent}
+                setEditCommentContent={setEditCommentContent}
+              />
             );
-          })}
+            acc.push(originalPostCard);
+            
+            return acc;
+          }, [])}
         </div>
 
         {/* Bio Modal */}
         {bioModalOpen && (
-          <div className="profile-bio-modal-overlay">
-            <div className="profile-bio-modal-content">
-              <h3 className="profile-bio-modal-title">Add Bio</h3>
-              <textarea
-                value={bioInput}
-                onChange={(e) => setBioInput(e.target.value)}
-                rows={4}
-                className="profile-bio-textarea"
-                placeholder="Enter your bio..."
-              />
-              <div className="profile-bio-modal-buttons">
+          <div 
+            className="profile-bio-modal-overlay" 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000
+            }}
+            onClick={(e) => {
+              // Close modal when clicking on the overlay (outside the modal content)
+              if (e.target === e.currentTarget) {
+                setBioModalOpen(false);
+              }
+            }}
+          >
+            <div 
+              className="profile-bio-modal-content" 
+              style={{
+                background: 'linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%)',
+                borderRadius: '16px',
+                padding: '20px',
+                maxWidth: '360px',
+                width: '90%',
+                maxHeight: '60vh',
+                overflowY: 'auto',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)',
+                position: 'relative',
+                border: '1px solid rgba(255, 255, 255, 0.8)',
+                backdropFilter: 'blur(10px)'
+              }}
+            >
+              <button
+                onClick={() => setBioModalOpen(false)}
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#666',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                  e.currentTarget.style.color = '#333';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#666';
+                }}
+                title="Close"
+              >
+                ×
+              </button>
+              
+              <h3 style={{
+                fontSize: '18px',
+                fontWeight: '600',
+                color: '#2c2c2c',
+                marginBottom: '16px',
+                textAlign: 'center'
+              }}>
+                {user && user.profile_bio && user.profile_bio.trim() ? 'Edit Bio' : 'Add Bio'}
+              </h3>
+              
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <textarea
+                  value={bioInput}
+                  onChange={(e) => {
+                    setBioInput(e.target.value);
+                    // Auto-resize textarea
+                    const textarea = e.target;
+                    textarea.style.height = 'auto';
+                    textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
+                  }}
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    maxWidth: '300px',
+                    padding: '12px',
+                    border: '1px solid rgba(0, 0, 0, 0.1)',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontFamily: 'inherit',
+                    resize: 'none',
+                    minHeight: '80px',
+                    maxHeight: '150px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                    transition: 'border-color 0.2s ease',
+                    outline: 'none',
+                    overflow: 'auto'
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#ff6b35';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                  }}
+                  placeholder="Tell us about yourself..."
+                />
+              </div>
+              
+              <div style={{ 
+                display: 'flex', 
+                gap: '10px', 
+                justifyContent: 'center', 
+                marginTop: '20px',
+                paddingTop: '16px',
+                borderTop: '1px solid rgba(0, 0, 0, 0.06)'
+              }}>
                 <button
                   onClick={() => setBioModalOpen(false)}
-                  className="profile-bio-cancel-btn"
                   disabled={bioLoading}
+                  style={{
+                    flex: 1,
+                    maxWidth: '100px',
+                    padding: '10px 16px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                    color: '#666',
+                    border: '1px solid rgba(0, 0, 0, 0.1)',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    transition: 'all 0.2s ease',
+                    opacity: bioLoading ? 0.6 : 1
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!bioLoading) {
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                      e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.15)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!bioLoading) {
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+                      e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }
+                  }}
                 >
                   Cancel
                 </button>
+                
                 {user && user.profile_bio && user.profile_bio.trim() && (
                   <button
                     onClick={handleDeleteBio}
-                    className="profile-bio-delete-btn"
                     disabled={bioLoading}
+                    style={{
+                      flex: 1,
+                      maxWidth: '100px',
+                      padding: '10px 16px',
+                      backgroundColor: 'rgba(255, 71, 87, 0.9)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      transition: 'all 0.2s ease',
+                      opacity: bioLoading ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!bioLoading) {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 55, 66, 0.95)';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!bioLoading) {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 71, 87, 0.9)';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }
+                    }}
                   >
                     {bioLoading ? 'Deleting...' : 'Delete Bio'}
                   </button>
                 )}
+                
                 <button
                   onClick={handleSaveBio}
-                  className="profile-bio-save-btn"
                   disabled={bioLoading}
+                  style={{
+                    flex: 1,
+                    maxWidth: '100px',
+                    padding: '10px 16px',
+                    backgroundColor: '#ff6b35',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    transition: 'all 0.2s ease',
+                    opacity: bioLoading ? 0.6 : 1,
+                    boxShadow: '0 2px 8px rgba(255, 107, 53, 0.25)'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!bioLoading) {
+                      e.currentTarget.style.backgroundColor = '#e55a2b';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 107, 53, 0.35)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!bioLoading) {
+                      e.currentTarget.style.backgroundColor = '#ff6b35';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(255, 107, 53, 0.25)';
+                    }
+                  }}
                 >
                   {bioLoading ? 'Saving...' : 'Save'}
                 </button>
@@ -1427,45 +1243,264 @@ getPosts()
 
       {/* Edit Profile Modal */}
       {editModalOpen && (
-        <div className="profile-edit-modal-overlay">
-          <div className="profile-edit-modal-content">
+        <div 
+          className="profile-edit-modal-overlay" 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+          onClick={(e) => {
+            // Close modal when clicking on the overlay (outside the modal content)
+            if (e.target === e.currentTarget) {
+              setEditModalOpen(false);
+            }
+          }}
+        >
+          <div className="profile-edit-modal-content" style={{
+            background: 'linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%)',
+            borderRadius: '16px',
+            padding: '20px',
+            maxWidth: '360px',
+            width: '90%',
+            maxHeight: '60vh',
+            overflowY: 'auto',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)',
+            position: 'relative',
+            border: '1px solid rgba(255, 255, 255, 0.8)',
+            backdropFilter: 'blur(10px)'
+          }}>
             <button
               onClick={() => setEditModalOpen(false)}
-              className="profile-edit-modal-close-btn"
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'none',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: '#666',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '50%',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f5f5f5';
+                e.currentTarget.style.color = '#333';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#666';
+              }}
               title="Close"
             >
               ×
             </button>
-            <h2 className="profile-edit-modal-title">Edit Profile</h2>
-            {/* Profile Pic */}
-            <div className="profile-edit-pic-section" style={{ marginBottom: 16 }}>
-              <label className="profile-edit-pic-label">Profile Picture</label>
-              <br />
+            <h2 style={{
+              fontSize: '18px',
+              fontWeight: '600',
+              color: '#2c2c2c',
+              marginBottom: '16px',
+              textAlign: 'center'
+            }}>Edit Profile</h2>
+            
+            {/* Profile Pic Section */}
+            <div style={{ 
+              marginBottom: '20px',
+              textAlign: 'center'
+            }}>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#4a4a4a',
+                marginBottom: '12px'
+              }}>Profile Picture</label>
+              
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '16px'
+              }}>
+                <div style={{
+                  position: 'relative',
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  border: '2px solid rgba(255, 255, 255, 0.9)',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+                }}>
               <img
-                src={editProfilePic || ctulogo}
+                src={
+                  editProfilePic 
+                    ? (String(editProfilePic).startsWith('data:') || String(editProfilePic).startsWith('http') 
+                        ? editProfilePic 
+                        : `http://127.0.0.1:8000${editProfilePic}`)
+                    : (user?.profile_pic 
+                        ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`)
+                        : ctulogo)
+                }
                 alt="Profile Preview"
-                className="profile-edit-pic-preview"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover'
+                }}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.onerror = null;
+                  target.src = ctulogo as unknown as string;
+                }}
               />
-              <div className="profile-edit-pic-controls">
-                <input type="file" accept="image/*" onChange={handleProfilePicChange} />
-                <button onClick={handleRemoveProfilePic} className="profile-edit-pic-remove-btn">
-                  Remove
+                </div>
+                
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  width: '100%',
+                  maxWidth: '250px'
+                }}>
+                  <label style={{
+                    display: 'inline-block',
+                    padding: '10px 16px',
+                    backgroundColor: '#ff6b35',
+                    color: 'white',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    textAlign: 'center',
+                    transition: 'all 0.2s ease',
+                    border: 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#e55a2b';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#ff6b35';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}>
+                    Choose New Photo
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleProfilePicChange}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                  
+                  <button 
+                    onClick={handleRemoveProfilePic} 
+                    style={{
+                      padding: '10px 16px',
+                      backgroundColor: 'transparent',
+                      color: '#666',
+                      border: '1px solid rgba(0, 0, 0, 0.1)',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f5f5f5';
+                      e.currentTarget.style.borderColor = '#ccc';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.borderColor = '#e0e0e0';
+                    }}
+                  >
+                    Remove Current Photo
                 </button>
+                </div>
               </div>
             </div>
 
-            {/* Resume (PDF) - Feature coming soon */}
-            <div className="profile-edit-modal-buttons">
+            {/* Save and Cancel Buttons */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '10px', 
+              justifyContent: 'center', 
+              marginTop: '20px',
+              paddingTop: '16px',
+              borderTop: '1px solid rgba(0, 0, 0, 0.06)'
+            }}>
               <button
                 onClick={() => setEditModalOpen(false)}
-                className="profile-edit-modal-cancel-btn"
+                style={{
+                  flex: 1,
+                  maxWidth: '100px',
+                  padding: '10px 16px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  color: '#666',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                  e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.15)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+                  e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
               >
                 Cancel
               </button>
-              <button onClick={handleSave} className="profile-edit-modal-save-btn">
-                Save
+              <button
+                onClick={handleSaveProfile}
+                style={{
+                  flex: 1,
+                  maxWidth: '100px',
+                  padding: '10px 16px',
+                  backgroundColor: '#ff6b35',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 8px rgba(255, 107, 53, 0.25)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#e55a2b';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 107, 53, 0.35)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#ff6b35';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(255, 107, 53, 0.25)';
+                }}
+              >
+                Save Changes
               </button>
             </div>
+
           </div>
         </div>
       )}
@@ -1578,232 +1613,103 @@ getPosts()
         </div>
       )}
 
-      {/* Post Modal */}
-      {selectedPost && (
-        <div
-          className="profile-post-modal-overlay"
-          onClick={() => setSelectedPost(null)}
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 2000,
-          }}
-        >
-          <div
-            className="profile-post-modal-content"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              backgroundColor: '#fff',
-              borderRadius: 12,
-              maxWidth: '600px',
-              maxHeight: '80vh',
-              overflowY: 'auto',
-              width: '90%',
-              position: 'relative',
-            }}
-          >
-            <button
-              onClick={() => setSelectedPost(null)}
-              style={{
-                position: 'absolute',
-                top: 16,
-                right: 16,
-                background: 'none',
-                border: 'none',
-                fontSize: 24,
-                cursor: 'pointer',
-                zIndex: 1001,
-              }}
-            >
-              ×
-            </button>
-            <div style={{ padding: 24 }}>
-              {/* Post Header */}
-              <div className="post-header" style={{ marginBottom: 16 }}>
-                <div className="post-header-left">
-                  <img
-                    src={
-                      selectedPost.user?.profile_pic
-                        ? (String(selectedPost.user.profile_pic).startsWith('http')
-                          ? selectedPost.user.profile_pic
-                          : `http://127.0.0.1:8000${selectedPost.user.profile_pic}`)
-                        : ctulogo
-                    }
-                    alt="Profile"
-                    className="post-header-profile-image"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.onerror = null;
-                      target.src = ctulogo as unknown as string;
-                    }}
-                  />
-                  <div>
-                    <div className="post-author-info">
-                      {selectedPost.user?.f_name && selectedPost.user?.l_name
-                        ? `${selectedPost.user.f_name} ${selectedPost.user.l_name}`
-                        : selectedPost.user?.name || 'User'}
-                    </div>
-                    <div className="post-author-details" style={{ color: '#666', fontSize: '12px' }}>
-                      <span>{formatTimeAgo(selectedPost.created_at) || 'Unknown time'}</span>
-                    </div>
-                  </div>
+      {/* Members Modal */}
+      {showMembersModal && (
+        <div className="profile-followers-modal-overlay">
+          <div className="profile-followers-modal-content" style={{ maxWidth: '800px', width: '90%' }}>
+            <div className="profile-followers-modal-header">
+              <h3 className="profile-followers-modal-title">Members ({allMembers.length}) - Batch {user?.batch || 'Unknown'}</h3>
+              <button
+                onClick={() => setShowMembersModal(false)}
+                className="profile-followers-modal-close-btn"
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="profile-followers-modal-list" style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(3, 1fr)', 
+              gap: '16px',
+              padding: '20px'
+            }}>
+              {allMembers.length === 0 ? (
+                <div className="profile-followers-modal-empty" style={{ gridColumn: '1 / -1', textAlign: 'center' }}>
+                  No members found.
                 </div>
-              </div>
-
-              {/* Post Content */}
-              <div className="post-content" style={{ marginBottom: 16 }}>
-                {selectedPost.post_content}
-              </div>
-
-              {/* Post Image */}
-              {selectedPost.post_image && (
-                <div style={{ marginBottom: 16 }}>
-                  <img
-                    src={
-                      selectedPost.post_image.startsWith('/media/')
-                        ? `http://127.0.0.1:8000${selectedPost.post_image}`
-                        : selectedPost.post_image
-                    }
-                    alt="post"
+              ) : (
+                allMembers.map((member) => (
+                  <div
+                    key={member.user_id ?? member.id}
+                    className="profile-followers-modal-item"
                     style={{
-                      maxWidth: '100%',
-                      borderRadius: 8,
-                      maxHeight: '400px',
-                      objectFit: 'cover'
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      padding: '16px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(0, 0, 0, 0.1)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      textAlign: 'center'
                     }}
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.style.display = 'none';
-                      console.error('Failed to load post image:', selectedPost.post_image);
+                    onClick={() => {
+                      const destId = member.user_id ?? member.id;
+                      const me = JSON.parse(localStorage.getItem('user') || '{}');
+                      const meId = me.user_id || me.id;
+                      if (destId && Number(destId) !== Number(meId)) {
+                        navigate(`/alumni/profile/${destId}`);
+                        setShowMembersModal(false);
+                      }
                     }}
-                  />
-                </div>
-              )}
-
-              {/* Post Actions */}
-              <div className="post-actions" style={{ display: 'flex', gap: 16, marginTop: 16 }}>
-                <button
-                  onClick={() => likedPosts[selectedPost.post_id] ? handleUnlike(selectedPost.post_id) : handleLike(selectedPost.post_id)}
-                  className="post-action-item"
-                  style={{
-                    color: likedPosts[selectedPost.post_id] ? '#e0245e' : '#555',
-                    fontWeight: likedPosts[selectedPost.post_id] ? 'bold' : 'normal',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {likedPosts[selectedPost.post_id] ? '❤️' : '🤍'} Like
-                </button>
-                <button
-                  onClick={() => setShowCommentInput(prev => ({ ...prev, [selectedPost.post_id]: !prev[selectedPost.post_id] }))}
-                  className="post-action-item"
-                >
-                  💬 Comment
-                </button>
-                <button
-                  onClick={() => handleRepost(selectedPost.post_id)}
-                  className="post-action-item"
-                  disabled={repostedPosts[selectedPost.post_id]}
-                  style={{
-                    color: repostedPosts[selectedPost.post_id] ? '#007bff' : '#555',
-                    fontWeight: repostedPosts[selectedPost.post_id] ? 'bold' : 'normal',
-                    background: 'none',
-                    border: 'none',
-                    cursor: repostedPosts[selectedPost.post_id] ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  🔄 Repost
-                </button>
-              </div>
-
-              {/* Comment Input */}
-              {showCommentInput[selectedPost.post_id] && (
-                <div className="comment-input-container" style={{ marginTop: 16 }}>
-                  <input
-                    type="text"
-                    placeholder="Type your comment..."
-                    value={commentInput[selectedPost.post_id] || ''}
-                    onChange={(e) => setCommentInput(prev => ({ ...prev, [selectedPost.post_id]: e.target.value }))}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      border: '1px solid #ccc',
-                      borderRadius: 4,
-                      marginBottom: 8
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 107, 53, 0.1)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
                     }}
-                  />
-                  <button
-                    onClick={() => handleCommentSubmit(selectedPost.post_id)}
-                    style={{
-                      padding: '6px 12px',
-                      background: '#174f84',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 4,
-                      cursor: 'pointer'
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
                     }}
                   >
-                    ➡️
-                  </button>
-                </div>
-              )}
-
-              {/* Comments */}
-              {selectedPost.comments && selectedPost.comments.length > 0 && (
-                <div className="comments-section" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #eee' }}>
-                  {(showAllComments[selectedPost.post_id] ? selectedPost.comments : selectedPost.comments.slice(0, 2)).map((comment) => (
-                    <div key={comment.comment_id} className="comment-item" style={{ display: 'flex', gap: '8px', marginBottom: '8px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-                      <img
-                        src={comment.user.profile_pic ? (String(comment.user.profile_pic).startsWith('http') ? comment.user.profile_pic : `http://127.0.0.1:8000${comment.user.profile_pic}`) : ctulogo}
-                        alt="Profile"
-                        className="comment-profile-image"
-                        style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.onerror = null;
-                          target.src = ctulogo as unknown as string;
-                        }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333' }}>
-                          {comment.user.f_name} {comment.user.l_name}
-                        </div>
-                        <div style={{ fontSize: '14px', color: '#555' }}>
-                          {comment.comment_content}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
-                          {formatTimeAgo(comment.date_created)}
-                        </div>
-                      </div>
+                    <img
+                      src={member.profile_pic ? (String(member.profile_pic).startsWith('http') ? member.profile_pic : `http://127.0.0.1:8000${member.profile_pic}`) : ctulogo}
+                      alt={member.name}
+                      style={{
+                        width: '60px',
+                        height: '60px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        marginBottom: '12px',
+                        border: '2px solid rgba(255, 255, 255, 0.9)',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                      }}
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.onerror = null;
+                        target.src = ctulogo as unknown as string;
+                      }}
+                    />
+                    <div style={{ 
+                      fontSize: '14px', 
+                      fontWeight: '600', 
+                      color: '#2c2c2c',
+                      wordBreak: 'break-word',
+                      marginBottom: '4px'
+                    }}>
+                      {member.name || 'Unknown User'}
                     </div>
-                  ))}
-                  {selectedPost.comments.length > 2 && !showAllComments[selectedPost.post_id] && (
-                    <button
-                      className="view-all-comments-btn"
-                      style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
-                      onClick={() => setShowAllComments(prev => ({ ...prev, [selectedPost.post_id]: true }))}
-                    >
-                      View all comments ({selectedPost.comments.length})
-                    </button>
-                  )}
-                  {selectedPost.comments.length > 2 && showAllComments[selectedPost.post_id] && (
-                    <button
-                      className="hide-comments-btn"
-                      style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
-                      onClick={() => setShowAllComments(prev => ({ ...prev, [selectedPost.post_id]: false }))}
-                    >
-                      Hide comments
-                    </button>
-                  )}
-                </div>
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: '#666',
+                      wordBreak: 'break-word'
+                    }}>
+                      Batch {member.batch || 'Unknown'}
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>

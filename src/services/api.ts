@@ -375,11 +375,6 @@ export const fetchNotifications = async (userId: number) => {
   return response.data;
 };
 
-// Fetch notification count for a user
-export const fetchNotificationCount = async (userId: number) => {
-  const response = await api.get(`notifications/count/?user_id=${userId}`);
-  return response.data;
-};
 
 // Delete notifications by IDs
 export const deleteNotifications = async (notificationIds: number[]) => {
@@ -447,8 +442,8 @@ export const getPostComments = async (postId: number) => {
   return response.data;
 };
 
-export const repostPost = async (postId: number) => {
-  const response = await api.post(`posts/${postId}/repost/`);
+export const repostPost = async (postId: number, caption?: string) => {
+  const response = await api.post(`posts/${postId}/repost/`, { caption });
   return response.data;
 };
 
@@ -481,5 +476,75 @@ export const deleteComment = async (postId: number, commentId: number) => {
 
 export const editComment = async (postId: number, commentId: number, commentData: { comment_content: string }) => {
   const response = await api.put(`posts/${postId}/comments/${commentId}/`, commentData);
+  return response.data;
+};
+
+// Forum-specific API functions
+export const getForums = async () => {
+  const response = await api.get('forum/');
+  return response.data?.forums || [];
+};
+
+export const createForumPost = async (forumData: {
+  content: string;
+  image?: string;
+}) => {
+  const response = await api.post('forum/', forumData);
+  return response.data;
+};
+
+export const likeForumPost = async (forumId: number) => {
+  const response = await api.post(`forum/${forumId}/like/`);
+  return response.data;
+};
+
+export const unlikeForumPost = async (forumId: number) => {
+  const response = await api.delete(`forum/${forumId}/like/`);
+  return response.data;
+};
+
+export const commentOnForumPost = async (forumId: number, commentContent: string) => {
+  const response = await api.post(`forum/${forumId}/comments/`, { comment_content: commentContent });
+  return response.data;
+};
+
+export const getForumComments = async (forumId: number) => {
+  const response = await api.get(`forum/${forumId}/comments/`);
+  return response.data;
+};
+
+export const repostForumPost = async (forumId: number) => {
+  const response = await api.post(`forum/${forumId}/repost/`);
+  return response.data;
+};
+
+export const unrepostForumPost = async (repostId: number) => {
+  const response = await api.delete(`forum-reposts/${repostId}/`);
+  return response.data;
+};
+
+export const deleteForumPost = async (forumId: number) => {
+  const response = await api.delete(`forum/${forumId}/`);
+  return response.data;
+};
+
+export const editForumPost = async (forumId: number, forumData: { content: string }) => {
+  const response = await api.put(`forum/${forumId}/`, forumData);
+  return response.data;
+};
+
+export const deleteForumComment = async (forumId: number, commentId: number) => {
+  const response = await api.delete(`forum/${forumId}/comments/${commentId}/`);
+  return response.data;
+};
+
+export const editForumComment = async (forumId: number, commentId: number, commentData: { comment_content: string }) => {
+  const response = await api.put(`forum/${forumId}/comments/${commentId}/`, commentData);
+  return response.data;
+};
+
+// Get admin and PESO user IDs dynamically
+export const getAdminPesoUsers = async () => {
+  const response = await api.get('admin-peso-users/');
   return response.data;
 };

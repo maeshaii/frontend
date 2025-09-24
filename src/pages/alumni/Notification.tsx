@@ -8,7 +8,7 @@ function formatHybrid(iso?: string | null): string {
 
   // Parse date string as UTC by appending 'Z' if no timezone info present
   let dateStr = iso;
-  if (!iso.endsWith('Z') && !iso.match(/[+\-]\d{2}:\d{2}$/)) {
+  if (!iso.endsWith('Z') && !iso.match(/[+-]\d{2}:\d{2}$/)) {
     dateStr = iso + 'Z';
   }
 
@@ -28,15 +28,6 @@ function formatHybrid(iso?: string | null): string {
   return 'Just now';
 }
 
-// New hook to force re-render every minute for real-time timestamp updates
-function useInterval(callback: () => void, delay: number | null) {
-  React.useEffect(() => {
-    if (delay === null) return;
-    const id = setInterval(callback, delay);
-    return () => clearInterval(id);
-  }, [callback, delay]);
-}
-
 const NotificationPage: React.FC = () => {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,13 +35,23 @@ const NotificationPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [showProfile, setShowProfile] = useState(false);
   const [openNotif, setOpenNotif] = useState<any | null>(null);
-  const [, setTick] = React.useState(0); // state to trigger re-render
   const navigate = useNavigate();
 
-  // Use interval to update every minute for real-time timestamps
-  useInterval(() => {
-    setTick(tick => tick + 1);
-  }, 60000);
+  // Add CSS for invisible scrollbar styling
+  React.useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      .notification-scroll::-webkit-scrollbar {
+        display: none;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
@@ -223,17 +224,25 @@ const NotificationPage: React.FC = () => {
           </button>
         </div>
         <div style={{ borderTop: '1px solid #eee' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8 }}>
-            <thead>
-              <tr style={{ background: '#f5f7fa' }}>
-                <th style={{ width: 40 }}></th>
-                <th style={{ textAlign: 'left', padding: 8 }}>Sender</th>
-                <th style={{ textAlign: 'left', padding: 8 }}>Subject</th>
-                <th style={{ textAlign: 'left', padding: 8 }}>Content</th>
-                <th style={{ textAlign: 'right', padding: 8 }}>Date</th>
-              </tr>
-            </thead>
-            <tbody>
+          <div 
+            className="notification-scroll"
+            style={{ 
+              maxHeight: '440px', // 10 rows * 44px height per row
+              overflowY: 'auto',
+              scrollbarWidth: 'none', /* Firefox */
+              msOverflowStyle: 'none', /* IE and Edge */
+            }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8 }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                <tr style={{ background: '#f5f7fa' }}>
+                  <th style={{ width: 40 }}></th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Sender</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Subject</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Content</th>
+                  <th style={{ textAlign: 'right', padding: 8 }}>Date</th>
+                </tr>
+              </thead>
+              <tbody>
               {loading ? (
                 <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24 }}>Loading...</td></tr>
               ) : filteredNotifications.length === 0 ? (
@@ -278,8 +287,9 @@ const NotificationPage: React.FC = () => {
                   </tr>
                 ))
               )}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       {openNotif && (

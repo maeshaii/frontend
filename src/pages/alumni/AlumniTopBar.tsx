@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
-import { api } from '../../services/api';
+import { api, getAdminPesoUsers } from '../../services/api';
 
 interface AlumniTopBarProps {
   showProfile: boolean;
@@ -30,22 +30,42 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   const [showSuggestions, setShowSuggestions] = React.useState(false);
 
   // New state for notification count
-  const [notificationCount, setNotificationCount] = React.useState(0);
+  
+  // State for admin and PESO user IDs
+  const [adminUserIds, setAdminUserIds] = React.useState<number[]>([]);
+  const [pesoUserIds, setPesoUserIds] = React.useState<number[]>([]);
 
   React.useEffect(() => {
-    // Fetch notification count from API (uses axios instance with auth)
-    api
-      .get('notifications/count')
-      .then(res => {
-        const data = res.data;
-        if (data && typeof data.count === 'number') {
-          setNotificationCount(data.count);
+    // Fetch admin and PESO user IDs
+    const fetchAdminPesoUsers = async () => {
+      try {
+        const response = await getAdminPesoUsers();
+        if (response.success) {
+          setAdminUserIds(response.admin_user_ids || []);
+          setPesoUserIds(response.peso_user_ids || []);
         }
-      })
-      .catch(() => {
-        setNotificationCount(0);
-      });
+      } catch (error) {
+        console.error('Error fetching admin/PESO users:', error);
+      }
+    };
+    
+    fetchAdminPesoUsers();
   }, []);
+
+  // Listen for user data updates from Settings
+  React.useEffect(() => {
+    const handleUserDataUpdate = (event: CustomEvent) => {
+      console.log('User data updated event received in AlumniTopBar:', event.detail);
+      // No specific action needed here as AlumniTopBar doesn't display user profile data
+    };
+
+    window.addEventListener('userDataUpdated', handleUserDataUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener('userDataUpdated', handleUserDataUpdate as EventListener);
+    };
+  }, []);
+
 
   React.useEffect(() => {
     const delayDebounce = setTimeout(() => {
@@ -62,7 +82,10 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               filteredData = (raw || []).filter((user: any) => {
                 const userIdInResult = user.user_id ?? user.id;
                 const userIdInStorage = userObj.user_id ?? userObj.id;
-                return userIdInResult !== userIdInStorage;
+                // Exclude current user, admin accounts, and PESO accounts by ID
+                return userIdInResult !== userIdInStorage && 
+                       !adminUserIds.includes(Number(userIdInResult)) && 
+                       !pesoUserIds.includes(Number(userIdInResult));
               });
             }
             setSearchResults(filteredData);
@@ -212,16 +235,23 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             cursor: 'pointer',
           }}
           onClick={() => {
-            const dashboardPath = isAdmin ? '/ccict/dashboard' : (isPeso ? '/peso/dashboard' : '/alumni/dashboard');
-            if (location.pathname === dashboardPath) {
-              const centerContent = document.querySelector('.center-content') as HTMLElement;
-              if (centerContent) {
-                centerContent.scrollTo({ top: 0, behavior: 'smooth' });
-              } else {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+            const userStr = localStorage.getItem('user');
+            if (userStr) {
+              const userObj = JSON.parse(userStr);
+              const userId = userObj.user_id || userObj.id;
+              if (userId) {
+                const dashboardPath = isAdmin ? `/ccict/dashboard/${userId}` : (isPeso ? `/peso/dashboard/${userId}` : `/alumni/dashboard/${userId}`);
+                if (location.pathname === dashboardPath) {
+                  const centerContent = document.querySelector('.center-content') as HTMLElement;
+                  if (centerContent) {
+                    centerContent.scrollTo({ top: 0, behavior: 'smooth' });
+                  } else {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                } else {
+                  navigate(dashboardPath);
+                }
               }
-            } else {
-              navigate(dashboardPath);
             }
           }}
         >
@@ -255,28 +285,6 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
         }}
       >
         <span style={{ color: 'white', fontSize: 20 }}>🔔</span>
-        {notificationCount > 0 && (
-          <span
-            style={{
-              position: 'absolute',
-              top: -4,
-              right: -4,
-              backgroundColor: 'red',
-              color: 'white',
-              borderRadius: '50%',
-              padding: '2px 6px',
-              fontSize: 10,
-              fontWeight: 'bold',
-              minWidth: 16,
-              textAlign: 'center',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              userSelect: 'none',
-            }}
-          >
-            {notificationCount}
-          </span>
-        )}
         <span style={{ color: 'white', fontSize: 12 }}>Notification</span>
       </div>
         {isAdmin && (
@@ -325,8 +333,11 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               <div style={{ padding: 12, cursor: 'pointer' }} onClick={handleLogout}>
                 Logout
               </div>
-              <div style={{ padding: 12, cursor: 'pointer' }} onClick={() => setShowProfile(false)}>
-                Close
+              <div style={{ padding: 12, cursor: 'pointer' }} onClick={() => {
+                setShowProfile(false);
+                navigate('/alumni/settings');
+              }}>
+                Settings
               </div>
             </div>
           )}

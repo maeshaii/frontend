@@ -21,14 +21,15 @@ const Login = () => {
         return;
       }
         if (data.user && data.user.account_type) {
+          const userId = data.user.user_id || data.user.id;
           if (data.user.account_type.admin) {
             navigate('/dashboard');
           } else if (data.user.account_type.peso) {
-            navigate('/peso/dashboard');
+            navigate(`/peso/dashboard/${userId}`);
           } else if (data.user.account_type.user) {
-            navigate('/alumni/dashboard');
+            navigate(`/alumni/dashboard/${userId}`);
           } else if (data.user.account_type.coordinator) {
-            navigate('/coordinator/dashboard');
+            navigate(`/coordinator/dashboard/${userId}`);
           } else {
             navigate('/dashboard');
           }
