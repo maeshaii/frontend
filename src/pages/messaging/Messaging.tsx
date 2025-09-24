@@ -92,20 +92,20 @@ const Messaging: React.FC = () => {
           />
         )}
 
-					{!selectedConversation && !isMobile && (
-						<div className="welcome-message">
-							<div className="welcome-content">
-								<h2>Welcome to Messages</h2>
-								<p>Select a conversation from the list to start messaging, or start a new conversation.</p>
-								<button 
-									onClick={() => setShowUserSearch(true)}
-									className="start-conversation-button"
-								>
-									Start New Conversation
-								</button>
-							</div>
-						</div>
-					)}
+          {!selectedConversation && !isMobile && (
+            <div className="welcome-message">
+              <div className="welcome-content">
+                <h2>Welcome to Messages</h2>
+                <p>Start a new conversation to begin messaging.</p>
+                <button 
+                  onClick={() => setShowUserSearch(true)}
+                  className="start-conversation-button"
+                >
+                  Start New Conversation
+                </button>
+              </div>
+            </div>
+          )}
 			</div>
 
       {showUserSearch && (

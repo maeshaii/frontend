@@ -1,4 +1,5 @@
 import React from 'react';
+import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
 import { api, getUserInfo, fetchNotificationCount } from '../../services/api';
@@ -155,6 +156,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
       navigate('/alumni/profile');
     }
   };
+
+  const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
 
   return (
     <div
@@ -368,7 +371,10 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                 zIndex: 10,
               }}
             >
-              <div style={{ padding: 12, cursor: 'pointer' }} onClick={handleLogout}>
+              <div
+                style={{ padding: 12, cursor: 'pointer' }}
+                onClick={() => setShowLogoutConfirm(true)}
+              >
                 Logout
               </div>
               <div style={{ padding: 12, cursor: 'pointer' }} onClick={() => setShowProfile(false)}>
@@ -378,6 +384,18 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           )}
         </div>
       </div>
+      <ConfirmModal
+        open={showLogoutConfirm}
+        title="Log out"
+        message="Are you sure you want to log out?"
+        confirmText="Yes"
+        cancelText="Cancel"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          handleLogout();
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   );
 };

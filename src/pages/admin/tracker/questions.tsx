@@ -675,19 +675,32 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                     cat.title.toLowerCase().includes('further study')}
                   {cat.questions.map((q, qIdx) => {
                     if (q.text.toLowerCase().includes('current position')) {
+                      const currentInput = jobInputValues[q.id] || '';
+                      const filterJobs = (input: string) => {
+                        const term = String(input || '').trim().toLowerCase();
+                        if (!term) return jobList.slice(0, 25);
+                        return jobList
+                          .filter((j) => !!j.title && j.title.toLowerCase().includes(term))
+                          .slice(0, 20);
+                      };
                       return (
                         <div key={q.id} style={{ marginBottom: 16 }}>
                           <label style={{ fontWeight: 500 }}>
                             {getQuestionNumber(catIdx, qIdx)}. {q.text}
                           </label>
                           <Autocomplete
-                            options={jobList}
+                            options={filterJobs(currentInput)}
                             getOptionLabel={(option) =>
                               typeof option === 'string' ? option : option.title
                             }
-                            filterOptions={(options) => options}
                             ListboxProps={{ style: { maxHeight: 400 } }}
                             freeSolo={true} // Allow free text entry
+                            inputValue={currentInput}
+                            onInputChange={(_, value) => {
+                              setJobInputValues((prev) => ({ ...prev, [q.id]: value }));
+                              handleResponseChange(cat.id, q.id, value || '');
+                              if (!value) handleResponseChange(cat.id, 'Job Code', '');
+                            }}
                             onChange={(_, value) => {
                               if (typeof value === 'string') {
                                 handleResponseChange(cat.id, q.id, value);
@@ -708,6 +721,19 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                                 fullWidth
                               />
                             )}
+                            renderOption={(props, option) => {
+                              const item = typeof option === 'string' ? { title: option, code: '' } : option;
+                              return (
+                                <li {...props}>
+                                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <span>{item.title}</span>
+                                    {item.code && (
+                                      <span style={{ fontSize: 12, color: '#6b7280' }}>Code: {item.code}</span>
+                                    )}
+                                  </div>
+                                </li>
+                              );
+                            }}
                           />
                         </div>
                       );
