@@ -23,6 +23,28 @@ function formatTimeAgo(iso?: string | null): string {
   return 'Just now';
 }
 
+function formatSocialMediaLink(socialMedia: string): { url: string; platform: string } {
+  const lowerSocial = socialMedia.toLowerCase().trim();
+  
+  // Check for common social media patterns
+  if (lowerSocial.includes('facebook.com') || lowerSocial.includes('fb.com')) {
+    return { url: socialMedia.startsWith('http') ? socialMedia : `https://${socialMedia}`, platform: 'Facebook' };
+  } else if (lowerSocial.includes('instagram.com') || lowerSocial.includes('instagr.am')) {
+    return { url: socialMedia.startsWith('http') ? socialMedia : `https://${socialMedia}`, platform: 'Instagram' };
+  } else if (lowerSocial.includes('twitter.com') || lowerSocial.includes('x.com')) {
+    return { url: socialMedia.startsWith('http') ? socialMedia : `https://${socialMedia}`, platform: 'Twitter' };
+  } else if (lowerSocial.includes('linkedin.com')) {
+    return { url: socialMedia.startsWith('http') ? socialMedia : `https://${socialMedia}`, platform: 'LinkedIn' };
+  } else if (lowerSocial.includes('tiktok.com')) {
+    return { url: socialMedia.startsWith('http') ? socialMedia : `https://${socialMedia}`, platform: 'TikTok' };
+  } else if (lowerSocial.includes('youtube.com') || lowerSocial.includes('youtu.be')) {
+    return { url: socialMedia.startsWith('http') ? socialMedia : `https://${socialMedia}`, platform: 'YouTube' };
+  } else {
+    // Default case - treat as generic URL
+    return { url: socialMedia.startsWith('http') ? socialMedia : `https://${socialMedia}`, platform: 'Social Media' };
+  }
+}
+
 interface AlumniUser {
   name: string;
   course?: string;
@@ -39,6 +61,8 @@ interface AlumniUser {
   middle_name?: string;
   last_name?: string;
   year_graduated?: string | number;
+  social_media?: string;
+  email?: string;
   account_type?: {
     ccict?: boolean;
     admin?: boolean;
@@ -159,7 +183,7 @@ const AlumniProfile: React.FC = () => {
 
       try {
         const token = localStorage.getItem('accessToken');
-        const res = await fetch(`http://127.0.0.1:8000/api/alumni/${userId}/`, {
+        const res = await fetch(`http://127.0.0.1:8000/api/alumni/profile/${userId}/`, {
           headers: token ? { 'Authorization': `Bearer ${token}` } : {},
         });
         if (res.status === 401) {
@@ -168,22 +192,35 @@ const AlumniProfile: React.FC = () => {
           return;
         }
         if (res.ok) {
-          const profile = await res.json();
-          if (res.status === 401 || !profile || !profile.alumni) {
+          const profileData = await res.json();
+          if (res.status === 401 || !profileData) {
             alert('Profile not found.');
             navigate('/login');
             return;
           }
-          setUser(profile.alumni);
-          setEditBio(profile.alumni.profile_bio || '');
           
-          // Debug: Log the user data to see account_type
-          console.log('Profile user data:', profile.alumni);
-          console.log('Account type:', profile.alumni.account_type);
+          // Transform the profile data to match the expected format
+          const userData = {
+            user_id: profileData.user_id,
+            id: profileData.user_id,
+            name: `${profileData.f_name || ''} ${profileData.m_name || ''} ${profileData.l_name || ''}`.trim(),
+            f_name: profileData.f_name,
+            l_name: profileData.l_name,
+            m_name: profileData.m_name,
+            profile_bio: profileData.profile_bio || '',
+            profile_pic: profileData.profile_pic,
+            social_media: profileData.social_media,
+            email: profileData.email,
+            account_type: currentUserObj.account_type || {} // Use current user's account type
+          };
+          
+          setUser(userData);
+          setEditBio(profileData.profile_bio || '');
+          
           
           // Update localStorage only if viewing own profile
           if (Number(userId) === Number(currentUserId)) {
-            localStorage.setItem('user', JSON.stringify(profile.alumni));
+            localStorage.setItem('user', JSON.stringify(userData));
           }
           
           const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
@@ -325,6 +362,14 @@ getPosts()
   const [bioModalOpen, setBioModalOpen] = useState(false);
   const [bioInput, setBioInput] = useState('');
   const [bioLoading, setBioLoading] = useState(false);
+
+  const [socialMediaModalOpen, setSocialMediaModalOpen] = useState(false);
+  const [socialMediaInput, setSocialMediaInput] = useState('');
+  const [socialMediaLoading, setSocialMediaLoading] = useState(false);
+
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
 
   const [resumeFile, setResumeFile] = useState<File | null>(null);
 
@@ -620,6 +665,148 @@ getPosts()
     setBioLoading(false);
   };
 
+  // Social Media handlers
+  const handleSaveSocialMedia = async () => {
+    setSocialMediaLoading(true);
+    const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+    const userId = userObj.user_id || userObj.id;
+    if (!userId) {
+      alert('User ID not found. Please log in again.');
+      setSocialMediaLoading(false);
+      return;
+    }
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`http://127.0.0.1:8000/api/userprofile/${userId}/social_media/`, {
+        method: 'PUT',
+        headers: token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ social_media: socialMediaInput }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setUser((prev) => (prev ? { ...prev, social_media: data.social_media } : prev));
+        const updatedUser = { ...userObj, social_media: data.social_media };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setSocialMediaModalOpen(false);
+        setSocialMediaInput('');
+        alert(data.message || 'Social media updated successfully.');
+      } else {
+        alert(data.error || 'Failed to update social media.');
+      }
+    } catch (error) {
+      alert('Network error: ' + error);
+    }
+    setSocialMediaLoading(false);
+  };
+
+  const handleDeleteSocialMedia = async () => {
+    setSocialMediaLoading(true);
+    const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+    const userId = userObj.user_id || userObj.id;
+    if (!userId) {
+      alert('User ID not found. Please log in again.');
+      setSocialMediaLoading(false);
+      return;
+    }
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`http://127.0.0.1:8000/api/userprofile/${userId}/social_media/`, {
+        method: 'PUT',
+        headers: token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ social_media: '' }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setUser((prev) => (prev ? { ...prev, social_media: '' } : prev));
+        const updatedUser = { ...userObj, social_media: '' };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setSocialMediaInput('');
+        setSocialMediaModalOpen(false);
+        alert(data.message || 'Social media deleted successfully.');
+      } else {
+        alert(data.error || 'Failed to delete social media.');
+      }
+    } catch (error) {
+      alert('Network error: ' + error);
+    }
+    setSocialMediaLoading(false);
+  };
+
+  // Email handlers
+  const handleSaveEmail = async () => {
+    setEmailLoading(true);
+    const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+    const userId = userObj.user_id || userObj.id;
+    if (!userId) {
+      alert('User ID not found. Please log in again.');
+      setEmailLoading(false);
+      return;
+    }
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`http://127.0.0.1:8000/api/userprofile/${userId}/email/`, {
+        method: 'PUT',
+        headers: token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailInput }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setUser((prev) => (prev ? { ...prev, email: data.email } : prev));
+        const updatedUser = { ...userObj, email: data.email };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setEmailModalOpen(false);
+        setEmailInput('');
+        alert(data.message || 'Email updated successfully.');
+      } else {
+        alert(data.error || 'Failed to update email.');
+      }
+    } catch (error) {
+      alert('Network error: ' + error);
+    }
+    setEmailLoading(false);
+  };
+
+  const handleDeleteEmail = async () => {
+    setEmailLoading(true);
+    const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+    const userId = userObj.user_id || userObj.id;
+    if (!userId) {
+      alert('User ID not found. Please log in again.');
+      setEmailLoading(false);
+      return;
+    }
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`http://127.0.0.1:8000/api/userprofile/${userId}/email/`, {
+        method: 'PUT',
+        headers: token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: '' }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setUser((prev) => (prev ? { ...prev, email: '' } : prev));
+        const updatedUser = { ...userObj, email: '' };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setEmailInput('');
+        setEmailModalOpen(false);
+        alert(data.message || 'Email deleted successfully.');
+      } else {
+        alert(data.error || 'Failed to delete email.');
+      }
+    } catch (error) {
+      alert('Network error: ' + error);
+    }
+    setEmailLoading(false);
+  };
+
   const onPosted = async () => {
     // Force refresh posts from backend with proper typing and delay
     try {
@@ -709,6 +896,89 @@ getPosts()
                 </button>
               ) : null}
             </div>
+
+            {/* Social Media and Email for Alumni/OJT accounts */}
+            {user && !user.account_type?.admin && !user.account_type?.peso && !user.account_type?.ccict && (
+              <div className="profile-contact-info">
+                {/* Social Media */}
+                <div className="profile-contact-item">
+                  <span className="profile-contact-label">Social Media:</span>
+                  {user.social_media && user.social_media.trim() ? (
+                    <div className="profile-contact-display">
+                      <a 
+                        href={formatSocialMediaLink(user.social_media).url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="profile-contact-link"
+                      >
+                        {formatSocialMediaLink(user.social_media).platform}
+                      </a>
+                      {isOwnProfile && (
+                        <button
+                          className="profile-contact-edit-btn"
+                          onClick={() => {
+                            setSocialMediaInput(user.social_media?.trim() || '');
+                            setSocialMediaModalOpen(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
+                  ) : isOwnProfile ? (
+                    <button 
+                      className="profile-contact-add-btn" 
+                      onClick={() => {
+                        setSocialMediaInput('');
+                        setSocialMediaModalOpen(true);
+                      }}
+                    >
+                      Add social media acc
+                    </button>
+                  ) : (
+                    <span className="profile-contact-empty">No social media added</span>
+                  )}
+                </div>
+
+                {/* Email */}
+                <div className="profile-contact-item">
+                  <span className="profile-contact-label">Email:</span>
+                  {user.email && user.email.trim() ? (
+                    <div className="profile-contact-display">
+                      <a 
+                        href={`mailto:${user.email}`}
+                        className="profile-contact-link"
+                      >
+                        {user.email}
+                      </a>
+                      {isOwnProfile && (
+                        <button
+                          className="profile-contact-edit-btn"
+                          onClick={() => {
+                            setEmailInput(user.email?.trim() || '');
+                            setEmailModalOpen(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
+                  ) : isOwnProfile ? (
+                    <button 
+                      className="profile-contact-add-btn" 
+                      onClick={() => {
+                        setEmailInput('');
+                        setEmailModalOpen(true);
+                      }}
+                    >
+                      Add Email
+                    </button>
+                  ) : (
+                    <span className="profile-contact-empty">No email added</span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Followers - Hide for admin and PESO accounts */}
@@ -1711,6 +1981,353 @@ getPosts()
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Social Media Modal */}
+      {socialMediaModalOpen && (
+        <div 
+          className="profile-bio-modal-overlay" 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSocialMediaModalOpen(false);
+            }
+          }}
+        >
+          <div 
+            className="profile-bio-modal-content" 
+            style={{
+              background: 'linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%)',
+              borderRadius: '16px',
+              padding: '20px',
+              maxWidth: '360px',
+              width: '90%',
+              maxHeight: '60vh',
+              overflowY: 'auto',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)',
+              position: 'relative',
+              border: '1px solid rgba(255, 255, 255, 0.8)',
+              backdropFilter: 'blur(10px)'
+            }}
+          >
+            <button
+              onClick={() => setSocialMediaModalOpen(false)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'none',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: '#666',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '50%',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f5f5f5';
+                e.currentTarget.style.color = '#333';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#666';
+              }}
+              title="Close"
+            >
+              ×
+            </button>
+            
+            <h3 style={{
+              fontSize: '18px',
+              fontWeight: '600',
+              color: '#2c2c2c',
+              marginBottom: '16px',
+              textAlign: 'center'
+            }}>
+              {user && user.social_media && user.social_media.trim() ? 'Edit Social Media' : 'Add Social Media'}
+            </h3>
+            
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <input
+                type="text"
+                value={socialMediaInput}
+                onChange={(e) => setSocialMediaInput(e.target.value)}
+                style={{
+                  width: '100%',
+                  maxWidth: '300px',
+                  padding: '12px',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontFamily: 'inherit',
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  transition: 'border-color 0.2s ease',
+                  outline: 'none'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#ff6b35';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                }}
+                placeholder="Add social media acc"
+              />
+            </div>
+            
+            <div style={{ 
+              display: 'flex', 
+              gap: '10px', 
+              justifyContent: 'center', 
+              marginTop: '20px',
+              paddingTop: '16px',
+              borderTop: '1px solid rgba(0, 0, 0, 0.06)'
+            }}>
+              <button
+                onClick={() => setSocialMediaModalOpen(false)}
+                disabled={socialMediaLoading}
+                style={{
+                  flex: 1,
+                  maxWidth: '140px',
+                  padding: '10px 16px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  color: '#666',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  opacity: socialMediaLoading ? 0.6 : 1
+                }}
+              >
+                Cancel
+              </button>
+              
+              <button
+                onClick={handleSaveSocialMedia}
+                disabled={socialMediaLoading}
+                style={{
+                  flex: 1,
+                  maxWidth: '140px',
+                  padding: '10px 16px',
+                  backgroundColor: '#ff6b35',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  opacity: socialMediaLoading ? 0.6 : 1,
+                  boxShadow: '0 2px 8px rgba(255, 107, 53, 0.25)'
+                }}
+              >
+                {socialMediaLoading ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Modal */}
+      {emailModalOpen && (
+        <div 
+          className="profile-bio-modal-overlay" 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setEmailModalOpen(false);
+            }
+          }}
+        >
+          <div 
+            className="profile-bio-modal-content" 
+            style={{
+              background: 'linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%)',
+              borderRadius: '16px',
+              padding: '20px',
+              maxWidth: '360px',
+              width: '90%',
+              maxHeight: '60vh',
+              overflowY: 'auto',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)',
+              position: 'relative',
+              border: '1px solid rgba(255, 255, 255, 0.8)',
+              backdropFilter: 'blur(10px)'
+            }}
+          >
+            <button
+              onClick={() => setEmailModalOpen(false)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'none',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: '#666',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '50%',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f5f5f5';
+                e.currentTarget.style.color = '#333';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#666';
+              }}
+              title="Close"
+            >
+              ×
+            </button>
+            
+            <h3 style={{
+              fontSize: '18px',
+              fontWeight: '600',
+              color: '#2c2c2c',
+              marginBottom: '16px',
+              textAlign: 'center'
+            }}>
+              {user && user.email && user.email.trim() ? 'Edit Email' : 'Add Email'}
+            </h3>
+            
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <input
+                type="email"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                style={{
+                  width: '100%',
+                  maxWidth: '300px',
+                  padding: '12px',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontFamily: 'inherit',
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  transition: 'border-color 0.2s ease',
+                  outline: 'none'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#ff6b35';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                }}
+                placeholder="Enter email address"
+              />
+            </div>
+            
+            <div style={{ 
+              display: 'flex', 
+              gap: '10px', 
+              justifyContent: 'center', 
+              marginTop: '20px',
+              paddingTop: '16px',
+              borderTop: '1px solid rgba(0, 0, 0, 0.06)'
+            }}>
+              <button
+                onClick={() => setEmailModalOpen(false)}
+                disabled={emailLoading}
+                style={{
+                  flex: 1,
+                  maxWidth: '100px',
+                  padding: '10px 16px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  color: '#666',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  opacity: emailLoading ? 0.6 : 1
+                }}
+              >
+                Cancel
+              </button>
+              
+              {user && user.email && user.email.trim() && (
+                <button
+                  onClick={handleDeleteEmail}
+                  disabled={emailLoading}
+                  style={{
+                    flex: 1,
+                    maxWidth: '100px',
+                    padding: '10px 16px',
+                    backgroundColor: 'rgba(255, 71, 87, 0.9)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    transition: 'all 0.2s ease',
+                    opacity: emailLoading ? 0.6 : 1
+                  }}
+                >
+                  {emailLoading ? 'Deleting...' : 'Delete'}
+                </button>
+              )}
+              
+              <button
+                onClick={handleSaveEmail}
+                disabled={emailLoading}
+                style={{
+                  flex: 1,
+                  maxWidth: '100px',
+                  padding: '10px 16px',
+                  backgroundColor: '#ff6b35',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  opacity: emailLoading ? 0.6 : 1,
+                  boxShadow: '0 2px 8px rgba(255, 107, 53, 0.25)'
+                }}
+              >
+                {emailLoading ? 'Saving...' : 'Save'}
+              </button>
             </div>
           </div>
         </div>

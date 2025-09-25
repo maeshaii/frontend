@@ -32,15 +32,7 @@ const RepostModal: React.FC<RepostModalProps> = ({
   currentUser,
   formatTime
 }) => {
-  const [showImageModal, setShowImageModal] = useState(false);
-  const [modalImageSrc, setModalImageSrc] = useState('');
   const [caption, setCaption] = useState('');
-
-  // Handle image click to show modal
-  const handleImageClick = (imageSrc: string) => {
-    setModalImageSrc(imageSrc);
-    setShowImageModal(true);
-  };
 
   // Add CSS animations and scrollbar styling
   React.useEffect(() => {
@@ -72,7 +64,8 @@ const RepostModal: React.FC<RepostModalProps> = ({
   }, []);
 
   const handleSubmit = () => {
-    onRepost(caption);
+    // Caption is optional, so we can proceed with or without it
+    onRepost(caption || ''); // Pass empty string if no caption
     setCaption('');
     onClose();
   };
@@ -202,7 +195,7 @@ const RepostModal: React.FC<RepostModalProps> = ({
         {/* Caption input */}
         <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <textarea
-            placeholder="Share your thoughts about this post..."
+            placeholder="Add a caption (optional)..."
             value={caption}
             onChange={(e) => {
               setCaption(e.target.value);
@@ -309,25 +302,7 @@ const RepostModal: React.FC<RepostModalProps> = ({
                 ? `http://127.0.0.1:8000${originalPost.post_image}`
                 : (originalPost.post_image as string)}
               alt="post"
-              style={{ 
-                maxWidth: '100%', 
-                borderRadius: 8, 
-                maxHeight: 200, 
-                objectFit: 'cover',
-                cursor: 'pointer',
-                transition: 'transform 0.2s ease'
-              }}
-              onClick={() => handleImageClick(
-                typeof originalPost.post_image === 'string' && originalPost.post_image.startsWith('/media/')
-                  ? `http://127.0.0.1:8000${originalPost.post_image}`
-                  : (originalPost.post_image as string)
-              )}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.02)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
+              style={{ maxWidth: '100%', borderRadius: 8, maxHeight: 200, objectFit: 'cover' }}
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
                 target.style.display = 'none';
@@ -366,108 +341,31 @@ const RepostModal: React.FC<RepostModalProps> = ({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!caption.trim()}
             style={{
-              background: caption.trim() 
-                ? 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)' 
-                : 'linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%)',
+              background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
               color: '#ffffff',
               border: 'none',
               borderRadius: 8,
               padding: '8px 16px',
-              cursor: caption.trim() ? 'pointer' : 'not-allowed',
+              cursor: 'pointer',
               fontSize: 13,
               fontWeight: '600',
               transition: 'all 0.2s ease',
-              boxShadow: caption.trim() 
-                ? '0 2px 6px rgba(59, 130, 246, 0.3)' 
-                : '0 1px 4px rgba(156, 163, 175, 0.2)',
+              boxShadow: '0 2px 6px rgba(59, 130, 246, 0.3)',
             }}
             onMouseEnter={(e) => {
-              if (caption.trim()) {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 3px 8px rgba(59, 130, 246, 0.4)';
-              }
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 3px 8px rgba(59, 130, 246, 0.4)';
             }}
             onMouseLeave={(e) => {
-              if (caption.trim()) {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 6px rgba(59, 130, 246, 0.3)';
-              }
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 6px rgba(59, 130, 246, 0.3)';
             }}
           >
             🔄 Repost
           </button>
         </div>
       </div>
-
-      {/* Image Modal */}
-      {showImageModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(0, 0, 0, 0.9)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 10000,
-            cursor: 'pointer'
-          }}
-          onClick={() => setShowImageModal(false)}
-        >
-          <div
-            style={{
-              position: 'relative',
-              maxWidth: '90%',
-              maxHeight: '90%',
-              cursor: 'default'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={modalImageSrc}
-              alt="Full size"
-              style={{
-                maxWidth: '100%',
-                maxHeight: '100%',
-                objectFit: 'contain',
-                borderRadius: 8
-              }}
-            />
-            <button
-              onClick={() => setShowImageModal(false)}
-              style={{
-                position: 'absolute',
-                top: -40,
-                right: 0,
-                background: 'rgba(255, 255, 255, 0.2)',
-                border: 'none',
-                borderRadius: '50%',
-                width: 32,
-                height: 32,
-                color: 'white',
-                fontSize: 18,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
-              }}
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

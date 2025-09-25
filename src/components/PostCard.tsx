@@ -132,8 +132,6 @@ const PostCard: React.FC<PostCardProps> = ({
   console.log('PostCard currentUserId:', currentUserId);
   const [showLikesModal, setShowLikesModal] = useState(false);
   const [showRepostModal, setShowRepostModal] = useState(false);
-  const [showImageModal, setShowImageModal] = useState(false);
-  const [modalImageSrc, setModalImageSrc] = useState('');
   const optionsMenuRef = useRef<HTMLDivElement>(null);
   const commentOptionsRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   const [showCommentOptions, setShowCommentOptions] = useState<{ [key: number]: boolean }>({});
@@ -141,12 +139,6 @@ const PostCard: React.FC<PostCardProps> = ({
   // Helper function to get proper singular/plural form
   const getPluralForm = (count: number, singular: string, plural: string) => {
     return count === 1 ? `${count} ${singular}` : `${count} ${plural}`;
-  };
-
-  // Handle image click to show modal
-  const handleImageClick = (imageSrc: string) => {
-    setModalImageSrc(imageSrc);
-    setShowImageModal(true);
   };
 
   // Helper function to detect and make URLs clickable
@@ -902,25 +894,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 : (post.post_image as string)
             }
             alt="post"
-            style={{ 
-              maxWidth: '100%', 
-              borderRadius: 8, 
-              maxHeight: '400px', 
-              objectFit: 'cover',
-              cursor: 'pointer',
-              transition: 'transform 0.2s ease'
-            }}
-            onClick={() => handleImageClick(
-              typeof post.post_image === 'string' && post.post_image.startsWith('/media/')
-                ? `http://127.0.0.1:8000${post.post_image}`
-                : (post.post_image as string)
-            )}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'scale(1.02)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'scale(1)';
-            }}
+            style={{ maxWidth: '100%', borderRadius: 8, maxHeight: '400px', objectFit: 'cover' }}
             onError={(e) => {
               const target = e.target as HTMLImageElement;
               target.style.display = 'none';
@@ -1418,74 +1392,6 @@ const PostCard: React.FC<PostCardProps> = ({
         })()}
         formatTime={formatTime}
       />
-
-      {/* Image Modal */}
-      {showImageModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(0, 0, 0, 0.9)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 9999,
-            cursor: 'pointer'
-          }}
-          onClick={() => setShowImageModal(false)}
-        >
-          <div
-            style={{
-              position: 'relative',
-              maxWidth: '90%',
-              maxHeight: '90%',
-              cursor: 'default'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={modalImageSrc}
-              alt="Full size"
-              style={{
-                maxWidth: '100%',
-                maxHeight: '100%',
-                objectFit: 'contain',
-                borderRadius: 8
-              }}
-            />
-            <button
-              onClick={() => setShowImageModal(false)}
-              style={{
-                position: 'absolute',
-                top: -40,
-                right: 0,
-                background: 'rgba(255, 255, 255, 0.2)',
-                border: 'none',
-                borderRadius: '50%',
-                width: 32,
-                height: 32,
-                color: 'white',
-                fontSize: 18,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
-              }}
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

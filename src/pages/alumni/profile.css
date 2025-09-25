@@ -79,6 +79,96 @@
   margin-bottom: 8px;
 }
 
+/* Contact info container */
+.profile-contact-info {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e0e0e0;
+}
+
+/* Contact item */
+.profile-contact-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+/* Contact label */
+.profile-contact-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Contact display container */
+.profile-contact-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Contact link */
+.profile-contact-link {
+  font-size: 14px;
+  color: #174f84;
+  text-decoration: none;
+  transition: color 0.2s ease;
+  word-break: break-all;
+  flex: 1;
+}
+
+.profile-contact-link:hover {
+  color: #0d3a5f;
+  text-decoration: underline;
+}
+
+/* Contact edit button */
+.profile-contact-edit-btn {
+  background: #eee;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #666;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.profile-contact-edit-btn:hover {
+  background: #ddd;
+  color: #333;
+}
+
+/* Contact add button */
+.profile-contact-add-btn {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #666;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.profile-contact-add-btn:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+/* Contact empty state */
+.profile-contact-empty {
+  font-size: 14px;
+  color: #999;
+  font-style: italic;
+}
+
 /* Resume link */
 .profile-resume-link {
   font-size: 14px;
