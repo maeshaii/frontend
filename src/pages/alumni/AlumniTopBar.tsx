@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
 import { api, getAdminPesoUsers } from '../../services/api';
@@ -24,6 +24,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
 
   const [searchValue, setSearchValue] = React.useState('');
   const [searchResults, setSearchResults] = React.useState<any[]>([]);
@@ -48,9 +49,26 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
         console.error('Error fetching admin/PESO users:', error);
       }
     };
-    
+
     fetchAdminPesoUsers();
   }, []);
+
+  // Handle click outside to close profile dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
+        setShowProfile(false);
+      }
+    };
+
+    if (showProfile) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showProfile, setShowProfile]);
 
   // Listen for user data updates from Settings
   React.useEffect(() => {
@@ -302,7 +320,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             <span style={{ color: 'white', fontSize: 12 }}>Tracker</span>
           </div>
         )}
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} ref={profileDropdownRef}>
           <div
             style={{
               display: 'flex',

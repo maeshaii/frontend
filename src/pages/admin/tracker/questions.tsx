@@ -61,9 +61,6 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
       return data && data.categories ? data.categories : [];
     },
   });
-  useEffect(() => {
-    if (questionsQuery.data) setCategories(questionsQuery.data as CategoryItem[]);
-  }, [questionsQuery.data]);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [editingCategoryIndex, setEditingCategoryIndex] = useState<number | null>(null);
   const [editCategoryDraft, setEditCategoryDraft] = useState<Partial<CategoryItem>>({});
@@ -72,6 +69,39 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   const [previewMode, setPreviewMode] = useState(!!previewModeFromParent);
   const [formResponses, setFormResponses] = useState<Record<string, any>>({});
   const [userDetails, setUserDetails] = useState<Record<string, any> | null>(null);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+
+  useEffect(() => {
+    if (questionsQuery.data) setCategories(questionsQuery.data as CategoryItem[]);
+  }, [questionsQuery.data]);
+
+  // Show privacy modal when component loads in preview mode
+  useEffect(() => {
+    if (previewMode && !privacyAccepted) {
+      setShowPrivacyModal(true);
+    }
+  }, [previewMode, privacyAccepted]);
+
+  // Prevent background scrolling when modal is open
+  useEffect(() => {
+    if (showPrivacyModal) {
+      // Save current scroll position
+      const scrollY = window.scrollY;
+      // Disable scrolling
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      
+      return () => {
+        // Re-enable scrolling
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [showPrivacyModal]);
 
   // Add validation state
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -1204,6 +1234,181 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
           </>
         )}
       </div>
+
+      {/* Privacy Notice Modal */}
+      {showPrivacyModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(5px)',
+            WebkitBackdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+              maxWidth: '500px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+
+            <div style={{ padding: '30px' }}>
+              <h2 style={{ 
+                color: '#174f84', 
+                marginBottom: '20px', 
+                fontSize: '24px',
+                fontWeight: 'bold',
+                textAlign: 'center'
+              }}>
+                Privacy Notice
+              </h2>
+              <p style={{ 
+                color: '#333', 
+                marginBottom: '15px', 
+                fontSize: '16px',
+                lineHeight: '1.6'
+              }}>
+                Republic Act No. 10173 - Data Privacy Act of 2012
+              </p>
+              <div style={{ 
+                background: '#f8f9fa', 
+                padding: '20px', 
+                borderRadius: '8px', 
+                marginBottom: '20px',
+                border: '1px solid #e9ecef'
+              }}>
+                <p style={{ 
+                  color: '#555', 
+                  marginBottom: '15px', 
+                  fontSize: '14px',
+                  lineHeight: '1.6'
+                }}>
+                  We are committed to protecting your personal data in accordance with the Data Privacy Act of 2012. 
+                  The information you provide in this Tracer Form will be used solely for academic and institutional purposes.
+                </p>
+                <p style={{ 
+                  color: '#555', 
+                  marginBottom: '15px', 
+                  fontSize: '14px',
+                  lineHeight: '1.6'
+                }}>
+                  Your personal data will be:
+                </p>
+                <ul style={{ 
+                  color: '#555', 
+                  marginBottom: '15px', 
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  paddingLeft: '20px'
+                }}>
+                  <li>Collected and processed lawfully and fairly</li>
+                  <li>Used only for the stated purposes</li>
+                  <li>Kept accurate and up-to-date</li>
+                  <li>Stored securely and confidentially</li>
+                  <li>Not shared with unauthorized parties</li>
+                </ul>
+                <p style={{ 
+                  color: '#555', 
+                  fontSize: '14px',
+                  lineHeight: '1.6'
+                }}>
+                  By proceeding with the Tracer Form, you acknowledge that you have read and understood this privacy notice.
+                </p>
+              </div>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ 
+                  display: 'flex', 
+                  alignItems: 'flex-start', 
+                  gap: '10px', 
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  lineHeight: '1.5'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={privacyAccepted}
+                    onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                    style={{ 
+                      marginTop: '2px',
+                      transform: 'scale(1.2)'
+                    }}
+                  />
+                  <span style={{ color: '#333' }}>
+                    I have read and understood the Privacy Notice and I voluntarily consent to the collection and use of my personal data for Tracer Form.
+                  </span>
+                </label>
+              </div>
+
+              <div style={{ 
+                display: 'flex', 
+                gap: '12px', 
+                justifyContent: 'center',
+                marginTop: '20px'
+              }}>
+                <button
+                  onClick={() => {
+                    setShowPrivacyModal(false);
+                    setPrivacyAccepted(false);
+                    // Navigate back to notifications page
+                    navigate('/alumni/notifications');
+                  }}
+                  style={{
+                    background: '#6c757d',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '14px',
+                    minWidth: '120px'
+                  }}
+                >
+                  I Don't Accept
+                </button>
+                <button
+                  onClick={() => {
+                    if (privacyAccepted) {
+                      setShowPrivacyModal(false);
+                    }
+                  }}
+                  disabled={!privacyAccepted}
+                  style={{
+                    background: privacyAccepted ? '#174f84' : '#ccc',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: privacyAccepted ? 'pointer' : 'not-allowed',
+                    fontWeight: 600,
+                    fontSize: '14px',
+                    minWidth: '120px'
+                  }}
+                >
+                  Proceed to Form
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

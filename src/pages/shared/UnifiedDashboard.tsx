@@ -5,7 +5,7 @@ import PostCreate from '../alumni/PostCreate';
 import PostCard from '../../components/PostCard';
 import ctulogo from '../../images/ctulogo.png';
 import '../alumni/dashboard.css';
-import { getPosts, followUser, getAdminPesoUsers } from '../../services/api';
+import { getPosts, followUser, getAdminPesoUsers, api } from '../../services/api';
 
 interface UnifiedDashboardProps {
   userType: 'alumni' | 'peso' | 'admin' | 'ojt';
@@ -161,6 +161,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [editingComment, setEditingComment] = useState<{ [key: number]: boolean }>({});
   const [editCommentContent, setEditCommentContent] = useState<{ [key: number]: string }>({});
   const [following, setFollowing] = useState<any[]>([]);
+  const [showPostModal, setShowPostModal] = useState(false);
+  const [modalPost, setModalPost] = useState<any | null>(null);
+  const [postLoading, setPostLoading] = useState(false);
   const navigate = useNavigate();
 
   // Determine user type from localStorage instead of props
@@ -389,6 +392,18 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     };
   }, []);
 
+  // Check for pending post view when component mounts or navigates here
+  useEffect(() => {
+    const pendingPostId = localStorage.getItem('pendingPostView');
+    if (pendingPostId) {
+      console.log('Found pending post view:', pendingPostId);
+      // Clear the pending post ID
+      localStorage.removeItem('pendingPostView');
+      // Show the post modal
+      handleViewPost(pendingPostId);
+    }
+  }, [userId]); // Check when userId changes (navigation)
+
   // ... (all handlers from AlumniDashboard, unchanged)
 
   // ... (feed, modal, and all JSX from AlumniDashboard, but use isAdmin/isPeso from userType)
@@ -405,6 +420,26 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
       console.error('Error following user:', error);
     } finally {
       setFollowLoading(prev => ({ ...prev, [userId]: false }));
+    }
+  };
+
+  const handleViewPost = async (postId: string) => {
+    console.log('handleViewPost called with postId:', postId);
+    setPostLoading(true);
+    try {
+      console.log('Fetching post from API...');
+      const response = await api.get(`posts/${postId}/detail/`);
+      console.log('API response:', response.data);
+      if (response.data) {
+        setModalPost(response.data);
+        setShowPostModal(true);
+        console.log('Post modal should now be visible');
+      }
+    } catch (error) {
+      console.error('Error fetching post:', error);
+      alert('Failed to load post.');
+    } finally {
+      setPostLoading(false);
     }
   };
 
@@ -883,6 +918,119 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
           </div>
         </div>
       </div>
+
+      {/* Post Modal */}
+      {showPostModal && modalPost && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '20px',
+          }}
+          onClick={() => setShowPostModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowPostModal(false)}
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                background: 'none',
+                border: 'none',
+                fontSize: 24,
+                cursor: 'pointer',
+                color: '#666',
+                zIndex: 10,
+              }}
+              title="Close"
+            >
+              ×
+            </button>
+            <div style={{ padding: '20px' }}>
+              <PostCard
+                post={modalPost}
+                currentUserId={getCurrentUserId(user)}
+                isOwn={getCurrentUserId(user) === modalPost.user?.user_id}
+                displayName={`${modalPost.user?.f_name || ''} ${modalPost.user?.l_name || ''}`.trim()}
+                displayAvatar={modalPost.user?.profile_pic || '/default-avatar.png'}
+                formatTime={formatHybrid}
+                onPostUpdate={() => {
+                  // Refresh the post data in modal and update the main posts list
+                  const postId = modalPost.post_id;
+                  if (postId) {
+                    handleViewPost(postId.toString());
+                  }
+                  
+                  // Also refresh the main posts list to keep everything in sync
+                  getPosts().then(updatedPosts => {
+                    setPosts(updatedPosts || []);
+                    
+                    // Update likedPosts state
+                    const currentUserId = getCurrentUserId(user);
+                    const liked: { [key: number]: boolean } = {};
+                    (updatedPosts || []).forEach((post: any) => {
+                      if (post.likes && Array.isArray(post.likes)) {
+                        liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                      }
+                    });
+                    setLikedPosts(liked);
+
+                    // Update repostedPosts state
+                    const reposted: { [key: number]: boolean } = {};
+                    (updatedPosts || []).forEach((post: any) => {
+                      if (post.reposts && Array.isArray(post.reposts)) {
+                        reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+                      }
+                    });
+                    setRepostedPosts(reposted);
+                  });
+                }}
+                showOptions={showOptions}
+                setShowOptions={setShowOptions}
+                editingPost={editingPost}
+                setEditingPost={setEditingPost}
+                editPostContent={editPostContent}
+                setEditPostContent={setEditPostContent}
+                likedPosts={likedPosts}
+                setLikedPosts={setLikedPosts}
+                repostedPosts={repostedPosts}
+                setRepostedPosts={setRepostedPosts}
+                showCommentInput={showCommentInput}
+                setShowCommentInput={setShowCommentInput}
+                showAllComments={showAllComments}
+                setShowAllComments={setShowAllComments}
+                commentInput={commentInput}
+                setCommentInput={setCommentInput}
+                editingComment={editingComment}
+                setEditingComment={setEditingComment}
+                editCommentContent={editCommentContent}
+                setEditCommentContent={setEditCommentContent}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

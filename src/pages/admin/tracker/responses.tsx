@@ -234,7 +234,7 @@ const Responses: React.FC = () => {
         <div className="card response-header-card">
           <div className="response-header">
             <h3>
-              No. of Responses: {responses.length} (Batch {targetBatchYear})
+              No. of Responses: {responses.length} 
             </h3>
             <button
               className={`toggle-button ${accepting ? 'active' : 'inactive'}`}
@@ -299,7 +299,7 @@ const Responses: React.FC = () => {
           <>
             {/* Quarterly Tracker */}
             <div className="card">
-              <h3>Quarterly Response Tracker (Batch {targetBatchYear})</h3>
+              <h3>Quarterly Response Tracker</h3>
               <div style={{ overflowX: 'auto' }}>
                 <table
                   style={{

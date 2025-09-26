@@ -184,7 +184,7 @@ const App: React.FC = () => {
             path="/ccict/dashboard/:id"
             element={
               <PrivateRoute>
-                <AlumniDashboard />
+                <AdminDashboard />
               </PrivateRoute>
             }
           />

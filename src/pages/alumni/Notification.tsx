@@ -35,6 +35,7 @@ const NotificationPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [showProfile, setShowProfile] = useState(false);
   const [openNotif, setOpenNotif] = useState<any | null>(null);
+  const [postLoading, setPostLoading] = useState(false);
   const navigate = useNavigate();
 
   // Add CSS for invisible scrollbar styling
@@ -70,6 +71,7 @@ const NotificationPage: React.FC = () => {
       alert('Failed to delete notifications.');
     }
   };
+
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -113,7 +115,7 @@ const NotificationPage: React.FC = () => {
       const parts = message.split(/<a [^>]*>.*Tracker Form.*<\/a>/);
       return (
         <>
-          {parts[0]}
+          <div style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: parts[0].replace(/\n/g, '<br>') }} />
           <br />
           <button
             style={{
@@ -131,12 +133,12 @@ const NotificationPage: React.FC = () => {
           >
             📒 Tracker Form
           </button>
-          {parts[1]}
+          <div style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: parts[1].replace(/\n/g, '<br>') }} />
         </>
       );
     }
-    // Fallback: render as plain text
-    return <span style={{ whiteSpace: 'pre-line' }}>{message}</span>;
+    // Fallback: render as HTML with line breaks
+    return <div style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: message.replace(/\n/g, '<br>') }} />;
   }
 
   return (
@@ -270,7 +272,14 @@ const NotificationPage: React.FC = () => {
                     <td style={{ fontWeight: 600, color: '#174f84', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 80 }}>{notif.type}</td>
                     <td style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 120 }}>{notif.subject || 'No Subject'}</td>
                     <td style={{ color: '#333', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 320 }}>
-                      {notif.content.length > 60 ? notif.content.slice(0, 60) + '...' : notif.content}
+                      <div 
+                        style={{ display: 'inline' }}
+                        dangerouslySetInnerHTML={{ 
+                          __html: notif.content.length > 60 ? 
+                            notif.content.slice(0, 60).replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ') + '...' : 
+                            notif.content.replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ')
+                        }} 
+                      />
                     </td>
                     <td style={{
                       textAlign: 'right',
@@ -377,6 +386,67 @@ const NotificationPage: React.FC = () => {
                       return <span key={index}>View profile:{part}</span>;
                     }
                   })}
+                </div>
+              ) : (openNotif.type && (openNotif.type.toLowerCase() === 'like' || openNotif.type.toLowerCase() === 'comment')) ? (
+                <div>
+                  <div dangerouslySetInnerHTML={{ __html: openNotif.content.replace(/\n/g, '<br>') }} />
+                  <br />
+                  <br />
+                  <button
+                    style={{
+                      background: '#1e4c7a',
+                      color: '#fff',
+                      padding: '8px 16px',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '1rem',
+                      marginTop: '12px',
+                    }}
+                    onClick={() => {
+                      // Try to extract post ID from notification content
+                      // Look for patterns like "Post ID: 123"
+                      console.log('Notification content:', openNotif.content);
+                      const postIdMatch = openNotif.content.match(/Post ID:\s*(\d+)/i);
+                      console.log('Post ID match:', postIdMatch);
+                      
+                      if (postIdMatch) {
+                        const postId = postIdMatch[1];
+                        console.log('Extracted post ID:', postId);
+                        
+                        // Close notification modal first
+                        setOpenNotif(null);
+                        
+                        // Navigate to dashboard
+                        const userStr = localStorage.getItem('user');
+                        const user = userStr ? JSON.parse(userStr) : null;
+                        const userId = user?.user_id || user?.id;
+                        
+                        if (userId) {
+                          // Store post ID in localStorage to be picked up by dashboard
+                          localStorage.setItem('pendingPostView', postId);
+                          navigate(`/alumni/dashboard/${userId}`);
+                        }
+                      } else {
+                        console.log('No post ID found in notification content');
+                        // For old notifications without post ID, we'll need to find the post another way
+                        // For now, let's show a message and redirect to dashboard
+                        alert('This notification is from an older version. Please check the dashboard to view recent posts.');
+                        const userStr = localStorage.getItem('user');
+                        const user = userStr ? JSON.parse(userStr) : null;
+                        const userId = user?.user_id || user?.id;
+                        
+                        if (userId) {
+                          navigate(`/alumni/dashboard/${userId}`);
+                          setOpenNotif(null);
+                        }
+                      }
+                    }}
+                    disabled={postLoading}
+                  >
+                    {postLoading ? 'Loading...' : 'View Post'}
+                  </button>
                 </div>
               ) : (
                 renderMessageWithButton(openNotif.content)
