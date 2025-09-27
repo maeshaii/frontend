@@ -333,6 +333,46 @@ export const fetchOJTByYear = async (year: string, coordinatorUsername?: string)
   return response.data;
 };
 
+// Clear OJT data by batch year (and optional coordinator/course)
+export const clearOJT = async (batchYear: string, course?: string, coordinatorUsername?: string) => {
+  const body: any = { batch_year: batchYear };
+  if (course) body.course = course;
+  if (coordinatorUsername) body.coordinator = coordinatorUsername;
+  const response = await api.post('ojt/clear/', body);
+  return response.data;
+};
+
+// Update OJT status for a specific user
+export const updateOJTStatus = async (userId: number, status: string) => {
+  const response = await api.post('ojt/status/', { user_id: userId, status });
+  return response.data;
+};
+
+// Send completed OJT list to admin (returns count)
+export const sendCompletedOJTToAdmin = async (year?: number | string, userIds?: number[]) => {
+  const response = await api.post('ojt/send-to-admin/', { year, user_ids: userIds || [] });
+  return response.data;
+};
+
+// Approve coordinator request for a batch year
+export const approveCoordinatorRequest = async (year: number | string) => {
+  const response = await api.post('ojt/coordinator-requests/approve/', { year });
+  return response.data as { success: boolean; approved: number; year: number };
+};
+
+// Get coordinator requests count for admin dashboard
+export const fetchCoordinatorRequestsCount = async (year?: number | string) => {
+  const path = year ? `ojt/coordinator-requests/?year=${year}` : 'ojt/coordinator-requests/';
+  const response = await api.get(path);
+  return response.data;
+};
+
+// List requested batches with counts for admin cards
+export const fetchCoordinatorRequestsList = async () => {
+  const response = await api.get('ojt/coordinator-requests/list/');
+  return response.data;
+};
+
 // Fetch tracker responses
 export const fetchTrackerResponses = async () => {
   const response = await api.get('tracker/list-responses/');
@@ -375,6 +415,11 @@ export const fetchNotifications = async (userId: number) => {
   return response.data;
 };
 
+// Fetch notification count for a user
+export const fetchNotificationCount = async (userId: number) => {
+  const response = await api.get(`notifications/count/?user_id=${userId}`);
+  return response.data;
+};
 
 // Delete notifications by IDs
 export const deleteNotifications = async (notificationIds: number[]) => {
@@ -442,8 +487,8 @@ export const getPostComments = async (postId: number) => {
   return response.data;
 };
 
-export const repostPost = async (postId: number, caption?: string) => {
-  const response = await api.post(`posts/${postId}/repost/`, { caption });
+export const repostPost = async (postId: number) => {
+  const response = await api.post(`posts/${postId}/repost/`);
   return response.data;
 };
 
@@ -541,6 +586,115 @@ export const deleteForumComment = async (forumId: number, commentId: number) => 
 export const editForumComment = async (forumId: number, commentId: number, commentData: { comment_content: string }) => {
   const response = await api.put(`forum/${forumId}/comments/${commentId}/`, commentData);
   return response.data;
+};
+
+// -------- Messaging API (web) --------
+export type ConversationSummary = {
+  conversation_id: number;
+  updated_at: string;
+  unread_count: number;
+  last_message?: {
+    content: string;
+    created_at: string;
+    sender_id: number;
+    message_type: 'text' | 'image' | 'file' | 'system';
+  } | null;
+  other_participant?: {
+    user_id: number;
+    name: string;
+    avatar_url?: string | null;
+  } | null;
+};
+
+export type MessageItem = {
+  message_id: number;
+  content: string;
+  message_type: 'text' | 'image' | 'file' | 'system';
+  sender: { user_id: number; name: string; avatar_url?: string | null };
+  is_read: boolean;
+  created_at: string;
+};
+
+export const listConversations = async (): Promise<ConversationSummary[]> => {
+  const { data } = await api.get('messaging/conversations/');
+  return data as ConversationSummary[];
+};
+
+export const createConversation = async (participant_id: number): Promise<ConversationSummary> => {
+  // Backend accepts either participant_id or participant_ids
+  const { data } = await api.post('messaging/conversations/', { participant_id, participant_ids: [participant_id] });
+  return data as ConversationSummary;
+};
+
+export const listMessages = async (
+  conversationId: number,
+  params?: { cursor?: string; limit?: number }
+): Promise<{ results: MessageItem[]; next_cursor?: string | null }> => {
+  const qs: string[] = [];
+  if (params?.cursor) qs.push(`cursor=${encodeURIComponent(params.cursor)}`);
+  if (params?.limit) qs.push(`limit=${params.limit}`);
+  const url = `messaging/conversations/${conversationId}/messages/${qs.length ? `?${qs.join('&')}` : ''}`;
+  const { data } = await api.get(url);
+  return data as { results: MessageItem[]; next_cursor?: string | null };
+};
+
+export const sendMessage = async (
+  conversationId: number,
+  payload: { content?: string; message_type?: 'text' | 'image' | 'file' | 'system'; attachment_id?: number }
+): Promise<MessageItem> => {
+  const body: any = {
+    content: payload.content ?? '',
+    message_type: payload.message_type ?? 'text',
+    attachment_id: payload.attachment_id,
+  };
+  const { data } = await api.post(`messaging/conversations/${conversationId}/messages/`, body);
+  return data as MessageItem;
+};
+
+export const markConversationRead = async (conversationId: number) => {
+  const { data } = await api.post(`messaging/conversations/${conversationId}/read/`, {});
+  return data as { status: string; messages_marked_read: number; timestamp: string };
+};
+
+export const deleteMessageApi = async (conversationId: number, messageId: number) => {
+  const { data } = await api.delete(`messaging/conversations/${conversationId}/messages/${messageId}/`);
+  return data as { status: string };
+};
+
+export const searchUsersForMessaging = async (q: string) => {
+  const { data } = await api.get(`messaging/users/search/?q=${encodeURIComponent(q)}`);
+  return data as { users: Array<{ user_id: number; f_name: string; l_name: string }>; count: number; query: string };
+};
+
+export const uploadAttachment = async (file: File): Promise<{
+  attachment_id: number;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  file_url: string;
+  uploaded_at: string;
+}> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post('messaging/attachments/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+};
+
+// WebSocket helpers
+export const getWebSocketBase = (): string => {
+  const http = API_BASE.replace('/api/', '');
+  if (http.startsWith('https://')) return `wss://${http.slice('https://'.length)}`;
+  if (http.startsWith('http://')) return `ws://${http.slice('http://'.length)}`;
+  return `ws://${http}`;
+};
+
+export const getConversationWsUrl = (conversationId: number): string => {
+  const token = localStorage.getItem('accessToken');
+  const base = getWebSocketBase();
+  const url = `${base}/ws/chat/${conversationId}/`;
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
 };
 
 // Get admin and PESO user IDs dynamically

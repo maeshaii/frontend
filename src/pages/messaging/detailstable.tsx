@@ -41,20 +41,6 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
     loadOJTData();
   }, [selectedYear, coordinatorUsername]);
 
-  const normalized = (v: any) => (v ? String(v).toLowerCase() : '');
-  useEffect(() => {
-    if (typeof searchQuery === 'string') setSearch(searchQuery);
-  }, [searchQuery]);
-  const filtered = ojtData.filter((ojt) => {
-    const q = normalized(search);
-    if (!q) return true;
-    const first = normalized(ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : ''));
-    const last = normalized(ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : ''));
-    const company = normalized(ojt.company);
-    const ctuId = normalized(ojt.ctu_id || ojt.id);
-    return first.includes(q) || last.includes(q) || company.includes(q) || ctuId.includes(q);
-  });
-
   // Inline styles
   const styles = {
     detailsTable: {
@@ -183,6 +169,20 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
       cursor: 'pointer'
     }
   };
+
+  const normalized = (v: any) => (v ? String(v).toLowerCase() : '');
+  useEffect(() => {
+    if (typeof searchQuery === 'string') setSearch(searchQuery);
+  }, [searchQuery]);
+  const filtered = ojtData.filter((ojt) => {
+    const q = normalized(search);
+    if (!q) return true;
+    const first = normalized(ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : ''));
+    const last = normalized(ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : ''));
+    const company = normalized(ojt.company);
+    const ctuId = normalized(ojt.ctu_id || ojt.id);
+    return first.includes(q) || last.includes(q) || company.includes(q) || ctuId.includes(q);
+  });
 
   if (loading) {
     return (

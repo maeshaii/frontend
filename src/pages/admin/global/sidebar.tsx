@@ -1,10 +1,13 @@
-import React from 'react';
-import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff } from 'react-icons/fa';
+import React, { useState } from 'react';
+import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaGift, FaPaperPlane } from 'react-icons/fa';
 import { LuLocateFixed } from 'react-icons/lu';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import ConfirmModal from '../../../components/ConfirmModal';
 
 const Sidebar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const styles = {
     sidebar: {
@@ -68,10 +71,11 @@ const Sidebar = () => {
     logout: {
       display: 'flex',
       alignItems: 'center',
-      padding: '12px 16px',
+      padding: '32px 32px',
       cursor: 'pointer',
       textDecoration: 'none',
       color: 'white',
+      marginBottom: '24px',
     },
   };
 
@@ -79,8 +83,12 @@ const Sidebar = () => {
     { to: '/dashboard', label: 'Dashboard', icon: <FaTh style={styles.icon} /> },
     { to: '/statistics', label: 'Statistics', icon: <FaChartBar style={styles.icon} /> },
     { to: '/users', label: 'Users', icon: <FaUser style={styles.icon} /> },
+
     { to: '/ccict/profile', label: 'Profile', icon: <FaUserCircle style={styles.icon} /> },
+
     { to: '/tracker', label: 'Tracker', icon: <LuLocateFixed style={styles.icon} /> },
+    { to: '/requests', label: 'Requests', icon: <FaPaperPlane style={styles.icon} /> },
+    { to: '/rewards', label: 'Rewards', icon: <FaGift style={styles.icon} /> },
   ];
 
   return (
@@ -108,9 +116,32 @@ const Sidebar = () => {
         </ul>
       </div>
 
-      <Link to="/logout" style={styles.logout}>
+      <a
+        href="#"
+        style={styles.logout}
+        onClick={(e) => {
+          e.preventDefault();
+          setShowLogoutConfirm(true);
+        }}
+      >
         <FaPowerOff style={styles.icon} /> Logout
-      </Link>
+      </a>
+
+      <ConfirmModal
+        open={showLogoutConfirm}
+        title="Log out"
+        message="Are you sure you want to log out?"
+        confirmText="Yes"
+        cancelText="Cancel"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('user');
+          navigate('/login');
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   );
 };

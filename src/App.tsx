@@ -13,7 +13,7 @@ import FirstLoginChangePassword from './pages/admin/TemporaryPassword/FirstLogin
 import Tracker from './pages/admin/tracker/index';
 import Users from './pages/admin/users/index';
 import Logout from './pages/admin/Logout/index';
-import AlumniDashboard from './pages/admin/dashboard/AdminDashboard';
+import AlumniDashboard from './pages/alumni/Dashboard';
 import PesoDashboard from './pages/peso/Dashboard';
 import NotificationPage from './pages/alumni/Notification';
 import AlumniTracker from './pages/alumni/Tracker';
@@ -21,14 +21,19 @@ import ForumPage from './pages/alumni/forum';
 import DonationPage from './pages/alumni/Donation';
 import Settings from './pages/alumni/Settings';
 
-import AlumniProfile from './pages/alumni/Profile';
+// import AlumniProfile from './pages/alumni/Profile';
 import PesoProfile from './pages/peso/Profile';
 import AdminDashboard from './pages/admin/dashboard/AdminDashboard';
 import AdminNotificationPage from './pages/admin/dashboard/AdminNotification';
 import AdminProfilePage from './pages/admin/dashboard/AdminProfilePage';
 import CoordinatorDashboard from './pages/coordinator/dashboard';
+import RequestsPage from './pages/admin/pages/RequestsPage';
+import RequestDetailsPage from './pages/admin/pages/RequestDetailsPage';
+import RewardsPage from './pages/admin/pages/RewardsPage';
+import Messaging from './pages/messaging/Messaging';
 // import other pages like Statistics, Users, etc.
 import { PrivateRoute } from './components/PrivateRoute';
+import AlumniProfile from './pages/alumni/Profile';
 
 const App: React.FC = () => {
   return (
@@ -49,6 +54,30 @@ const App: React.FC = () => {
             element={
               <PrivateRoute roles={['admin']}>
                 <Dashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/requests"
+            element={
+              <PrivateRoute roles={['admin']}>
+                <RequestsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/admin/requests/:year"
+            element={
+              <PrivateRoute roles={['admin']}>
+                <RequestDetailsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/rewards"
+            element={
+              <PrivateRoute roles={['admin']}>
+                <RewardsPage />
               </PrivateRoute>
             }
           />
@@ -214,7 +243,7 @@ const App: React.FC = () => {
           />
 
           <Route
-            path="/coordinator/dashboard/:id"
+            path="/coordinator/dashboard/:id?"
             element={
               <PrivateRoute roles={['coordinator']}>
                 <CoordinatorDashboard />
@@ -225,7 +254,17 @@ const App: React.FC = () => {
             path="/alumni/profile/:id"
             element={
               <PrivateRoute>
-                <AlumniProfile />
+                <AlumniProfile  />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Messaging routes - available to alumni and OJT users */}
+          <Route
+            path="/messages"
+            element={
+              <PrivateRoute roles={['user', 'ojt']}>
+                <Messaging />
               </PrivateRoute>
             }
           />

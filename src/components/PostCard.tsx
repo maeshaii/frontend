@@ -270,7 +270,7 @@ const PostCard: React.FC<PostCardProps> = ({
   const handleRepostSubmit = async (caption: string) => {
     if (!setRepostedPosts) return;
     try {
-      await api.repostPost(post.post_id, caption);
+      await api.repostPost(post.post_id);
       setRepostedPosts(prev => ({ ...prev, [post.post_id]: true }));
       onPostUpdate?.();
     } catch (error: any) {

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
 import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaFileImport } from 'react-icons/fa';
-import Statistics from './statistics';
+// import Statistics from './statistics'; // Commented out - file doesn't exist
 import DetailsTable from './detailstable'; // ✅ Your new table component
 import { fetchOJTStatistics, importOJT } from '../../services/api';
 
@@ -80,21 +80,6 @@ export default function Dashboard() {
     }
   };
 
-  const refreshOJTData = async () => {
-    setLoading(true);
-    try {
-      console.log('Refreshing OJT data for coordinator:', coordinatorUsername);
-      const data = await fetchOJTStatistics();
-      console.log('Refreshed OJT data:', data);
-      setOjtYears(data.years || []);
-    } catch (error) {
-      console.error('Error refreshing OJT data:', error);
-      setOjtYears([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const downloadOJTTemplate = () => {
     // Build CSV template with exact columns shown in the screenshot
     const headers = [
@@ -126,6 +111,21 @@ export default function Dashboard() {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
+  };
+
+  const refreshOJTData = async () => {
+    setLoading(true);
+    try {
+      console.log('Refreshing OJT data for coordinator:', coordinatorUsername);
+      const data = await fetchOJTStatistics();
+      console.log('Refreshed OJT data:', data);
+      setOjtYears(data.years || []);
+    } catch (error) {
+      console.error('Error refreshing OJT data:', error);
+      setOjtYears([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -357,7 +357,7 @@ export default function Dashboard() {
   };
 
   const links = [
-    { to: `/coordinator/dashboard/${coordinatorUsername}`, label: 'Dashboard', icon: <FaTh style={styles.icon} /> },
+    { to: '/coordinator/dashboard', label: 'Dashboard', icon: <FaTh style={styles.icon} /> },
     { to: '/coordinator/imports', label: 'Imports', icon: <FaFileImport style={styles.icon} /> },
   ];
 
@@ -460,28 +460,14 @@ export default function Dashboard() {
             </div>
           )
         ) : (
-          <Statistics />
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            <h3>Statistics component not available</h3>
+            <p>Statistics functionality will be implemented here.</p>
+          </div>
         )}
       </main>
 
-      {/* ===================== Logout Confirm Modal ===================== */}
-      <ConfirmModal
-        open={showLogoutConfirm}
-        title="Log out"
-        message="Are you sure you want to log out?"
-        confirmText="Yes"
-        cancelText="Cancel"
-        onConfirm={() => {
-          setShowLogoutConfirm(false);
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          localStorage.removeItem('user');
-          navigate('/login');
-        }}
-        onCancel={() => setShowLogoutConfirm(false)}
-      />
-
-      {/* ===================== Modal ===================== */}
+      {/* ===================== Import Modal ===================== */}
       {showModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
@@ -524,6 +510,24 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* ===================== Logout Confirm Modal ===================== */}
+      <ConfirmModal
+        open={showLogoutConfirm}
+        title="Log out"
+        message="Are you sure you want to log out?"
+        confirmText="Yes"
+        cancelText="Cancel"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('user');
+          navigate('/login');
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   );
 }
+

@@ -1,7 +1,8 @@
 import React, { useRef, useEffect } from 'react';
+import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
-import { api, getAdminPesoUsers } from '../../services/api';
+import { api, getAdminPesoUsers, getUserInfo, fetchNotificationCount } from '../../services/api';
 
 interface AlumniTopBarProps {
   showProfile: boolean;
@@ -31,6 +32,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   const [showSuggestions, setShowSuggestions] = React.useState(false);
 
   // New state for notification count
+  const [notificationCount, setNotificationCount] = React.useState(0);
   
   // State for admin and PESO user IDs
   const [adminUserIds, setAdminUserIds] = React.useState<number[]>([]);
@@ -51,6 +53,27 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     };
 
     fetchAdminPesoUsers();
+  }, []);
+
+  // Fetch notification count
+  React.useEffect(() => {
+    const user = getUserInfo();
+    if (!user || !(user.user_id || user.id)) {
+      setNotificationCount(0);
+      return;
+    }
+    const uid = Number(user.user_id || user.id);
+    fetchNotificationCount(uid)
+      .then((data) => {
+        if (data && typeof data.count === 'number') {
+          setNotificationCount(data.count);
+        } else {
+          setNotificationCount(0);
+        }
+      })
+      .catch(() => {
+        setNotificationCount(0);
+      });
   }, []);
 
   // Handle click outside to close profile dropdown
@@ -120,7 +143,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     }, 300); // debounce delay
 
     return () => clearTimeout(delayDebounce);
-  }, [searchValue]);
+  }, [searchValue])
 
 
   const handleSearchSelect = (userId: number) => {
@@ -136,6 +159,63 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
       navigate(`/alumni/profile/${userId}`);
     }
   };
+
+  // Refactored admin URLs
+  const getAdminUrl = (path: string) => `/ccict/${path}`;
+
+  // Default tracker click for admin
+  const handleTrackerClick = onTrackerClick || (() => {
+    if (isAdmin) {
+      navigate('/tracker/questions');
+    }
+  });
+
+  // Refactored navigation for admin
+  const handleHomeClick = () => {
+    if (isAdmin) {
+      navigate(getAdminUrl('dashboard'));
+    } else if (isPeso) {
+      navigate('/peso/dashboard');
+    } else {
+      navigate('/alumni/dashboard');
+    }
+    setTimeout(() => {
+      const selectors = ['.center-content', '.profile-center-content', '.main-content'];
+      let scrolled = false;
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el) {
+          el.scrollTo({ top: 0, behavior: 'smooth' });
+          scrolled = true;
+        }
+      }
+      if (!scrolled) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 200);
+  };
+
+  const handleNotificationClick = () => {
+    if (isAdmin) {
+      navigate(getAdminUrl('notification'));
+    } else if (isPeso) {
+      navigate('/peso/notifications');
+    } else {
+      navigate('/alumni/notifications');
+    }
+  };
+
+  const handleProfileClick = () => {
+    if (isAdmin) {
+      navigate(getAdminUrl('profile'));
+    } else if (isPeso) {
+      navigate('/peso/profile');
+    } else {
+      navigate('/alumni/profile');
+    }
+  };
+
+  const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
 
   return (
     <div
@@ -252,26 +332,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             gap: 4,
             cursor: 'pointer',
           }}
-          onClick={() => {
-            const userStr = localStorage.getItem('user');
-            if (userStr) {
-              const userObj = JSON.parse(userStr);
-              const userId = userObj.user_id || userObj.id;
-              if (userId) {
-                const dashboardPath = isAdmin ? `/ccict/dashboard/${userId}` : (isPeso ? `/peso/dashboard/${userId}` : `/alumni/dashboard/${userId}`);
-                if (location.pathname === dashboardPath) {
-                  const centerContent = document.querySelector('.center-content') as HTMLElement;
-                  if (centerContent) {
-                    centerContent.scrollTo({ top: 0, behavior: 'smooth' });
-                  } else {
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }
-                } else {
-                  navigate(dashboardPath);
-                }
-              }
-            }
-          }}
+          onClick={handleHomeClick}
         >
           <span style={{ color: 'white', fontSize: 20 }}>🏠</span>
           <span style={{ color: 'white', fontSize: 12 }}>Home</span>
@@ -284,6 +345,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             gap: 4,
             cursor: 'pointer',
           }}
+          onClick={() => navigate('/messages')}
         >
           <span style={{ color: 'white', fontSize: 20 }}>✉️</span>
           <span style={{ color: 'white', fontSize: 12 }}>Messages</span>
@@ -297,12 +359,31 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           cursor: 'pointer',
           position: 'relative', // for badge positioning
         }}
-        onClick={() => {
-          const notifPath = isAdmin ? '/ccict/notification' : (isPeso ? '/peso/notifications' : '/alumni/notifications');
-          navigate(notifPath);
-        }}
+        onClick={handleNotificationClick}
       >
         <span style={{ color: 'white', fontSize: 20 }}>🔔</span>
+        {notificationCount > 0 && (
+          <span
+            style={{
+              position: 'absolute',
+              top: -4,
+              right: -4,
+              backgroundColor: 'red',
+              color: 'white',
+              borderRadius: '50%',
+              padding: '2px 6px',
+              fontSize: 10,
+              fontWeight: 'bold',
+              minWidth: 16,
+              textAlign: 'center',
+              lineHeight: 1,
+              pointerEvents: 'none',
+              userSelect: 'none',
+            }}
+          >
+            {notificationCount}
+          </span>
+        )}
         <span style={{ color: 'white', fontSize: 12 }}>Notification</span>
       </div>
         {isAdmin && (
@@ -314,7 +395,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               gap: 4,
               cursor: 'pointer',
             }}
-            onClick={onTrackerClick}
+            onClick={handleTrackerClick}
           >
             <span style={{ color: 'white', fontSize: 20 }}>📋</span>
             <span style={{ color: 'white', fontSize: 12 }}>Tracker</span>
@@ -348,7 +429,10 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                 zIndex: 10,
               }}
             >
-              <div style={{ padding: 12, cursor: 'pointer' }} onClick={handleLogout}>
+              <div
+                style={{ padding: 12, cursor: 'pointer' }}
+                onClick={() => setShowLogoutConfirm(true)}
+              >
                 Logout
               </div>
               <div style={{ padding: 12, cursor: 'pointer' }} onClick={() => {
@@ -361,6 +445,18 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           )}
         </div>
       </div>
+      <ConfirmModal
+        open={showLogoutConfirm}
+        title="Log out"
+        message="Are you sure you want to log out?"
+        confirmText="Yes"
+        cancelText="Cancel"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          handleLogout();
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   );
 };
