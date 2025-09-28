@@ -173,7 +173,23 @@ const NotificationPage: React.FC = () => {
           const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
           const isAdmin = !!(currentUser && currentUser.account_type && currentUser.account_type.admin);
           const isPeso = !!(currentUser && currentUser.account_type && currentUser.account_type.peso);
-          const backPath = isAdmin ? '/ccict/dashboard' : (isPeso ? '/peso/dashboard' : '/alumni/dashboard');
+          const userId = currentUser?.user_id || currentUser?.id;
+          
+          let backPath = '';
+          if (isAdmin) {
+            backPath = `/ccict/dashboard/${userId}`;
+          } else if (isPeso) {
+            backPath = `/peso/dashboard/${userId}`;
+          } else {
+            // Check if user is OJT or alumni based on user data
+            const userRole = currentUser?.role || currentUser?.user_type;
+            if (userRole === 'ojt' || userRole === 'coordinator') {
+              backPath = `/ojt/dashboard/${userId}`;
+            } else {
+              backPath = `/alumni/dashboard/${userId}`;
+            }
+          }
+          
           return (
             <button
           onClick={() => navigate(backPath)}

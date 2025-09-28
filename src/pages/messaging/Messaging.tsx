@@ -50,6 +50,8 @@ const Messaging: React.FC = () => {
         showProfile={showProfile}
         setShowProfile={setShowProfile}
         handleLogout={handleLogout}
+        isAdmin={false}
+        isPeso={false}
       />
 
 			{/* Messaging Top Bar */}

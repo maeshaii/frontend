@@ -172,13 +172,27 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
 
   // Refactored navigation for admin
   const handleHomeClick = () => {
+    const user = getUserInfo();
+    const userId = user?.user_id || user?.id;
+    
+    if (!userId) return;
+    
+    let dashboardPath = '';
     if (isAdmin) {
-      navigate(getAdminUrl('dashboard'));
+      dashboardPath = `/ccict/dashboard/${userId}`;
     } else if (isPeso) {
-      navigate('/peso/dashboard');
+      dashboardPath = `/peso/dashboard/${userId}`;
     } else {
-      navigate('/alumni/dashboard');
+      // Check if user is OJT or alumni based on user data
+      const userRole = user?.role || user?.user_type;
+      if (userRole === 'ojt' || userRole === 'coordinator') {
+        dashboardPath = `/ojt/dashboard/${userId}`;
+      } else {
+        dashboardPath = `/alumni/dashboard/${userId}`;
+      }
     }
+    
+    navigate(dashboardPath);
     setTimeout(() => {
       const selectors = ['.center-content', '.profile-center-content', '.main-content'];
       let scrolled = false;
@@ -196,23 +210,51 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   };
 
   const handleNotificationClick = () => {
+    const user = getUserInfo();
+    const userId = user?.user_id || user?.id;
+    
+    if (!userId) return;
+    
+    let notificationPath = '';
     if (isAdmin) {
-      navigate(getAdminUrl('notification'));
+      notificationPath = `/ccict/notifications/`;
     } else if (isPeso) {
-      navigate('/peso/notifications');
+      notificationPath = `/peso/notifications/`;
     } else {
-      navigate('/alumni/notifications');
+      // Check if user is OJT or alumni based on user data
+      const userRole = user?.role || user?.user_type;
+      if (userRole === 'ojt' || userRole === 'coordinator') {
+        notificationPath = `/ojt/notifications/`;
+      } else {
+        notificationPath = `/alumni/notifications/`;
+      }
     }
+    
+    navigate(notificationPath);
   };
 
   const handleProfileClick = () => {
+    const user = getUserInfo();
+    const userId = user?.user_id || user?.id;
+    
+    if (!userId) return;
+    
+    let profilePath = '';
     if (isAdmin) {
-      navigate(getAdminUrl('profile'));
+      profilePath = `/ccict/profile/${userId}`;
     } else if (isPeso) {
-      navigate('/peso/profile');
+      profilePath = `/peso/profile/${userId}`;
     } else {
-      navigate('/alumni/profile');
+      // Check if user is OJT or alumni based on user data
+      const userRole = user?.role || user?.user_type;
+      if (userRole === 'ojt' || userRole === 'coordinator') {
+        profilePath = `/ojt/profile/${userId}`;
+      } else {
+        profilePath = `/alumni/profile/${userId}`;
+      }
     }
+    
+    navigate(profilePath);
   };
 
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
@@ -426,7 +468,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                 borderRadius: 8,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                 minWidth: 120,
-                zIndex: 10,
+                zIndex: 1000,
               }}
             >
               <div
@@ -435,10 +477,13 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               >
                 Logout
               </div>
-              <div style={{ padding: 12, cursor: 'pointer' }} onClick={() => {
-                setShowProfile(false);
-                navigate('/alumni/settings');
-              }}>
+              <div 
+                style={{ padding: 12, cursor: 'pointer' }} 
+                onClick={() => {
+                  setShowProfile(false);
+                  navigate('/alumni/settings');
+                }}
+              >
                 Settings
               </div>
             </div>
