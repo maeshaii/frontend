@@ -353,9 +353,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                   />
                   <div>
                     <div style={{ fontWeight: 'bold' }}>{user.name}</div>
-                    <div style={{ fontSize: 12, color: '#777' }}>
-                      {user.course} • {user.year_graduated}
-                    </div>
+
                   </div>
                 </div>
               ))}
@@ -477,15 +475,17 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               >
                 Logout
               </div>
-              <div 
-                style={{ padding: 12, cursor: 'pointer' }} 
-                onClick={() => {
-                  setShowProfile(false);
-                  navigate('/alumni/settings');
-                }}
-              >
-                Settings
-              </div>
+              {!location.pathname.includes('/settings') && (
+                <div 
+                  style={{ padding: 12, cursor: 'pointer' }} 
+                  onClick={() => {
+                    setShowProfile(false);
+                    navigate('/alumni/settings');
+                  }}
+                >
+                  Settings
+                </div>
+              )}
             </div>
           )}
         </div>

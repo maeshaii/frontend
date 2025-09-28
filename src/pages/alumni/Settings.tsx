@@ -21,6 +21,7 @@ const Settings: React.FC = () => {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<string>('personal');
   const [userData, setUserData] = useState<UserData | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
@@ -309,8 +310,8 @@ const Settings: React.FC = () => {
   return (
     <div style={{ backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
       <AlumniTopBar
-        showProfile={false}
-        setShowProfile={() => {}}
+        showProfile={showProfile}
+        setShowProfile={setShowProfile}
         handleLogout={handleLogout}
         isAdmin={false}
         isPeso={false}

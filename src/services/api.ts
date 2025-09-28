@@ -697,6 +697,19 @@ export const getConversationWsUrl = (conversationId: number): string => {
   return token ? `${url}?token=${encodeURIComponent(token)}` : url;
 };
 
+// User Management API functions
+export const fetchAllUsers = async (): Promise<any[]> => {
+  const { data } = await api.get('admin/users/');
+  return data.users || data;
+};
+
+export const updateUserPassword = async (userId: number, newPassword: string): Promise<{ success: boolean; message: string }> => {
+  const { data } = await api.put(`admin/users/${userId}/password/`, {
+    new_password: newPassword
+  });
+  return data;
+};
+
 // Get admin and PESO user IDs dynamically
 export const getAdminPesoUsers = async () => {
   const response = await api.get('admin-peso-users/');

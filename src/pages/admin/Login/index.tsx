@@ -126,6 +126,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   h2: {
     margin: 0,
+    color: 'white',
   },
   h1: {
     fontSize: '2rem',

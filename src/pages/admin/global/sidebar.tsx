@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaGift, FaPaperPlane } from 'react-icons/fa';
+import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaGift, FaPaperPlane, FaUsersCog } from 'react-icons/fa';
 import { LuLocateFixed } from 'react-icons/lu';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import ConfirmModal from '../../../components/ConfirmModal';
@@ -83,9 +83,8 @@ const Sidebar = () => {
     { to: '/dashboard', label: 'Dashboard', icon: <FaTh style={styles.icon} /> },
     { to: '/statistics', label: 'Statistics', icon: <FaChartBar style={styles.icon} /> },
     { to: '/users', label: 'Users', icon: <FaUser style={styles.icon} /> },
-
+    { to: '/user-management', label: 'User Management', icon: <FaUsersCog style={styles.icon} /> },
     { to: '/ccict/profile', label: 'Profile', icon: <FaUserCircle style={styles.icon} /> },
-
     { to: '/tracker', label: 'Tracker', icon: <LuLocateFixed style={styles.icon} /> },
     { to: '/requests', label: 'Requests', icon: <FaPaperPlane style={styles.icon} /> },
     { to: '/rewards', label: 'Rewards', icon: <FaGift style={styles.icon} /> },
