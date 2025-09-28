@@ -360,10 +360,48 @@ export const approveCoordinatorRequest = async (year: number | string) => {
   return response.data as { success: boolean; approved: number; year: number };
 };
 
+// Approve OJT students to become alumni with password generation
+export const approveOJTToAlumni = async (year: number | string) => {
+  const response = await api.post('ojt/approve-to-alumni/', { year });
+  return response.data as { 
+    success: boolean; 
+    approved: number; 
+    year: number; 
+    batch_created?: boolean;
+    batch_year?: string;
+    message?: string;
+    passwords?: Array<{ user_id: number; username: string; password: string; name: string }>;
+    excel_file?: string;
+    excel_filename?: string;
+  };
+};
+
+// Approve individual OJT student to become alumni with password generation
+export const approveIndividualOJTToAlumni = async (userId: number) => {
+  const response = await api.post('ojt/approve-individual-to-alumni/', { user_id: userId });
+  return response.data as { 
+    success: boolean; 
+    approved: number; 
+    year: number; 
+    batch_created?: boolean;
+    batch_year?: string;
+    message?: string;
+    passwords?: Array<{ user_id: number; username: string; password: string; name: string }>;
+  };
+};
+
 // Get coordinator requests count for admin dashboard
 export const fetchCoordinatorRequestsCount = async (year?: number | string) => {
   const path = year ? `ojt/coordinator-requests/?year=${year}` : 'ojt/coordinator-requests/';
   const response = await api.get(path);
+  return response.data;
+};
+
+// Export initial passwords to Excel
+export const exportInitialPasswords = async () => {
+  const response = await api.get('export-initial-passwords/', {
+    responseType: 'blob', // Important for file downloads
+  });
   return response.data;
 };
 
