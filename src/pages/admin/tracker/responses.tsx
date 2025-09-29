@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import './Tracker.css';
-import { fetchTrackerResponsesByBatchYear, fetchAlumniByYear } from '../../../services/api';
+import { fetchTrackerResponses, fetchAlumniList } from '../../../services/api';
 import { trackerApi, trackerUtils } from '../../../services/trackerApi';
 
 const Responses: React.FC = () => {
@@ -35,9 +35,6 @@ const Responses: React.FC = () => {
       setTrackerFormId(activeFormQuery.data.tracker_form_id);
   }, [activeFormQuery.data]);
 
-  // Calculate target batch year (current year - 2)
-  const targetBatchYear = trackerUtils.getTargetBatchYear();
-
   // Fetch categories (questions), responses, and accepting state from backend
   const questionsQuery = useQuery({
     queryKey: ['tracker', 'questions'],
@@ -45,13 +42,13 @@ const Responses: React.FC = () => {
     enabled: !!trackerFormId,
   });
   const responsesQuery = useQuery({
-    queryKey: ['tracker', 'responses', targetBatchYear],
-    queryFn: async () => fetchTrackerResponsesByBatchYear(targetBatchYear.toString()),
+    queryKey: ['tracker', 'responses', 'all'],
+    queryFn: async () => fetchTrackerResponses(),
     enabled: !!trackerFormId,
   });
   const alumniQuery = useQuery({
-    queryKey: ['users', 'alumni', targetBatchYear],
-    queryFn: async () => fetchAlumniByYear(targetBatchYear.toString()),
+    queryKey: ['users', 'alumni', 'all'],
+    queryFn: async () => fetchAlumniList(),
     enabled: !!trackerFormId,
   });
   const acceptingQuery = useQuery({
@@ -253,7 +250,7 @@ const Responses: React.FC = () => {
                         queryKey: ['tracker', 'accepting', trackerFormId],
                       }),
                       queryClient.invalidateQueries({
-                        queryKey: ['tracker', 'responses', targetBatchYear],
+                        queryKey: ['tracker', 'responses', 'all'],
                       }),
                     ]);
                   } else {
@@ -299,7 +296,7 @@ const Responses: React.FC = () => {
           <>
             {/* Quarterly Tracker */}
             <div className="card">
-              <h3>Quarterly Response Tracker</h3>
+              <h3>Quarterly Response Tracker (All Alumni)</h3>
               <div style={{ overflowX: 'auto' }}>
                 <table
                   style={{
@@ -718,7 +715,7 @@ const Responses: React.FC = () => {
                             const processNextFile = (index: number) => {
                               if (index >= stat.files.length) {
                                 // All files processed, save the PDF
-                                const filename = `${stat.question_text.replace(/[^a-zA-Z0-9]/g, '_')}_Batch_${targetBatchYear}.pdf`;
+                                const filename = `${stat.question_text.replace(/[^a-zA-Z0-9]/g, '_')}_All_Alumni.pdf`;
                                 doc.save(filename);
                                 return;
                               }

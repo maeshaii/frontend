@@ -217,7 +217,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     
     let notificationPath = '';
     if (isAdmin) {
-      notificationPath = `/ccict/notifications/`;
+      notificationPath = `/ccict/notification`;
     } else if (isPeso) {
       notificationPath = `/peso/notifications/`;
     } else {
@@ -480,7 +480,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                   style={{ padding: 12, cursor: 'pointer' }} 
                   onClick={() => {
                     setShowProfile(false);
-                    navigate('/alumni/settings');
+                    const settingsPath = isAdmin ? '/ccict/settings' : '/alumni/settings';
+                    navigate(settingsPath);
                   }}
                 >
                   Settings

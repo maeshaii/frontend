@@ -9,6 +9,7 @@ import {
   uploadAttachment 
 } from '../../services/api';
 import { ConversationWebSocket, TypingIndicator, WsEvent } from '../../services/websocketHelper';
+import { getConversationWsUrl } from '../../services/api';
 import './Messaging.css';
 
 interface ChatInterfaceProps {
@@ -88,7 +89,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
   const connectWebSocket = useCallback(() => {
     if (!conversation) return;
 
-    const ws = new ConversationWebSocket(conversation.conversation_id);
+    const wsUrl = getConversationWsUrl(conversation.conversation_id);
+    const ws = new ConversationWebSocket(wsUrl);
     wsRef.current = ws;
     
     const typingIndicator = new TypingIndicator(ws, conversation.conversation_id);

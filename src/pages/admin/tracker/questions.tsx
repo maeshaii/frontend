@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import './Tracker.css';
 import { trackerApi } from '../../../services/trackerApi';
@@ -71,9 +71,17 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   const [userDetails, setUserDetails] = useState<Record<string, any> | null>(null);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const newCategoryRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (questionsQuery.data) setCategories(questionsQuery.data as CategoryItem[]);
+    if (questionsQuery.data) {
+      // Handle both direct array and object with categories property
+      if (Array.isArray(questionsQuery.data)) {
+        setCategories(questionsQuery.data as CategoryItem[]);
+      } else if (questionsQuery.data.categories) {
+        setCategories(questionsQuery.data.categories as CategoryItem[]);
+      }
+    }
   }, [questionsQuery.data]);
 
   // Show privacy modal when component loads in preview mode
@@ -82,6 +90,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
       setShowPrivacyModal(true);
     }
   }, [previewMode, privacyAccepted]);
+
 
   // Prevent background scrolling when modal is open
   useEffect(() => {
@@ -222,6 +231,16 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
     description: '',
   });
 
+  // Auto-scroll to new category when adding
+  useEffect(() => {
+    if (addingCategory && newCategoryRef.current) {
+      newCategoryRef.current.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
+    }
+  }, [addingCategory]);
+
   const handleAddCategoryChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setNewCategoryDraft({ ...newCategoryDraft, [e.target.name]: e.target.value });
   };
@@ -249,6 +268,17 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   const cancelAddCategory = () => {
     setAddingCategory(false);
     setNewCategoryDraft({ title: '', description: '' });
+    // Scroll to top when canceling - try multiple methods
+    setTimeout(() => {
+      // Try scrolling the main container first
+      const container = document.querySelector('.tracker-container');
+      if (container) {
+        container.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        // Fallback to window scroll
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 100);
   };
 
   // Add state for adding question
@@ -682,13 +712,24 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
     <div className="tracker-container">
       <div className="tracker-inner">
         {previewModeFromParent ? null : (
-          <button
-            className="action-button"
-            onClick={() => setPreviewMode(!previewMode)}
-            style={{ marginBottom: 16 }}
-          >
-            {previewMode ? 'Back to Edit' : 'Preview/Fill Out Form'}
-          </button>
+          <>
+            <button
+              className="action-button"
+              onClick={() => setPreviewMode(!previewMode)}
+              style={{ marginBottom: 16, marginRight: 16 }}
+            >
+              {previewMode ? 'Back to Edit' : 'Preview/Fill Out Form'}
+            </button>
+            {!previewMode && (
+              <button
+                className="action-button"
+                onClick={() => setAddingCategory(true)}
+                style={{ marginBottom: 16 }}
+              >
+                Add Category
+              </button>
+            )}
+          </>
         )}
         {previewMode ? (
           <form
@@ -1210,8 +1251,8 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                 )}
               </div>
             ))}
-            {addingCategory ? (
-              <div className="card" style={{ marginBottom: 24, background: '#f5f5f5' }}>
+            {addingCategory && (
+              <div ref={newCategoryRef} className="card" style={{ marginBottom: 24, background: '#f5f5f5' }}>
                 <div
                   style={{
                     display: 'flex',
@@ -1248,14 +1289,6 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                   </button>
                 </div>
               </div>
-            ) : (
-              <button
-                className="action-button"
-                onClick={() => setAddingCategory(true)}
-                style={{ marginTop: 16 }}
-              >
-                Add Category
-              </button>
             )}
           </>
         )}

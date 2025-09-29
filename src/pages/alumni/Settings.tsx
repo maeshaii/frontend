@@ -307,14 +307,20 @@ const Settings: React.FC = () => {
     );
   }
 
+  // Get current user info for admin/peso detection
+  const currentUserStr = localStorage.getItem('user');
+  const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
+  const isAdmin = currentUser?.account_type?.admin || currentUser?.account_type?.ccict;
+  const isPeso = currentUser?.account_type?.peso;
+
   return (
     <div style={{ backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
       <AlumniTopBar
         showProfile={showProfile}
         setShowProfile={setShowProfile}
         handleLogout={handleLogout}
-        isAdmin={false}
-        isPeso={false}
+        isAdmin={isAdmin}
+        isPeso={isPeso}
       />
       
       <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>

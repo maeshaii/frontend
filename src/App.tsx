@@ -219,6 +219,14 @@ const App: React.FC = () => {
             }
           />
           <Route
+            path="/ccict/settings"
+            element={
+              <PrivateRoute>
+                <Settings />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/ccict/dashboard/:id"
             element={
               <PrivateRoute>

@@ -858,12 +858,20 @@ getPosts()
     );
   }
 
+  // Get current user info for admin/peso detection
+  const currentUserStr = localStorage.getItem('user');
+  const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
+  const isAdmin = currentUser?.account_type?.admin || currentUser?.account_type?.ccict;
+  const isPeso = currentUser?.account_type?.peso;
+
   return (
     <div className="profile-container">
       <AlumniTopBar
         showProfile={showProfile}
         setShowProfile={setShowProfile}
         handleLogout={handleLogout}
+        isAdmin={isAdmin}
+        isPeso={isPeso}
       />
 
       {/* Main Content */}
