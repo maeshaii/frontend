@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchNotifications, deleteNotifications } from '../../services/api';
+import { fetchNotifications, deleteNotifications, markNotificationAsRead, api } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 
@@ -271,11 +271,32 @@ const NotificationPage: React.FC = () => {
                     key={notif.id}
                     style={{
                       borderBottom: '1px solid #eee',
-                      background: selected.includes(notif.id) ? '#e0e7ef' : undefined,
+                      background: selected.includes(notif.id) 
+                        ? '#e0e7ef' 
+                        : !notif.is_read 
+                          ? 'rgba(0, 102, 204, 0.08)' 
+                          : 'transparent',
                       cursor: 'pointer',
-                      height: 44
+                      height: 44,
+                      fontWeight: !notif.is_read ? '600' : 'normal',
                     }}
-                    onClick={() => setOpenNotif(notif)}
+                    onClick={async () => {
+                      setOpenNotif(notif);
+                      // Mark notification as read
+                      if (!notif.is_read) {
+                        try {
+                          await markNotificationAsRead(notif.id);
+                          // Update local state
+                          setNotifications(prev => 
+                            prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n)
+                          );
+                          // Dispatch event to update notification count in topbar
+                          window.dispatchEvent(new CustomEvent('notificationRead'));
+                        } catch (error) {
+                          console.error('Error marking notification as read:', error);
+                        }
+                      }
+                    }}
                   >
                     <td>
                       <input
@@ -288,14 +309,46 @@ const NotificationPage: React.FC = () => {
                     <td style={{ fontWeight: 600, color: '#174f84', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 80 }}>{notif.type}</td>
                     <td style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 120 }}>{notif.subject || 'No Subject'}</td>
                     <td style={{ color: '#333', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 320 }}>
-                      <div 
-                        style={{ display: 'inline' }}
-                        dangerouslySetInnerHTML={{ 
-                          __html: notif.content.length > 60 ? 
-                            notif.content.slice(0, 60).replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ') + '...' : 
-                            notif.content.replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ')
-                        }} 
-                      />
+                      {notif.type.toLowerCase() === 'follow' ? (
+                        (() => {
+                          // Parse format: "Name|user_id started following you."
+                          const match = notif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
+                          if (match) {
+                            const followerName = match[1];
+                            const followerId = match[2];
+                            return (
+                              <span>
+                                <span
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/alumni/profile/${followerId}`);
+                                  }}
+                                  style={{
+                                    color: '#0066cc',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                                  onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                                >
+                                  {followerName}
+                                </span>
+                                {' started following you.'}
+                              </span>
+                            );
+                          }
+                          return notif.content;
+                        })()
+                      ) : (
+                        <div 
+                          style={{ display: 'inline' }}
+                          dangerouslySetInnerHTML={{ 
+                            __html: notif.content.length > 60 ? 
+                              notif.content.slice(0, 60).replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ') + '...' : 
+                              notif.content.replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ')
+                          }} 
+                        />
+                      )}
                     </td>
                     <td style={{
                       textAlign: 'right',
@@ -372,36 +425,36 @@ const NotificationPage: React.FC = () => {
             <div style={{ fontSize: 16, whiteSpace: 'pre-line', marginBottom: 24 }}>
               {openNotif.type && openNotif.type.toLowerCase() === 'follow' ? (
                 <div>
-                  {openNotif.content.split('View profile:').map((part: string, index: number) => {
-                    if (index === 0) {
-                      return <span key={index}>{part}</span>;
-                    } else {
-                      const match = part.match(/\/alumni\/profile\/(\d+)/);
-                      if (match) {
-                        const followerId = match[1];
-                        return (
-                          <span key={index}>
-                            View profile:{' '}
-                            <span
-                              onClick={() => {
-                                navigate(`/alumni/profile/${followerId}`);
-                                setOpenNotif(null);
-                              }}
-                              style={{
-                                color: '#1e4c7a',
-                                textDecoration: 'underline',
-                                cursor: 'pointer',
-                                fontWeight: 600,
-                              }}
-                            >
-                              {part.trim()}
-                            </span>
+                  {(() => {
+                    // Parse format: "Name|user_id started following you."
+                    const match = openNotif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
+                    if (match) {
+                      const followerName = match[1];
+                      const followerId = match[2];
+                      return (
+                        <span>
+                          <span
+                            onClick={() => {
+                              navigate(`/alumni/profile/${followerId}`);
+                              setOpenNotif(null);
+                            }}
+                            style={{
+                              color: '#0066cc',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                            onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                          >
+                            {followerName}
                           </span>
-                        );
-                      }
-                      return <span key={index}>View profile:{part}</span>;
+                          {' '}started following you.
+                        </span>
+                      );
                     }
-                  })}
+                    // Fallback for old format notifications
+                    return <span>{openNotif.content}</span>;
+                  })()}
                 </div>
               ) : (openNotif.type && (openNotif.type.toLowerCase() === 'like' || openNotif.type.toLowerCase() === 'comment')) ? (
                 <div>
@@ -420,34 +473,44 @@ const NotificationPage: React.FC = () => {
                       fontSize: '1rem',
                       marginTop: '12px',
                     }}
-                    onClick={() => {
-                      // Try to extract post ID from notification content
-                      // Look for patterns like "Post ID: 123"
-                      console.log('Notification content:', openNotif.content);
-                      const postIdMatch = openNotif.content.match(/Post ID:\s*(\d+)/i);
-                      console.log('Post ID match:', postIdMatch);
+                    onClick={async () => {
+                      // Try to extract post ID from notification content (hidden format: <!--POST_ID:123-->)
+                      const hiddenIdMatch = openNotif.content.match(/<!--POST_ID:(\d+)-->/);
+                      const visibleIdMatch = openNotif.content.match(/Post ID:\s*(\d+)/i);
+                      const postIdMatch = hiddenIdMatch || visibleIdMatch;
                       
                       if (postIdMatch) {
                         const postId = postIdMatch[1];
-                        console.log('Extracted post ID:', postId);
+                        setPostLoading(true);
                         
-                        // Close notification modal first
-                        setOpenNotif(null);
-                        
-                        // Navigate to dashboard
-                        const userStr = localStorage.getItem('user');
-                        const user = userStr ? JSON.parse(userStr) : null;
-                        const userId = user?.user_id || user?.id;
-                        
-                        if (userId) {
-                          // Store post ID in localStorage to be picked up by dashboard
-                          localStorage.setItem('pendingPostView', postId);
-                          navigate(`/alumni/dashboard/${userId}`);
+                        try {
+                          // Try to fetch the post to check if it exists
+                          const response = await api.get(`posts/${postId}/detail/`);
+                          
+                          if (response.data) {
+                            // Post exists, navigate to dashboard to view it
+                            setOpenNotif(null);
+                            const userStr = localStorage.getItem('user');
+                            const user = userStr ? JSON.parse(userStr) : null;
+                            const userId = user?.user_id || user?.id;
+                            
+                            if (userId) {
+                              localStorage.setItem('pendingPostView', postId);
+                              navigate(`/alumni/dashboard/${userId}`);
+                            }
+                          }
+                        } catch (error: any) {
+                          // Post doesn't exist or error occurred
+                          if (error.response && error.response.status === 404) {
+                            alert('This post has been deleted by the owner.');
+                          } else {
+                            alert('Unable to load the post. It may have been deleted.');
+                          }
+                        } finally {
+                          setPostLoading(false);
                         }
                       } else {
-                        console.log('No post ID found in notification content');
-                        // For old notifications without post ID, we'll need to find the post another way
-                        // For now, let's show a message and redirect to dashboard
+                        // Old notification format without Post ID
                         alert('This notification is from an older version. Please check the dashboard to view recent posts.');
                         const userStr = localStorage.getItem('user');
                         const user = userStr ? JSON.parse(userStr) : null;

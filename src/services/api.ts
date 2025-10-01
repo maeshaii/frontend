@@ -421,6 +421,18 @@ export const fetchNotificationCount = async (userId: number) => {
   return response.data;
 };
 
+// Mark notification as read
+export const markNotificationAsRead = async (notificationId: number) => {
+  const response = await api.post(`notifications/mark-read/`, { notification_id: notificationId });
+  return response.data;
+};
+
+// Mark all notifications as read
+export const markAllNotificationsAsRead = async (userId: number) => {
+  const response = await api.post(`notifications/mark-all-read/`, { user_id: userId });
+  return response.data;
+};
+
 // Delete notifications by IDs
 export const deleteNotifications = async (notificationIds: number[]) => {
   const response = await api.post('notifications/delete/', { notification_ids: notificationIds });

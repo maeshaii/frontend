@@ -3,6 +3,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
 import { api, getAdminPesoUsers, getUserInfo, fetchNotificationCount } from '../../services/api';
+import 'primeicons/primeicons.css';
 
 interface AlumniTopBarProps {
   showProfile: boolean;
@@ -56,7 +57,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   }, []);
 
   // Fetch notification count
-  React.useEffect(() => {
+  const loadNotificationCount = React.useCallback(() => {
     const user = getUserInfo();
     if (!user || !(user.user_id || user.id)) {
       setNotificationCount(0);
@@ -75,6 +76,21 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
         setNotificationCount(0);
       });
   }, []);
+
+  React.useEffect(() => {
+    loadNotificationCount();
+    
+    // Listen for notification read events to refresh count
+    const handleNotificationRead = () => {
+      loadNotificationCount();
+    };
+    
+    window.addEventListener('notificationRead', handleNotificationRead);
+    
+    return () => {
+      window.removeEventListener('notificationRead', handleNotificationRead);
+    };
+  }, [loadNotificationCount]);
 
   // Handle click outside to close profile dropdown
   useEffect(() => {
@@ -262,76 +278,99 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   return (
     <div
       style={{
-        background: '#174f84',
-        padding: '12px 24px',
+        background: 'linear-gradient(135deg, #003366 0%, #0066cc 100%)',
+        padding: '14px 32px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+        backdropFilter: 'blur(10px)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 1000,
       }}
     >
       {/* Logo and Search */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div
             style={{
-              width: 40,
-              height: 40,
-              background: 'white',
+              width: 44,
+              height: 44,
+              background: 'linear-gradient(135deg, #ffffff 0%, #f0f8ff 100%)',
               borderRadius: '50%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 12,
-              fontWeight: 'bold',
-              color: '#174f84',
+              fontSize: 14,
+              fontWeight: '700',
+              color: '#003366',
+              boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)',
+              transition: 'transform 0.3s ease',
+              cursor: 'pointer',
             }}
+            onClick={handleHomeClick}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
             WNY
           </div>
-          <span style={{ color: 'white', fontSize: 18, fontWeight: 'bold' }}>WhereNa You</span>
         </div>
         <div style={{ position: 'relative' }}>
           <input
             type="text"
-            placeholder="Search..."
+            placeholder="Search users..."
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            onFocus={() => setShowSuggestions(searchResults.length > 0)}
             style={{
-              borderRadius: 20,
-              border: 'none',
-              padding: '8px 16px 8px 40px',
-              width: 300,
+              borderRadius: 24,
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              padding: '10px 18px 10px 42px',
+              width: 320,
               fontSize: 14,
+              background: 'rgba(255, 255, 255, 0.95)',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+              outline: 'none',
+              transition: 'all 0.3s ease',
+            }}
+            onFocus={(e) => {
+              setShowSuggestions(searchResults.length > 0);
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 102, 204, 0.3)';
+              e.currentTarget.style.border = '1px solid rgba(0, 102, 204, 0.5)';
+            }}
+            onBlur={(e) => {
+              setTimeout(() => setShowSuggestions(false), 200);
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+              e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.2)';
             }}
           />
-          <span
+          <i 
+            className="pi pi-search"
             style={{
               position: 'absolute',
-              left: 12,
+              left: 14,
               top: '50%',
               transform: 'translateY(-50%)',
               color: '#666',
               fontSize: 16,
             }}
-          >
-            🔍
-          </span>
+          ></i>
           {showSuggestions && searchResults.length > 0 && (
             <div
               style={{
                 position: 'absolute',
-                top: 40,
+                top: 48,
                 left: 0,
                 right: 0,
-                background: '#fff',
-                border: '1px solid #ddd',
-                borderRadius: 8,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                background: 'white',
+                border: '1px solid rgba(0, 0, 0, 0.1)',
+                borderRadius: 12,
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
                 zIndex: 1000,
-                maxHeight: 200,
+                maxHeight: 280,
                 overflowY: 'auto',
+                backdropFilter: 'blur(10px)',
               }}
             >
               {searchResults.map((user) => (
@@ -339,21 +378,40 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                   key={user.user_id ?? user.id}
                   onClick={() => handleSearchSelect(user.user_id ?? user.id)}
                   style={{
-                    padding: 10,
+                    padding: 12,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
+                    gap: 12,
+                    transition: 'all 0.2s ease',
+                    borderBottom: '1px solid rgba(0, 0, 0, 0.05)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 102, 204, 0.05)';
+                    e.currentTarget.style.paddingLeft = '16px';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.paddingLeft = '12px';
                   }}
                 >
                   <img
                     src={user.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo}
                     alt=""
-                    style={{ width: 30, height: 30, borderRadius: '50%' }}
+                    style={{ 
+                      width: 36, 
+                      height: 36, 
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: '2px solid rgba(0, 102, 204, 0.2)',
+                    }}
                   />
                   <div>
-                    <div style={{ fontWeight: 'bold' }}>{user.name}</div>
-
+                    <div style={{ 
+                      fontWeight: '600',
+                      color: '#003366',
+                      fontSize: '14px',
+                    }}>{user.name}</div>
                   </div>
                 </div>
               ))}
@@ -363,68 +421,153 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
       </div>
 
       {/* Navigation Icons */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
         <div
           style={{
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: 4,
+            gap: 6,
             cursor: 'pointer',
+            padding: '10px 16px',
+            borderRadius: '16px',
+            transition: 'all 0.3s ease',
+            background: location.pathname.includes('/dashboard') 
+              ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%)'
+              : 'transparent',
+            boxShadow: location.pathname.includes('/dashboard') 
+              ? '0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
+              : 'none',
+            transform: location.pathname.includes('/dashboard') ? 'scale(1.05)' : 'scale(1)',
+            borderBottom: location.pathname.includes('/dashboard') ? '3px solid white' : '3px solid transparent',
           }}
           onClick={handleHomeClick}
+          onMouseEnter={(e) => {
+            if (!location.pathname.includes('/dashboard')) {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+            }
+            e.currentTarget.style.transform = location.pathname.includes('/dashboard') ? 'scale(1.05) translateY(-2px)' : 'scale(1) translateY(-2px)';
+          }}
+          onMouseLeave={(e) => {
+            if (!location.pathname.includes('/dashboard')) {
+              e.currentTarget.style.background = 'transparent';
+            }
+            e.currentTarget.style.transform = location.pathname.includes('/dashboard') ? 'scale(1.05)' : 'scale(1)';
+          }}
         >
-          <span style={{ color: 'white', fontSize: 20 }}>🏠</span>
-          <span style={{ color: 'white', fontSize: 12 }}>Home</span>
+          <i className="pi pi-home" style={{ color: 'white', fontSize: 20 }}></i>
+          <span style={{ 
+            color: 'white', 
+            fontSize: 12, 
+            fontWeight: location.pathname.includes('/dashboard') ? '600' : '500',
+            letterSpacing: '0.2px',
+          }}>Home</span>
         </div>
         <div
           style={{
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: 4,
+            gap: 6,
             cursor: 'pointer',
+            padding: '10px 16px',
+            borderRadius: '16px',
+            transition: 'all 0.3s ease',
+            background: location.pathname.includes('/message') 
+              ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%)'
+              : 'transparent',
+            boxShadow: location.pathname.includes('/message') 
+              ? '0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
+              : 'none',
+            transform: location.pathname.includes('/message') ? 'scale(1.05)' : 'scale(1)',
+            borderBottom: location.pathname.includes('/message') ? '3px solid white' : '3px solid transparent',
           }}
           onClick={() => navigate('/messages')}
+          onMouseEnter={(e) => {
+            if (!location.pathname.includes('/message')) {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+            }
+            e.currentTarget.style.transform = location.pathname.includes('/message') ? 'scale(1.05) translateY(-2px)' : 'scale(1) translateY(-2px)';
+          }}
+          onMouseLeave={(e) => {
+            if (!location.pathname.includes('/message')) {
+              e.currentTarget.style.background = 'transparent';
+            }
+            e.currentTarget.style.transform = location.pathname.includes('/message') ? 'scale(1.05)' : 'scale(1)';
+          }}
         >
-          <span style={{ color: 'white', fontSize: 20 }}>✉️</span>
-          <span style={{ color: 'white', fontSize: 12 }}>Messages</span>
+          <i className="pi pi-envelope" style={{ color: 'white', fontSize: 20 }}></i>
+          <span style={{ 
+            color: 'white', 
+            fontSize: 12, 
+            fontWeight: location.pathname.includes('/message') ? '600' : '500',
+            letterSpacing: '0.2px',
+          }}>Messages</span>
         </div>
       <div
         style={{
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 4,
+          gap: 6,
           cursor: 'pointer',
-          position: 'relative', // for badge positioning
+          position: 'relative',
+          padding: '10px 16px',
+          borderRadius: '16px',
+          transition: 'all 0.3s ease',
+          background: location.pathname.includes('/notification') 
+            ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%)'
+            : 'transparent',
+          boxShadow: location.pathname.includes('/notification') 
+            ? '0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
+            : 'none',
+          transform: location.pathname.includes('/notification') ? 'scale(1.05)' : 'scale(1)',
+          borderBottom: location.pathname.includes('/notification') ? '3px solid white' : '3px solid transparent',
         }}
         onClick={handleNotificationClick}
+        onMouseEnter={(e) => {
+          if (!location.pathname.includes('/notification')) {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+          }
+          e.currentTarget.style.transform = location.pathname.includes('/notification') ? 'scale(1.05) translateY(-2px)' : 'scale(1) translateY(-2px)';
+        }}
+        onMouseLeave={(e) => {
+          if (!location.pathname.includes('/notification')) {
+            e.currentTarget.style.background = 'transparent';
+          }
+          e.currentTarget.style.transform = location.pathname.includes('/notification') ? 'scale(1.05)' : 'scale(1)';
+        }}
       >
-        <span style={{ color: 'white', fontSize: 20 }}>🔔</span>
+        <i className="pi pi-bell" style={{ color: 'white', fontSize: 20 }}></i>
         {notificationCount > 0 && (
           <span
             style={{
               position: 'absolute',
-              top: -4,
-              right: -4,
-              backgroundColor: 'red',
+              top: 4,
+              right: 8,
+              backgroundColor: '#ff3b3b',
               color: 'white',
-              borderRadius: '50%',
-              padding: '2px 6px',
+              borderRadius: '12px',
+              padding: '3px 7px',
               fontSize: 10,
-              fontWeight: 'bold',
-              minWidth: 16,
+              fontWeight: '700',
+              minWidth: 18,
               textAlign: 'center',
-              lineHeight: 1,
+              lineHeight: 1.2,
               pointerEvents: 'none',
               userSelect: 'none',
+              boxShadow: '0 2px 6px rgba(255, 0, 0, 0.4)',
             }}
           >
             {notificationCount}
           </span>
         )}
-        <span style={{ color: 'white', fontSize: 12 }}>Notification</span>
+        <span style={{ 
+          color: 'white', 
+          fontSize: 12, 
+          fontWeight: location.pathname.includes('/notification') ? '600' : '500',
+          letterSpacing: '0.2px',
+        }}>Notification</span>
       </div>
         {isAdmin && (
           <div
@@ -432,13 +575,41 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: 4,
+              gap: 6,
               cursor: 'pointer',
+              padding: '10px 16px',
+              borderRadius: '16px',
+              transition: 'all 0.3s ease',
+              background: location.pathname.includes('/tracker') 
+                ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%)'
+                : 'transparent',
+              boxShadow: location.pathname.includes('/tracker') 
+                ? '0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
+                : 'none',
+              transform: location.pathname.includes('/tracker') ? 'scale(1.05)' : 'scale(1)',
+              borderBottom: location.pathname.includes('/tracker') ? '3px solid white' : '3px solid transparent',
             }}
             onClick={handleTrackerClick}
+            onMouseEnter={(e) => {
+              if (!location.pathname.includes('/tracker')) {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+              }
+              e.currentTarget.style.transform = location.pathname.includes('/tracker') ? 'scale(1.05) translateY(-2px)' : 'scale(1) translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              if (!location.pathname.includes('/tracker')) {
+                e.currentTarget.style.background = 'transparent';
+              }
+              e.currentTarget.style.transform = location.pathname.includes('/tracker') ? 'scale(1.05)' : 'scale(1)';
+            }}
           >
-            <span style={{ color: 'white', fontSize: 20 }}>📋</span>
-            <span style={{ color: 'white', fontSize: 12 }}>Tracker</span>
+            <i className="pi pi-clipboard" style={{ color: 'white', fontSize: 20 }}></i>
+            <span style={{ 
+              color: 'white', 
+              fontSize: 12, 
+              fontWeight: location.pathname.includes('/tracker') ? '600' : '500',
+              letterSpacing: '0.2px',
+            }}>Tracker</span>
           </div>
         )}
         <div style={{ position: 'relative' }} ref={profileDropdownRef}>
@@ -447,41 +618,88 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: 4,
+              gap: 6,
               cursor: 'pointer',
+              padding: '8px 12px',
+              borderRadius: '12px',
+              transition: 'all 0.3s ease',
+              background: showProfile ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
             }}
             onClick={() => setShowProfile(!showProfile)}
+            onMouseEnter={(e) => {
+              if (!showProfile) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              if (!showProfile) e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
           >
-            <span style={{ color: 'white', fontSize: 20 }}>👤</span>
-            <span style={{ color: 'white', fontSize: 12 }}>Profile ▼</span>
+            <i className="pi pi-user" style={{ color: 'white', fontSize: 20 }}></i>
+            <span style={{ 
+              color: 'white', 
+              fontSize: 12, 
+              fontWeight: '500',
+              letterSpacing: '0.2px',
+            }}>Profile ▼</span>
           </div>
           {showProfile && (
             <div
               style={{
                 position: 'absolute',
                 right: 0,
-                top: 40,
+                top: 52,
                 background: 'white',
-                color: '#174f84',
-                borderRadius: 8,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                minWidth: 120,
+                color: '#003366',
+                borderRadius: 12,
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)',
+                minWidth: 140,
                 zIndex: 1000,
+                overflow: 'hidden',
               }}
             >
               <div
-                style={{ padding: 12, cursor: 'pointer' }}
+                style={{ 
+                  padding: '14px 16px', 
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  fontWeight: '500',
+                  fontSize: '14px',
+                }}
                 onClick={() => setShowLogoutConfirm(true)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(0, 102, 204, 0.08)';
+                  e.currentTarget.style.paddingLeft = '20px';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.paddingLeft = '16px';
+                }}
               >
                 Logout
               </div>
               {!location.pathname.includes('/settings') && (
                 <div 
-                  style={{ padding: 12, cursor: 'pointer' }} 
+                  style={{ 
+                    padding: '14px 16px', 
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    fontWeight: '500',
+                    fontSize: '14px',
+                    borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+                  }} 
                   onClick={() => {
                     setShowProfile(false);
                     const settingsPath = isAdmin ? '/ccict/settings' : '/alumni/settings';
                     navigate(settingsPath);
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 102, 204, 0.08)';
+                    e.currentTarget.style.paddingLeft = '20px';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.paddingLeft = '16px';
                   }}
                 >
                   Settings

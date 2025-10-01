@@ -71,7 +71,26 @@ interface PostItem {
   reposts?: RepostItem[];
   likes?: LikeItem[];
   liked_by_user?: boolean;
+  item_type?: 'post' | 'repost';  // New: distinguish between post and repost items
+  sort_date?: string;  // New: for sorting feed items
 }
+
+interface RepostFeedItem {
+  repost_id: number;
+  repost_date: string;
+  repost_caption?: string;
+  user: {
+    user_id: number;
+    f_name: string;
+    l_name: string;
+    profile_pic?: string;
+  };
+  original_post: PostItem;
+  item_type: 'repost';
+  sort_date: string;
+}
+
+type FeedItem = PostItem | RepostFeedItem;
 interface SuggestedUser {
   id: number;
   name: string;
@@ -164,6 +183,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [showPostModal, setShowPostModal] = useState(false);
   const [modalPost, setModalPost] = useState<any | null>(null);
   const [postLoading, setPostLoading] = useState(false);
+  const [showAllUsersModal, setShowAllUsersModal] = useState(false);
   const navigate = useNavigate();
 
   // Determine user type from localStorage instead of props
@@ -637,45 +657,41 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 // Show posts from: own posts, followed users, PESO posts, or admin posts
                 // PESO and admin posts are always visible regardless of follow status
                 return isOwn || isFollowed || isCcict || isPeso;
-              }).reduce((acc: any[], post) => {
+              }).reduce((acc: any[], item: FeedItem) => {
                 const currentUserId = getCurrentUserId(user);
-                const isOwn = currentUserId !== null && post.user?.user_id && Number(post.user.user_id) === Number(currentUserId);
-                const displayName = isOwn && user?.name ? user.name : `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim();
-                const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
-                const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
                 
-                // Check if this post has reposts and render them
-                if (post.reposts && post.reposts.length > 0) {
-                  const repostCards = post.reposts.map((repost: any) => (
+                // Check if this is a repost item or a regular post item
+                if (item.item_type === 'repost' && 'repost_id' in item) {
+                  // Render as repost card (nested structure)
+                  const repostItem = item as RepostFeedItem;
+                  const repostCard = (
                     <PostCard
-                      key={`repost-${repost.repost_id}`}
-                      post={post}
+                      key={`repost-${repostItem.repost_id}`}
+                      post={repostItem.original_post}
                       currentUserId={currentUserId}
                       isOwn={false}
-                      displayName={displayName}
-                      displayAvatar={displayAvatar}
+                      displayName={`${repostItem.user.f_name} ${repostItem.user.l_name}`}
+                      displayAvatar={repostItem.user.profile_pic ? (String(repostItem.user.profile_pic).startsWith('http') ? repostItem.user.profile_pic : `http://127.0.0.1:8000${repostItem.user.profile_pic}`) : ctulogo}
                       formatTime={formatHybrid}
                       isRepost={true}
-                      repostData={repost}
+                      repostData={repostItem as any}
                       onPostUpdate={() => {
                         getPosts().then(updatedPosts => {
                           setPosts(updatedPosts || []);
                           
-                          // Update likedPosts state
                           const currentUserId = getCurrentUserId(user);
                           const liked: { [key: number]: boolean } = {};
                           (updatedPosts || []).forEach((post: any) => {
-                            if (post.likes && Array.isArray(post.likes)) {
+                            if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
                               liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
                             }
                           });
                           setLikedPosts(liked);
 
-                          // Update repostedPosts state
-                          const reposted: { [key: number]: boolean } = {};
+                          const reposted: { [key: number]: boolean} = {};
                           (updatedPosts || []).forEach((post: any) => {
-                            if (post.reposts && Array.isArray(post.reposts)) {
-                              reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+                            if (post.item_type === 'post') {
+                              reposted[post.post_id] = false; // Will be calculated from reposts_count
                             }
                           });
                           setRepostedPosts(reposted);
@@ -702,11 +718,19 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                       editCommentContent={editCommentContent}
                       setEditCommentContent={setEditCommentContent}
                     />
-                  ));
-                  acc.push(...repostCards);
+                  );
+                  acc.push(repostCard);
+                  return acc;
                 }
                 
-                // Also render original post
+                // Regular post rendering
+                const post = item;
+                const isOwn = currentUserId !== null && post.user?.user_id && Number(post.user.user_id) === Number(currentUserId);
+                const displayName = isOwn && user?.name ? user.name : `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim();
+                const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
+                const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
+                
+                // Render regular post
                 const originalPostCard = (
                   <PostCard
                     key={post.post_id}
@@ -766,48 +790,27 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 
                 return acc;
               }, [])
-            : posts.reduce((acc: any[], post) => {
+            : posts.reduce((acc: any[], item: FeedItem) => {
                 const currentUserId = getCurrentUserId(user);
-                const isOwn = currentUserId !== null && post.user?.user_id && Number(post.user.user_id) === Number(currentUserId);
-                const displayName = isOwn && user?.name ? user.name : `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim();
-                const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
-                const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
                 
-                // Check if this post has reposts and render them
-                if (post.reposts && post.reposts.length > 0) {
-                  const repostCards = post.reposts.map((repost: any) => (
+                // Check if this is a repost item or a regular post item
+                if (item.item_type === 'repost' && 'repost_id' in item) {
+                  // Render as repost card (nested structure)
+                  const repostItem = item as RepostFeedItem;
+                  const repostCard = (
                     <PostCard
-                      key={`repost-${repost.repost_id}`}
-                      post={post}
+                      key={`repost-${repostItem.repost_id}`}
+                      post={repostItem.original_post}
                       currentUserId={currentUserId}
                       isOwn={false}
-                      displayName={displayName}
-                      displayAvatar={displayAvatar}
+                      displayName={`${repostItem.user.f_name} ${repostItem.user.l_name}`}
+                      displayAvatar={repostItem.user.profile_pic ? (String(repostItem.user.profile_pic).startsWith('http') ? repostItem.user.profile_pic : `http://127.0.0.1:8000${repostItem.user.profile_pic}`) : ctulogo}
                       formatTime={formatHybrid}
                       isRepost={true}
-                      repostData={repost}
+                      repostData={repostItem as any}
                       onPostUpdate={() => {
                         getPosts().then(updatedPosts => {
                           setPosts(updatedPosts || []);
-                          
-                          // Update likedPosts state
-                          const currentUserId = getCurrentUserId(user);
-                          const liked: { [key: number]: boolean } = {};
-                          (updatedPosts || []).forEach((post: any) => {
-                            if (post.likes && Array.isArray(post.likes)) {
-                              liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-                            }
-                          });
-                          setLikedPosts(liked);
-
-                          // Update repostedPosts state
-                          const reposted: { [key: number]: boolean } = {};
-                          (updatedPosts || []).forEach((post: any) => {
-                            if (post.reposts && Array.isArray(post.reposts)) {
-                              reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
-                            }
-                          });
-                          setRepostedPosts(reposted);
                         });
                       }}
                       showOptions={showOptions}
@@ -831,11 +834,19 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                       editCommentContent={editCommentContent}
                       setEditCommentContent={setEditCommentContent}
                     />
-                  ));
-                  acc.push(...repostCards);
+                  );
+                  acc.push(repostCard);
+                  return acc;
                 }
                 
-                // Also render original post
+                // Regular post rendering
+                const post = item;
+                const isOwn = currentUserId !== null && post.user?.user_id && Number(post.user.user_id) === Number(currentUserId);
+                const displayName = isOwn && user?.name ? user.name : `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim();
+                const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
+                const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
+                
+                // Render regular post
                 const originalPostCard = (
                   <PostCard
                     key={post.post_id}
@@ -899,10 +910,38 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         {/* Right Sidebar */}
         <div className="right-sidebar">
           <div className="people-you-may-know-card">
-            <div className="people-you-may-know-title">People you may know</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div className="people-you-may-know-title" style={{ marginBottom: 0 }}>People you may know</div>
+              {suggestedUsers.length > 6 && (
+                <button
+                  onClick={() => setShowAllUsersModal(true)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#0066cc',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    padding: '4px 8px',
+                    borderRadius: 6,
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 102, 204, 0.1)';
+                    e.currentTarget.style.textDecoration = 'underline';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.textDecoration = 'none';
+                  }}
+                >
+                  See all
+                </button>
+              )}
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {suggestedUsers.length > 0 ? (
-                suggestedUsers.map((user) => (
+                suggestedUsers.slice(0, 6).map((user) => (
                   <div key={user.id} className="suggested-user-item" onClick={() => navigate(`/alumni/profile/${user.id}`)} style={{ cursor: 'pointer' }}>
                     <img src={user.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo} alt={user.name} className="suggested-user-profile-image" />
                     <div className="suggested-user-name">{user.name} {user.batch ? `(${user.batch})` : ''}</div>
@@ -1027,6 +1066,164 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 editCommentContent={editCommentContent}
                 setEditCommentContent={setEditCommentContent}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* All Users Modal */}
+      {showAllUsersModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '20px',
+          }}
+          onClick={() => setShowAllUsersModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+              maxWidth: '800px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              position: 'sticky',
+              top: 0,
+              background: 'white',
+              borderBottom: '1px solid #e0e0e0',
+              padding: '20px 24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderRadius: '16px 16px 0 0',
+              zIndex: 1,
+            }}>
+              <h3 style={{
+                margin: 0,
+                fontSize: 20,
+                fontWeight: 700,
+                color: '#1a1a1a',
+              }}>People you may know ({suggestedUsers.length})</h3>
+              <button
+                onClick={() => setShowAllUsersModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 28,
+                  cursor: 'pointer',
+                  color: '#666',
+                  width: 36,
+                  height: 36,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f5f5f5';
+                  e.currentTarget.style.color = '#333';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#666';
+                }}
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div style={{
+              padding: '20px 24px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gap: 16,
+            }}>
+              {suggestedUsers.map((user) => (
+                <div
+                  key={user.id}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    padding: 16,
+                    borderRadius: 12,
+                    border: '1px solid #e0e0e0',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    background: 'white',
+                  }}
+                  onClick={() => {
+                    navigate(`/alumni/profile/${user.id}`);
+                    setShowAllUsersModal(false);
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                    e.currentTarget.style.borderColor = '#0066cc';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = '#e0e0e0';
+                  }}
+                >
+                  <img
+                    src={user.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo}
+                    alt={user.name}
+                    style={{
+                      width: 80,
+                      height: 80,
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      marginBottom: 12,
+                      border: '3px solid #f0f0f0',
+                    }}
+                  />
+                  <div style={{
+                    fontSize: 15,
+                    fontWeight: 600,
+                    color: '#1a1a1a',
+                    textAlign: 'center',
+                    marginBottom: 4,
+                  }}>
+                    {user.name}
+                  </div>
+                  <div style={{
+                    fontSize: 13,
+                    color: '#666',
+                    marginBottom: 12,
+                  }}>
+                    {user.batch ? `(${user.batch})` : ''}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleFollow(user.id);
+                    }}
+                    disabled={followLoading[user.id]}
+                    className="suggested-user-follow-button"
+                  >
+                    {followLoading[user.id] ? '...' : 'Follow'}
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         </div>

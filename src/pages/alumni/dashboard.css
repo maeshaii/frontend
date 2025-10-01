@@ -1,23 +1,23 @@
 /* Container for the whole page */
 .page-container {
-  background: #f5f7fa;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
   min-height: 100vh;
-  font-family: Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
 }
 
 /* Main content wrapper */
 .main-content {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 24px auto;
   display: flex;
   gap: 24px;
-  padding: 0 24px;
+  padding: 0 40px;
 }
 
 /* Left sidebar */
 .left-sidebar {
   flex: 1;
-  max-width: 280px;
+  max-width: 300px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -26,30 +26,31 @@
 /* Profile card */
 .profile-card {
   background: white;
-  border-radius: 12px;
+  border-radius: 16px;
   text-align: center;
   color: #333;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e0e0e0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: none;
   overflow: hidden;
-  transition: transform 0.2s ease-in-out;
+  transition: all 0.3s ease;
 }
 
 .profile-card:hover {
-  transform: scale(1.02);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 /* Orange header bar */
 .orange-header-bar {
-  background: #ff6b35;
+  background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
   height: 40px;
   width: 100%;
 }
 
 /* Profile content inside card */
 .profile-content {
-  padding: 8px 8px;
+  padding: 16px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -59,19 +60,20 @@
 
 /* Profile name */
 .profile-name {
-  font-weight: bold;
+  font-weight: 700;
   font-size: 16px;
-  margin-bottom: 4px;
-  color: #333;
-  text-transform: uppercase;
+  margin-bottom: 6px;
+  color: #1a1a1a;
   text-align: center;
+  letter-spacing: 0.3px;
 }
 
 /* Profile university */
 .profile-university {
-  font-size: 14px;
+  font-size: 13px;
   color: #666;
   text-align: center;
+  font-weight: 500;
 }
 
 /* Quick links container */
@@ -85,28 +87,34 @@
 .quick-link-card {
   flex: 1;
   background: white;
-  border-radius: 12px;
+  border-radius: 16px;
   text-align: center;
   color: #333;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e0e0e0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: none;
   overflow: hidden;
-  height: 100px;
-  max-width: 280px;
+  height: 125px;
+  max-width: 300px;
+  transition: all 0.3s ease;
+}
+
+.quick-link-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 /* Quick link orange header */
 .quick-link-orange-header {
-  background: #ff6b35;
-  height: 30px;
+  background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
+  height: 35px;
   width: 100%;
 }
 
 /* Quick link content */
 .quick-link-content {
-  padding: 8px 8px;
-  height: 60px;
+  padding: 12px 8px;
+  height: 75px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -124,6 +132,14 @@
   justify-content: center;
   font-size: 18px;
   font-weight: bold;
+}
+
+/* Quick link text */
+.quick-link-text {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1a1a1a;
+  letter-spacing: 0.3px;
 }
 
 /* CCICT icon */
@@ -182,10 +198,15 @@
 /* Post start container */
 .post-start {
   background: white;
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e0e0e0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.post-start:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
 }
 
 /* Post start input container */
@@ -205,20 +226,32 @@
 /* Post start input */
 .post-start-input {
   flex: 1;
-  border-radius: 20px;
+  border-radius: 24px;
   border: 1px solid #e0e0e0;
-  padding: 10px 16px;
+  padding: 12px 18px;
   font-size: 14px;
+  transition: all 0.3s ease;
+  background: #f8f9fa;
+}
+
+.post-start-input:hover {
+  background: #ffffff;
+  border-color: #ff6b35;
 }
 
 /* Post feed card */
 .post-feed-card {
   background: white;
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e0e0e0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: none;
   margin-bottom: 16px;
+  transition: all 0.3s ease;
+}
+
+.post-feed-card:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
 }
 
 /* Post header */
@@ -277,23 +310,25 @@
 /* Right sidebar */
 .right-sidebar {
   flex: 1;
-  max-width: 280px;
+  max-width: 300px;
 }
 
 /* People you may know card */
 .people-you-may-know-card {
   background: white;
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e0e0e0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: none;
 }
 
 /* People you may know title */
 .people-you-may-know-title {
-  font-weight: bold;
-  font-size: 16px;
+  font-weight: 700;
+  font-size: 17px;
   margin-bottom: 16px;
+  color: #1a1a1a;
+  letter-spacing: 0.3px;
 }
 
 /* Suggested user item */
@@ -301,13 +336,14 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px;
-  border-radius: 8px;
-  transition: background-color 0.2s ease;
+  padding: 10px;
+  border-radius: 12px;
+  transition: all 0.3s ease;
 }
 
 .suggested-user-item:hover {
-  background-color: #f5f7fa;
+  background-color: #f8f9fa;
+  transform: translateX(4px);
 }
 
 /* Suggested user profile image */
@@ -326,19 +362,21 @@
 
 /* Suggested user follow button */
 .suggested-user-follow-button {
-  background: #174f84;
+  background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
   color: white;
   border: none;
-  border-radius: 6px;
-  padding: 6px 12px;
+  border-radius: 20px;
+  padding: 8px 16px;
   font-size: 12px;
   cursor: pointer;
-  font-weight: 500;
-  transition: all 0.2s ease;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
 }
 
 .suggested-user-follow-button:hover {
-  background: #0d3a5f;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.4);
 }
 
 .suggested-user-follow-button:disabled {
