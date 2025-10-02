@@ -8,6 +8,27 @@ import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, de
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 
+function getCurrentUserId(user: AlumniUser | null): number | null {
+  if (!user) return null;
+  if (typeof user.user_id === 'number') return user.user_id;
+  if (typeof user.id === 'number') return user.id;
+  return null;
+}
+
+function formatDisplayName(user: any, isOwn: boolean, currentUser: AlumniUser | null): string {
+  if (isOwn && currentUser?.name) {
+    return currentUser.name;
+  }
+  
+  // For other users, construct name from f_name, m_name, l_name
+  const parts = [];
+  if (user?.f_name) parts.push(user.f_name);
+  if (user?.m_name) parts.push(user.m_name);
+  if (user?.l_name) parts.push(user.l_name);
+  
+  return parts.join(' ').trim() || 'Unknown User';
+}
+
 function formatTimeAgo(iso?: string | null): string {
   if (!iso) return '';
   const then = new Date(iso);
@@ -56,6 +77,7 @@ interface AlumniUser {
   university?: string;
   resume?: string;
   id?: number;
+  user_id?: number;
   ctu_id?: string;
   first_name?: string;
   middle_name?: string;
@@ -73,12 +95,15 @@ interface AlumniUser {
 interface RepostItem {
   repost_id: number;
   repost_date: string;
+  repost_caption?: string;
   user: {
+    m_name: any;
     user_id: number;
     f_name: string;
     l_name: string;
     profile_pic?: string;
   };
+  original_post?: PostItem;
 }
 
 interface CommentItem {
@@ -107,6 +132,8 @@ interface PostItem {
   post_content: string;
   post_image?: string | null;
   created_at?: string | null;
+  likes_count?: number;
+  comments_count?: number;
   user?: { 
     user_id?: number; 
     f_name?: string; 
@@ -133,7 +160,8 @@ const AlumniProfile: React.FC = () => {
   const [isOwnProfile, setIsOwnProfile] = useState(true);
   const [followers, setFollowers] = useState<any[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
-  const [followLoading, setFollowLoading] = useState(false);
+  const [followLoading, setFollowLoading] = useState<{ [key: number]: boolean }>({});
+  const [followingStatus, setFollowingStatus] = useState<{ [key: number]: boolean }>({});
   const [posts, setPosts] = useState<PostItem[]>([]);
   const [showComposer, setShowComposer] = useState(false);
   const [commentInput, setCommentInput] = useState<{ [key: number]: string }>({});
@@ -151,6 +179,12 @@ const AlumniProfile: React.FC = () => {
   const [editingComment, setEditingComment] = useState<{ [key: number]: boolean }>({});
   const [editPostContent, setEditPostContent] = useState<{ [key: number]: string }>({});
   const [editCommentContent, setEditCommentContent] = useState<{ [key: number]: string }>({});
+  const [showPostModal, setShowPostModal] = useState(false);
+  const [modalPost, setModalPost] = useState<any | null>(null);
+  const [postLoading, setPostLoading] = useState(false);
+  const [repostError, setRepostError] = useState<string | null>(null);
+  const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
+  const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
 
   // Get current user ID
   const currentUserObj = JSON.parse(localStorage.getItem('user') || '{}');
@@ -230,6 +264,8 @@ const AlumniProfile: React.FC = () => {
               .then((data) => {
                 if (data.success && data.followers) {
                   setFollowers(data.followers);
+                  // Check follow status for each follower
+                  checkFollowStatusForUsers(data.followers);
                 } else {
                   setFollowers([]);
                 }
@@ -241,6 +277,8 @@ const AlumniProfile: React.FC = () => {
               .then((response) => {
                 if (response.data.success && response.data.following) {
                   setFollowing(response.data.following);
+                  // Check follow status for each followed user
+                  checkFollowStatusForUsers(response.data.following);
                 } else {
                   setFollowing([]);
                 }
@@ -289,15 +327,47 @@ const AlumniProfile: React.FC = () => {
 getPosts()
   .then((all: any[]) => {
     console.log('Profile posts fetched:', all);
-    const subset = (all || []).filter(p => 
-      p.user?.user_id === Number(numericUserId) || 
-      (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === Number(numericUserId)))
-    );
+    const subset = (all || []).filter(p => {
+      // Include original posts by this user
+      if (p.user?.user_id === Number(numericUserId)) {
+        return true;
+      }
+      
+      // Include reposts by this user (reposts are separate feed items)
+      if (p.item_type === 'repost' && p.user?.user_id === Number(numericUserId)) {
+        return true;
+      }
+      
+      // Include original posts that have reposts by this user
+      if (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === Number(numericUserId))) {
+        return true;
+      }
+      
+      return false;
+    });
 
     // Sort posts by most recent date considering repost_date for reposts and created_at for original posts
     subset.sort((a, b) => {
-      const aDate = a.reposts && a.reposts.length > 0 ? new Date(a.reposts[0].repost_date) : new Date(a.created_at || 0);
-      const bDate = b.reposts && b.reposts.length > 0 ? new Date(b.reposts[0].repost_date) : new Date(b.created_at || 0);
+      let aDate: Date;
+      let bDate: Date;
+      
+      // Handle repost items
+      if (a.item_type === 'repost') {
+        aDate = new Date(a.repost_date || 0);
+      } else if (a.reposts && a.reposts.length > 0) {
+        aDate = new Date(a.reposts[0].repost_date);
+      } else {
+        aDate = new Date(a.created_at || 0);
+      }
+      
+      if (b.item_type === 'repost') {
+        bDate = new Date(b.repost_date || 0);
+      } else if (b.reposts && b.reposts.length > 0) {
+        bDate = new Date(b.reposts[0].repost_date);
+      } else {
+        bDate = new Date(b.created_at || 0);
+      }
+      
       return bDate.getTime() - aDate.getTime();
     });
 
@@ -305,9 +375,11 @@ getPosts()
     
     // Track liked posts for current user
     const liked: { [key: number]: boolean } = {};
-    subset.forEach(post => {
-      if (post.likes && Array.isArray(post.likes)) {
+    subset.forEach((post: any) => {
+      if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
         liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentId);
+      } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+        liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentId);
       } else if (post.liked_by_user !== undefined) {
         liked[post.post_id] = !!post.liked_by_user;
       }
@@ -456,7 +528,7 @@ getPosts()
       setIsFollowing(false);
       return;
     }
-    setFollowLoading(true);
+    setFollowLoading(prev => ({ ...prev, [Number(id)]: true }));
     try {
       const result = await followUser(Number(id));
       if (result.success) {
@@ -470,13 +542,13 @@ getPosts()
     } catch (error: any) {
       alert(error?.response?.data?.error || error?.message || 'Failed to follow user.');
     } finally {
-      setFollowLoading(false);
+      setFollowLoading(prev => ({ ...prev, [Number(id)]: false }));
     }
   };
 
   const handleUnfollow = async () => {
     if (!id) return;
-    setFollowLoading(true);
+    setFollowLoading(prev => ({ ...prev, [Number(id)]: true }));
     try {
       const result = await unfollowUser(Number(id));
       if (result.success) {
@@ -490,7 +562,80 @@ getPosts()
     } catch (error: any) {
       alert(error?.response?.data?.error || error?.message || 'Failed to unfollow user.');
     } finally {
-      setFollowLoading(false);
+      setFollowLoading(prev => ({ ...prev, [Number(id)]: false }));
+    }
+  };
+
+  // Check follow status for multiple users
+  const checkFollowStatusForUsers = async (users: any[]) => {
+    const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+    const currentUserId = getCurrentUserId(userObj);
+    if (!currentUserId) return;
+    
+    const followStatusPromises = users.map(async (user) => {
+      if (user.user_id && Number(user.user_id) !== Number(currentUserId)) {
+        try {
+          const followData = await checkFollowStatus(Number(user.user_id));
+          return { userId: user.user_id, isFollowing: followData.success ? followData.is_following : false };
+        } catch (error) {
+          return { userId: user.user_id, isFollowing: false };
+        }
+      }
+      return null;
+    });
+    
+    const followStatuses = await Promise.all(followStatusPromises);
+    const followStatusMap: { [key: number]: boolean } = {};
+    followStatuses.forEach(status => {
+      if (status) {
+        followStatusMap[status.userId] = status.isFollowing;
+      }
+    });
+    setFollowingStatus(followStatusMap);
+  };
+
+  // Handle follow/unfollow for follower/following cards and modals
+  const handleFollowUser = async (userId: number) => {
+    const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+    const currentUserId = getCurrentUserId(userObj);
+    
+    if (!userId || userId === Number(currentUserId)) return;
+    
+    setFollowLoading(prev => ({ ...prev, [userId]: true }));
+    
+    try {
+      const isCurrentlyFollowing = followingStatus[userId];
+      
+      if (isCurrentlyFollowing) {
+        // Unfollow
+        const result = await unfollowUser(userId);
+        if (result.success) {
+          setFollowingStatus(prev => ({ ...prev, [userId]: false }));
+          // Refresh followers/following data
+          if (currentUserId) {
+            fetchFollowers(currentUserId);
+          }
+        } else {
+          alert(result.message || 'Failed to unfollow user.');
+        }
+      } else {
+        // Follow
+        const result = await followUser(userId);
+        if (result.success) {
+          setFollowingStatus(prev => ({ ...prev, [userId]: true }));
+          // Refresh followers/following data
+          if (currentUserId) {
+            fetchFollowers(currentUserId);
+          }
+        } else {
+          alert(result.message || 'Failed to follow user.');
+        }
+      }
+    } catch (error: any) {
+      console.error('Follow/unfollow error:', error);
+      alert(error?.response?.data?.error || error?.message || 'Failed to follow/unfollow user.');
+    } finally {
+      setFollowLoading(prev => ({ ...prev, [userId]: false }));
     }
   };
 
@@ -807,25 +952,86 @@ getPosts()
     setEmailLoading(false);
   };
 
+  const handleViewPost = async (postId: string) => {
+    console.log('handleViewPost called with postId:', postId);
+    setPostLoading(true);
+    try {
+      console.log('Fetching post from API...');
+      const response = await api.get(`posts/${postId}/detail/`);
+      console.log('API response:', response.data);
+      if (response.data) {
+        setModalPost(response.data);
+        setShowPostModal(true);
+        console.log('Post modal should now be visible');
+      }
+    } catch (error) {
+      console.error('Error fetching post:', error);
+      alert('Failed to load post.');
+    } finally {
+      setPostLoading(false);
+    }
+  };
+
+  const handleViewOriginalPost = async (originalPost: any) => {
+    console.log('handleViewOriginalPost called with original post:', originalPost);
+    setPostLoading(true);
+    try {
+      // Fetch the full post data from the API
+      const response = await api.get(`posts/${originalPost.post_id}/detail/`);
+      console.log('Original post API response:', response.data);
+      if (response.data) {
+        setOriginalPostModalData(response.data);
+        setShowOriginalPostModal(true);
+        console.log('Original post modal should now be visible');
+      }
+    } catch (error) {
+      console.error('Error fetching original post:', error);
+      alert('Failed to load original post.');
+    } finally {
+      setPostLoading(false);
+    }
+  };
+
   const onPosted = async () => {
     // Force refresh posts from backend with proper typing and delay
     try {
+      console.log('Post created, refreshing profile posts...');
       // Small delay to ensure database write is complete
       await new Promise(resolve => setTimeout(resolve, 500));
       
       const allPosts: PostItem[] = await getPosts();
+      console.log('All posts from API:', allPosts);
       const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
       
       if (currentUserId) {
-        const subset = (allPosts || []).filter((p: PostItem) => Number(p.user?.user_id) === currentUserId);
+        const subset = (allPosts || []).filter((p: any) => {
+          // Include original posts by this user
+          if (p.user?.user_id === Number(currentUserId)) {
+            return true;
+          }
+          
+          // Include reposts by this user (reposts are separate feed items)
+          if (p.item_type === 'repost' && p.user?.user_id === Number(currentUserId)) {
+            return true;
+          }
+          
+          // Include original posts that have reposts by this user
+          if (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === Number(currentUserId))) {
+            return true;
+          }
+          
+          return false;
+        });
         console.log('Refreshed posts:', subset.length, 'posts for user', currentUserId);
         setPosts(subset);
         
         // Update likedPosts state
         const liked: { [key: number]: boolean } = {};
-        subset.forEach(post => {
-          if (post.likes && Array.isArray(post.likes)) {
+        subset.forEach((post: any) => {
+          if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
             liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentId);
+          } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+            liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentId);
           } else if (post.liked_by_user !== undefined) {
             liked[post.post_id] = !!post.liked_by_user;
           }
@@ -1044,7 +1250,12 @@ getPosts()
                               target.src = ctulogo as unknown as string;
                             }}
                           />
-                          <div className="profile-follower-name">{follower.name}</div>
+                          <div className="profile-follower-name">
+                            {follower.name || 
+                             (follower.f_name || follower.m_name || follower.l_name ? 
+                              `${follower.f_name || ''} ${follower.m_name || ''} ${follower.l_name || ''}`.trim() : 
+                              `User ${follower.user_id || follower.id}`)}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1110,7 +1321,12 @@ getPosts()
                               target.src = ctulogo as unknown as string;
                             }}
                           />
-                          <div className="profile-follower-name">{followedUser.name}</div>
+                          <div className="profile-follower-name">
+                            {followedUser.name || 
+                             (followedUser.f_name || followedUser.m_name || followedUser.l_name ? 
+                              `${followedUser.f_name || ''} ${followedUser.m_name || ''} ${followedUser.l_name || ''}`.trim() : 
+                              `User ${followedUser.user_id || followedUser.id}`)}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1152,9 +1368,9 @@ getPosts()
                   <button
                     className={`profile-follow-button ${isFollowing ? 'following' : ''}`}
                     onClick={isFollowing ? handleUnfollow : handleFollow}
-                    disabled={followLoading}
+                    disabled={followLoading[Number(id)]}
                   >
-                    {followLoading ? '...' : isFollowing ? 'Unfollow' : 'Follow'}
+                    {followLoading[Number(id)] ? '...' : isFollowing ? 'Unfollow' : 'Follow'}
                   </button>
                 )}  
                 {!isOwnProfile && (
@@ -1198,9 +1414,110 @@ getPosts()
               This user has not posted anything yet.
             </div>
           )}
-          {posts.reduce((acc: any[], post) => {
+          {posts.map((item: any) => {
+            // Handle repost items (separate feed items)
+            if (item.item_type === 'repost') {
+              const repostItem = item;
+              const isOwnRepost = currentId && repostItem.user?.user_id && Number(repostItem.user.user_id) === Number(currentId);
+              const repostDisplayName = formatDisplayName(repostItem.user, isOwnRepost, user);
+              const repostUserAvatar = repostItem.user?.profile_pic ? (String(repostItem.user.profile_pic).startsWith('http') ? repostItem.user.profile_pic : `http://127.0.0.1:8000${repostItem.user.profile_pic}`) : undefined;
+              const repostDisplayAvatar = isOwnRepost && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (repostUserAvatar || ctulogo);
+              
+              return (
+                <PostCard
+                  key={`repost-${repostItem.repost_id}`}
+                  post={{
+                    ...repostItem.original_post,
+                    post_id: repostItem.repost_id, // Use repost_id for interactions
+                    likes: repostItem.likes || [],
+                    comments: repostItem.comments || [],
+                    likes_count: repostItem.likes_count || 0,
+                    comments_count: repostItem.comments_count || 0,
+                  }}
+                  currentUserId={currentId}
+                  isOwn={isOwnRepost}
+                  displayName={repostDisplayName}
+                  displayAvatar={repostDisplayAvatar}
+                  formatTime={formatTimeAgo}
+                  isRepost={true}
+                  repostData={repostItem}
+                  onViewOriginalPost={handleViewOriginalPost}
+                  onPostUpdate={() => {
+                    getPosts().then(updatedPosts => {
+                      const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
+                      
+                      if (currentUserId) {
+                        const subset = (updatedPosts || []).filter((p: any) => {
+                          // Include original posts by this user
+                          if (p.user?.user_id === Number(currentUserId)) {
+                            return true;
+                          }
+                          
+                          // Include reposts by this user (reposts are separate feed items)
+                          if (p.item_type === 'repost' && p.user?.user_id === Number(currentUserId)) {
+                            return true;
+                          }
+                          
+                          // Include original posts that have reposts by this user
+                          if (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === Number(currentUserId))) {
+                            return true;
+                          }
+                          
+                          return false;
+                        });
+                        
+                        setPosts(subset);
+                        
+                        // Update likedPosts state
+                        const liked: { [key: number]: boolean } = {};
+                        subset.forEach((post: any) => {
+                          if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
+                            liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentId);
+                          } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+                            liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentId);
+                          }
+                        });
+                        setLikedPosts(liked);
+
+                        // Update repostedPosts state
+                        const reposted: { [key: number]: boolean } = {};
+                        subset.forEach((post: any) => {
+                          if (post.item_type === 'post') {
+                            reposted[post.post_id] = false; // Will be calculated from reposts_count
+                          }
+                        });
+                        setRepostedPosts(reposted);
+                      }
+                    });
+                  }}
+                  showOptions={showOptions}
+                  setShowOptions={setShowOptions}
+                  editingPost={editingPost}
+                  setEditingPost={setEditingPost}
+                  editPostContent={editPostContent}
+                  setEditPostContent={setEditPostContent}
+                  likedPosts={likedPosts}
+                  setLikedPosts={setLikedPosts}
+                  repostedPosts={repostedPosts}
+                  setRepostedPosts={setRepostedPosts}
+                  showCommentInput={showCommentInput}
+                  setShowCommentInput={setShowCommentInput}
+                  showAllComments={showAllComments}
+                  setShowAllComments={setShowAllComments}
+                  commentInput={commentInput}
+                  setCommentInput={setCommentInput}
+                  editingComment={editingComment}
+                  setEditingComment={setEditingComment}
+                  editCommentContent={editCommentContent}
+                  setEditCommentContent={setEditCommentContent}
+                />
+              );
+            }
+            
+            // Handle regular posts
+            const post = item;
             const isOwn = currentId && post.user?.user_id && Number(post.user.user_id) === Number(currentId);
-            const displayName = isOwn && user?.name ? user.name : `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim();
+            const displayName = formatDisplayName(post.user, isOwn, user);
             const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
             const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
             
@@ -1209,15 +1526,70 @@ getPosts()
               const repostCards = post.reposts.map((repost: any) => (
                 <PostCard
                   key={`repost-${repost.repost_id}`}
-                  post={post}
+                  post={{
+                    ...post,
+                    post_id: repost.repost_id, // Use repost_id for interactions
+                    likes: repost.likes || [],
+                    comments: repost.comments || [],
+                    likes_count: repost.likes_count || 0,
+                    comments_count: repost.comments_count || 0,
+                  }}
                   currentUserId={currentId}
-                  isOwn={false}
+                  isOwn={currentId === repost.user.user_id}
                   displayName={displayName}
                   displayAvatar={displayAvatar}
                   formatTime={formatTimeAgo}
                   isRepost={true}
                   repostData={repost}
-                  onPostUpdate={onPosted}
+                  onViewOriginalPost={handleViewOriginalPost}
+                  onPostUpdate={() => {
+                    getPosts().then(updatedPosts => {
+                      const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
+                      
+                      if (currentUserId) {
+                        const subset = (updatedPosts || []).filter((p: any) => {
+                          // Include original posts by this user
+                          if (p.user?.user_id === Number(currentUserId)) {
+                            return true;
+                          }
+                          
+                          // Include reposts by this user (reposts are separate feed items)
+                          if (p.item_type === 'repost' && p.user?.user_id === Number(currentUserId)) {
+                            return true;
+                          }
+                          
+                          // Include original posts that have reposts by this user
+                          if (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === Number(currentUserId))) {
+                            return true;
+                          }
+                          
+                          return false;
+                        });
+                        
+                        setPosts(subset);
+                        
+                        // Update likedPosts state
+                        const liked: { [key: number]: boolean } = {};
+                        subset.forEach((post: any) => {
+                          if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
+                            liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentId);
+                          } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+                            liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentId);
+                          }
+                        });
+                        setLikedPosts(liked);
+
+                        // Update repostedPosts state
+                        const reposted: { [key: number]: boolean } = {};
+                        subset.forEach((post: any) => {
+                          if (post.item_type === 'post') {
+                            reposted[post.post_id] = false; // Will be calculated from reposts_count
+                          }
+                        });
+                        setRepostedPosts(reposted);
+                      }
+                    });
+                  }}
                   showOptions={showOptions}
                   setShowOptions={setShowOptions}
                   editingPost={editingPost}
@@ -1240,11 +1612,11 @@ getPosts()
                   setEditCommentContent={setEditCommentContent}
                 />
               ));
-              acc.push(...repostCards);
+              return repostCards;
             }
             
-            // Also render original post
-            const originalPostCard = (
+            // Render original post
+            return (
               <PostCard
                 key={post.post_id}
                 post={post}
@@ -1253,7 +1625,55 @@ getPosts()
                 displayName={displayName}
                 displayAvatar={displayAvatar}
                 formatTime={formatTimeAgo}
-                onPostUpdate={onPosted}
+                onViewOriginalPost={handleViewOriginalPost}
+                onPostUpdate={() => {
+                  getPosts().then(updatedPosts => {
+                    const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
+                    
+                    if (currentUserId) {
+                      const subset = (updatedPosts || []).filter((p: any) => {
+                        // Include original posts by this user
+                        if (p.user?.user_id === Number(currentUserId)) {
+                          return true;
+                        }
+                        
+                        // Include reposts by this user (reposts are separate feed items)
+                        if (p.item_type === 'repost' && p.user?.user_id === Number(currentUserId)) {
+                          return true;
+                        }
+                        
+                        // Include original posts that have reposts by this user
+                        if (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === Number(currentUserId))) {
+                          return true;
+                        }
+                        
+                        return false;
+                      });
+                      
+                      setPosts(subset);
+                      
+                      // Update likedPosts state
+                      const liked: { [key: number]: boolean } = {};
+                      subset.forEach((post: any) => {
+                        if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
+                          liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentId);
+                        } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+                          liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentId);
+                        }
+                      });
+                      setLikedPosts(liked);
+
+                      // Update repostedPosts state
+                      const reposted: { [key: number]: boolean } = {};
+                      subset.forEach((post: any) => {
+                        if (post.item_type === 'post') {
+                          reposted[post.post_id] = false; // Will be calculated from reposts_count
+                        }
+                      });
+                      setRepostedPosts(reposted);
+                    }
+                  });
+                }}
                 showOptions={showOptions}
                 setShowOptions={setShowOptions}
                 editingPost={editingPost}
@@ -1276,10 +1696,7 @@ getPosts()
                 setEditCommentContent={setEditCommentContent}
               />
             );
-            acc.push(originalPostCard);
-            
-            return acc;
-          }, [])}
+          }).flat()}
         </div>
 
         {/* Bio Modal */}
@@ -1785,26 +2202,111 @@ getPosts()
 
       {/* Followers Modal */}
       {showFollowersModal && (
-        <div className="profile-followers-modal-overlay">
-          <div className="profile-followers-modal-content">
-            <div className="profile-followers-modal-header">
-              <h3 className="profile-followers-modal-title">Followers</h3>
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '20px',
+          }}
+          onClick={() => setShowFollowersModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+              maxWidth: '800px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              position: 'sticky',
+              top: 0,
+              background: 'white',
+              borderBottom: '1px solid #e0e0e0',
+              padding: '20px 24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderRadius: '16px 16px 0 0',
+              zIndex: 1,
+            }}>
+              <h3 style={{
+                margin: 0,
+                fontSize: 20,
+                fontWeight: 700,
+                color: '#1a1a1a',
+              }}>Followers ({followers.length})</h3>
               <button
                 onClick={() => setShowFollowersModal(false)}
-                className="profile-followers-modal-close-btn"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 28,
+                  cursor: 'pointer',
+                  color: '#666',
+                  width: 36,
+                  height: 36,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f5f5f5';
+                  e.currentTarget.style.color = '#333';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#666';
+                }}
                 title="Close"
               >
                 ×
               </button>
             </div>
-            <div className="profile-followers-modal-list">
+            <div style={{
+              padding: '20px 24px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gap: 16,
+            }}>
               {followers.length === 0 ? (
-                <div className="profile-followers-modal-empty">No followers yet.</div>
+                <div style={{
+                  gridColumn: '1 / -1',
+                  textAlign: 'center',
+                  color: '#666',
+                  fontSize: 16,
+                  padding: '40px 20px'
+                }}>No followers yet.</div>
               ) : (
                 followers.map((follower) => (
                   <div
                     key={follower.user_id ?? follower.id}
-                    className="profile-followers-modal-item"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      padding: 16,
+                      borderRadius: 12,
+                      border: '1px solid #e0e0e0',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      background: 'white',
+                    }}
                     onClick={() => {
                       const destId = follower.user_id ?? follower.id;
                       const me = JSON.parse(localStorage.getItem('user') || '{}');
@@ -1814,21 +2316,66 @@ getPosts()
                         setShowFollowersModal(false);
                       }
                     }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                      e.currentTarget.style.borderColor = '#0066cc';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.borderColor = '#e0e0e0';
+                    }}
                   >
                     <img
                       src={follower.profile_pic ? (String(follower.profile_pic).startsWith('http') ? follower.profile_pic : `http://127.0.0.1:8000${follower.profile_pic}`) : ctulogo}
-                      alt={follower.name}
-                      className="profile-followers-modal-img"
+                      alt={`${follower.f_name} ${follower.l_name}`}
+                      style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        marginBottom: 12,
+                        border: '3px solid #f0f0f0',
+                      }}
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         target.onerror = null;
                         target.src = ctulogo as unknown as string;
                       }}
                     />
-                    <div className="profile-followers-modal-info">
-                      <div className="profile-followers-modal-name">{follower.name}</div>
-                      <div className="profile-followers-modal-course">{follower.course || ''}</div>
+                    <div style={{
+                      fontSize: 15,
+                      fontWeight: 600,
+                      color: '#1a1a1a',
+                      textAlign: 'center',
+                      marginBottom: 4,
+                    }}>
+                      {follower.name || 
+                       (follower.f_name || follower.m_name || follower.l_name ? 
+                        `${follower.f_name || ''} ${follower.m_name || ''} ${follower.l_name || ''}`.trim() : 
+                        `User ${follower.user_id || follower.id}`)}
                     </div>
+                    <div style={{
+                      fontSize: 13,
+                      color: '#666',
+                      marginBottom: 12,
+                    }}>
+                      {follower.batch ? `Batch ${follower.batch}` : ''}
+                    </div>
+                    {Number(follower.user_id || follower.id) !== Number(getCurrentUserId(JSON.parse(localStorage.getItem('user') || '{}'))) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleFollowUser(Number(follower.user_id || follower.id));
+                        }}
+                        disabled={followLoading[Number(follower.user_id || follower.id)]}
+                        className={`suggested-user-follow-button ${followingStatus[Number(follower.user_id || follower.id)] ? 'following' : ''}`}
+                      >
+                        {followLoading[Number(follower.user_id || follower.id)] ? '...' : 
+                         followingStatus[Number(follower.user_id || follower.id)] ? 'Unfollow' : 'Follow'}
+                      </button>
+                    )}
                   </div>
                 ))
               )}
@@ -1839,26 +2386,111 @@ getPosts()
 
       {/* Following Modal */}
       {showFollowingModal && (
-        <div className="profile-followers-modal-overlay">
-          <div className="profile-followers-modal-content">
-            <div className="profile-followers-modal-header">
-              <h3 className="profile-followers-modal-title">Following</h3>
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '20px',
+          }}
+          onClick={() => setShowFollowingModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+              maxWidth: '800px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              position: 'sticky',
+              top: 0,
+              background: 'white',
+              borderBottom: '1px solid #e0e0e0',
+              padding: '20px 24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderRadius: '16px 16px 0 0',
+              zIndex: 1,
+            }}>
+              <h3 style={{
+                margin: 0,
+                fontSize: 20,
+                fontWeight: 700,
+                color: '#1a1a1a',
+              }}>Following ({following.length})</h3>
               <button
                 onClick={() => setShowFollowingModal(false)}
-                className="profile-followers-modal-close-btn"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 28,
+                  cursor: 'pointer',
+                  color: '#666',
+                  width: 36,
+                  height: 36,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f5f5f5';
+                  e.currentTarget.style.color = '#333';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#666';
+                }}
                 title="Close"
               >
                 ×
               </button>
             </div>
-            <div className="profile-followers-modal-list">
+            <div style={{
+              padding: '20px 24px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gap: 16,
+            }}>
               {following.length === 0 ? (
-                <div className="profile-followers-modal-empty">No following yet.</div>
+                <div style={{
+                  gridColumn: '1 / -1',
+                  textAlign: 'center',
+                  color: '#666',
+                  fontSize: 16,
+                  padding: '40px 20px'
+                }}>No following yet.</div>
               ) : (
                 following.map((followedUser) => (
                   <div
                     key={followedUser.user_id ?? followedUser.id}
-                    className="profile-followers-modal-item"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      padding: 16,
+                      borderRadius: 12,
+                      border: '1px solid #e0e0e0',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      background: 'white',
+                    }}
                     onClick={() => {
                       const destId = followedUser.user_id ?? followedUser.id;
                       const me = JSON.parse(localStorage.getItem('user') || '{}');
@@ -1868,21 +2500,66 @@ getPosts()
                         setShowFollowingModal(false);
                       }
                     }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                      e.currentTarget.style.borderColor = '#0066cc';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.borderColor = '#e0e0e0';
+                    }}
                   >
                     <img
                       src={followedUser.profile_pic ? (String(followedUser.profile_pic).startsWith('http') ? followedUser.profile_pic : `http://127.0.0.1:8000${followedUser.profile_pic}`) : ctulogo}
-                      alt={followedUser.name}
-                      className="profile-followers-modal-img"
+                      alt={`${followedUser.f_name} ${followedUser.l_name}`}
+                      style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        marginBottom: 12,
+                        border: '3px solid #f0f0f0',
+                      }}
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         target.onerror = null;
                         target.src = ctulogo as unknown as string;
                       }}
                     />
-                    <div className="profile-followers-modal-info">
-                      <div className="profile-followers-modal-name">{followedUser.name}</div>
-                      <div className="profile-followers-modal-course">{followedUser.course || ''}</div>
+                    <div style={{
+                      fontSize: 15,
+                      fontWeight: 600,
+                      color: '#1a1a1a',
+                      textAlign: 'center',
+                      marginBottom: 4,
+                    }}>
+                      {followedUser.name || 
+                       (followedUser.f_name || followedUser.m_name || followedUser.l_name ? 
+                        `${followedUser.f_name || ''} ${followedUser.m_name || ''} ${followedUser.l_name || ''}`.trim() : 
+                        `User ${followedUser.user_id || followedUser.id}`)}
                     </div>
+                    <div style={{
+                      fontSize: 13,
+                      color: '#666',
+                      marginBottom: 12,
+                    }}>
+                      {followedUser.batch ? `Batch ${followedUser.batch}` : ''}
+                    </div>
+                    {Number(followedUser.user_id || followedUser.id) !== Number(getCurrentUserId(JSON.parse(localStorage.getItem('user') || '{}'))) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleFollowUser(Number(followedUser.user_id || followedUser.id));
+                        }}
+                        disabled={followLoading[Number(followedUser.user_id || followedUser.id)]}
+                        className={`suggested-user-follow-button ${followingStatus[Number(followedUser.user_id || followedUser.id)] ? 'following' : ''}`}
+                      >
+                        {followLoading[Number(followedUser.user_id || followedUser.id)] ? '...' : 
+                         followingStatus[Number(followedUser.user_id || followedUser.id)] ? 'Unfollow' : 'Follow'}
+                      </button>
+                    )}
                   </div>
                 ))
               )}
@@ -1893,44 +2570,110 @@ getPosts()
 
       {/* Members Modal */}
       {showMembersModal && (
-        <div className="profile-followers-modal-overlay">
-          <div className="profile-followers-modal-content" style={{ maxWidth: '800px', width: '90%' }}>
-            <div className="profile-followers-modal-header">
-              <h3 className="profile-followers-modal-title">Members ({allMembers.length}) - Batch {user?.batch || 'Unknown'}</h3>
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '20px',
+          }}
+          onClick={() => setShowMembersModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+              maxWidth: '800px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              position: 'sticky',
+              top: 0,
+              background: 'white',
+              borderBottom: '1px solid #e0e0e0',
+              padding: '20px 24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderRadius: '16px 16px 0 0',
+              zIndex: 1,
+            }}>
+              <h3 style={{
+                margin: 0,
+                fontSize: 20,
+                fontWeight: 700,
+                color: '#1a1a1a',
+              }}>Members ({allMembers.length}) - Batch {user?.batch || 'Unknown'}</h3>
               <button
                 onClick={() => setShowMembersModal(false)}
-                className="profile-followers-modal-close-btn"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 28,
+                  cursor: 'pointer',
+                  color: '#666',
+                  width: 36,
+                  height: 36,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f5f5f5';
+                  e.currentTarget.style.color = '#333';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#666';
+                }}
                 title="Close"
               >
                 ×
               </button>
             </div>
-            <div className="profile-followers-modal-list" style={{ 
+            <div style={{
+              padding: '20px 24px',
               display: 'grid', 
-              gridTemplateColumns: 'repeat(3, 1fr)', 
-              gap: '16px',
-              padding: '20px'
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gap: 16,
             }}>
               {allMembers.length === 0 ? (
-                <div className="profile-followers-modal-empty" style={{ gridColumn: '1 / -1', textAlign: 'center' }}>
-                  No members found.
-                </div>
+                <div style={{
+                  gridColumn: '1 / -1',
+                  textAlign: 'center',
+                  color: '#666',
+                  fontSize: 16,
+                  padding: '40px 20px'
+                }}>No members found.</div>
               ) : (
                 allMembers.map((member) => (
                   <div
                     key={member.user_id ?? member.id}
-                    className="profile-followers-modal-item"
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      padding: '16px',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(0, 0, 0, 0.1)',
-                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                      padding: 16,
+                      borderRadius: 12,
+                      border: '1px solid #e0e0e0',
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      textAlign: 'center'
+                      transition: 'all 0.3s ease',
+                      background: 'white',
                     }}
                     onClick={() => {
                       const destId = member.user_id ?? member.id;
@@ -1942,27 +2685,26 @@ getPosts()
                       }
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(255, 107, 53, 0.1)';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.transform = 'translateY(-4px)';
                       e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                      e.currentTarget.style.borderColor = '#0066cc';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
                       e.currentTarget.style.transform = 'translateY(0)';
                       e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.borderColor = '#e0e0e0';
                     }}
                   >
                     <img
                       src={member.profile_pic ? (String(member.profile_pic).startsWith('http') ? member.profile_pic : `http://127.0.0.1:8000${member.profile_pic}`) : ctulogo}
-                      alt={member.name}
+                      alt={member.name || 'Unknown User'}
                       style={{
-                        width: '60px',
-                        height: '60px',
+                        width: 80,
+                        height: 80,
                         borderRadius: '50%',
                         objectFit: 'cover',
-                        marginBottom: '12px',
-                        border: '2px solid rgba(255, 255, 255, 0.9)',
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                        marginBottom: 12,
+                        border: '3px solid #f0f0f0',
                       }}
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
@@ -1971,18 +2713,18 @@ getPosts()
                       }}
                     />
                     <div style={{ 
-                      fontSize: '14px', 
-                      fontWeight: '600', 
-                      color: '#2c2c2c',
-                      wordBreak: 'break-word',
-                      marginBottom: '4px'
+                      fontSize: 15,
+                      fontWeight: 600,
+                      color: '#1a1a1a',
+                      textAlign: 'center',
+                      marginBottom: 4,
                     }}>
-                      {member.name || 'Unknown User'}
+                      {member.f_name} {member.m_name} {member.l_name}
                     </div>
                     <div style={{ 
-                      fontSize: '12px', 
+                      fontSize: 13,
                       color: '#666',
-                      wordBreak: 'break-word'
+                      marginBottom: 12,
                     }}>
                       Batch {member.batch || 'Unknown'}
                     </div>
@@ -2336,6 +3078,282 @@ getPosts()
               >
                 {emailLoading ? 'Saving...' : 'Save'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Post Modal */}
+      {showPostModal && modalPost && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '20px',
+          }}
+          onClick={() => setShowPostModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowPostModal(false)}
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                background: 'none',
+                border: 'none',
+                fontSize: 24,
+                cursor: 'pointer',
+                color: '#666',
+                zIndex: 10,
+              }}
+              title="Close"
+            >
+              ×
+            </button>
+            <div style={{ padding: '20px' }}>
+              <PostCard
+                post={modalPost}
+                currentUserId={getCurrentUserId(user)}
+                isOwn={getCurrentUserId(user) === modalPost.user?.user_id}
+                displayName={formatDisplayName(modalPost.user, getCurrentUserId(user) === modalPost.user?.user_id, user)}
+                displayAvatar={modalPost.user?.profile_pic ? (String(modalPost.user.profile_pic).startsWith('http') ? modalPost.user.profile_pic : `http://127.0.0.1:8000${modalPost.user.profile_pic}`) : ctulogo}
+                formatTime={formatTimeAgo}
+                onViewOriginalPost={handleViewOriginalPost}
+                onPostUpdate={() => {
+                  // Refresh the post data in modal and update the main posts list
+                  const postId = modalPost.post_id;
+                  if (postId) {
+                    handleViewPost(postId.toString());
+                  }
+                  
+                  // Also refresh the main posts list to keep everything in sync
+                  getPosts().then(updatedPosts => {
+                    const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
+                    
+                    if (currentUserId) {
+                      const subset = (updatedPosts || []).filter((p: any) => {
+                        // Include original posts by this user
+                        if (p.user?.user_id === Number(currentUserId)) {
+                          return true;
+                        }
+                        
+                        // Include reposts by this user (reposts are separate feed items)
+                        if (p.item_type === 'repost' && p.user?.user_id === Number(currentUserId)) {
+                          return true;
+                        }
+                        
+                        // Include original posts that have reposts by this user
+                        if (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === Number(currentUserId))) {
+                          return true;
+                        }
+                        
+                        return false;
+                      });
+                      
+                      setPosts(subset);
+                      
+                      // Update likedPosts state
+                      const liked: { [key: number]: boolean } = {};
+                      subset.forEach((post: any) => {
+                        if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
+                          liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentId);
+                        } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+                          liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentId);
+                        }
+                      });
+                      setLikedPosts(liked);
+
+                      // Update repostedPosts state
+                      const reposted: { [key: number]: boolean } = {};
+                      subset.forEach((post: any) => {
+                        if (post.item_type === 'post') {
+                          reposted[post.post_id] = false; // Will be calculated from reposts_count
+                        }
+                      });
+                      setRepostedPosts(reposted);
+                    }
+                  });
+                }}
+                showOptions={showOptions}
+                setShowOptions={setShowOptions}
+                editingPost={editingPost}
+                setEditingPost={setEditingPost}
+                editPostContent={editPostContent}
+                setEditPostContent={setEditPostContent}
+                likedPosts={likedPosts}
+                setLikedPosts={setLikedPosts}
+                repostedPosts={repostedPosts}
+                setRepostedPosts={setRepostedPosts}
+                showCommentInput={showCommentInput}
+                setShowCommentInput={setShowCommentInput}
+                showAllComments={showAllComments}
+                setShowAllComments={setShowAllComments}
+                commentInput={commentInput}
+                setCommentInput={setCommentInput}
+                editingComment={editingComment}
+                setEditingComment={setEditingComment}
+                editCommentContent={editCommentContent}
+                setEditCommentContent={setEditCommentContent}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Original Post Modal */}
+      {showOriginalPostModal && originalPostModalData && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '20px',
+          }}
+          onClick={() => setShowOriginalPostModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowOriginalPostModal(false)}
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                background: 'none',
+                border: 'none',
+                fontSize: 24,
+                cursor: 'pointer',
+                color: '#666',
+                zIndex: 10,
+              }}
+              title="Close"
+            >
+              ×
+            </button>
+            <div style={{ padding: '20px' }}>
+              <PostCard
+                post={originalPostModalData}
+                currentUserId={getCurrentUserId(user)}
+                isOwn={getCurrentUserId(user) === originalPostModalData.user?.user_id}
+                displayName={formatDisplayName(originalPostModalData.user, getCurrentUserId(user) === originalPostModalData.user?.user_id, user)}
+                displayAvatar={originalPostModalData.user?.profile_pic ? (String(originalPostModalData.user.profile_pic).startsWith('http') ? originalPostModalData.user.profile_pic : `http://127.0.0.1:8000${originalPostModalData.user.profile_pic}`) : ctulogo}
+                formatTime={formatTimeAgo}
+                onViewOriginalPost={handleViewOriginalPost}
+                onPostUpdate={() => {
+                  // Refresh the original post data in modal
+                  const postId = originalPostModalData.post_id;
+                  if (postId) {
+                    handleViewOriginalPost(originalPostModalData);
+                  }
+                  
+                  // Also refresh the main posts list to keep everything in sync
+                  getPosts().then(updatedPosts => {
+                    const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
+                    
+                    if (currentUserId) {
+                      const subset = (updatedPosts || []).filter((p: any) => {
+                        // Include original posts by this user
+                        if (p.user?.user_id === Number(currentUserId)) {
+                          return true;
+                        }
+                        
+                        // Include reposts by this user (reposts are separate feed items)
+                        if (p.item_type === 'repost' && p.user?.user_id === Number(currentUserId)) {
+                          return true;
+                        }
+                        
+                        // Include original posts that have reposts by this user
+                        if (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === Number(currentUserId))) {
+                          return true;
+                        }
+                        
+                        return false;
+                      });
+                      
+                      setPosts(subset);
+                      
+                      // Update likedPosts state
+                      const liked: { [key: number]: boolean } = {};
+                      subset.forEach((post: any) => {
+                        if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
+                          liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentId);
+                        } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+                          liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentId);
+                        }
+                      });
+                      setLikedPosts(liked);
+
+                      // Update repostedPosts state
+                      const reposted: { [key: number]: boolean } = {};
+                      subset.forEach((post: any) => {
+                        if (post.item_type === 'post') {
+                          reposted[post.post_id] = false; // Will be calculated from reposts_count
+                        }
+                      });
+                      setRepostedPosts(reposted);
+                    }
+                  });
+                }}
+                showOptions={showOptions}
+                setShowOptions={setShowOptions}
+                editingPost={editingPost}
+                setEditingPost={setEditingPost}
+                editPostContent={editPostContent}
+                setEditPostContent={setEditPostContent}
+                likedPosts={likedPosts}
+                setLikedPosts={setLikedPosts}
+                repostedPosts={repostedPosts}
+                setRepostedPosts={setRepostedPosts}
+                showCommentInput={showCommentInput}
+                setShowCommentInput={setShowCommentInput}
+                showAllComments={showAllComments}
+                setShowAllComments={setShowAllComments}
+                commentInput={commentInput}
+                setCommentInput={setCommentInput}
+                editingComment={editingComment}
+                setEditingComment={setEditingComment}
+                editCommentContent={editCommentContent}
+                setEditCommentContent={setEditCommentContent}
+              />
             </div>
           </div>
         </div>

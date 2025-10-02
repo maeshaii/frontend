@@ -5,7 +5,7 @@ import AlumniTopBar from './AlumniTopBar';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import ctulogo from '../../images/ctulogo.png';
-import { getForums } from '../../services/api';
+import { getForums, followUser, unfollowUser, checkFollowStatus } from '../../services/api';
 import './profile.css';
 
 // Define getCurrentUserId locally since auth utility doesn't exist
@@ -44,12 +44,15 @@ interface PostItem {
   reposts?: Array<{
     repost_id: number;
     repost_date: string;
+    repost_caption?: string;
     user: {
+      m_name: any;
       user_id: number;
       f_name: string;
       l_name: string;
       profile_pic?: string;
     };
+    original_post?: PostItem;
   }>;
   likes?: Array<{
     user_id: number;
@@ -81,6 +84,8 @@ const ForumPage: React.FC = () => {
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [allMembers, setAllMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [followLoading, setFollowLoading] = useState<{ [key: number]: boolean }>({});
+  const [followingStatus, setFollowingStatus] = useState<{ [key: number]: boolean }>({});
 
   // Get current user info
   const userObj = JSON.parse(localStorage.getItem('user') || '{}');
@@ -147,6 +152,28 @@ const ForumPage: React.FC = () => {
           return memberBatch === currentUserBatch;
         });
         setAllMembers(batchMembers);
+        
+        // Check follow status for each member
+        const followStatusPromises = batchMembers.map(async (member: any) => {
+          if (member.id && Number(member.id) !== Number(currentUserId)) {
+            try {
+              const followData = await checkFollowStatus(Number(member.id));
+              return { memberId: member.id, isFollowing: followData.success ? followData.is_following : false };
+            } catch (error) {
+              return { memberId: member.id, isFollowing: false };
+            }
+          }
+          return null;
+        });
+        
+        const followStatuses = await Promise.all(followStatusPromises);
+        const followStatusMap: { [key: number]: boolean } = {};
+        followStatuses.forEach(status => {
+          if (status) {
+            followStatusMap[status.memberId] = status.isFollowing;
+          }
+        });
+        setFollowingStatus(followStatusMap);
       } else {
         setAllMembers([]);
       }
@@ -155,6 +182,39 @@ const ForumPage: React.FC = () => {
       setAllMembers([]);
     } finally {
       setMembersLoading(false);
+    }
+  };
+
+  const handleFollow = async (userId: number) => {
+    if (!userId || userId === Number(currentUserId)) return;
+    
+    setFollowLoading(prev => ({ ...prev, [userId]: true }));
+    
+    try {
+      const isCurrentlyFollowing = followingStatus[userId];
+      
+      if (isCurrentlyFollowing) {
+        // Unfollow
+        const result = await unfollowUser(userId);
+        if (result.success) {
+          setFollowingStatus(prev => ({ ...prev, [userId]: false }));
+        } else {
+          alert(result.message || 'Failed to unfollow user.');
+        }
+      } else {
+        // Follow
+        const result = await followUser(userId);
+        if (result.success) {
+          setFollowingStatus(prev => ({ ...prev, [userId]: true }));
+        } else {
+          alert(result.message || 'Failed to follow user.');
+        }
+      }
+    } catch (error: any) {
+      console.error('Follow/unfollow error:', error);
+      alert(error?.response?.data?.error || error?.message || 'Failed to follow/unfollow user.');
+    } finally {
+      setFollowLoading(prev => ({ ...prev, [userId]: false }));
     }
   };
 
@@ -492,44 +552,110 @@ const ForumPage: React.FC = () => {
 
       {/* Members Modal */}
       {showMembersModal && (
-        <div className="profile-followers-modal-overlay">
-          <div className="profile-followers-modal-content" style={{ maxWidth: '800px', width: '90%' }}>
-            <div className="profile-followers-modal-header">
-              <h3 className="profile-followers-modal-title">Members ({allMembers.length}) </h3>
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '20px',
+          }}
+          onClick={() => setShowMembersModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+              maxWidth: '800px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              position: 'sticky',
+              top: 0,
+              background: 'white',
+              borderBottom: '1px solid #e0e0e0',
+              padding: '20px 24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderRadius: '16px 16px 0 0',
+              zIndex: 1,
+            }}>
+              <h3 style={{
+                margin: 0,
+                fontSize: 20,
+                fontWeight: 700,
+                color: '#1a1a1a',
+              }}>Members ({allMembers.length})</h3>
               <button
                 onClick={() => setShowMembersModal(false)}
-                className="profile-followers-modal-close-btn"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 28,
+                  cursor: 'pointer',
+                  color: '#666',
+                  width: 36,
+                  height: 36,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f5f5f5';
+                  e.currentTarget.style.color = '#333';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#666';
+                }}
                 title="Close"
               >
                 ×
               </button>
             </div>
-            <div className="profile-followers-modal-list" style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(3, 1fr)', 
-              gap: '16px',
-              padding: '20px'
+            <div style={{
+              padding: '20px 24px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gap: 16,
             }}>
               {allMembers.length === 0 ? (
-                <div className="profile-followers-modal-empty" style={{ gridColumn: '1 / -1', textAlign: 'center' }}>
-                  No members found.
-                </div>
+                <div style={{
+                  gridColumn: '1 / -1',
+                  textAlign: 'center',
+                  color: '#666',
+                  fontSize: 16,
+                  padding: '40px 20px'
+                }}>No members found.</div>
               ) : (
                 allMembers.map((member) => (
                   <div
                     key={member.id}
-                    className="profile-followers-modal-item"
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      padding: '16px',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(0, 0, 0, 0.1)',
-                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                      padding: 16,
+                      borderRadius: 12,
+                      border: '1px solid #e0e0e0',
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      textAlign: 'center'
+                      transition: 'all 0.3s ease',
+                      background: 'white',
                     }}
                     onClick={() => {
                       const destId = member.id;
@@ -539,27 +665,26 @@ const ForumPage: React.FC = () => {
                       }
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(255, 107, 53, 0.1)';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.transform = 'translateY(-4px)';
                       e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                      e.currentTarget.style.borderColor = '#0066cc';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
                       e.currentTarget.style.transform = 'translateY(0)';
                       e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.borderColor = '#e0e0e0';
                     }}
                   >
                     <img
                       src={member.profile_pic ? (String(member.profile_pic).startsWith('http') ? member.profile_pic : `http://127.0.0.1:8000${member.profile_pic}`) : ctulogo}
-                      alt={`${member.f_name} ${member.l_name}`}
+                      alt={member.name || 'Unknown User'}
                       style={{
-                        width: '60px',
-                        height: '60px',
+                        width: 80,
+                        height: 80,
                         borderRadius: '50%',
                         objectFit: 'cover',
-                        marginBottom: '12px',
-                        border: '2px solid rgba(255, 255, 255, 0.9)',
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                        marginBottom: 12,
+                        border: '3px solid #f0f0f0',
                       }}
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
@@ -567,16 +692,34 @@ const ForumPage: React.FC = () => {
                         target.src = ctulogo as unknown as string;
                       }}
                     />
-                    <div style={{ 
-                      fontSize: '14px', 
-                      fontWeight: '600', 
-                      color: '#2c2c2c',
-                      wordBreak: 'break-word',
-                      marginBottom: '4px'
+                    <div style={{
+                      fontSize: 15,
+                      fontWeight: 600,
+                      color: '#1a1a1a',
+                      textAlign: 'center',
+                      marginBottom: 4,
                     }}>
-                      {member.name || 'Unknown User'}
+                      {member.name || `${member.f_name || ''} ${member.m_name || ''} ${member.l_name || ''}`.trim() || 'Unknown User'}
                     </div>
-                    
+                    <div style={{
+                      fontSize: 13,
+                      color: '#666',
+                      marginBottom: 12,
+                    }}>
+                      {member.batch ? `Batch ${member.batch}` : ''}
+                    </div>
+                    {Number(member.id) !== Number(currentUserId) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleFollow(member.id);
+                        }}
+                        disabled={followLoading[member.id]}
+                        className={`suggested-user-follow-button ${followingStatus[member.id] ? 'following' : ''}`}
+                      >
+                        {followLoading[member.id] ? '...' : followingStatus[member.id] ? 'Unfollow' : 'Follow'}
+                      </button>
+                    )}
                   </div>
                 ))
               )}

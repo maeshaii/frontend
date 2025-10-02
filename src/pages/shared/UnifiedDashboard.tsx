@@ -5,6 +5,7 @@ import PostCreate from '../alumni/PostCreate';
 import PostCard from '../../components/PostCard';
 import ctulogo from '../../images/ctulogo.png';
 import '../alumni/dashboard.css';
+import '../alumni/profile.css';
 import { getPosts, followUser, getAdminPesoUsers, api } from '../../services/api';
 
 interface UnifiedDashboardProps {
@@ -27,12 +28,15 @@ interface AlumniUser {
 interface RepostItem {
   repost_id: number;
   repost_date: string;
+  repost_caption?: string;
   user: {
+    m_name: any;
     user_id: number;
     f_name: string;
     l_name: string;
     profile_pic?: string;
   };
+  original_post?: PostItem;
 }
 interface CommentItem {
   comment_id: number;
@@ -59,6 +63,8 @@ interface PostItem {
   post_content: string;
   post_image?: string | null;
   created_at?: string | null;
+  likes_count?: number;
+  comments_count?: number;
   user?: {
     user_id?: number;
     f_name?: string;
@@ -79,6 +85,10 @@ interface RepostFeedItem {
   repost_id: number;
   repost_date: string;
   repost_caption?: string;
+  likes_count?: number;
+  comments_count?: number;
+  likes?: LikeItem[];
+  comments?: CommentItem[];
   user: {
     user_id: number;
     f_name: string;
@@ -156,6 +166,20 @@ function getCurrentUserId(user: AlumniUser | null): number | null {
   return null;
 }
 
+function formatDisplayName(user: any, isOwn: boolean, currentUser: AlumniUser | null): string {
+  if (isOwn && currentUser?.name) {
+    return currentUser.name;
+  }
+  
+  // For other users, construct name from f_name, m_name, l_name
+  const parts = [];
+  if (user?.f_name) parts.push(user.f_name);
+  if (user?.m_name) parts.push(user.m_name);
+  if (user?.l_name) parts.push(user.l_name);
+  
+  return parts.join(' ').trim() || 'Unknown User';
+}
+
 const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId }) => {
   // All state and logic from AlumniDashboard, but use userType for admin/peso logic
   const [user, setUser] = useState<AlumniUser | null>(null);
@@ -184,6 +208,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [modalPost, setModalPost] = useState<any | null>(null);
   const [postLoading, setPostLoading] = useState(false);
   const [showAllUsersModal, setShowAllUsersModal] = useState(false);
+  const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
+  const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
   const navigate = useNavigate();
 
   // Determine user type from localStorage instead of props
@@ -363,22 +389,17 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     fetchAdminPesoUsers();
     
     // Fetch posts from backend (backend already includes followed + PESO + admin)
-    // Try both endpoints to see which one works better
-    Promise.all([
-      getPosts().catch(() => []),
-      import('../../services/api').then(({ getPostsView }) => getPostsView().catch(() => []))
-    ]).then(([postsList, postsViewList]) => {
-      // Use the endpoint that returns more data
-      const fetchedPosts = (postsViewList && postsViewList.length > 0) ? postsViewList : postsList;
-      
+    getPosts().then((fetchedPosts) => {
       setPosts(fetchedPosts);
       
       // Initialize likedPosts state based on current user's likes
       const currentUserId = getCurrentUserId(userObj);
       const liked: { [key: number]: boolean } = {};
       fetchedPosts.forEach((post: any) => {
-        if (post.likes && Array.isArray(post.likes)) {
+        if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
           liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+        } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+          liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
         }
       });
       setLikedPosts(liked);
@@ -458,6 +479,26 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     } catch (error) {
       console.error('Error fetching post:', error);
       alert('Failed to load post.');
+    } finally {
+      setPostLoading(false);
+    }
+  };
+
+  const handleViewOriginalPost = async (originalPost: any) => {
+    console.log('handleViewOriginalPost called with original post:', originalPost);
+    setPostLoading(true);
+    try {
+      // Fetch the full post data from the API
+      const response = await api.get(`posts/${originalPost.post_id}/detail/`);
+      console.log('Original post API response:', response.data);
+      if (response.data) {
+        setOriginalPostModalData(response.data);
+        setShowOriginalPostModal(true);
+        console.log('Original post modal should now be visible');
+      }
+    } catch (error) {
+      console.error('Error fetching original post:', error);
+      alert('Failed to load original post.');
     } finally {
       setPostLoading(false);
     }
@@ -609,8 +650,15 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
           </div>
           {showComposer && (
             <PostCreate
-              onPosted={() => {
-                getPosts().then(updatedPosts => setPosts(updatedPosts || []));
+              onPosted={async () => {
+                console.log('Post created, refreshing feed...');
+                try {
+                  const updatedPosts = await getPosts();
+                  console.log('Updated posts:', updatedPosts);
+                  setPosts(updatedPosts || []);
+                } catch (error) {
+                  console.error('Error refreshing posts:', error);
+                }
                 setShowComposer(false);
               }}
               onCancel={() => setShowComposer(false)}
@@ -667,14 +715,22 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                   const repostCard = (
                     <PostCard
                       key={`repost-${repostItem.repost_id}`}
-                      post={repostItem.original_post}
+                      post={{
+                        ...repostItem.original_post,
+                        post_id: repostItem.repost_id, // Use repost_id for interactions
+                        likes: repostItem.likes || [],
+                        comments: repostItem.comments || [],
+                        likes_count: repostItem.likes_count || 0,
+                        comments_count: repostItem.comments_count || 0,
+                      } as PostItem}
                       currentUserId={currentUserId}
-                      isOwn={false}
-                      displayName={`${repostItem.user.f_name} ${repostItem.user.l_name}`}
+                      isOwn={currentUserId === repostItem.user.user_id}
+                      displayName={formatDisplayName(repostItem.user, currentUserId === repostItem.user.user_id, user)}
                       displayAvatar={repostItem.user.profile_pic ? (String(repostItem.user.profile_pic).startsWith('http') ? repostItem.user.profile_pic : `http://127.0.0.1:8000${repostItem.user.profile_pic}`) : ctulogo}
                       formatTime={formatHybrid}
                       isRepost={true}
                       repostData={repostItem as any}
+                      onViewOriginalPost={handleViewOriginalPost}
                       onPostUpdate={() => {
                         getPosts().then(updatedPosts => {
                           setPosts(updatedPosts || []);
@@ -684,6 +740,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           (updatedPosts || []).forEach((post: any) => {
                             if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
                               liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                            } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+                              liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
                             }
                           });
                           setLikedPosts(liked);
@@ -726,7 +784,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 // Regular post rendering
                 const post = item;
                 const isOwn = currentUserId !== null && post.user?.user_id && Number(post.user.user_id) === Number(currentUserId);
-                const displayName = isOwn && user?.name ? user.name : `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim();
+                const displayName = formatDisplayName(post.user, !!isOwn, user);
                 const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
                 const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
                 
@@ -740,6 +798,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                     displayName={displayName}
                     displayAvatar={displayAvatar}
                     formatTime={formatHybrid}
+                    onViewOriginalPost={handleViewOriginalPost}
                     onPostUpdate={() => {
                       getPosts().then(updatedPosts => {
                         setPosts(updatedPosts || []);
@@ -748,8 +807,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         const currentUserId = getCurrentUserId(user);
                         const liked: { [key: number]: boolean } = {};
                         (updatedPosts || []).forEach((post: any) => {
-                          if (post.likes && Array.isArray(post.likes)) {
+                          if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
                             liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                          } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+                            liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
                           }
                         });
                         setLikedPosts(liked);
@@ -800,14 +861,22 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                   const repostCard = (
                     <PostCard
                       key={`repost-${repostItem.repost_id}`}
-                      post={repostItem.original_post}
+                      post={{
+                        ...repostItem.original_post,
+                        post_id: repostItem.repost_id, // Use repost_id for interactions
+                        likes: repostItem.likes || [],
+                        comments: repostItem.comments || [],
+                        likes_count: repostItem.likes_count || 0,
+                        comments_count: repostItem.comments_count || 0,
+                      } as PostItem}
                       currentUserId={currentUserId}
-                      isOwn={false}
-                      displayName={`${repostItem.user.f_name} ${repostItem.user.l_name}`}
+                      isOwn={currentUserId === repostItem.user.user_id}
+                      displayName={formatDisplayName(repostItem.user, currentUserId === repostItem.user.user_id, user)}
                       displayAvatar={repostItem.user.profile_pic ? (String(repostItem.user.profile_pic).startsWith('http') ? repostItem.user.profile_pic : `http://127.0.0.1:8000${repostItem.user.profile_pic}`) : ctulogo}
                       formatTime={formatHybrid}
                       isRepost={true}
                       repostData={repostItem as any}
+                      onViewOriginalPost={handleViewOriginalPost}
                       onPostUpdate={() => {
                         getPosts().then(updatedPosts => {
                           setPosts(updatedPosts || []);
@@ -842,7 +911,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 // Regular post rendering
                 const post = item;
                 const isOwn = currentUserId !== null && post.user?.user_id && Number(post.user.user_id) === Number(currentUserId);
-                const displayName = isOwn && user?.name ? user.name : `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim();
+                const displayName = formatDisplayName(post.user, !!isOwn, user);
                 const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
                 const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
                 
@@ -856,6 +925,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                     displayName={displayName}
                     displayAvatar={displayAvatar}
                     formatTime={formatHybrid}
+                    onViewOriginalPost={handleViewOriginalPost}
                     onPostUpdate={() => {
                       getPosts().then(updatedPosts => {
                         setPosts(updatedPosts || []);
@@ -864,8 +934,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         const currentUserId = getCurrentUserId(user);
                         const liked: { [key: number]: boolean } = {};
                         (updatedPosts || []).forEach((post: any) => {
-                          if (post.likes && Array.isArray(post.likes)) {
+                          if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
                             liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                          } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+                            liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
                           }
                         });
                         setLikedPosts(liked);
@@ -1011,9 +1083,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 post={modalPost}
                 currentUserId={getCurrentUserId(user)}
                 isOwn={getCurrentUserId(user) === modalPost.user?.user_id}
-                displayName={`${modalPost.user?.f_name || ''} ${modalPost.user?.l_name || ''}`.trim()}
+                displayName={formatDisplayName(modalPost.user, getCurrentUserId(user) === modalPost.user?.user_id, user)}
                 displayAvatar={modalPost.user?.profile_pic || '/default-avatar.png'}
                 formatTime={formatHybrid}
+                onViewOriginalPost={handleViewOriginalPost}
                 onPostUpdate={() => {
                   // Refresh the post data in modal and update the main posts list
                   const postId = modalPost.post_id;
@@ -1029,8 +1102,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                     const currentUserId = getCurrentUserId(user);
                     const liked: { [key: number]: boolean } = {};
                     (updatedPosts || []).forEach((post: any) => {
-                      if (post.likes && Array.isArray(post.likes)) {
+                      if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
                         liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                      } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+                        liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
                       }
                     });
                     setLikedPosts(liked);
@@ -1224,6 +1299,122 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Original Post Modal */}
+      {showOriginalPostModal && originalPostModalData && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '20px',
+          }}
+          onClick={() => setShowOriginalPostModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowOriginalPostModal(false)}
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                background: 'none',
+                border: 'none',
+                fontSize: 24,
+                cursor: 'pointer',
+                color: '#666',
+                zIndex: 10,
+              }}
+              title="Close"
+            >
+              ×
+            </button>
+            <div style={{ padding: '20px' }}>
+              <PostCard
+                post={originalPostModalData}
+                currentUserId={getCurrentUserId(user)}
+                isOwn={getCurrentUserId(user) === originalPostModalData.user?.user_id}
+                displayName={formatDisplayName(originalPostModalData.user, getCurrentUserId(user) === originalPostModalData.user?.user_id, user)}
+                displayAvatar={originalPostModalData.user?.profile_pic ? (String(originalPostModalData.user.profile_pic).startsWith('http') ? originalPostModalData.user.profile_pic : `http://127.0.0.1:8000${originalPostModalData.user.profile_pic}`) : ctulogo}
+                formatTime={formatHybrid}
+                onViewOriginalPost={handleViewOriginalPost}
+                onPostUpdate={() => {
+                  // Refresh the original post data in modal
+                  const postId = originalPostModalData.post_id;
+                  if (postId) {
+                    handleViewOriginalPost(originalPostModalData);
+                  }
+                  
+                  // Also refresh the main posts list to keep everything in sync
+                  getPosts().then(updatedPosts => {
+                    setPosts(updatedPosts || []);
+                    
+                    // Update likedPosts state
+                    const currentUserId = getCurrentUserId(user);
+                    const liked: { [key: number]: boolean } = {};
+                    (updatedPosts || []).forEach((post: any) => {
+                      if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
+                        liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                      } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+                        liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                      }
+                    });
+                    setLikedPosts(liked);
+
+                    // Update repostedPosts state
+                    const reposted: { [key: number]: boolean } = {};
+                    (updatedPosts || []).forEach((post: any) => {
+                      if (post.reposts && Array.isArray(post.reposts)) {
+                        reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+                      }
+                    });
+                    setRepostedPosts(reposted);
+                  });
+                }}
+                showOptions={showOptions}
+                setShowOptions={setShowOptions}
+                editingPost={editingPost}
+                setEditingPost={setEditingPost}
+                editPostContent={editPostContent}
+                setEditPostContent={setEditPostContent}
+                likedPosts={likedPosts}
+                setLikedPosts={setLikedPosts}
+                repostedPosts={repostedPosts}
+                setRepostedPosts={setRepostedPosts}
+                showCommentInput={showCommentInput}
+                setShowCommentInput={setShowCommentInput}
+                showAllComments={showAllComments}
+                setShowAllComments={setShowAllComments}
+                commentInput={commentInput}
+                setCommentInput={setCommentInput}
+                editingComment={editingComment}
+                setEditingComment={setEditingComment}
+                editCommentContent={editCommentContent}
+                setEditCommentContent={setEditCommentContent}
+              />
             </div>
           </div>
         </div>

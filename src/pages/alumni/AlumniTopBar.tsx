@@ -665,6 +665,9 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                   transition: 'all 0.2s ease',
                   fontWeight: '500',
                   fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
                 }}
                 onClick={() => setShowLogoutConfirm(true)}
                 onMouseEnter={(e) => {
@@ -676,6 +679,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                   e.currentTarget.style.paddingLeft = '16px';
                 }}
               >
+                <i className="pi pi-sign-out" style={{ fontSize: '16px', color: '#e74c3c' }}></i>
                 Logout
               </div>
               {!location.pathname.includes('/settings') && (
@@ -687,6 +691,9 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                     fontWeight: '500',
                     fontSize: '14px',
                     borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
                   }} 
                   onClick={() => {
                     setShowProfile(false);
@@ -702,6 +709,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                     e.currentTarget.style.paddingLeft = '16px';
                   }}
                 >
+                  <i className="pi pi-cog" style={{ fontSize: '16px', color: '#3498db' }}></i>
                   Settings
                 </div>
               )}

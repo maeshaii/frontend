@@ -446,36 +446,23 @@ export const fetchAlumniDetails = async (userId: string | number) => {
 };
 
 // -------- Posts API --------
-export const getPostCategories = async () => {
-  try {
-    const response = await api.get('post-categories/');
-    const categories = (response.data && (response.data.categories || response.data)) || [];
-    return { categories };
-  } catch (e) {
-    const response = await axios.get(`${API_BASE}post-categories/`);
-    const categories = (response.data && (response.data.categories || response.data)) || [];
-    return { categories };
-  }
-};
 
 export const getPosts = async () => {
+  console.log('Fetching posts from API...');
   const response = await api.get('posts/');
-  return response.data?.posts || [];
-};
-
-export const getPostsView = async () => {
-  const response = await api.get('posts_view/');
+  console.log('Posts API response:', response.data);
   return response.data?.posts || [];
 };
 
 export const createPost = async (postData: {
-  post_title: string;
   post_content: string;
-  post_image?: string;
-  post_cat_id: number;
+  post_image?: string; // Backward compatibility
+  post_images?: string[]; // Multiple images
   type?: string;
 }) => {
+  console.log('Sending post creation request:', postData);
   const response = await api.post('posts/', postData);
+  console.log('Post creation response:', response.data);
   return response.data;
 };
 
@@ -499,13 +486,45 @@ export const getPostComments = async (postId: number) => {
   return response.data;
 };
 
-export const repostPost = async (postId: number) => {
-  const response = await api.post(`posts/${postId}/repost/`);
+export const repostPost = async (postId: number, caption?: string) => {
+  const response = await api.post(`posts/${postId}/repost/`, { caption: caption || '' });
+  return response.data;
+};
+
+export const editRepost = async (repostId: number, repostData: { caption?: string }) => {
+  const response = await api.put(`reposts/${repostId}/`, repostData);
   return response.data;
 };
 
 export const deleteRepost = async (repostId: number) => {
   const response = await api.delete(`reposts/${repostId}/`);
+  return response.data;
+};
+
+// Repost like functions
+export const likeRepost = async (repostId: number) => {
+  const response = await api.post(`reposts/${repostId}/like/`);
+  return response.data;
+};
+
+export const unlikeRepost = async (repostId: number) => {
+  const response = await api.delete(`reposts/${repostId}/like/`);
+  return response.data;
+};
+
+// Repost comment functions
+export const commentOnRepost = async (repostId: number, commentContent: string) => {
+  const response = await api.post(`reposts/${repostId}/comments/`, { comment_content: commentContent });
+  return response.data;
+};
+
+export const deleteRepostComment = async (repostId: number, commentId: number) => {
+  const response = await api.delete(`reposts/${repostId}/comments/${commentId}/`);
+  return response.data;
+};
+
+export const editRepostComment = async (repostId: number, commentId: number, commentData: { comment_content: string }) => {
+  const response = await api.put(`reposts/${repostId}/comments/${commentId}/`, commentData);
   return response.data;
 };
 
@@ -576,7 +595,7 @@ export const repostForumPost = async (forumId: number) => {
 };
 
 export const unrepostForumPost = async (repostId: number) => {
-  const response = await api.delete(`forum-reposts/${repostId}/`);
+  const response = await api.delete(`reposts/${repostId}/`);
   return response.data;
 };
 

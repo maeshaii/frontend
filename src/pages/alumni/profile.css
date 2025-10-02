@@ -17,12 +17,13 @@ body::-webkit-scrollbar {
 
 /* Main content wrapper */
 .profile-main-content {
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   display: flex;
   gap: 24px;
-  padding: 24px 40px;
+  padding: 24px;
   align-items: flex-start;
+  box-sizing: border-box;
 }
 
 /* Left sidebar */
@@ -669,11 +670,12 @@ body::-webkit-scrollbar {
 /* Added CSS classes for inline styles in return JSX of Profile.tsx */
 
 .profile-main-container {
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   display: flex;
   gap: 24px;
   padding: 24px;
+  box-sizing: border-box;
 }
 
 .profile-left-sidebar-container {
@@ -978,10 +980,10 @@ body::-webkit-scrollbar {
 
 /* Follow button styles */
 .profile-follow-button {
-  background: #174f84;
+  background: #0066cc;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 8px 16px;
   cursor: pointer;
   font-size: 14px;
@@ -990,55 +992,57 @@ body::-webkit-scrollbar {
 }
 
 .profile-follow-button:hover {
-  background: #0d3a5f;
+  background: #004499;
 }
 
 .profile-follow-button:disabled {
   background: #ccc;
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .profile-follow-button.following {
-  background: #e0e0e0;
-  color: #333;
+  background: #f5f5f5;
+  color: #666;
 }
 
 .profile-follow-button.following:hover {
-  background: #d0d0d0;
+  background: #e8e8e8;
 }
 
 /* Suggested user follow button styles */
 .suggested-user-follow-button {
-  background: #174f84;
+  background: #0066cc;
   color: white;
   border: none;
-  border-radius: 6px;
-  padding: 6px 12px;
+  border-radius: 8px;
+  padding: 8px 16px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   transition: all 0.2s ease;
 }
 
 .suggested-user-follow-button:hover {
-  background: #0d3a5f;
+  background: #004499;
 }
 
 .suggested-user-follow-button:disabled {
   background: #ccc;
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .suggested-user-follow-button.following {
-  background: #e0e0e0;
-  color: #333;
+  background: #f5f5f5;
+  color: #666;
 }
 
 .suggested-user-follow-button.following:hover {
-  background: #d0d0d0;
+  background: #e8e8e8;
 }
 
-/* Followers Modal Styles */
+/* Followers Modal Styles - Used by forum */
 .profile-followers-modal-overlay {
   position: fixed;
   top: 0;
@@ -1159,4 +1163,150 @@ body::-webkit-scrollbar {
 /* Post feed card for consistent spacing in profile */
 .post-feed-card {
   margin-bottom: 16px;
+}
+
+/* Repost card styles for profile page */
+.profile-repost-card {
+  background: white;
+  border: 1px solid #e1e8ed;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.profile-repost-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.profile-repost-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-repost-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.profile-repost-profile-image {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+.profile-repost-author-info {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+  text-transform: uppercase;
+}
+
+.profile-repost-author-details {
+  color: #666;
+  font-size: 12px;
+}
+
+.profile-repost-caption {
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.profile-repost-original {
+  background: #f8f9fa;
+  border: 1px solid #e1e8ed;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.profile-repost-original-header {
+  margin-bottom: 8px;
+}
+
+.profile-repost-original-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-repost-original-profile-image {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+.profile-repost-original-author-info {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.profile-repost-original-author-details {
+  color: #666;
+  font-size: 11px;
+}
+
+.profile-repost-original-content {
+  white-space: pre-wrap;
+  max-width: 100%;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.profile-repost-original-image {
+  max-width: 100%;
+  border-radius: 6px;
+  max-height: 300px;
+  object-fit: cover;
+  margin-top: 8px;
+}
+
+.profile-repost-actions {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #e9ecef;
+  padding-top: 8px;
+}
+
+.profile-repost-action-item {
+  color: #6c757d;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color 0.2s;
+}
+
+.profile-repost-action-item:hover {
+  background-color: #f8f9fa;
+}
+
+.profile-repost-action-item.liked {
+  color: #e0245e;
+  font-weight: bold;
+}
+
+.profile-repost-action-item.reposted {
+  color: #1da1f2;
+  font-weight: bold;
 }

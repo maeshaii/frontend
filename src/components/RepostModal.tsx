@@ -9,6 +9,7 @@ interface RepostModalProps {
     user?: {
       user_id?: number;
       f_name?: string;
+      m_name?: string;
       l_name?: string;
       profile_pic?: string;
       name?: string;
@@ -277,7 +278,7 @@ const RepostModal: React.FC<RepostModalProps> = ({
               />
               <div>
                 <div style={{ fontWeight: '600', fontSize: 13, color: '#1f2937', marginBottom: 1 }}>
-                  {originalPost.user?.f_name} {originalPost.user?.l_name}
+                  {originalPost.user?.f_name} {originalPost.user?.m_name} {originalPost.user?.l_name}
                 </div>
                 <div style={{ fontSize: 10, color: '#6b7280' }}>
                   {formatTime(originalPost.created_at)}
