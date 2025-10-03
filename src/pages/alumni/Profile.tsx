@@ -103,6 +103,10 @@ interface RepostItem {
     l_name: string;
     profile_pic?: string;
   };
+  likes?: LikeItem[];
+  comments?: CommentItem[];
+  likes_count?: number;
+  comments_count?: number;
   original_post?: PostItem;
 }
 
@@ -326,20 +330,37 @@ const AlumniProfile: React.FC = () => {
             // Load posts for this user
 getPosts()
   .then((all: any[]) => {
-    console.log('Profile posts fetched:', all);
+    console.log('🔍 Profile DEBUG: Posts fetched:', all);
+    console.log('🔍 Profile DEBUG: Posts type:', typeof all);
+    console.log('🔍 Profile DEBUG: Posts length:', all?.length);
+    console.log('🔍 Profile DEBUG: First few posts:', all?.slice(0, 3));
+    
+    if (!all || all.length === 0) {
+      console.log('🚨 Profile DEBUG: No posts returned from API!');
+      setPosts([]);
+      return;
+    }
+    
+    const repostItems = all.filter((item: any) => item.item_type === 'repost');
+    console.log('Profile repost items:', repostItems);
+    console.log('Profile user ID:', numericUserId);
+    
     const subset = (all || []).filter(p => {
       // Include original posts by this user
       if (p.user?.user_id === Number(numericUserId)) {
+        console.log('Including original post by user:', p.user?.user_id);
         return true;
       }
       
       // Include reposts by this user (reposts are separate feed items)
       if (p.item_type === 'repost' && p.user?.user_id === Number(numericUserId)) {
+        console.log('Including repost by user:', p.user?.user_id, 'repost:', p);
         return true;
       }
       
       // Include original posts that have reposts by this user
       if (p.reposts && p.reposts.some((repost: any) => repost.user.user_id === Number(numericUserId))) {
+        console.log('Including post with repost by user:', numericUserId);
         return true;
       }
       

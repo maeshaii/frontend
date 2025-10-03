@@ -246,20 +246,95 @@ const ForumPage: React.FC = () => {
         reposts: forum.reposts || [] // Use actual reposts data from backend
       }));
       
-      setPosts(transformedPosts);
+      // Create a mixed feed of posts and reposts, sorted by date
+      const mixedFeed: any[] = [];
+      
+      // Add original posts to the feed
+      transformedPosts.forEach(post => {
+        mixedFeed.push({
+          ...post,
+          item_type: 'post',
+          sort_date: post.created_at
+        });
+        
+        // Add each repost as a separate feed item
+        if (post.reposts && post.reposts.length > 0) {
+          post.reposts.forEach((repost: any) => {
+            mixedFeed.push({
+              post_id: repost.repost_id, // Use repost_id for interactions
+              post_content: post.post_content,
+              post_image: post.post_image,
+              created_at: repost.repost_date, // Use repost date for sorting
+              type: 'forum',
+              item_type: 'repost',
+              sort_date: repost.repost_date,
+              user: repost.user,
+              likes: repost.likes || [], // Use actual likes data from backend
+              comments: repost.comments || [], // Use actual comments data from backend
+              likes_count: repost.likes_count || 0,
+              comments_count: repost.comments_count || 0,
+              reposts: [], // No nested reposts
+              repostData: {
+                repost_id: repost.repost_id,
+                repost_date: repost.repost_date,
+                repost_caption: repost.repost_caption,
+                user: repost.user,
+                original_post: {
+                  post_id: post.post_id,
+                  post_content: post.post_content,
+                  post_image: post.post_image,
+                  created_at: post.created_at,
+                  user: post.user
+                }
+              }
+            });
+          });
+        }
+      });
+      
+      // Sort the mixed feed by date (newest first)
+      const sortedFeed = mixedFeed.sort((a: any, b: any) => {
+        const dateA = a.sort_date || a.created_at || '';
+        const dateB = b.sort_date || b.created_at || '';
+        
+        // Convert to Date objects for comparison
+        const dateAObj = new Date(dateA);
+        const dateBObj = new Date(dateB);
+        
+        // Sort newest first (descending)
+        return dateBObj.getTime() - dateAObj.getTime();
+      });
+      
+      console.log('🔍 FORUM MIXED FEED:', sortedFeed.slice(0, 5).map(item => ({
+        type: item.item_type,
+        date: item.sort_date,
+        user: item.user?.f_name || 'unknown'
+      })));
+      
+      setPosts(sortedFeed);
       
       // Initialize liked and reposted posts state
       const liked: { [key: number]: boolean } = {};
       const reposted: { [key: number]: boolean } = {};
       
-      forumsData.forEach((forum: any) => {
-        liked[forum.post_id] = forum.is_liked || false;
-        
-        // Check if current user has reposted this forum post
-        if (forum.reposts && Array.isArray(forum.reposts)) {
-          reposted[forum.post_id] = forum.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+      sortedFeed.forEach((item: any) => {
+        if (item.item_type === 'repost') {
+          // Handle repost items
+          liked[item.post_id] = item.likes?.some((like: any) => like.user_id === currentUserId) || false;
+          reposted[item.post_id] = false; // Reposts themselves can't be reposted
         } else {
-          reposted[forum.post_id] = false;
+          // Handle original post items
+          const forum = forumsData.find((f: any) => f.post_id === item.post_id);
+          if (forum) {
+            liked[item.post_id] = forum.is_liked || false;
+            
+            // Check if current user has reposted this forum post
+            if (forum.reposts && Array.isArray(forum.reposts)) {
+              reposted[item.post_id] = forum.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+            } else {
+              reposted[item.post_id] = false;
+            }
+          }
         }
       });
       
@@ -479,25 +554,272 @@ const ForumPage: React.FC = () => {
                   </Typography>
                 </Box>
               ) : (
-                posts.map((post) => {
-                  const isOwn = Number(post.user?.user_id) === Number(currentUserId);
-                  const displayName = post.user?.name || `${post.user?.f_name || ''} ${post.user?.l_name || ''}`.trim() || 'Unknown User';
-                  const displayAvatar = post.user?.profile_pic ? 
-                    (String(post.user.profile_pic).startsWith('http') ? 
-                      post.user.profile_pic : 
-                      `http://127.0.0.1:8000${post.user.profile_pic}`) : 
+                posts.map((item: any) => {
+                  // Handle both posts and reposts as separate items
+                  const isOwn = Number(item.user?.user_id) === Number(currentUserId);
+                  const displayName = item.user?.name || `${item.user?.f_name || ''} ${item.user?.l_name || ''}`.trim() || 'Unknown User';
+                  const displayAvatar = item.user?.profile_pic ? 
+                    (String(item.user.profile_pic).startsWith('http') ? 
+                      item.user.profile_pic : 
+                      `http://127.0.0.1:8000${item.user.profile_pic}`) : 
                     ctulogo;
                   
+                  // Render as repost if item_type is 'repost'
+                  if (item.item_type === 'repost') {
+                    return (
+                      <PostCard
+                        key={`repost-${item.post_id}`}
+                        post={item}
+                        currentUserId={currentUserId}
+                        isOwn={isOwn}
+                        displayName={displayName}
+                        displayAvatar={displayAvatar}
+                        formatTime={formatTime}
+                        isRepost={true}
+                        repostData={item.repostData}
+                        onPostUpdate={() => {
+                          // Immediate update without page refresh - similar to UnifiedDashboard
+                          getForums().then((forumsData) => {
+                            // Transform forum data to match PostItem interface
+                            const transformedPosts: PostItem[] = forumsData.map((forum: any) => ({
+                              post_id: forum.post_id,
+                              post_content: forum.post_content,
+                              post_image: forum.post_image,
+                              created_at: forum.created_at,
+                              type: forum.type,
+                              user: forum.user,
+                              likes_count: forum.likes_count,
+                              comments_count: forum.comments_count,
+                              reposts_count: forum.reposts_count,
+                              is_liked: forum.is_liked,
+                              likes: forum.likes || [],
+                              comments: forum.comments || [],
+                              reposts: forum.reposts || []
+                            }));
+                            
+                            // Create a mixed feed of posts and reposts, sorted by date
+                            const mixedFeed: any[] = [];
+                            
+                            // Add original posts to the feed
+                            transformedPosts.forEach(post => {
+                              mixedFeed.push({
+                                ...post,
+                                item_type: 'post',
+                                sort_date: post.created_at
+                              });
+                              
+                              // Add each repost as a separate feed item
+                              if (post.reposts && post.reposts.length > 0) {
+                                post.reposts.forEach((repost: any) => {
+                                  mixedFeed.push({
+                                    post_id: repost.repost_id,
+                                    post_content: post.post_content,
+                                    post_image: post.post_image,
+                                    created_at: repost.repost_date,
+                                    type: 'forum',
+                                    item_type: 'repost',
+                                    sort_date: repost.repost_date,
+                                    user: repost.user,
+                                    likes: repost.likes || [],
+                                    comments: repost.comments || [],
+                                    likes_count: repost.likes_count || 0,
+                                    comments_count: repost.comments_count || 0,
+                                    reposts: [],
+                                    repostData: {
+                                      repost_id: repost.repost_id,
+                                      repost_date: repost.repost_date,
+                                      repost_caption: repost.repost_caption,
+                                      user: repost.user,
+                                      original_post: {
+                                        post_id: post.post_id,
+                                        post_content: post.post_content,
+                                        post_image: post.post_image,
+                                        created_at: post.created_at,
+                                        user: post.user
+                                      }
+                                    }
+                                  });
+                                });
+                              }
+                            });
+                            
+                            // Sort the mixed feed by date (newest first)
+                            const sortedFeed = mixedFeed.sort((a: any, b: any) => {
+                              const dateA = a.sort_date || a.created_at || '';
+                              const dateB = b.sort_date || b.created_at || '';
+                              
+                              const dateAObj = new Date(dateA);
+                              const dateBObj = new Date(dateB);
+                              
+                              return dateBObj.getTime() - dateAObj.getTime();
+                            });
+                            
+                            setPosts(sortedFeed);
+                            
+                            // Update liked and reposted states
+                            const liked: { [key: number]: boolean } = {};
+                            const reposted: { [key: number]: boolean } = {};
+                            
+                            sortedFeed.forEach((item: any) => {
+                              if (item.item_type === 'repost') {
+                                liked[item.post_id] = item.likes?.some((like: any) => like.user_id === currentUserId) || false;
+                                reposted[item.post_id] = false;
+                              } else {
+                                const forum = forumsData.find((f: any) => f.post_id === item.post_id);
+                                if (forum) {
+                                  liked[item.post_id] = forum.is_liked || false;
+                                  if (forum.reposts && Array.isArray(forum.reposts)) {
+                                    reposted[item.post_id] = forum.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+                                  } else {
+                                    reposted[item.post_id] = false;
+                                  }
+                                }
+                              }
+                            });
+                            
+                            setLikedPosts(liked);
+                            setRepostedPosts(reposted);
+                          });
+                        }}
+                        showOptions={showOptions}
+                        setShowOptions={setShowOptions}
+                        editingPost={editingPost}
+                        setEditingPost={setEditingPost}
+                        editPostContent={editPostContent}
+                        setEditPostContent={setEditPostContent}
+                        likedPosts={likedPosts}
+                        setLikedPosts={setLikedPosts}
+                        repostedPosts={repostedPosts}
+                        setRepostedPosts={setRepostedPosts}
+                        showCommentInput={showCommentInput}
+                        setShowCommentInput={setShowCommentInput}
+                        showAllComments={showAllComments}
+                        setShowAllComments={setShowAllComments}
+                        commentInput={commentInput}
+                        setCommentInput={setCommentInput}
+                        editingComment={editingComment}
+                        setEditingComment={setEditingComment}
+                        editCommentContent={editCommentContent}
+                        setEditCommentContent={setEditCommentContent}
+                        isForum={true}
+                      />
+                    );
+                  }
+                  
+                  // Render as regular post
                   return (
                     <PostCard
-                      key={post.post_id}
-                      post={post}
+                      key={item.post_id}
+                      post={item}
                       currentUserId={currentUserId}
                       isOwn={isOwn}
                       displayName={displayName}
                       displayAvatar={displayAvatar}
                       formatTime={formatTime}
-                      onPostUpdate={fetchForumPosts}
+                      onPostUpdate={() => {
+                        // Immediate update without page refresh - similar to UnifiedDashboard
+                        getForums().then((forumsData) => {
+                          // Transform forum data to match PostItem interface
+                          const transformedPosts: PostItem[] = forumsData.map((forum: any) => ({
+                            post_id: forum.post_id,
+                            post_content: forum.post_content,
+                            post_image: forum.post_image,
+                            created_at: forum.created_at,
+                            type: forum.type,
+                            user: forum.user,
+                            likes_count: forum.likes_count,
+                            comments_count: forum.comments_count,
+                            reposts_count: forum.reposts_count,
+                            is_liked: forum.is_liked,
+                            likes: forum.likes || [],
+                            comments: forum.comments || [],
+                            reposts: forum.reposts || []
+                          }));
+                          
+                          // Create a mixed feed of posts and reposts, sorted by date
+                          const mixedFeed: any[] = [];
+                          
+                          // Add original posts to the feed
+                          transformedPosts.forEach(post => {
+                            mixedFeed.push({
+                              ...post,
+                              item_type: 'post',
+                              sort_date: post.created_at
+                            });
+                            
+                            // Add each repost as a separate feed item
+                            if (post.reposts && post.reposts.length > 0) {
+                              post.reposts.forEach((repost: any) => {
+                                mixedFeed.push({
+                                  post_id: repost.repost_id,
+                                  post_content: post.post_content,
+                                  post_image: post.post_image,
+                                  created_at: repost.repost_date,
+                                  type: 'forum',
+                                  item_type: 'repost',
+                                  sort_date: repost.repost_date,
+                                  user: repost.user,
+                                  likes: repost.likes || [],
+                                  comments: repost.comments || [],
+                                  likes_count: repost.likes_count || 0,
+                                  comments_count: repost.comments_count || 0,
+                                  reposts: [],
+                                  repostData: {
+                                    repost_id: repost.repost_id,
+                                    repost_date: repost.repost_date,
+                                    repost_caption: repost.repost_caption,
+                                    user: repost.user,
+                                    original_post: {
+                                      post_id: post.post_id,
+                                      post_content: post.post_content,
+                                      post_image: post.post_image,
+                                      created_at: post.created_at,
+                                      user: post.user
+                                    }
+                                  }
+                                });
+                              });
+                            }
+                          });
+                          
+                          // Sort the mixed feed by date (newest first)
+                          const sortedFeed = mixedFeed.sort((a: any, b: any) => {
+                            const dateA = a.sort_date || a.created_at || '';
+                            const dateB = b.sort_date || b.created_at || '';
+                            
+                            const dateAObj = new Date(dateA);
+                            const dateBObj = new Date(dateB);
+                            
+                            return dateBObj.getTime() - dateAObj.getTime();
+                          });
+                          
+                          setPosts(sortedFeed);
+                          
+                          // Update liked and reposted states
+                          const liked: { [key: number]: boolean } = {};
+                          const reposted: { [key: number]: boolean } = {};
+                          
+                          sortedFeed.forEach((item: any) => {
+                            if (item.item_type === 'repost') {
+                              liked[item.post_id] = item.likes?.some((like: any) => like.user_id === currentUserId) || false;
+                              reposted[item.post_id] = false;
+                            } else {
+                              const forum = forumsData.find((f: any) => f.post_id === item.post_id);
+                              if (forum) {
+                                liked[item.post_id] = forum.is_liked || false;
+                                if (forum.reposts && Array.isArray(forum.reposts)) {
+                                  reposted[item.post_id] = forum.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+                                } else {
+                                  reposted[item.post_id] = false;
+                                }
+                              }
+                            }
+                          });
+                          
+                          setLikedPosts(liked);
+                          setRepostedPosts(reposted);
+                        });
+                      }}
                       showOptions={showOptions}
                       setShowOptions={setShowOptions}
                       editingPost={editingPost}

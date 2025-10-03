@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import * as api from '../services/api';
+import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment } from '../services/api';
 import { 
   commentOnForumPost, 
   deleteForumComment, 
@@ -8,9 +8,8 @@ import {
   editForumPost,
   likeForumPost,
   unlikeForumPost,
-  likeRepost,
-  unlikeRepost,
-  commentOnRepost,
+  repostForumPost,
+  // Removed old repost functions - now using unified Like and Comment models
   deleteRepostComment,
   editRepostComment,
   editRepost,
@@ -18,6 +17,7 @@ import {
 } from '../services/api';
 import ctulogo from '../images/ctulogo.png';
 import RepostModal from './RepostModal';
+import RepostButton from './RepostButton';
 import PhotoGalleryModal from './PhotoGalleryModal';
 
 interface RepostItem {
@@ -31,6 +31,10 @@ interface RepostItem {
     l_name: string;
     profile_pic?: string;
   };
+  likes?: LikeItem[];
+  comments?: CommentItem[];
+  likes_count?: number;
+  comments_count?: number;
   original_post?: PostItem;
 }
 
@@ -152,7 +156,6 @@ const PostCard: React.FC<PostCardProps> = ({
 }) => {
   console.log('PostCard currentUserId:', currentUserId);
   const [showLikesModal, setShowLikesModal] = useState(false);
-  const [showRepostModal, setShowRepostModal] = useState(false);
   const [showPhotoGallery, setShowPhotoGallery] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
@@ -273,16 +276,23 @@ const PostCard: React.FC<PostCardProps> = ({
     if (!setLikedPosts) return;
     try {
       if (isRepostPost) {
-        // Use repost like API with correct repost_id
-        await likeRepost(repostData?.repost_id || post.post_id);
+        // Use unified like API with repost_id
+        const repostId = repostData?.repost_id || post.post_id;
+        await api.post(`reposts/${repostId}/like/`);
+        setLikedPosts(prev => ({ ...prev, [repostId]: true }));
+        
+        // Immediately update local state for repost likes
+        post.likes_count = (post.likes_count || 0) + 1;
+        post.liked_by_user = true;
       } else if (isForum) {
         // Use forum like API
         await likeForumPost(post.post_id);
+        setLikedPosts(prev => ({ ...prev, [post.post_id]: true }));
       } else {
         // Use regular post like API
-        await api.likePost(post.post_id);
-      }
+        await likePost(post.post_id);
       setLikedPosts(prev => ({ ...prev, [post.post_id]: true }));
+      }
       onPostUpdate?.();
     } catch (error) {
       console.error('Error liking post:', error);
@@ -293,16 +303,23 @@ const PostCard: React.FC<PostCardProps> = ({
     if (!setLikedPosts) return;
     try {
       if (isRepostPost) {
-        // Use repost unlike API with correct repost_id
-        await unlikeRepost(repostData?.repost_id || post.post_id);
+        // Use unified unlike API with repost_id
+        const repostId = repostData?.repost_id || post.post_id;
+        await api.delete(`reposts/${repostId}/like/`);
+        setLikedPosts(prev => ({ ...prev, [repostId]: false }));
+        
+        // Immediately update local state for repost likes
+        post.likes_count = Math.max((post.likes_count || 0) - 1, 0);
+        post.liked_by_user = false;
       } else if (isForum) {
         // Use forum unlike API
         await unlikeForumPost(post.post_id);
+        setLikedPosts(prev => ({ ...prev, [post.post_id]: false }));
       } else {
         // Use regular post unlike API
-        await api.unlikePost(post.post_id);
-      }
+        await unlikePost(post.post_id);
       setLikedPosts(prev => ({ ...prev, [post.post_id]: false }));
+      }
       onPostUpdate?.();
     } catch (error) {
       console.error('Error unliking post:', error);
@@ -310,22 +327,93 @@ const PostCard: React.FC<PostCardProps> = ({
   };
 
   const handleCommentSubmit = async () => {
-    if (!commentInput[post.post_id] || !setCommentInput) return;
+    // Determine if this is a repost
+    const isRepostPost = isRepost && repostData;
+    
+    // Use the correct ID for reposts vs regular posts
+    const itemId = isRepostPost ? (repostData?.repost_id || post.post_id) : post.post_id;
+    if (!commentInput[itemId] || !setCommentInput) return;
+    
+    const commentContent = commentInput[itemId];
+    
     try {
       let result;
       if (isRepostPost) {
-        // Use repost comment API with correct repost_id
-        result = await commentOnRepost(repostData?.repost_id || post.post_id, commentInput[post.post_id]);
+        // Use unified repost comment API (works for both forum and regular reposts)
+        const repostId = repostData?.repost_id || post.post_id;
+        result = await api.post(`reposts/${repostId}/comments/`, {
+          comment_content: commentContent
+        });
+        
+        // Immediately update local state for repost comments
+        if (result.data && result.data.success && result.data.comment) {
+          // Add the new comment to the local post.comments array
+          const newComment = {
+            comment_id: result.data.comment.comment_id,
+            comment_content: commentContent,
+            date_created: new Date().toISOString(),
+            user: {
+              user_id: currentUserId || 0,
+              f_name: displayName.split(' ')[0] || '',
+              l_name: displayName.split(' ').slice(1).join(' ') || '',
+              profile_pic: displayAvatar
+            }
+          };
+          
+          // Update the post object with the new comment
+          post.comments = [...(post.comments || []), newComment as any];
+          post.comments_count = (post.comments_count || 0) + 1;
+        }
       } else if (isForum) {
         // Use forum comment API
-        result = await commentOnForumPost(post.post_id, commentInput[post.post_id]);
+        result = await commentOnForumPost(post.post_id, commentContent);
+        
+        // Immediately update local state for forum comments
+        if (result && result.success && result.comment) {
+          // Add the new comment to the local post.comments array
+          const newComment = {
+            comment_id: result.comment.comment_id,
+            comment_content: commentContent,
+            date_created: new Date().toISOString(),
+            user: {
+              user_id: currentUserId || 0,
+              f_name: displayName.split(' ')[0] || '',
+              l_name: displayName.split(' ').slice(1).join(' ') || '',
+              profile_pic: displayAvatar
+            }
+          };
+          
+          // Update the post object with the new comment
+          post.comments = [...(post.comments || []), newComment as any];
+          post.comments_count = (post.comments_count || 0) + 1;
+        }
       } else {
         // Use regular post comment API
-        result = await api.commentOnPost(post.post_id, commentInput[post.post_id]);
+        result = await commentOnPost(post.post_id, commentContent);
+        
+        // Immediately update local state for regular post comments
+        if (result && result.success && result.comment) {
+          // Add the new comment to the local post.comments array
+          const newComment = {
+            comment_id: result.comment.comment_id,
+            comment_content: commentContent,
+            date_created: new Date().toISOString(),
+            user: {
+              user_id: currentUserId || 0,
+              f_name: displayName.split(' ')[0] || '',
+              l_name: displayName.split(' ').slice(1).join(' ') || '',
+              profile_pic: displayAvatar
+            }
+          };
+          
+          // Update the post object with the new comment
+          post.comments = [...(post.comments || []), newComment as any];
+          post.comments_count = (post.comments_count || 0) + 1;
+        }
       }
       
-      if (result.success) {
-        setCommentInput(prev => ({ ...prev, [post.post_id]: '' }));
+      if ((result && result.success) || (result.data && result.data.success)) {
+        setCommentInput(prev => ({ ...prev, [itemId]: '' }));
         onPostUpdate?.();
       }
     } catch (error) {
@@ -333,23 +421,9 @@ const PostCard: React.FC<PostCardProps> = ({
     }
   };
 
-  const handleRepost = () => {
-    setShowRepostModal(true);
-  };
-
-  const handleRepostSubmit = async (caption: string) => {
-    if (!setRepostedPosts) return;
-    try {
-      await api.repostPost(post.post_id, caption);
-      setRepostedPosts(prev => ({ ...prev, [post.post_id]: true }));
-      setShowRepostModal(false);
-      onPostUpdate?.();
-    } catch (error: any) {
-      console.error('Error reposting:', error);
-    }
-  };
 
   const handleEditPost = () => {
+    console.log('Edit clicked - isOwn:', isOwn, 'currentUserId:', currentUserId, 'post.user.user_id:', post.user?.user_id);
     if (!setEditPostContent || !setEditingPost) return;
     if (!isOwn) {
       alert('You can only edit your own posts');
@@ -373,7 +447,7 @@ const PostCard: React.FC<PostCardProps> = ({
           await deleteForumPost(post.post_id);
         } else {
           // Use regular post API
-          await api.deletePost(post.post_id);
+          await deletePost(post.post_id);
         }
         onPostUpdate?.();
         alert('Post deleted successfully');
@@ -386,6 +460,7 @@ const PostCard: React.FC<PostCardProps> = ({
   };
 
   const handleSaveEditPost = async () => {
+    console.log('Save edit clicked - editPostContent:', editPostContent[post.post_id], 'isOwn:', isOwn);
     if (!editPostContent[post.post_id]?.trim() || !setEditingPost) return;
     if (!isOwn) {
       alert('You can only edit your own posts');
@@ -393,14 +468,16 @@ const PostCard: React.FC<PostCardProps> = ({
     }
     
     try {
+      console.log('Calling editPost with:', post.post_id, { post_content: editPostContent[post.post_id] });
       if (isForum) {
         // Use forum post API
         await editForumPost(post.post_id, { content: editPostContent[post.post_id] });
       } else {
         // Use regular post API
-        await api.editPost(post.post_id, { post_content: editPostContent[post.post_id] });
+        await editPost(post.post_id, { post_content: editPostContent[post.post_id] });
       }
       setEditingPost(prev => ({ ...prev, [post.post_id]: false }));
+      console.log('Calling onPostUpdate');
       onPostUpdate?.();
     } catch (error) {
       console.error('Error editing post:', error);
@@ -450,7 +527,7 @@ const PostCard: React.FC<PostCardProps> = ({
           await deleteForumComment(post.post_id, commentId);
         } else {
           // Use regular post comment API
-          await api.deleteComment(post.post_id, commentId);
+          await deleteComment(post.post_id, commentId);
         }
         onPostUpdate?.();
         alert('Comment deleted successfully');
@@ -482,7 +559,7 @@ const PostCard: React.FC<PostCardProps> = ({
         await editForumComment(post.post_id, commentId, { comment_content: editCommentContent[commentId] });
       } else {
         // Use regular post comment API
-        await api.editComment(post.post_id, commentId, { comment_content: editCommentContent[commentId] });
+        await editComment(post.post_id, commentId, { comment_content: editCommentContent[commentId] });
       }
       setEditingComment?.(prev => ({ ...prev, [commentId]: false }));
       setEditCommentContent?.(prev => ({ ...prev, [commentId]: '' }));
@@ -1080,15 +1157,16 @@ const PostCard: React.FC<PostCardProps> = ({
             <div className="profile-repost-actions">
               <button
                 onClick={() => {
+                  const repostId = repostData?.repost_id || post.post_id;
                   console.log('Repost like button clicked:', {
-                    post_id: post.post_id,
+                    repost_id: repostId,
                     likedPosts: likedPosts,
-                    isLiked: likedPosts[post.post_id],
+                    isLiked: likedPosts[repostId],
                     likes: post.likes
                   });
-                  likedPosts[post.post_id] ? handleUnlike() : handleLike();
+                  likedPosts[repostId] ? handleUnlike() : handleLike();
                 }}
-                className={`profile-repost-action-item ${likedPosts[post.post_id] ? 'liked' : ''}`}
+                className={`profile-repost-action-item ${likedPosts[repostData?.repost_id || post.post_id] ? 'liked' : ''}`}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = '#f8f9fa';
                 }}
@@ -1096,21 +1174,15 @@ const PostCard: React.FC<PostCardProps> = ({
                   e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
-                <span style={{ fontSize: '14px' }}>
-                  {(() => {
-                    const isLiked = likedPosts[post.post_id];
-                    console.log('Repost heart display:', {
-                      post_id: post.post_id,
-                      isLiked: isLiked,
-                      likedPosts: likedPosts
-                    });
-                    return isLiked ? '❤️' : '🤍';
-                  })()}
+                <span style={{ fontSize: '14px', marginRight: '4px' }}>
+                👍
                 </span>
+                <span>
                 {post.likes_count === 1 ? '1 like' : (post.likes_count && post.likes_count > 1) ? `${post.likes_count} likes` : 'Like'}
+                </span>
               </button>
               <button
-                onClick={() => setShowCommentInput?.(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
+                onClick={() => setShowCommentInput?.(prev => ({ ...prev, [repostData?.repost_id || post.post_id]: !prev[repostData?.repost_id || post.post_id] }))}
                 className="profile-repost-action-item"
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = '#f8f9fa';
@@ -1122,32 +1194,39 @@ const PostCard: React.FC<PostCardProps> = ({
                 <span style={{ fontSize: '14px' }}>💬</span>
                 Comment
               </button>
-              <button
-                onClick={handleRepost}
+              <RepostButton
+                originalPost={{
+                  post_id: post.post_id,
+                  post_content: post.post_content,
+                  post_image: post.post_image,
+                  post_images: post.post_images,
+                  user: {
+                    user_id: post.user?.user_id || 0,
+                    f_name: post.user?.f_name || '',
+                    l_name: post.user?.l_name || '',
+                    profile_pic: post.user?.profile_pic
+                  },
+                  created_at: post.created_at || ''
+                }}
+                currentUser={{
+                  name: `${displayName}`,
+                  profile_pic: displayAvatar
+                }}
+                isReposted={repostedPosts[post.post_id] || false}
+                onRepost={onPostUpdate}
+                formatTime={formatTime}
                 className={`profile-repost-action-item ${repostedPosts[post.post_id] ? 'reposted' : ''}`}
-                disabled={repostedPosts[post.post_id]}
-                onMouseEnter={(e) => {
-                  if (!repostedPosts[post.post_id]) {
-                    e.currentTarget.style.backgroundColor = '#f8f9fa';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                <span style={{ fontSize: '14px' }}>🔄</span>
-                Repost
-              </button>
+              />
             </div>
 
             {/* Comment input for repost */}
-            {showCommentInput[post.post_id] && (
+            {showCommentInput[repostData?.repost_id || post.post_id] && (
               <div className="comment-input-container">
                 <input
                   type="text"
                   placeholder="Type your comment..."
-                  value={commentInput[post.post_id] || ''}
-                  onChange={(e) => setCommentInput?.(prev => ({ ...prev, [post.post_id]: e.target.value }))}
+                  value={commentInput[repostData?.repost_id || post.post_id] || ''}
+                  onChange={(e) => setCommentInput?.(prev => ({ ...prev, [repostData?.repost_id || post.post_id]: e.target.value }))}
                 />
                 <button onClick={handleCommentSubmit}>➡️</button>
               </div>
@@ -1156,7 +1235,7 @@ const PostCard: React.FC<PostCardProps> = ({
             {/* Comments section for repost */}
             {post.comments && post.comments.length > 0 && (
               <div className="comments-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
-                {(showAllComments[post.post_id] ? post.comments : post.comments.slice(0, 2)).map((comment) => {
+                {(showAllComments[repostData?.repost_id || post.post_id] ? post.comments : post.comments.slice(0, 2)).map((comment) => {
                   return (
                     <div key={comment.comment_id} className="comment-item" style={{ display: 'flex', gap: '8px', marginBottom: '8px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
                       <img
@@ -1371,20 +1450,20 @@ const PostCard: React.FC<PostCardProps> = ({
                     </div>
                   );
                 })}
-                {post.comments.length > 2 && !showAllComments[post.post_id] && (
+                {post.comments.length > 2 && !showAllComments[repostData?.repost_id || post.post_id] && (
                   <button
                     className="view-all-comments-btn"
                     style={{ fontSize: '12px', color: '#1C4E80', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
-                    onClick={() => setShowAllComments?.(prev => ({ ...prev, [post.post_id]: true }))}
+                    onClick={() => setShowAllComments?.(prev => ({ ...prev, [repostData?.repost_id || post.post_id]: true }))}
                   >
                     View all comments ({post.comments.length})
                   </button>
                 )}
-                {post.comments.length > 2 && showAllComments[post.post_id] && (
+                {post.comments.length > 2 && showAllComments[repostData?.repost_id || post.post_id] && (
                   <button
                     className="hide-comments-btn"
                     style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
-                    onClick={() => setShowAllComments?.(prev => ({ ...prev, [post.post_id]: false }))}
+                    onClick={() => setShowAllComments?.(prev => ({ ...prev, [repostData?.repost_id || post.post_id]: false }))}
                   >
                     Hide comments
                   </button>
@@ -1450,7 +1529,10 @@ const PostCard: React.FC<PostCardProps> = ({
         {isOwn && setShowOptions && (
           <div className="post-header-right" style={{ position: 'relative' }} ref={optionsMenuRef}>
             <button
-              onClick={() => setShowOptions(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
+              onClick={() => {
+                console.log('Three dots clicked - post_id:', post.post_id);
+                setShowOptions(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }));
+              }}
               style={{
                 background: 'none',
                 border: 'none',
@@ -1914,36 +1996,37 @@ const PostCard: React.FC<PostCardProps> = ({
           <span style={{ fontSize: '14px' }}>💬</span>
           Comment
         </button>
-        <button
-          onClick={handleRepost}
-          className="post-action-item"
-          disabled={repostedPosts[post.post_id]}
+        <RepostButton
+          originalPost={{
+            post_id: post.post_id,
+            post_content: post.post_content,
+            post_image: post.post_image,
+            post_images: post.post_images,
+            user: {
+              user_id: post.user?.user_id || 0,
+              f_name: post.user?.f_name || '',
+              l_name: post.user?.l_name || '',
+              profile_pic: post.user?.profile_pic
+            },
+            created_at: post.created_at || ''
+          }}
+          currentUser={{
+            name: `${displayName}`,
+            profile_pic: displayAvatar
+          }}
+          isReposted={repostedPosts[post.post_id] || false}
+          onRepost={onPostUpdate}
+          formatTime={formatTime}
+          isForum={isForum}
           style={{
             color: repostedPosts[post.post_id] ? '#007bff' : '#6c757d',
             fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
-            background: 'none',
-            border: 'none',
-            cursor: repostedPosts[post.post_id] ? 'not-allowed' : 'pointer',
             padding: '8px 16px',
             borderRadius: 6,
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
             transition: 'background-color 0.2s'
           }}
-          onMouseEnter={(e) => {
-            if (!repostedPosts[post.post_id]) {
-              e.currentTarget.style.backgroundColor = '#f8f9fa';
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }}
-        >
-          <span style={{ fontSize: '14px' }}>🔄</span>
-          Repost
-        </button>
+          className="post-action-item"
+        />
       </div>
 
       {showCommentInput[post.post_id] && (
@@ -2330,25 +2413,110 @@ const PostCard: React.FC<PostCardProps> = ({
         </div>
       )}
 
-      {/* Repost Modal */}
-      <RepostModal
-        isOpen={showRepostModal}
-        onClose={() => setShowRepostModal(false)}
-        onRepost={handleRepostSubmit}
-        originalPost={post}
-        currentUser={(() => {
-          const userStr = localStorage.getItem('user');
-          if (userStr) {
-            const user = JSON.parse(userStr);
-            return {
-              name: `${user.f_name || ''} ${user.m_name || ''} ${user.l_name || ''}`.trim(),
-              profile_pic: user.profile_pic
-            };
-          }
-          return { name: '', profile_pic: undefined };
-        })()}
-        formatTime={formatTime}
-      />
+      {/* Reposts section - hidden for forum posts as they use individual repost cards */}
+      {!isForum && post.reposts && post.reposts.length > 0 && (
+        <div className="reposts-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
+          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '8px' }}>
+            Reposts ({post.reposts.length})
+          </div>
+          {post.reposts.map((repost) => (
+            <div key={repost.repost_id} className="profile-repost-card" style={{ 
+              marginBottom: '12px',
+              backgroundColor: '#fff',
+              border: '1px solid #e1e5e9',
+              borderRadius: '12px',
+              padding: '16px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+            }}>
+              {/* Reposter's header - matching main repost structure */}
+              <div className="profile-repost-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div className="profile-repost-header-left" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <img
+                    src={repost.user.profile_pic ? (String(repost.user.profile_pic).startsWith('http') ? repost.user.profile_pic : `http://127.0.0.1:8000${repost.user.profile_pic}`) : ctulogo}
+                    alt="Profile"
+                    className="profile-repost-profile-image"
+                    style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }}
+                    onClick={() => {
+                      if (repost.user?.user_id) {
+                        const currentPath = window.location.pathname;
+                        if (currentPath.startsWith('/peso')) {
+                          window.location.href = `/peso/profile/${repost.user.user_id}`;
+                        } else if (currentPath.startsWith('/ccict')) {
+                          window.location.href = `/ccict/profile/${repost.user.user_id}`;
+                        } else {
+                          window.location.href = `/alumni/profile/${repost.user.user_id}`;
+                        }
+                      }
+                    }}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.onerror = null;
+                      target.src = ctulogo as unknown as string;
+                    }}
+                  />
+                  <div>
+                    <div 
+                      className="post-author-info"
+                      style={{ fontSize: '16px', fontWeight: 'bold', color: '#333', cursor: 'pointer', marginBottom: '4px' }}
+                      onClick={() => {
+                        if (repost.user?.user_id) {
+                          const currentPath = window.location.pathname;
+                          if (currentPath.startsWith('/peso')) {
+                            window.location.href = `/peso/profile/${repost.user.user_id}`;
+                          } else if (currentPath.startsWith('/ccict')) {
+                            window.location.href = `/ccict/profile/${repost.user.user_id}`;
+                          } else {
+                            window.location.href = `/alumni/profile/${repost.user.user_id}`;
+                          }
+                        }
+                      }}
+                    >
+                      {repost.user.f_name} {repost.user.m_name} {repost.user.l_name}
+                    </div>
+                    <div className="profile-repost-author-details" style={{ fontSize: '14px', color: '#666' }}>
+                      <span>{formatTime(repost.repost_date)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Repost caption - matching main repost structure */}
+              {repost.repost_caption && (
+                <div className="profile-repost-caption" style={{ 
+                  fontSize: '16px', 
+                  color: '#333', 
+                  marginBottom: '12px',
+                  lineHeight: '1.5',
+                  padding: '12px',
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '8px',
+                  border: '1px solid #e9ecef'
+                }}>
+                  {repost.repost_caption}
+                </div>
+              )}
+              
+              {/* Repost indicator - matching main repost structure */}
+              <div style={{ 
+                fontSize: '14px', 
+                color: '#007bff', 
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                backgroundColor: '#e3f2fd',
+                borderRadius: '6px',
+                border: '1px solid #bbdefb'
+              }}>
+                <span style={{ fontSize: '16px' }}>🔄</span>
+                <span>Reposted</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
 
       {/* Photo Gallery Modal */}
       <PhotoGalleryModal

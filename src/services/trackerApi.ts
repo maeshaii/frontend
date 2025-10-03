@@ -23,7 +23,13 @@ async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T
   try {
     const method = (options?.method || 'GET').toUpperCase();
     const headers = options?.headers as Record<string, string> | undefined;
-    const data = options?.body as any;
+    let data = options?.body as any;
+    
+    // Parse JSON string if needed
+    if (typeof data === 'string') {
+      data = JSON.parse(data);
+    }
+    
     const config = { headers } as any;
     if (method === 'GET') {
       const { data: resp } = await api.get(endpoint.replace(/^\//, ''), config);
@@ -43,6 +49,7 @@ async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T
     }
     throw new Error(`Unsupported method ${method}`);
   } catch (error: any) {
+    console.error('API Request Error:', error);  // Debug print
     const message =
       error?.response?.data?.message ||
       (error instanceof Error ? error.message : 'Network error occurred');

@@ -487,7 +487,10 @@ export const getPostComments = async (postId: number) => {
 };
 
 export const repostPost = async (postId: number, caption?: string) => {
-  const response = await api.post(`posts/${postId}/repost/`, { caption: caption || '' });
+  const url = `posts/${postId}/repost/`;
+  console.log('Repost API URL:', url);
+  console.log('Post ID:', postId, 'Type:', typeof postId);
+  const response = await api.post(url, { caption: caption || '' });
   return response.data;
 };
 
@@ -589,8 +592,8 @@ export const getForumComments = async (forumId: number) => {
   return response.data;
 };
 
-export const repostForumPost = async (forumId: number) => {
-  const response = await api.post(`forum/${forumId}/repost/`);
+export const repostForumPost = async (forumId: number, caption?: string) => {
+  const response = await api.post(`forum/${forumId}/repost/`, { caption });
   return response.data;
 };
 
@@ -744,5 +747,88 @@ export const updateUserPassword = async (userId: number, newPassword: string): P
 // Get admin and PESO user IDs dynamically
 export const getAdminPesoUsers = async () => {
   const response = await api.get('admin-peso-users/');
+  return response.data;
+};
+
+// Donation API functions
+export const getDonationRequests = async () => {
+  console.log('API: Fetching donation requests from donations/ endpoint');
+  try {
+    const response = await api.get('donations/');
+    console.log('API: Donation requests response:', response);
+    console.log('API: Response data:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('API: Error fetching donation requests:', error);
+    console.error('API: Error response:', error.response);
+    throw error;
+  }
+};
+
+export const createDonationRequest = async (donationData: {
+  description: string;
+  images?: string[];
+}) => {
+  console.log('Creating donation request with data:', donationData);
+  console.log('API base URL:', API_BASE);
+  try {
+    const response = await api.post('donations/', donationData);
+    console.log('Donation request response:', response);
+    console.log('Response data:', response.data);
+    console.log('Response status:', response.status);
+    return response.data;
+  } catch (error: any) {
+    console.error('Donation request API error:', error);
+    console.error('Error response:', error.response);
+    console.error('Error response data:', error.response?.data);
+    throw error;
+  }
+};
+
+export const getDonationRequest = async (donationId: number) => {
+  const response = await api.get(`donations/${donationId}/`);
+  return response.data;
+};
+
+export const updateDonationRequest = async (donationId: number, updateData: {
+  description?: string;
+  status?: string;
+}) => {
+  const response = await api.put(`donations/${donationId}/`, updateData);
+  return response.data;
+};
+
+export const deleteDonationRequest = async (donationId: number) => {
+  const response = await api.delete(`donations/${donationId}/`);
+  return response.data;
+};
+
+// Donation interaction API functions
+export const likeDonation = async (donationId: number) => {
+  const response = await api.post(`donations/${donationId}/like/`);
+  return response.data;
+};
+
+export const unlikeDonation = async (donationId: number) => {
+  const response = await api.delete(`donations/${donationId}/like/`);
+  return response.data;
+};
+
+export const getDonationComments = async (donationId: number) => {
+  const response = await api.get(`donations/${donationId}/comments/`);
+  return response.data;
+};
+
+export const commentOnDonation = async (donationId: number, commentContent: string) => {
+  const response = await api.post(`donations/${donationId}/comments/`, {
+    comment_content: commentContent
+  });
+  return response.data;
+};
+
+export const repostDonation = async (donationId: number, repostCaption: string) => {
+  const response = await api.post(`donations/${donationId}/repost/`, {
+    caption: repostCaption
+  });
   return response.data;
 };

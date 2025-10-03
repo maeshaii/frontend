@@ -38,6 +38,7 @@ interface QuestionItem {
   text: string;
   type: string;
   options?: string[];
+  required?: boolean;
 }
 
 interface CategoryItem {
@@ -287,10 +288,17 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
     text: '',
     type: 'text',
     options: [''],
+    required: false,
   });
 
   const handleAddQuestionChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setNewQuestionDraft({ ...newQuestionDraft, [e.target.name]: e.target.value });
+    const { name, value, type } = e.target;
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setNewQuestionDraft({ ...newQuestionDraft, [name]: checked });
+    } else {
+      setNewQuestionDraft({ ...newQuestionDraft, [name]: value });
+    }
   };
   const handleAddQuestionOptionChange = (idx: number, value: string) => {
     if (!newQuestionDraft.options) return;
@@ -311,13 +319,17 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   const handleSaveNewQuestion = async (catIdx: number) => {
     if (!newQuestionDraft.text || !newQuestionDraft.type) return;
     try {
-      const data = await trackerApi.addQuestion({
+      const questionData = {
         category_id: categories[catIdx].id,
         text: newQuestionDraft.text,
         type: newQuestionDraft.type,
         options:
           newQuestionDraft.type !== 'text' ? newQuestionDraft.options?.filter((opt) => opt) : [],
-      });
+        required: newQuestionDraft.required || false,
+      };
+      console.log('Sending question data:', questionData);  // Debug print
+      const data = await trackerApi.addQuestion(questionData);
+      console.log('Received response:', data);  // Debug print
 
       if (data.success) {
         setCategories((cats) =>
@@ -326,7 +338,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
           )
         );
         setAddingQuestionCatIdx(null);
-        setNewQuestionDraft({ text: '', type: 'text', options: [''] });
+        setNewQuestionDraft({ text: '', type: 'text', options: [''], required: false });
         await queryClient.invalidateQueries({ queryKey: ['tracker', 'questions'] });
       } else {
         alert(data.message || 'Failed to add question');
@@ -338,7 +350,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   };
   const cancelAddQuestion = () => {
     setAddingQuestionCatIdx(null);
-    setNewQuestionDraft({ text: '', type: 'text', options: [''] });
+    setNewQuestionDraft({ text: '', type: 'text', options: [''], required: false });
   };
 
   // Add state for editing a question inline
@@ -352,7 +364,13 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
     setEditQuestionDraft({ ...categories[catIdx].questions[qIdx] });
   };
   const handleEditQuestionChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setEditQuestionDraft({ ...editQuestionDraft, [e.target.name]: e.target.value });
+    const { name, value, type } = e.target;
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setEditQuestionDraft({ ...editQuestionDraft, [name]: checked });
+    } else {
+      setEditQuestionDraft({ ...editQuestionDraft, [name]: value });
+    }
   };
   const handleEditQuestionOptionChange = (idx: number, value: string) => {
     if (!editQuestionDraft.options) return;
@@ -378,6 +396,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         type: editQuestionDraft.type,
         options:
           editQuestionDraft.type !== 'text' ? editQuestionDraft.options?.filter((opt) => opt) : [],
+        required: editQuestionDraft.required || false,
       });
 
       if (data.success) {
@@ -533,6 +552,30 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   const handleSubmit = async () => {
     try {
       console.log('🔍 Form Submit Debug - Starting form submission...');
+      
+      // Validate required questions
+      const missingRequiredQuestions = [];
+      for (const category of categories) {
+        for (const question of category.questions) {
+          if (question.required) {
+            const answer = formResponses[question.id];
+            if (!answer || (typeof answer === 'string' && answer.trim() === '')) {
+              missingRequiredQuestions.push({
+                questionNumber: getQuestionNumber(categories.indexOf(category), category.questions.indexOf(question)),
+                questionText: question.text
+              });
+            }
+          }
+        }
+      }
+      
+      if (missingRequiredQuestions.length > 0) {
+        const missingQuestionsList = missingRequiredQuestions
+          .map(q => `${q.questionNumber}. ${q.questionText}`)
+          .join('\n');
+        alert(`Please answer the following required questions:\n\n${missingQuestionsList}`);
+        return;
+      }
       
       // Create FormData for file uploads
       const formData = new FormData();
@@ -765,6 +808,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                         <div key={q.id} style={{ marginBottom: 16 }}>
                           <label style={{ fontWeight: 500 }}>
                             {getQuestionNumber(catIdx, qIdx)}. {q.text}
+                            {q.required && <span style={{ color: 'red', marginLeft: 4 }}>*</span>}
                           </label>
                           <Autocomplete
                             options={filterJobs(currentInput)}
@@ -820,6 +864,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                       <div key={q.id} style={{ marginBottom: 16 }}>
                         <label style={{ fontWeight: 500 }}>
                           {getQuestionNumber(catIdx, qIdx)}. {q.text}
+                          {q.required && <span style={{ color: 'red', marginLeft: 4 }}>*</span>}
                         </label>
                         <div>
                           {q.type === 'text' &&
@@ -1085,6 +1130,17 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                               </option>
                             ))}
                           </select>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <input
+                                type="checkbox"
+                                name="required"
+                                checked={newQuestionDraft.required || false}
+                                onChange={handleAddQuestionChange}
+                              />
+                              Required
+                            </label>
+                          </div>
                           {newQuestionDraft.type !== 'text' && (
                             <div style={{ marginBottom: 8 }}>
                               <label>Options:</label>
@@ -1169,6 +1225,17 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                                   </option>
                                 ))}
                               </select>
+                              <div style={{ marginBottom: 8 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <input
+                                    type="checkbox"
+                                    name="required"
+                                    checked={editQuestionDraft.required || false}
+                                    onChange={handleEditQuestionChange}
+                                  />
+                                  Required
+                                </label>
+                              </div>
                               {editQuestionDraft.type !== 'text' && (
                                 <div style={{ marginBottom: 8 }}>
                                   <label>Options:</label>
@@ -1220,8 +1287,10 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                             <>
                               <h3>
                                 {getQuestionNumber(catIdx, qIdx)}. {q.text}
+                                {q.required && <span style={{ color: 'red', marginLeft: 8 }}>*</span>}
                               </h3>
                               <p>Type: {QUESTION_TYPES.find((t) => t.value === q.type)?.label}</p>
+                              {q.required && <p style={{ color: 'red', fontSize: '0.9em', margin: 0 }}>Required</p>}
                               {q.options && q.options.length > 0 && (
                                 <ul>
                                   {q.options.map((opt, i) => (
