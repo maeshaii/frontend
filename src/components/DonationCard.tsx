@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Avatar, Typography, Box } from '@mui/material';
 import ctulogo from '../images/ctulogo.png';
 import { api, likeDonation, unlikeDonation, commentOnDonation, repostDonation, deleteDonationRequest, updateDonationRequest } from '../services/api';
 import RepostModal from './RepostModal';
@@ -822,29 +821,69 @@ const DonationCard: React.FC<DonationCardProps> = ({
           </div>
         </>
       ) : (
-        // Original donation structure
-        <Card sx={{ 
-          mb: 2, 
-          borderRadius: 2, 
-          boxShadow: 3, 
-          p: 2,
-          border: '2px solid #ff6b35',
-          borderLeft: '6px solid #ff6b35'
+        // Original donation structure - matching forum UI exactly
+        <div style={{
+          background: 'white',
+          border: '1px solid #e1e8ed',
+          borderRadius: '12px',
+          padding: '16px',
+          marginBottom: '16px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
         }}>
-          {/* User info */}
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, position: 'relative' }}>
-            <Avatar 
-              src={repostDisplayAvatar} 
-              sx={{ width: 40, height: 40, mr: 2 }} 
+          {/* User info - matching forum header */}
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px', position: 'relative' }}>
+            <img
+              src={repostDisplayAvatar}
+              alt="Profile"
+              style={{ 
+                width: '40px', 
+                height: '40px', 
+                borderRadius: '50%', 
+                objectFit: 'cover', 
+                cursor: 'pointer',
+                marginRight: '12px'
+              }}
+              onClick={() => {
+                if (donation.user?.user_id) {
+                  const currentPath = window.location.pathname;
+                  if (currentPath.startsWith('/peso')) {
+                    window.location.href = `/peso/profile/${donation.user.user_id}`;
+                  } else if (currentPath.startsWith('/ccict')) {
+                    window.location.href = `/ccict/profile/${donation.user.user_id}`;
+                  } else {
+                    window.location.href = `/alumni/profile/${donation.user.user_id}`;
+                  }
+                }
+              }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = ctulogo;
+              }}
             />
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="subtitle2" fontWeight="bold">
+            <div style={{ flex: 1 }}>
+              <div style={{ 
+                fontWeight: '600', 
+                fontSize: '16px', 
+                color: '#333',
+                cursor: 'pointer'
+              }}
+              onClick={() => {
+                if (donation.user?.user_id) {
+                  const currentPath = window.location.pathname;
+                  if (currentPath.startsWith('/peso')) {
+                    window.location.href = `/peso/profile/${donation.user.user_id}`;
+                  } else if (currentPath.startsWith('/ccict')) {
+                    window.location.href = `/ccict/profile/${donation.user.user_id}`;
+                  } else {
+                    window.location.href = `/alumni/profile/${donation.user.user_id}`;
+                  }
+                }
+              }}>
                 {repostDisplayName}
-              </Typography>
-              <Typography variant="caption" sx={{ color: '#6c757d' }}>
+              </div>
+              <div style={{ fontSize: '14px', color: '#6c757d' }}>
                 {formatTime(isRepostPost ? repostData.repost_date : donation.created_at)}
-              </Typography>
-            </Box>
+              </div>
+            </div>
         {isOwn && (
           <div ref={optionsMenuRef} style={{ position: 'relative' }}>
             <button
@@ -923,579 +962,470 @@ const DonationCard: React.FC<DonationCardProps> = ({
             )}
           </div>
         )}
-      </Box>
+            </div>
 
-      {/* Description */}
-      {editingDonation ? (
-        <Box sx={{ mb: 2 }}>
-          <textarea
-            value={editDonationContent}
-            onChange={(e) => setEditDonationContent(e.target.value)}
-            style={{
-              width: '100%',
-              minHeight: '80px',
-              padding: '12px',
-              border: '1px solid #e9ecef',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontFamily: 'inherit',
-              resize: 'vertical'
-            }}
-            placeholder="Describe your donation request..."
-          />
-          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-            <button
-              onClick={handleSaveEditDonation}
-              style={{
-                background: '#0066cc',
-                color: 'white',
-                border: 'none',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                cursor: 'pointer'
-              }}
-            >
-              Save
-            </button>
-            <button
-              onClick={handleCancelEditDonation}
-              style={{
-                background: '#6c757d',
-                color: 'white',
-                border: 'none',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                cursor: 'pointer'
-              }}
-            >
-              Cancel
-            </button>
-          </Box>
-        </Box>
-      ) : (
-        <Typography variant="body2" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>
-          {donation.description}
-        </Typography>
-      )}
-      
-      {/* Repost structure for donation reposts */}
-      {isRepostPost && repostData?.original_donation && (
-        <Box sx={{ 
-          border: '1px solid #e0e0e0', 
-          borderRadius: 2, 
-          p: 2, 
-          mt: 2, 
-          bgcolor: '#fafafa',
-          cursor: 'pointer',
-          '&:hover': {
-            bgcolor: '#f5f5f5'
-          }
-        }}
-        onClick={() => {
-          // Handle clicking on original donation - could open a modal or navigate
-          console.log('Clicked on original donation:', repostData.original_donation);
-        }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <Avatar 
-              src={repostData.original_donation.user.profile_pic ? 
-                (String(repostData.original_donation.user.profile_pic).startsWith('http') ? 
-                  repostData.original_donation.user.profile_pic : 
-                  `http://127.0.0.1:8000${repostData.original_donation.user.profile_pic}`) : 
-                ctulogo} 
-              sx={{ width: 32, height: 32, mr: 1 }} 
-            />
-            <Typography variant="caption" sx={{ color: '#6c757d' }}>
-              Original donation by {repostData.original_donation.user.name}
-            </Typography>
-          </Box>
-          <Typography variant="body2" sx={{ color: '#666' }}>
-            {repostData.original_donation.description}
-          </Typography>
-        </Box>
-      )}
-
-      {/* Images */}
-      {donation.images && donation.images.length > 0 && (
-        <Box sx={{ mb: 2 }}>
-          <div style={{
-            display: 'grid',
-            gap: 8,
-            gridTemplateColumns: donation.images.length === 1 ? '1fr' : 
-                             donation.images.length === 2 ? '1fr 1fr' :
-                             donation.images.length === 3 ? '2fr 1fr' :
-                             'repeat(2, 1fr)',
-            gridTemplateRows: donation.images.length <= 2 ? '1fr' :
-                            donation.images.length === 3 ? '1fr 1fr' :
-                            'repeat(2, 1fr)',
-            height: donation.images.length <= 2 ? '200px' : '300px',
-            borderRadius: 12,
-            overflow: 'hidden'
-          }}>
-            {donation.images.slice(0, 4).map((image, index) => {
-              let gridArea = '';
-              if (donation.images.length === 3) {
-                gridArea = index === 0 ? '1 / 1 / 3 / 2' : `1 / 2 / 2 / 3`;
-                if (index === 2) gridArea = '2 / 2 / 3 / 3';
-              }
-              return (
-                <div key={index} style={{
-                  position: 'relative',
-                  gridArea: gridArea,
-                  overflow: 'hidden'
-                }}>
-                  <img
-                    src={image.image_url.startsWith('/media/') 
-                      ? `http://127.0.0.1:8000${image.image_url}`
-                      : image.image_url
-                    }
-                    alt={`Donation ${index + 1}`}
-                    onClick={() => handleImageClick(index)}
+            {/* Description - matching forum content style */}
+            {editingDonation ? (
+              <div style={{ marginBottom: '12px' }}>
+                <textarea
+                  value={editDonationContent}
+                  onChange={(e) => setEditDonationContent(e.target.value)}
+                  style={{
+                    width: '100%',
+                    minHeight: '80px',
+                    padding: '12px',
+                    border: '1px solid #e9ecef',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontFamily: 'inherit',
+                    resize: 'vertical',
+                    marginBottom: '8px'
+                  }}
+                  placeholder="Describe your donation request..."
+                />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={handleSaveEditDonation}
                     style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
+                      background: '#0066cc',
+                      color: 'white',
+                      border: 'none',
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
                       cursor: 'pointer'
                     }}
-                  />
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={handleCancelEditDonation}
+                    style={{
+                      background: '#6c757d',
+                      color: 'white',
+                      border: 'none',
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
                 </div>
-              );
-            })}
-            {donation.images.length > 4 && (
-              <div style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'rgba(0, 0, 0, 0.75)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'white',
-                fontSize: 20,
-                fontWeight: 'bold',
-                cursor: 'pointer'
+              </div>
+            ) : (
+              <div style={{ 
+                fontSize: '16px', 
+                color: '#333', 
+                lineHeight: '1.5', 
+                marginBottom: '12px',
+                whiteSpace: 'pre-wrap'
               }}>
-                +{donation.images.length - 4}
+                {donation.description}
               </div>
             )}
-          </div>
-        </Box>
-      )}
+            {/* Images - matching forum image display */}
+            {donation.images && donation.images.length > 0 && (
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{
+                  display: 'grid',
+                  gap: '6px',
+                  gridTemplateColumns: donation.images.length === 1 ? '1fr' : 
+                                   donation.images.length === 2 ? '1fr 1fr' :
+                                   donation.images.length === 3 ? '2fr 1fr' :
+                                   'repeat(2, 1fr)',
+                  gridTemplateRows: donation.images.length <= 2 ? '1fr' :
+                                  donation.images.length === 3 ? '1fr 1fr' :
+                                  'repeat(2, 1fr)',
+                  height: donation.images.length <= 2 ? '200px' : '300px',
+                  borderRadius: '8px',
+                  overflow: 'hidden'
+                }}>
+                  {donation.images.slice(0, 4).map((image, index) => {
+                    let gridArea = '';
+                    if (donation.images.length === 3) {
+                      gridArea = index === 0 ? '1 / 1 / 3 / 2' : `1 / 2 / 2 / 3`;
+                      if (index === 2) gridArea = '2 / 2 / 3 / 3';
+                    }
+                    return (
+                      <div key={index} style={{
+                        position: 'relative',
+                        gridArea: gridArea,
+                        overflow: 'hidden'
+                      }}>
+                        <img
+                          src={image.image_url.startsWith('/media/') 
+                            ? `http://127.0.0.1:8000${image.image_url}`
+                            : image.image_url
+                          }
+                          alt={`Donation ${index + 1}`}
+                          onClick={() => handleImageClick(index)}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            cursor: 'pointer'
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                  {donation.images.length > 4 && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      background: 'rgba(0, 0, 0, 0.75)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontSize: 20,
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}>
+                      +{donation.images.length - 4}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
-      {/* Likes, Comments, and Reposts Count */}
-      {(donation.likes_count && donation.likes_count > 0) || (donation.comments_count && donation.comments_count > 0) || (donation.reposts_count && donation.reposts_count > 0) ? (
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          padding: '8px 0',
-          borderTop: '1px solid #f0f0f0',
-          marginTop: '8px'
-        }}>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            {donation.likes_count && donation.likes_count > 0 ? (
-              <span
-                onClick={() => setShowLikesModal(true)}
-                style={{ 
-                  cursor: 'pointer', 
-                  fontSize: '12px',
-                  color: '#6c757d',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  transition: 'background-color 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f8f9fa';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                {donation.likes_count === 1 ? '1 like' : `${donation.likes_count} likes`}
-              </span>
-            ) : null}
-            
-            {donation.comments_count && donation.comments_count > 0 ? (
-              <span
-                onClick={() => setShowAllComments?.(prev => ({ ...prev, [isRepostPost ? repostData.repost_id : donation.donation_id]: !prev[isRepostPost ? repostData.repost_id : donation.donation_id] }))}
-                style={{ 
-                  cursor: 'pointer', 
-                  fontSize: '12px',
-                  color: '#6c757d',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  transition: 'background-color 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f8f9fa';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                {getPluralForm(donation.comments_count, 'comment', 'comments')}
-              </span>
-            ) : null}
-            
-            {donation.reposts_count && donation.reposts_count > 0 ? (
-              <span
-                style={{ 
-                  fontSize: '12px',
-                  color: '#6c757d',
-                  padding: '4px 8px',
-                  borderRadius: '4px'
-                }}
-              >
-                {getPluralForm(donation.reposts_count, 'repost', 'reposts')}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {/* Action Buttons */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        borderTop: '1px solid #e9ecef',
-        paddingTop: '8px',
-        marginTop: '8px'
-      }}>
-        <button
-          onClick={() => {
-            const itemId = isRepostPost ? repostData.repost_id : donation.donation_id;
-            if (donation.likes_count && donation.likes_count > 0 && !likedDonations[itemId]) {
-              setShowLikesModal(true);
-            } else {
-              likedDonations[itemId] ? handleUnlike() : handleLike();
-            }
-          }}
-          style={{
-            color: likedDonations[isRepostPost ? repostData.repost_id : donation.donation_id] ? '#ef4444' : '#6c757d',
-            fontWeight: likedDonations[isRepostPost ? repostData.repost_id : donation.donation_id] ? '600' : '400',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '8px 16px',
-            borderRadius: 8,
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            transition: 'all 0.3s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#f8f9fa';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }}
-        >
-          <span style={{ 
-            fontSize: '16px', 
-            color: likedDonations[donation.donation_id] ? '#3b82f6' : '#6b7280',
-            fontWeight: likedDonations[donation.donation_id] ? '900' : '400'
-          }}>
-            👍
-          </span>
-          {donation.likes_count === 1 ? '1 like' : (donation.likes_count && donation.likes_count > 1) ? `${donation.likes_count} likes` : 'Like'}
-        </button>
-        
-        <button
-          onClick={() => setShowCommentInput?.(prev => ({ ...prev, [isRepostPost ? repostData.repost_id : donation.donation_id]: !prev[isRepostPost ? repostData.repost_id : donation.donation_id] }))}
-          style={{
-            color: '#6c757d',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '8px 16px',
-            borderRadius: 8,
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            transition: 'all 0.3s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#f8f9fa';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }}
-        >
-          <span style={{ fontSize: '16px' }}>💬</span>
-          Comment
-        </button>
-        
-        <button
-          onClick={handleRepost}
-          style={{
-            color: '#6c757d',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '8px 16px',
-            borderRadius: 8,
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            transition: 'all 0.3s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#f8f9fa';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }}
-        >
-          <span style={{ fontSize: '16px' }}>🔄</span>
-          Repost
-        </button>
-      </div>
-
-      {/* Comment Input */}
-      {showCommentInput[isRepostPost ? repostData.repost_id : donation.donation_id] && (
-        <div style={{ 
-          borderTop: '1px solid #f0f0f0', 
-          paddingTop: '12px', 
-          marginTop: '8px' 
-        }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-            <div style={{ 
-              width: '32px', 
-              height: '32px', 
-              borderRadius: '50%', 
-              background: '#e9ecef',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              color: '#6c757d'
-            }}>
-              {currentUserId ? String(currentUserId).slice(-2) : '?'}
-            </div>
-            <div style={{ flex: 1 }}>
-              <textarea
-                value={commentInput[isRepostPost ? repostData.repost_id : donation.donation_id] || ''}
-                onChange={(e) => setCommentInput?.(prev => ({ ...prev, [isRepostPost ? repostData.repost_id : donation.donation_id]: e.target.value }))}
-                placeholder="Write a comment..."
-                style={{
-                  width: '100%',
-                  minHeight: '60px',
-                  padding: '8px 12px',
-                  border: '1px solid #e9ecef',
-                  borderRadius: '20px',
-                  fontSize: '14px',
-                  fontFamily: 'inherit',
-                  resize: 'none',
-                  outline: 'none'
-                }}
-              />
+            {/* Interaction Summary - matching forum style */}
+            {(donation.likes_count && donation.likes_count > 0) || (donation.comments_count && donation.comments_count > 0) || (donation.reposts_count && donation.reposts_count > 0) ? (
               <div style={{ 
                 display: 'flex', 
-                justifyContent: 'flex-end', 
-                gap: '8px', 
-                marginTop: '8px' 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                padding: '8px 0',
+                borderTop: '1px solid #f0f0f0',
+                marginTop: '8px'
               }}>
-                <button
-                  onClick={() => setShowCommentInput?.(prev => ({ ...prev, [isRepostPost ? repostData.repost_id : donation.donation_id]: false }))}
-                  style={{
-                    background: 'none',
-                    border: '1px solid #e9ecef',
-                    color: '#6c757d',
-                    padding: '6px 12px',
-                    borderRadius: '16px',
-                    fontSize: '12px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    console.log('Comment button clicked');
-                    handleCommentSubmit();
-                  }}
-                  disabled={!commentInput[isRepostPost ? repostData.repost_id : donation.donation_id]?.trim()}
-                  style={{
-                    background: commentInput[isRepostPost ? repostData.repost_id : donation.donation_id]?.trim() ? '#0066cc' : '#e9ecef',
-                    border: 'none',
-                    color: commentInput[isRepostPost ? repostData.repost_id : donation.donation_id]?.trim() ? 'white' : '#6c757d',
-                    padding: '6px 12px',
-                    borderRadius: '16px',
-                    fontSize: '12px',
-                    cursor: commentInput[isRepostPost ? repostData.repost_id : donation.donation_id]?.trim() ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  Comment
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Comments Display */}
-      {donation.comments && donation.comments.length > 0 && (
-        <div style={{ 
-          borderTop: '1px solid #f0f0f0', 
-          paddingTop: '12px', 
-          marginTop: '8px' 
-        }}>
-          {donation.comments.slice(0, showAllComments[isRepostPost ? repostData.repost_id : donation.donation_id] ? donation.comments.length : 2).map((comment) => (
-            <div key={comment.comment_id} style={{ 
-              display: 'flex', 
-              gap: '8px', 
-              marginBottom: '12px' 
-            }}>
-              <Avatar 
-                src={comment.user.profile_pic ? 
-                  (String(comment.user.profile_pic).startsWith('http') ? 
-                    comment.user.profile_pic : 
-                    `http://127.0.0.1:8000${comment.user.profile_pic}`) : 
-                  ctulogo} 
-                sx={{ width: 32, height: 32 }} 
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ 
-                  background: '#f8f9fa', 
-                  padding: '8px 12px', 
-                  borderRadius: '16px',
-                  marginBottom: '4px'
-                }}>
-                  <div style={{ 
-                    fontSize: '12px', 
-                    fontWeight: 'bold', 
-                    marginBottom: '2px' 
-                  }}>
-                    {`${comment.user.f_name} ${comment.user.m_name || ''} ${comment.user.l_name}`.trim()}
-                  </div>
-                  <div style={{ fontSize: '14px' }}>
-                    {comment.comment_content}
-                  </div>
-                </div>
-                <div style={{ 
-                  fontSize: '11px', 
-                  color: '#6c757d', 
-                  marginLeft: '12px' 
-                }}>
-                  {formatTime(comment.date_created)}
-                </div>
-              </div>
-            </div>
-          ))}
-          {donation.comments.length > 2 && !showAllComments[isRepostPost ? repostData.repost_id : donation.donation_id] && (
-            <button
-              onClick={() => setShowAllComments?.(prev => ({ ...prev, [isRepostPost ? repostData.repost_id : donation.donation_id]: true }))}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#0066cc',
-                fontSize: '12px',
-                cursor: 'pointer',
-                padding: '4px 0'
-              }}
-            >
-              View {donation.comments.length - 2} more comments
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Reposts Section */}
-      {donation.reposts && donation.reposts.length > 0 && (
-        <div style={{ 
-          borderTop: '1px solid #f0f0f0', 
-          paddingTop: '12px', 
-          marginTop: '8px' 
-        }}>
-          {donation.reposts.map((repost) => (
-            <div key={repost.repost_id} style={{ 
-              backgroundColor: '#f8f9fa',
-              border: '1px solid #e9ecef',
-              borderRadius: '8px',
-              padding: '12px',
-              marginBottom: '12px'
-            }}>
-              {/* Reposter header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <Avatar 
-                  src={repost.user.profile_pic ? 
-                    (String(repost.user.profile_pic).startsWith('http') ? 
-                      repost.user.profile_pic : 
-                      `http://127.0.0.1:8000${repost.user.profile_pic}`) : 
-                    ctulogo} 
-                  sx={{ width: 24, height: 24 }} 
-                />
-                <div>
-                  <div style={{ 
-                    fontSize: '12px', 
-                    fontWeight: 'bold',
-                    color: '#333'
-                  }}>
-                    {`${repost.user.f_name} ${repost.user.m_name || ''} ${repost.user.l_name}`.trim()}
-                  </div>
-                  <div style={{ 
-                    fontSize: '10px', 
-                    color: '#6c757d' 
-                  }}>
-                    {new Date(repost.repost_date).toLocaleDateString()}
-                  </div>
-                </div>
-                <div style={{ 
-                  marginLeft: 'auto',
-                  fontSize: '10px', 
-                  color: '#007bff', 
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <span>🔄</span>
-                  <span>Reposted</span>
-                </div>
-              </div>
-              
-              {/* Repost caption */}
-              {repost.repost_caption && (
-                <div style={{ 
-                  fontSize: '13px', 
-                  color: '#333', 
-                  marginBottom: '8px',
-                  lineHeight: '1.4'
-                }}>
-                  {repost.repost_caption}
-                </div>
-              )}
-              
-              {/* Repost interactions */}
-              {(repost.likes_count && repost.likes_count > 0) || (repost.comments_count && repost.comments_count > 0) ? (
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '12px',
-                  fontSize: '11px',
-                  color: '#6c757d',
-                  padding: '4px 0'
-                }}>
-                  {repost.likes_count && repost.likes_count > 0 ? (
-                    <span>{repost.likes_count === 1 ? '1 like' : `${repost.likes_count} likes`}</span>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  {donation.likes_count && donation.likes_count > 0 ? (
+                    <span
+                      onClick={() => setShowLikesModal(true)}
+                      style={{ 
+                        cursor: 'pointer', 
+                        fontSize: '14px',
+                        color: '#6c757d',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        transition: 'background-color 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f8f9fa';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      👍 {donation.likes_count === 1 ? '1 like' : `${donation.likes_count} likes`}
+                    </span>
                   ) : null}
                   
-                  {repost.comments_count && repost.comments_count > 0 ? (
-                    <span>{getPluralForm(repost.comments_count, 'comment', 'comments')}</span>
+                  {donation.comments_count && donation.comments_count > 0 ? (
+                    <span
+                      onClick={() => setShowAllComments?.(prev => ({ ...prev, [isRepostPost ? repostData.repost_id : donation.donation_id]: !prev[isRepostPost ? repostData.repost_id : donation.donation_id] }))}
+                      style={{ 
+                        cursor: 'pointer', 
+                        fontSize: '14px',
+                        color: '#6c757d',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        transition: 'background-color 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f8f9fa';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      {getPluralForm(donation.comments_count, 'comment', 'comments')}
+                    </span>
+                  ) : null}
+                  
+                  {donation.reposts_count && donation.reposts_count > 0 ? (
+                    <span
+                      style={{ 
+                        fontSize: '14px',
+                        color: '#6c757d',
+                        padding: '4px 8px',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      {getPluralForm(donation.reposts_count, 'repost', 'reposts')}
+                    </span>
                   ) : null}
                 </div>
-              ) : null}
+              </div>
+            ) : null}
+
+            {/* Action Buttons - matching forum style exactly */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              borderTop: '1px solid #e9ecef',
+              paddingTop: '8px',
+              marginTop: '8px'
+            }}>
+              <button
+                onClick={() => {
+                  const itemId = isRepostPost ? repostData.repost_id : donation.donation_id;
+                  if (donation.likes_count && donation.likes_count > 0 && !likedDonations[itemId]) {
+                    setShowLikesModal(true);
+                  } else {
+                    likedDonations[itemId] ? handleUnlike() : handleLike();
+                  }
+                }}
+                style={{
+                  color: likedDonations[isRepostPost ? repostData.repost_id : donation.donation_id] ? '#ef4444' : '#6c757d',
+                  fontWeight: likedDonations[isRepostPost ? repostData.repost_id : donation.donation_id] ? '600' : '400',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f8f9fa';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                <span style={{ 
+                  fontSize: '16px', 
+                  color: likedDonations[donation.donation_id] ? '#ef4444' : '#6c757d',
+                  fontWeight: likedDonations[donation.donation_id] ? '600' : '400'
+                }}>
+                  👍
+                </span>
+                {donation.likes_count === 1 ? '1 like' : (donation.likes_count && donation.likes_count > 1) ? `${donation.likes_count} likes` : 'Like'}
+              </button>
+              
+              <button
+                onClick={() => setShowCommentInput?.(prev => ({ ...prev, [isRepostPost ? repostData.repost_id : donation.donation_id]: !prev[isRepostPost ? repostData.repost_id : donation.donation_id] }))}
+                style={{
+                  color: '#6c757d',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f8f9fa';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                <span style={{ fontSize: '16px' }}>💬</span>
+                Comment
+              </button>
+              
+              <button
+                onClick={handleRepost}
+                style={{
+                  color: '#6c757d',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f8f9fa';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                <span style={{ fontSize: '16px' }}>🔄</span>
+                Repost
+              </button>
             </div>
-          ))}
-        </div>
-      )}
+
+            {/* Comment Input - matching forum style */}
+            {showCommentInput[isRepostPost ? repostData.repost_id : donation.donation_id] && (
+              <div style={{ 
+                borderTop: '1px solid #f0f0f0', 
+                paddingTop: '12px', 
+                marginTop: '8px' 
+              }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                  <div style={{ 
+                    width: '32px', 
+                    height: '32px', 
+                    borderRadius: '50%', 
+                    background: '#e9ecef',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    color: '#6c757d'
+                  }}>
+                    {currentUserId ? String(currentUserId).slice(-2) : '?'}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <textarea
+                      value={commentInput[isRepostPost ? repostData.repost_id : donation.donation_id] || ''}
+                      onChange={(e) => setCommentInput?.(prev => ({ ...prev, [isRepostPost ? repostData.repost_id : donation.donation_id]: e.target.value }))}
+                      placeholder="Write a comment..."
+                      style={{
+                        width: '100%',
+                        minHeight: '60px',
+                        padding: '8px 12px',
+                        border: '1px solid #e9ecef',
+                        borderRadius: '20px',
+                        fontSize: '14px',
+                        fontFamily: 'inherit',
+                        resize: 'none',
+                        outline: 'none'
+                      }}
+                    />
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'flex-end', 
+                      gap: '8px', 
+                      marginTop: '8px' 
+                    }}>
+                      <button
+                        onClick={() => setShowCommentInput?.(prev => ({ ...prev, [isRepostPost ? repostData.repost_id : donation.donation_id]: false }))}
+                        style={{
+                          background: 'none',
+                          border: '1px solid #e9ecef',
+                          color: '#6c757d',
+                          padding: '6px 12px',
+                          borderRadius: '16px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => {
+                          console.log('Comment button clicked');
+                          handleCommentSubmit();
+                        }}
+                        disabled={!commentInput[isRepostPost ? repostData.repost_id : donation.donation_id]?.trim()}
+                        style={{
+                          background: commentInput[isRepostPost ? repostData.repost_id : donation.donation_id]?.trim() ? '#0066cc' : '#e9ecef',
+                          border: 'none',
+                          color: commentInput[isRepostPost ? repostData.repost_id : donation.donation_id]?.trim() ? 'white' : '#6c757d',
+                          padding: '6px 12px',
+                          borderRadius: '16px',
+                          fontSize: '12px',
+                          cursor: commentInput[isRepostPost ? repostData.repost_id : donation.donation_id]?.trim() ? 'pointer' : 'not-allowed'
+                        }}
+                      >
+                        Comment
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Comments Display - matching forum style */}
+            {donation.comments && donation.comments.length > 0 && (
+              <div style={{ 
+                borderTop: '1px solid #f0f0f0', 
+                paddingTop: '12px', 
+                marginTop: '8px' 
+              }}>
+                {donation.comments.slice(0, showAllComments[isRepostPost ? repostData.repost_id : donation.donation_id] ? donation.comments.length : 2).map((comment) => (
+                  <div key={comment.comment_id} style={{ 
+                    display: 'flex', 
+                    gap: '8px', 
+                    marginBottom: '12px' 
+                  }}>
+                    <img
+                      src={comment.user.profile_pic ? 
+                        (String(comment.user.profile_pic).startsWith('http') ? 
+                          comment.user.profile_pic : 
+                          `http://127.0.0.1:8000${comment.user.profile_pic}`) : 
+                        ctulogo} 
+                      alt="Profile"
+                      style={{ 
+                        width: '32px', 
+                        height: '32px', 
+                        borderRadius: '50%', 
+                        objectFit: 'cover'
+                      }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = ctulogo;
+                      }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ 
+                        background: '#f8f9fa', 
+                        padding: '8px 12px', 
+                        borderRadius: '16px',
+                        marginBottom: '4px'
+                      }}>
+                        <div style={{ 
+                          fontSize: '12px', 
+                          fontWeight: 'bold', 
+                          marginBottom: '2px' 
+                        }}>
+                          {`${comment.user.f_name} ${comment.user.m_name || ''} ${comment.user.l_name}`.trim()}
+                        </div>
+                        <div style={{ fontSize: '14px' }}>
+                          {comment.comment_content}
+                        </div>
+                      </div>
+                      <div style={{ 
+                        fontSize: '11px', 
+                        color: '#6c757d', 
+                        marginLeft: '12px' 
+                      }}>
+                        {formatTime(comment.date_created)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {donation.comments.length > 2 && !showAllComments[isRepostPost ? repostData.repost_id : donation.donation_id] && (
+                  <button
+                    onClick={() => setShowAllComments?.(prev => ({ ...prev, [isRepostPost ? repostData.repost_id : donation.donation_id]: true }))}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#0066cc',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      padding: '4px 0'
+                    }}
+                  >
+                    View {donation.comments.length - 2} more comments
+                  </button>
+                )}
+              </div>
+            )}
+
+
 
       {/* Photo Gallery Modal */}
       {showPhotoGallery && donation.images && donation.images.length > 0 && (
@@ -1679,7 +1609,7 @@ const DonationCard: React.FC<DonationCardProps> = ({
           }}
         />
       )}
-        </Card>
+        </div>
       )}
       
       {/* Repost Modal */}

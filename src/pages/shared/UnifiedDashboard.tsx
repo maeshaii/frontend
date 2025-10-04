@@ -825,32 +825,80 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
               user={user ?? { name: '', profile_pic: undefined }}
             />
           )}
-          {(userType === 'alumni' || userType === 'ojt')
-            ? posts.filter(item => {
+          {(() => {
+            if (userType === 'alumni' || userType === 'ojt') {
+              // Create a unified feed with both posts and donations, sorted by date
+              const unifiedFeed: any[] = [];
+              
+              // Add posts to the unified feed
+              posts.forEach(post => {
+                unifiedFeed.push({
+                  ...post,
+                  feed_type: 'post',
+                  sort_date: post.sort_date || post.created_at || new Date().toISOString()
+                });
+              });
+              
+              // Add donations to the unified feed
+              donationRequests.forEach(donation => {
+                // Add the original donation
+                unifiedFeed.push({
+                  ...donation,
+                  feed_type: 'donation',
+                  sort_date: donation.created_at
+                });
+                
+                // Add donation reposts as separate feed items
+                if (donation.reposts && donation.reposts.length > 0) {
+                  donation.reposts.forEach(repost => {
+                    unifiedFeed.push({
+                      ...donation,
+                      feed_type: 'donation_repost',
+                      repostData: repost,
+                      sort_date: repost.repost_date
+                    });
+                  });
+                }
+              });
+              
+              // Sort the unified feed by date (newest first)
+              const sortedUnifiedFeed = unifiedFeed.sort((a: any, b: any) => {
+                const dateA = new Date(a.sort_date);
+                const dateB = new Date(b.sort_date);
+                return dateB.getTime() - dateA.getTime();
+              });
+              
+              const filteredFeed = sortedUnifiedFeed.filter(item => {
                 const currentUserId = getCurrentUserId(user);
                 
-                // Debug repost items
-                if (item.item_type === 'repost') {
-                  console.log('🔍 DEBUG: Filtering repost item:', item);
+                // Handle different feed item types
+                let itemUserId: number | undefined;
+                let itemUser: any;
+                
+                if (item.feed_type === 'post') {
+                  // This is a regular post
+                  if (item.item_type === 'repost' && 'repost_id' in item) {
+                    // This is a post repost item
+                    itemUserId = item.user?.user_id;
+                    itemUser = item.user;
+                  } else {
+                    // This is a regular post item
+                    itemUserId = item.user?.user_id;
+                    itemUser = item.user;
+                  }
+                } else if (item.feed_type === 'donation') {
+                  // This is a regular donation
+                  itemUserId = item.user?.user_id;
+                  itemUser = item.user;
+                } else if (item.feed_type === 'donation_repost') {
+                  // This is a donation repost
+                  itemUserId = item.repostData?.user?.user_id;
+                  itemUser = item.repostData?.user;
                 }
                 
-                // Handle both regular posts and repost items
-                let postUserId: number | undefined;
-                let postUser: any;
-                if (item.item_type === 'repost' && 'repost_id' in item) {
-                  // This is a repost item
-                  postUserId = item.user?.user_id;
-                  postUser = item.user;
-                  console.log('🔍 DEBUG: Repost item user ID:', postUserId);
-                } else {
-                  // This is a regular post item
-                  postUserId = item.user?.user_id;
-                  postUser = item.user;
-                }
-                
-                const isOwn = currentUserId && postUserId && Number(postUserId) === Number(currentUserId);
+                const isOwn = currentUserId && itemUserId && Number(itemUserId) === Number(currentUserId);
                 let isFollowed = false;
-                if (Array.isArray(following) && postUserId) {
+                if (Array.isArray(following) && itemUserId) {
                   isFollowed = following.some(f => {
                     let followedId: number | undefined = undefined;
                     if (typeof f === 'object' && f !== null) {
@@ -860,81 +908,241 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         followedId = f.user_id;
                       }
                     }
-                    return followedId !== undefined && Number(followedId) === Number(postUserId);
+                    return followedId !== undefined && Number(followedId) === Number(itemUserId);
                   });
                 }
                 let isCcict = false, isPeso = false;
                 
-                if (postUser && postUser.account_type) {
+                if (itemUser && itemUser.account_type) {
                   // Check for both possible field names (ccict/admin, peso)
-                  isCcict = !!(postUser.account_type.ccict || postUser.account_type.admin);
-                  isPeso = !!postUser.account_type.peso;
+                  isCcict = !!(itemUser.account_type.ccict || itemUser.account_type.admin);
+                  isPeso = !!itemUser.account_type.peso;
                 }
                 
                 // DYNAMIC CHECK: Use fetched admin and PESO user IDs
-                const postUserIdForCheck = postUserId;
-                if (postUserIdForCheck && pesoUserIds.includes(postUserIdForCheck)) {
+                const itemUserIdForCheck = itemUserId;
+                if (itemUserIdForCheck && pesoUserIds.includes(itemUserIdForCheck)) {
                   isPeso = true;
-                  console.log('Dynamic PESO check - post from user', postUserIdForCheck);
-                } else if (postUserIdForCheck && adminUserIds.includes(postUserIdForCheck)) {
+                  console.log('Dynamic PESO check - item from user', itemUserIdForCheck);
+                } else if (itemUserIdForCheck && adminUserIds.includes(itemUserIdForCheck)) {
                   isCcict = true;
-                  console.log('Dynamic admin check - post from user', postUserIdForCheck);
+                  console.log('Dynamic admin check - item from user', itemUserIdForCheck);
                 }
                 
                 // For reposts, show if the reposter is visible (original post visibility is not required)
                 // This allows reposts to be shown based on who reposted it, not who originally posted it
                 
-                // Show posts from: own posts, followed users, PESO posts, or admin posts
-                // PESO and admin posts are always visible regardless of follow status
+                // Show items from: own items, followed users, PESO items, or admin items
+                // PESO and admin items are always visible regardless of follow status
                 const shouldShow = isOwn || isFollowed || isCcict || isPeso;
                 
-                // Debug repost filtering
-                if (item.item_type === 'repost') {
-                  console.log('🔍 DEBUG: Repost filter result:', {
+                // Debug filtering
+                if (item.feed_type === 'donation_repost' || item.item_type === 'repost') {
+                  console.log('🔍 DEBUG: Item filter result:', {
+                    feed_type: item.feed_type,
                     shouldShow,
                     isOwn,
                     isFollowed,
                     isCcict,
                     isPeso,
-                    postUserId,
+                    itemUserId,
                     currentUserId
                   });
                 }
                 
                 return shouldShow;
-              }).reduce((acc: any[], item: FeedItem) => {
+              });
+              
+              return filteredFeed.reduce((acc: any[], item: any) => {
                 const currentUserId = getCurrentUserId(user);
                 
-                // Check if this is a repost item or a regular post item
-                if (item.item_type === 'repost' && 'repost_id' in item) {
-                  // Render as repost card (nested structure)
-                  const repostItem = item as RepostFeedItem;
-                  const repostCard = (
-                    <PostCard
-                      key={`repost-${repostItem.repost_id}`}
-                      post={{
-                        ...repostItem.original_post,
-                        post_id: repostItem.repost_id, // Use repost_id for interactions
-                        likes: repostItem.likes || [],
-                        comments: repostItem.comments || [],
-                        likes_count: repostItem.likes_count || 0,
-                        comments_count: repostItem.comments_count || 0,
-                      } as PostItem}
+                // Handle different feed item types
+                if (item.feed_type === 'donation') {
+                  // Render donation card
+                  const donationCard = (
+                    <DonationCard 
+                      key={item.donation_id} 
+                      donation={item}
                       currentUserId={currentUserId}
-                      isOwn={currentUserId === repostItem.user.user_id}
-                      displayName={formatDisplayName(repostItem.user, currentUserId === repostItem.user.user_id, user)}
-                      displayAvatar={repostItem.user.profile_pic ? (String(repostItem.user.profile_pic).startsWith('http') ? repostItem.user.profile_pic : `http://127.0.0.1:8000${repostItem.user.profile_pic}`) : ctulogo}
-                      formatTime={formatHybrid}
+                      onDonationUpdate={() => {
+                        // Refresh donation requests
+                        getDonationRequests().then((response) => {
+                          if (response.success) {
+                            setDonationRequests(response.donations);
+                          }
+                        }).catch((error) => {
+                          console.error('Error refreshing donation requests:', error);
+                        });
+                      }}
+                      onDonationEdit={(donationId: number, newDescription: string) => {
+                        // Update local state immediately without page refresh
+                        setDonationRequests(prev => 
+                          prev.map(donation => 
+                            donation.donation_id === donationId 
+                              ? { ...donation, description: newDescription }
+                              : donation
+                          )
+                        );
+                      }}
+                      likedDonations={likedPosts} // Reuse likedPosts state
+                      setLikedDonations={setLikedPosts} // Reuse setLikedPosts
+                      commentInput={commentInput}
+                      setCommentInput={setCommentInput}
+                      showCommentInput={showCommentInput}
+                      setShowCommentInput={setShowCommentInput}
+                      showAllComments={showAllComments}
+                      setShowAllComments={setShowAllComments}
+                      showOptions={showOptions}
+                      setShowOptions={setShowOptions}
+                      isRepost={false}
+                    />
+                  );
+                  acc.push(donationCard);
+                  return acc;
+                } else if (item.feed_type === 'donation_repost') {
+                  // Render donation repost card
+                  const donationRepostCard = (
+                    <DonationCard 
+                      key={`donation-repost-${item.repostData.repost_id}`} 
+                      donation={item}
+                      currentUserId={currentUserId}
+                      onDonationUpdate={() => {
+                        // Refresh donation requests
+                        getDonationRequests().then((response) => {
+                          if (response.success) {
+                            setDonationRequests(response.donations);
+                          }
+                        }).catch((error) => {
+                          console.error('Error refreshing donation requests:', error);
+                        });
+                      }}
+                      onDonationEdit={(donationId: number, newDescription: string) => {
+                        // Update local state immediately without page refresh
+                        setDonationRequests(prev => 
+                          prev.map(donation => 
+                            donation.donation_id === donationId 
+                              ? { ...donation, description: newDescription }
+                              : donation
+                          )
+                        );
+                      }}
+                      likedDonations={likedPosts} // Reuse likedPosts state
+                      setLikedDonations={setLikedPosts} // Reuse setLikedPosts
+                      commentInput={commentInput}
+                      setCommentInput={setCommentInput}
+                      showCommentInput={showCommentInput}
+                      setShowCommentInput={setShowCommentInput}
+                      showAllComments={showAllComments}
+                      setShowAllComments={setShowAllComments}
+                      showOptions={showOptions}
+                      setShowOptions={setShowOptions}
                       isRepost={true}
-                      repostData={repostItem as any}
+                      repostData={item.repostData}
+                    />
+                  );
+                  acc.push(donationRepostCard);
+                  return acc;
+                } else if (item.feed_type === 'post') {
+                  // Handle post items (existing logic)
+                  // Check if this is a repost item or a regular post item
+                  if (item.item_type === 'repost' && 'repost_id' in item) {
+                    // Render as repost card (nested structure)
+                    const repostItem = item as RepostFeedItem;
+                    const repostCard = (
+                      <PostCard
+                        key={`repost-${repostItem.repost_id}`}
+                        post={{
+                          ...repostItem.original_post,
+                          post_id: repostItem.repost_id, // Use repost_id for interactions
+                          likes: repostItem.likes || [],
+                          comments: repostItem.comments || [],
+                          likes_count: repostItem.likes_count || 0,
+                          comments_count: repostItem.comments_count || 0,
+                        } as PostItem}
+                        currentUserId={currentUserId}
+                        isOwn={currentUserId === repostItem.user.user_id}
+                        displayName={formatDisplayName(repostItem.user, currentUserId === repostItem.user.user_id, user)}
+                        displayAvatar={repostItem.user.profile_pic ? (String(repostItem.user.profile_pic).startsWith('http') ? repostItem.user.profile_pic : `http://127.0.0.1:8000${repostItem.user.profile_pic}`) : ctulogo}
+                        formatTime={formatHybrid}
+                        isRepost={true}
+                        repostData={repostItem as any}
+                        onViewOriginalPost={handleViewOriginalPost}
+                        onPostUpdate={() => {
+                          console.log('onPostUpdate called - refreshing posts...');
+                          getPosts().then(updatedPosts => {
+                            console.log('Updated posts after repost:', updatedPosts);
+                            console.log('Repost items in update:', updatedPosts.filter((item: any) => item.item_type === 'repost'));
+                            setPosts(updatedPosts || []);
+                            
+                            const currentUserId = getCurrentUserId(user);
+                            const liked: { [key: number]: boolean } = {};
+                            (updatedPosts || []).forEach((post: any) => {
+                              if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
+                                liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                              } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
+                                liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                              }
+                            });
+                            setLikedPosts(liked);
+
+                            const reposted: { [key: number]: boolean} = {};
+                            (updatedPosts || []).forEach((post: any) => {
+                              if (post.item_type === 'post') {
+                                reposted[post.post_id] = false; // Will be calculated from reposts_count
+                              }
+                            });
+                            setRepostedPosts(reposted);
+                          });
+                        }}
+                        showOptions={showOptions}
+                        setShowOptions={setShowOptions}
+                        editingPost={editingPost}
+                        setEditingPost={setEditingPost}
+                        editPostContent={editPostContent}
+                        setEditPostContent={setEditPostContent}
+                        likedPosts={likedPosts}
+                        setLikedPosts={setLikedPosts}
+                        repostedPosts={repostedPosts}
+                        setRepostedPosts={setRepostedPosts}
+                        showCommentInput={showCommentInput}
+                        setShowCommentInput={setShowCommentInput}
+                        showAllComments={showAllComments}
+                        setShowAllComments={setShowAllComments}
+                        commentInput={commentInput}
+                        setCommentInput={setCommentInput}
+                        editingComment={editingComment}
+                        setEditingComment={setEditingComment}
+                        editCommentContent={editCommentContent}
+                        setEditCommentContent={setEditCommentContent}
+                      />
+                    );
+                    acc.push(repostCard);
+                    return acc;
+                  }
+                  
+                  // Regular post rendering
+                  const post = item;
+                  const isOwn = currentUserId !== null && post.user?.user_id && Number(post.user.user_id) === Number(currentUserId);
+                  const displayName = formatDisplayName(post.user, !!isOwn, user);
+                  const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
+                  const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
+                  
+                  // Render regular post
+                  const originalPostCard = (
+                    <PostCard
+                      key={post.post_id}
+                      post={post}
+                      currentUserId={currentUserId}
+                      isOwn={!!isOwn}
+                      displayName={displayName}
+                      displayAvatar={displayAvatar}
+                      formatTime={formatHybrid}
                       onViewOriginalPost={handleViewOriginalPost}
                       onPostUpdate={() => {
-                        console.log('onPostUpdate called - refreshing posts...');
                         getPosts().then(updatedPosts => {
-                          console.log('Updated posts after repost:', updatedPosts);
-                          console.log('Repost items in update:', updatedPosts.filter((item: any) => item.item_type === 'repost'));
                           setPosts(updatedPosts || []);
                           
+                          // Update likedPosts state
                           const currentUserId = getCurrentUserId(user);
                           const liked: { [key: number]: boolean } = {};
                           (updatedPosts || []).forEach((post: any) => {
@@ -946,10 +1154,11 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           });
                           setLikedPosts(liked);
 
-                          const reposted: { [key: number]: boolean} = {};
+                          // Update repostedPosts state
+                          const reposted: { [key: number]: boolean } = {};
                           (updatedPosts || []).forEach((post: any) => {
-                            if (post.item_type === 'post') {
-                              reposted[post.post_id] = false; // Will be calculated from reposts_count
+                            if (post.reposts && Array.isArray(post.reposts)) {
+                              reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
                             }
                           });
                           setRepostedPosts(reposted);
@@ -977,81 +1186,14 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                       setEditCommentContent={setEditCommentContent}
                     />
                   );
-                  acc.push(repostCard);
+                  acc.push(originalPostCard);
                   return acc;
                 }
-                
-                // Regular post rendering
-                const post = item;
-                const isOwn = currentUserId !== null && post.user?.user_id && Number(post.user.user_id) === Number(currentUserId);
-                const displayName = formatDisplayName(post.user, !!isOwn, user);
-                const postUserAvatar = post.user?.profile_pic ? (String(post.user.profile_pic).startsWith('http') ? post.user.profile_pic : `http://127.0.0.1:8000${post.user.profile_pic}`) : undefined;
-                const displayAvatar = isOwn && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (postUserAvatar || ctulogo);
-                
-                // Render regular post
-                const originalPostCard = (
-                  <PostCard
-                    key={post.post_id}
-                    post={post}
-                    currentUserId={currentUserId}
-                    isOwn={!!isOwn}
-                    displayName={displayName}
-                    displayAvatar={displayAvatar}
-                    formatTime={formatHybrid}
-                    onViewOriginalPost={handleViewOriginalPost}
-                    onPostUpdate={() => {
-                      getPosts().then(updatedPosts => {
-                        setPosts(updatedPosts || []);
-                        
-                        // Update likedPosts state
-                        const currentUserId = getCurrentUserId(user);
-                        const liked: { [key: number]: boolean } = {};
-                        (updatedPosts || []).forEach((post: any) => {
-                          if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
-                            liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-                          } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
-                            liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-                          }
-                        });
-                        setLikedPosts(liked);
-
-                        // Update repostedPosts state
-                        const reposted: { [key: number]: boolean } = {};
-                        (updatedPosts || []).forEach((post: any) => {
-                          if (post.reposts && Array.isArray(post.reposts)) {
-                            reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
-                          }
-                        });
-                        setRepostedPosts(reposted);
-                      });
-                    }}
-                    showOptions={showOptions}
-                    setShowOptions={setShowOptions}
-                    editingPost={editingPost}
-                    setEditingPost={setEditingPost}
-                    editPostContent={editPostContent}
-                    setEditPostContent={setEditPostContent}
-                    likedPosts={likedPosts}
-                    setLikedPosts={setLikedPosts}
-                    repostedPosts={repostedPosts}
-                    setRepostedPosts={setRepostedPosts}
-                    showCommentInput={showCommentInput}
-                    setShowCommentInput={setShowCommentInput}
-                    showAllComments={showAllComments}
-                    setShowAllComments={setShowAllComments}
-                    commentInput={commentInput}
-                    setCommentInput={setCommentInput}
-                    editingComment={editingComment}
-                    setEditingComment={setEditingComment}
-                    editCommentContent={editCommentContent}
-                    setEditCommentContent={setEditCommentContent}
-                  />
-                );
-                acc.push(originalPostCard);
-                
                 return acc;
-              }, [])
-            : posts.reduce((acc: any[], item: FeedItem) => {
+              }, []);
+            } else {
+              // For admin/peso users, show regular posts
+              return posts.reduce((acc: any[], item: FeedItem) => {
                 const currentUserId = getCurrentUserId(user);
                 
                 // Check if this is a repost item or a regular post item
@@ -1177,110 +1319,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 acc.push(originalPostCard);
                 
                 return acc;
-              }, [])}
-          
-          {/* Donation Requests */}
-          {donationRequests.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              {(() => {
-                // Create a mixed feed of donations and reposts, sorted by date (like forum posts)
-                const mixedFeed: any[] = [];
-                
-                // Add original donations to the feed
-                donationRequests.forEach(donation => {
-                  mixedFeed.push({
-                    ...donation,
-                    item_type: 'donation',
-                    sort_date: donation.created_at
-                  });
-                  
-                  // Add each repost as a separate feed item
-                  if (donation.reposts && donation.reposts.length > 0) {
-                    donation.reposts.forEach((repost: any) => {
-                      mixedFeed.push({
-                        donation_id: repost.repost_id, // Use repost_id for interactions
-                        description: donation.description,
-                        images: donation.images,
-                        created_at: repost.repost_date, // Use repost date for sorting
-                        item_type: 'repost',
-                        sort_date: repost.repost_date,
-                        user: repost.user,
-                        likes: repost.likes || [],
-                        comments: repost.comments || [],
-                        likes_count: repost.likes_count || 0,
-                        comments_count: repost.comments_count || 0,
-                        reposts: [], // No nested reposts
-                        repostData: {
-                          repost_id: repost.repost_id,
-                          repost_date: repost.repost_date,
-                          repost_caption: repost.repost_caption,
-                          user: repost.user,
-                          original_donation: {
-                            donation_id: donation.donation_id,
-                            description: donation.description,
-                            images: donation.images,
-                            created_at: donation.created_at,
-                            user: donation.user
-                          }
-                        }
-                      });
-                    });
-                  }
-                });
-                
-                // Sort the mixed feed by date (newest first)
-                const sortedFeed = mixedFeed.sort((a: any, b: any) => {
-                  const dateA = a.sort_date || a.created_at || '';
-                  const dateB = b.sort_date || b.created_at || '';
-                  
-                  const dateAObj = new Date(dateA);
-                  const dateBObj = new Date(dateB);
-                  
-                  return dateBObj.getTime() - dateAObj.getTime();
-                });
-                
-                return sortedFeed.map((donation) => (
-                  <DonationCard 
-                    key={donation.item_type === 'repost' ? `repost-${donation.donation_id}` : donation.donation_id} 
-                    donation={donation}
-                    currentUserId={getCurrentUserId(user)}
-                    onDonationUpdate={() => {
-                      // Refresh donation requests
-                      getDonationRequests().then((response) => {
-                        if (response.success) {
-                          setDonationRequests(response.donations);
-                        }
-                      }).catch((error) => {
-                        console.error('Error refreshing donation requests:', error);
-                      });
-                    }}
-                    onDonationEdit={(donationId: number, newDescription: string) => {
-                      // Update local state immediately without page refresh
-                      setDonationRequests(prev => 
-                        prev.map(donation => 
-                          donation.donation_id === donationId 
-                            ? { ...donation, description: newDescription }
-                            : donation
-                        )
-                      );
-                    }}
-                    likedDonations={likedPosts} // Reuse likedPosts state
-                    setLikedDonations={setLikedPosts} // Reuse setLikedPosts
-                    commentInput={commentInput}
-                    setCommentInput={setCommentInput}
-                    showCommentInput={showCommentInput}
-                    setShowCommentInput={setShowCommentInput}
-                    showAllComments={showAllComments}
-                    setShowAllComments={setShowAllComments}
-                    showOptions={showOptions}
-                    setShowOptions={setShowOptions}
-                    isRepost={donation.item_type === 'repost'}
-                    repostData={donation.repostData}
-                  />
-                ));
-              })()}
-            </div>
-          )}
+              }, []);
+            }
+          })()}
         </div>
         {/* Right Sidebar */}
         <div className="right-sidebar">

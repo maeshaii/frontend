@@ -404,41 +404,21 @@ const DonationPage: React.FC = () => {
                   
                   // Add original donations to the feed
                   donationRequests.forEach(donation => {
+                    // Add the original donation
                     mixedFeed.push({
                       ...donation,
                       item_type: 'donation',
                       sort_date: donation.created_at
                     });
                     
-                    // Add each repost as a separate feed item
+                    // Add donation reposts as separate feed items (like forum reposts)
                     if (donation.reposts && donation.reposts.length > 0) {
-                      donation.reposts.forEach((repost: any) => {
+                      donation.reposts.forEach(repost => {
                         mixedFeed.push({
-                          donation_id: repost.repost_id, // Use repost_id for interactions
-                          description: donation.description,
-                          images: donation.images,
-                          created_at: repost.repost_date, // Use repost date for sorting
+                          ...donation,
                           item_type: 'repost',
-                          sort_date: repost.repost_date,
-                          user: repost.user,
-                          likes: repost.likes || [],
-                          comments: repost.comments || [],
-                          likes_count: repost.likes_count || 0,
-                          comments_count: repost.comments_count || 0,
-                          reposts: [], // No nested reposts
-                          repostData: {
-                            repost_id: repost.repost_id,
-                            repost_date: repost.repost_date,
-                            repost_caption: repost.repost_caption,
-                            user: repost.user,
-                            original_donation: {
-                              donation_id: donation.donation_id,
-                              description: donation.description,
-                              images: donation.images,
-                              created_at: donation.created_at,
-                              user: donation.user
-                            }
-                          }
+                          repostData: repost,
+                          sort_date: repost.repost_date
                         });
                       });
                     }
