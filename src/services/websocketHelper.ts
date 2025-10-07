@@ -1,3 +1,5 @@
+import { FileCategory } from '../utils/fileUtils';
+
 export type WsStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 export type WsEvent = {
@@ -12,6 +14,14 @@ export type WsEvent = {
   sender_name?: string;
   content?: string;
   created_at?: string;
+  message_type?: string;
+  attachment_url?: string;
+  attachment_info?: {
+    file_name?: string;
+    file_type?: string;
+    file_category?: FileCategory;
+    file_size?: number;
+  };
   is_typing?: boolean;
 };
 

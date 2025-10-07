@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   MessageItem, 
   ConversationSummary, 
@@ -10,6 +11,7 @@ import {
 } from '../../services/api';
 import { ConversationWebSocket, TypingIndicator, WsEvent } from '../../services/websocketHelper';
 import { getConversationWsUrl } from '../../services/api';
+import { getFileIcon, getFileTypeDisplayName, formatFileSize, isImageFile, isVideoFile, isAudioFile, canPreview, FileCategory } from '../../utils/fileUtils';
 import './Messaging.css';
 
 interface ChatInterfaceProps {
@@ -27,6 +29,12 @@ type UiMessage = {
   tempId?: string;
   message_type?: string;
   attachment_url?: string | null;
+  attachment_info?: {
+    file_name?: string;
+    file_type?: string;
+    file_category?: FileCategory;
+    file_size?: number;
+  };
 };
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) => {
@@ -45,10 +53,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
   const wsRef = useRef<ConversationWebSocket | null>(null);
   const typingIndicatorRef = useRef<TypingIndicator | null>(null);
   const typingTimeoutRef = useRef<number | null>(null);
-  const currentUser = getUserInfo();
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
+
+  // Initialize current user
+  useEffect(() => {
+    const initUser = async () => {
+      try {
+        const user = await getUserInfo();
+        setCurrentUser(user);
+      } catch (error) {
+        console.error('Failed to get user info:', error);
+      }
+    };
+    initUser();
   }, []);
 
   const loadMessages = useCallback(async (cursor?: string) => {
@@ -68,6 +91,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
           const url = ((m as any).attachments && (m as any).attachments[0]?.file_url) || null;
           if (!url) return null;
           return url.startsWith('http') ? url : `${window.location.origin}${url}`;
+        })(),
+        attachment_info: (() => {
+          const attachment = ((m as any).attachments && (m as any).attachments[0]);
+          if (!attachment) return undefined;
+          return {
+            file_name: attachment.file_name,
+            file_type: attachment.file_type,
+            file_category: attachment.file_category as FileCategory,
+            file_size: attachment.file_size,
+          };
         })(),
       }));
 
@@ -122,6 +155,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
               sender_name: event.sender_name || '',
               created_at: event.created_at || new Date().toISOString(),
               is_read: false,
+              message_type: event.message_type,
+              attachment_url: event.attachment_url,
+              attachment_info: event.attachment_info,
             };
             return Object.values(map);
           });
@@ -297,27 +333,101 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
           </div>
         )}
 
-        {messages.map((message) => {
+        {messages.map((message, idx) => {
           const own = isOwnMessage(message);
+          const prev = idx > 0 ? messages[idx - 1] : undefined;
+          const isFirstOfGroup = !prev || prev.sender_id !== message.sender_id;
+          const firstName = (message.sender_name || '').split(' ')[0] || 'Someone';
           return (
             <div key={message.id} className={`message ${own ? 'sent' : 'received'}`}>
-              <div className="message-bubble">
-                {!own && (
-                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
-                    {message.sender_name || 'Them'}
+              <div className="message-content">
+                {!own && isFirstOfGroup ? (
+                  <div
+                    className="message-avatar"
+                    onClick={() => {
+                      if (message.sender_id) {
+                        navigate(`/alumni/profile/${message.sender_id}`);
+                      }
+                    }}
+                    title={message.sender_name}
+                  >
+                    {(firstName[0] || 'U').toUpperCase()}
                   </div>
-                )}
-                {own && (
-                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, opacity: 0.85 }}>
-                    You
+                ) : (!own ? <div className="message-avatar-spacer" /> : null)}
+
+                <div className="message-bubble-container">
+                  {!own && isFirstOfGroup && (
+                    <div className="message-header-name">
+                      {firstName}
+                    </div>
+                  )}
+                  <div className="message-bubble">
+                    {message.attachment_url ? (
+                      <div className="attachment-preview">
+                        {message.attachment_info?.file_category === 'image' || isImageFile(message.attachment_info?.file_category || 'document', message.attachment_info?.file_type) ? (
+                          <div>
+                            <img 
+                              src={message.attachment_url} 
+                              alt={message.content} 
+                              style={{ cursor: 'pointer' }} 
+                              onClick={() => {
+                                if (message.attachment_url) setLightboxUrl(message.attachment_url);
+                              }}
+                            />
+                          </div>
+                        ) : message.attachment_info?.file_category === 'video' || isVideoFile(message.attachment_info?.file_category || 'document', message.attachment_info?.file_type) ? (
+                          <div>
+                            <video 
+                              controls 
+                              src={message.attachment_url}
+                            />
+                          </div>
+                        ) : message.attachment_info?.file_category === 'audio' || isAudioFile(message.attachment_info?.file_category || 'document', message.attachment_info?.file_type) ? (
+                          <div>
+                            <audio 
+                              controls 
+                              style={{ width: '100%', maxWidth: '240px' }}
+                              src={message.attachment_url}
+                            />
+                          </div>
+                        ) : (
+                          <div className="file-attachment">
+                            <div 
+                              className="attachment-card"
+                              onClick={() => {
+                                if (message.attachment_url) {
+                                  const link = document.createElement('a');
+                                  link.href = message.attachment_url;
+                                  link.download = message.attachment_info?.file_name || 'download';
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                }
+                              }}
+                            >
+                              <span className="file-icon">
+                                {getFileIcon(message.attachment_info?.file_category || 'document', message.attachment_info?.file_type)}
+                              </span>
+                              <div className="file-info">
+                                <div className="file-name">
+                                  {message.attachment_info?.file_name || message.content}
+                                </div>
+                                {message.attachment_info?.file_size && (
+                                  <div className="file-size">
+                                    {formatFileSize(message.attachment_info.file_size)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      message.content
+                    )}
                   </div>
-                )}
-                <div>
-                  {message.attachment_url && /\.(png|jpe?g|gif|webp)$/i.test(message.attachment_url)
-                    ? (<img src={message.attachment_url} alt={message.content} style={{ maxWidth: '240px', borderRadius: 8 }} />)
-                    : message.content}
+                  <div className="message-time">{formatTime(message.created_at)}</div>
                 </div>
-                <div className="message-time">{formatTime(message.created_at)}</div>
               </div>
             </div>
           );
@@ -339,6 +449,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
         <div ref={messagesEndRef} />
       </div>
 
+      {lightboxUrl && (
+        <div 
+          onClick={() => setLightboxUrl(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, cursor: 'zoom-out'
+          }}
+        >
+          <img
+            src={lightboxUrl}
+            alt="Preview"
+            style={{
+              maxWidth: '96vw', maxHeight: '96vh', borderRadius: 8,
+              boxShadow: '0 12px 32px rgba(0,0,0,0.4)'
+            }}
+          />
+        </div>
+      )}
+
       <div className="chat-input-container">
         <div className="chat-input-wrapper">
           <input
@@ -346,14 +476,56 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
             id="chat-file-input"
             style={{ display: 'none' }}
             ref={fileInputRef}
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp,.zip,.rar,.7z,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.mp3,.mp4,.wav,.ogg,.avi,.mov"
             onChange={async () => {
               const inputEl = fileInputRef.current;
               const file = inputEl?.files?.[0] || null;
               if (!file || !conversation) return;
               try {
                 const uploaded = await uploadAttachment(file);
-                const isImage = (uploaded.file_type || '').startsWith('image/');
-                const saved = await sendMessage(conversation.conversation_id, { content: uploaded.file_name, message_type: isImage ? 'image' : 'file', attachment_id: uploaded.attachment_id });
+                
+                // Determine message type and content based on file category
+                let messageType: 'image' | 'file' = 'file';
+                let messageContent = uploaded.file_name;
+                
+                switch (uploaded.file_category) {
+                  case 'image':
+                    messageType = 'image';
+                    messageContent = '📷 Image';
+                    break;
+                  case 'pdf':
+                    messageContent = '📄 PDF Document';
+                    break;
+                  case 'word':
+                    messageContent = '📝 Word Document';
+                    break;
+                  case 'excel':
+                    messageContent = '📊 Excel Spreadsheet';
+                    break;
+                  case 'powerpoint':
+                    messageContent = '📈 PowerPoint Presentation';
+                    break;
+                  case 'video':
+                    messageContent = '🎥 Video File';
+                    break;
+                  case 'audio':
+                    messageContent = '🎵 Audio File';
+                    break;
+                  case 'archive':
+                    messageContent = '📦 Archive File';
+                    break;
+                  case 'text':
+                    messageContent = '📄 Text Document';
+                    break;
+                  default:
+                    messageContent = `📎 ${uploaded.file_name}`;
+                }
+                
+                const saved = await sendMessage(conversation.conversation_id, { 
+                  content: messageContent, 
+                  message_type: messageType, 
+                  attachment_id: uploaded.attachment_id 
+                });
                 setMessages(prev => [...prev, {
                   id: String(saved.message_id),
                   content: saved.content,
@@ -368,6 +540,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
                     if (!url) return null;
                     return url.startsWith('http') ? url : `${window.location.origin}${url}`;
                   })(),
+                  attachment_info: {
+                    file_name: uploaded.file_name,
+                    file_type: uploaded.file_type,
+                    file_category: uploaded.file_category as FileCategory,
+                    file_size: uploaded.file_size,
+                  },
                 }]);
                 setTimeout(scrollToBottom, 100);
               } catch (err) {

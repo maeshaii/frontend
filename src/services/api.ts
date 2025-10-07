@@ -704,6 +704,7 @@ export const uploadAttachment = async (file: File): Promise<{
   attachment_id: number;
   file_name: string;
   file_type: string;
+  file_category: string;
   file_size: number;
   file_url: string;
   uploaded_at: string;

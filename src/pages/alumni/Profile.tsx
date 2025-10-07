@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import ctulogo from '../../images/ctulogo.png';
 import './profile.css';
-import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api } from '../../services/api';
+import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api, createConversation } from '../../services/api';
 import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment } from '../../services/api';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
@@ -1395,7 +1395,20 @@ getPosts()
                   </button>
                 )}  
                 {!isOwnProfile && (
-                  <button className="profile-message-button">Message</button>
+                  <button
+                    className="profile-message-button"
+                    onClick={async () => {
+                      try {
+                        // Create or open conversation with this user, then navigate
+                        const convo = await createConversation(Number(id));
+                        window.location.href = `/messages?conversation_id=${convo.conversation_id}`;
+                      } catch (e) {
+                        console.error('Failed to open conversation:', e);
+                      }
+                    }}
+                  >
+                    Message
+                  </button>
                 )}
               </div>
             </div>
