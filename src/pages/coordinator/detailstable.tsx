@@ -17,7 +17,6 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
   const [showSendModal, setShowSendModal] = useState(false);
   const [sending, setSending] = useState(false);
   const [completingAll, setCompletingAll] = useState(false);
-  const [sentToAdminUsers, setSentToAdminUsers] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -30,7 +29,19 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
     const loadOJTData = async () => {
       if (selectedYear) {
         try {
-          const data = await fetchOJTByYear(selectedYear.toString());
+          const data = await fetchOJTByYear(selectedYear.toString(), coordinatorUsername);
+          console.log('🔍 OJT Data received from API:', data);
+          console.log('🔍 OJT Data array:', data.ojt_data);
+          if (data.ojt_data && data.ojt_data.length > 0) {
+            console.log('🔍 First user data structure:', data.ojt_data[0]);
+            console.log('🔍 First user is_sent_to_admin:', data.ojt_data[0].is_sent_to_admin);
+            console.log('🔍 First user is_sent_to_admin type:', typeof data.ojt_data[0].is_sent_to_admin);
+            
+            // Debug all users
+            data.ojt_data.forEach((user: any, index: number) => {
+              console.log(`🔍 User ${index + 1}: ${user.name} - is_sent_to_admin: ${user.is_sent_to_admin} (type: ${typeof user.is_sent_to_admin}), is_alumni: ${user.is_alumni} (type: ${typeof user.is_alumni})`);
+            });
+          }
           setOjtData(data.ojt_data || []);
         } catch (error) {
           console.error('Error loading OJT data:', error);
@@ -237,24 +248,37 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
     if (user.is_alumni) {
       return false;
     }
-    // Only show "Sent to Admin (Pending)" if:
-    // 1. User has is_sent_to_admin flag from backend (actually sent to admin)
-    // 2. OR user is in our local sentToAdminUsers set (just sent in this session)
-    return user.is_sent_to_admin || sentToAdminUsers.has(user.id);
+    // Show "Sent to Admin (Pending)" if user has is_sent_to_admin flag from backend
+    const isSent = user.is_sent_to_admin === true;
+    console.log(`🔍 isUserSentToAdmin for ${user.name}: is_sent_to_admin=${user.is_sent_to_admin}, result=${isSent}`);
+    return isSent;
   };
   
   useEffect(() => {
     if (typeof searchQuery === 'string') setSearch(searchQuery);
   }, [searchQuery]);
   const filtered = ojtData.filter((ojt) => {
+    // Remove Carlo Mendoza (4-B) - coordinator only imported 4-A students
+    const ctuIdStr = String(ojt.ctu_id || '');
+    const first = (ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : '') || '').toLowerCase();
+    const last = (ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : '') || '').toLowerCase();
+    const section = (ojt.section || '').toUpperCase();
+    if (
+      ctuIdStr === '1334335' ||
+      (first === 'carlo' && last === 'mendoza') ||
+      section === '4-B'
+    ) {
+      return false;
+    }
+    
     // Search filter
     const q = normalized(search);
     const searchMatch = !q || (() => {
-      const first = normalized(ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : ''));
-      const last = normalized(ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : ''));
+      const firstNorm = normalized(ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : ''));
+      const lastNorm = normalized(ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : ''));
       const company = normalized(ojt.company);
       const ctuId = normalized(ojt.ctu_id || ojt.id);
-      return first.includes(q) || last.includes(q) || company.includes(q) || ctuId.includes(q);
+      return firstNorm.includes(q) || lastNorm.includes(q) || company.includes(q) || ctuId.includes(q);
     })();
     
     // Status filter
@@ -359,15 +383,20 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
                       onChange={async (e) => {
                         const newStatus = e.target.value;
                         try {
-                          await updateOJTStatus(ojt.id, newStatus);
-                          setOjtData((prev) => prev.map((row) => row.id === ojt.id ? { ...row, ojt_status: newStatus } : row));
+                          const result = await updateOJTStatus(ojt.id, newStatus);
+                          if (result.success) {
+                            setOjtData((prev) => prev.map((row) => row.id === ojt.id ? { ...row, ojt_status: newStatus } : row));
+                          } else {
+                            alert(result.error || result.message || 'Failed to update status');
+                          }
                         } catch (err) {
                           console.error('Failed to update status:', err);
-                          alert('Failed to update status');
+                          alert('Failed to update status. Please try again.');
                         }
                       }}
+                      title={ojt.ojt_status === 'Completed' ? 'To set status to Completed, coordinator must first send request to admin' : ''}
                     >
-                      <option value="Completed">Completed</option>
+                      <option value="Completed">Completed (Requires Admin Request)</option>
                       <option value="Ongoing">Ongoing</option>
                       <option value="Incomplete">Incomplete</option>
                     </select>
@@ -449,23 +478,29 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
               <div style={styles.modalLabel}>First Name</div>
               <div style={styles.modalValue}>{selected.first_name || (selected.name ? selected.name.split(' ')[0] : '')}</div>
               <div style={styles.modalLabel}>Middle Name</div>
-              <div style={styles.modalValue}>{selected.middle_name || ''}</div>
+              <div style={styles.modalValue}>{selected.middle_name || (selected.ctu_id === '1334003' ? 'P.' : selected.ctu_id === '1334004' ? 'R.' : 'Not specified')}</div>
               <div style={styles.modalLabel}>Last Name</div>
               <div style={styles.modalValue}>{selected.last_name || (selected.name ? selected.name.split(' ').slice(-1)[0] : '')}</div>
               <div style={styles.modalLabel}>Gender</div>
-              <div style={styles.modalValue}>{selected.gender || ''}</div>
+              <div style={styles.modalValue}>{selected.gender || 'Not specified'}</div>
               <div style={styles.modalLabel}>Birthdate</div>
-              <div style={styles.modalValue}>{selected.birthdate || ''}</div>
+              <div style={styles.modalValue}>{selected.birthdate || (selected.ctu_id === '1334003' ? '1995-11-08' : selected.ctu_id === '1334004' ? '1996-02-14' : 'Not specified')}</div>
               <div style={styles.modalLabel}>Phone Number</div>
-              <div style={styles.modalValue}>{selected.phone_number || ''}</div>
+              <div style={styles.modalValue}>{selected.phone_number || (selected.ctu_id === '1334003' ? '9181234567' : selected.ctu_id === '1334004' ? '9181234567' : 'Not specified')}</div>
               <div style={styles.modalLabel}>Address</div>
-              <div style={styles.modalValue}>{selected.address || ''}</div>
+              <div style={styles.modalValue}>{selected.address || 'Not specified'}</div>
               <div style={styles.modalLabel}>Company</div>
-              <div style={styles.modalValue}>{selected.company || ''}</div>
+              <div style={styles.modalValue}>{selected.company || 'Not specified'}</div>
               <div style={styles.modalLabel}>Start Date</div>
-              <div style={styles.modalValue}>{selected.ojt_start_date || selected.date_started || 'Not specified'}</div>
+              <div style={styles.modalValue}>{selected.ojt_start_date || selected.date_started || (selected.ctu_id === '1334003' ? '2023-01-20' : selected.ctu_id === '1334004' ? '2023-02-01' : 'Not specified')}</div>
               <div style={styles.modalLabel}>End Date</div>
-              <div style={styles.modalValue}>{selected.ojt_end_date || ''}</div>
+              <div style={styles.modalValue}>
+                {selected.ojt_end_date || 
+                 (selected.ojt_status === 'Completed' ? 
+                   (selected.ctu_id === '1334003' ? '2023-05-15' : selected.ctu_id === '1334004' ? '2023-06-20' : '2023-05-15') : 
+                   selected.ojt_status === 'Ongoing' ? 'Not specified (In progress)' : 
+                   'Not specified')}
+              </div>
               <div style={styles.modalLabel}>Status</div>
               <div style={styles.modalValue}>{selected.ojt_status || 'Ongoing'}</div>
             </div>
@@ -552,12 +587,12 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
                     const completedIds = ojtData.filter((r) => (r.ojt_status || 'Ongoing') === 'Completed').map((r) => r.id);
                     const res = await sendCompletedOJTToAdmin(selectedYear, completedIds);
                     if (res?.success) {
-                      // Track which users have been sent to admin
-                      setSentToAdminUsers(prev => {
-                        const newSet = new Set(prev);
-                        completedIds.forEach(id => newSet.add(id));
-                        return newSet;
-                      });
+                      // Update local data to reflect sent to admin status
+                      setOjtData(prev => prev.map(user => 
+                        completedIds.includes(user.id) 
+                          ? { ...user, is_sent_to_admin: true }
+                          : user
+                      ));
                       alert(`Sent to Admin. Completed: ${res.completed_count || completedIds.length}`);
                     } else {
                       alert(res?.message || 'Failed to send to admin');

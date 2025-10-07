@@ -23,11 +23,13 @@ api.interceptors.request.use(
     if (token) {
       config.headers = config.headers || {};
       config.headers['Authorization'] = `Bearer ${token}`;
+    } else {
+      console.warn('No access token found in localStorage');
     }
     if (process.env.NODE_ENV === 'development') {
       console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, {
         headers: config.headers,
-        data: config.data,
+        hasToken: !!token
       });
     }
     return config;
@@ -42,7 +44,15 @@ api.interceptors.request.use(
 let refreshing: Promise<any> | null = null;
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
+        status: response.status,
+        data: response.data
+      });
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config || {};
     if (error.response?.status === 401 && !(originalRequest as any)._retry) {
@@ -291,7 +301,8 @@ export const importOJT = async (
   file: File,
   batchYear: string,
   course: string,
-  coordinatorUsername: string
+  coordinatorUsername: string,
+  section: string
 ) => {
   try {
     const formData = new FormData();
@@ -299,6 +310,7 @@ export const importOJT = async (
     formData.append('batch_year', batchYear);
     formData.append('course', course);
     formData.append('coordinator_username', coordinatorUsername);
+    formData.append('section', section);
 
     const response = await api.post('ojt/import/', formData, {
       headers: {
@@ -306,6 +318,19 @@ export const importOJT = async (
       },
     });
 
+    return response.data;
+  } catch (error: any) {
+    if (error.response?.data) {
+      return error.response.data;
+    }
+    return { success: false, message: 'Network error occurred' };
+  }
+};
+
+// Fetch sections previously imported by coordinator
+export const fetchCoordinatorSections = async (coordinatorUsername: string) => {
+  try {
+    const response = await api.get(`ojt/coordinator-sections/?coordinator=${coordinatorUsername}`);
     return response.data;
   } catch (error: any) {
     if (error.response?.data) {
@@ -354,10 +379,25 @@ export const sendCompletedOJTToAdmin = async (year?: number | string, userIds?: 
   return response.data;
 };
 
-// Approve coordinator request for a batch year
+// Approve coordinator request for a batch year (converts OJT users to alumni)
 export const approveCoordinatorRequest = async (year: number | string) => {
-  const response = await api.post('ojt/coordinator-requests/approve/', { year });
-  return response.data as { success: boolean; approved: number; year: number };
+  const response = await api.post('ojt/approve-to-alumni/', { year });
+  return response.data as { 
+    success: boolean; 
+    approved: number; 
+    year: number; 
+    passwords?: Array<{
+      user_id: number;
+      username: string;
+      password: string;
+      name: string;
+    }>;
+    errors?: Array<{
+      user_id: number;
+      username: string;
+      error: string;
+    }>;
+  };
 };
 
 // Get coordinator requests count for admin dashboard

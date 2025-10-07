@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaFileImport } from 'react-icons/fa';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
-import { fetchOJTStatistics, importOJT } from '../../services/api';
+import { fetchOJTStatistics, importOJT, fetchCoordinatorSections } from '../../services/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -13,7 +13,9 @@ export default function Dashboard() {
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [batchYear, setBatchYear] = useState('');
+  const [section, setSection] = useState('');
   const [course, setCourse] = useState('BSIT');
+  const [availableSections, setAvailableSections] = useState<string[]>([]);
   const [ojtYears, setOjtYears] = useState<{ year: number; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [importLoading, setImportLoading] = useState(false);
@@ -27,7 +29,9 @@ export default function Dashboard() {
       const userData = JSON.parse(user);
       setCoordinatorUsername(userData.name || '');
     }
+  }, []);
 
+  useEffect(() => {
     const loadOJTData = async () => {
       try {
         console.log('Loading OJT data for coordinator:', coordinatorUsername);
@@ -42,8 +46,23 @@ export default function Dashboard() {
       }
     };
 
+    const loadCoordinatorSections = async () => {
+      try {
+        console.log('Loading sections for coordinator:', coordinatorUsername);
+        const data = await fetchCoordinatorSections(coordinatorUsername);
+        if (data.success) {
+          setAvailableSections(data.sections || []);
+          console.log('Coordinator sections loaded:', data.sections);
+        }
+      } catch (error) {
+        console.error('Error loading coordinator sections:', error);
+        setAvailableSections([]);
+      }
+    };
+
     if (coordinatorUsername) {
       loadOJTData();
+      loadCoordinatorSections();
     }
   }, [coordinatorUsername]);
 
@@ -56,18 +75,17 @@ export default function Dashboard() {
   };
 
   const handleImport = async () => {
-    if (!selectedFile || !batchYear) {
-      alert('Please select a file and enter the batch year');
+    if (!selectedFile || !batchYear || !section) {
+      alert('Please select a file, enter the batch year, and choose a section');
       return;
     }
 
     setImportLoading(true);
     try {
-      const result = await importOJT(selectedFile, batchYear, course, coordinatorUsername);
+      const result = await importOJT(selectedFile, batchYear, course, coordinatorUsername, section);
       if (result.success) {
-        alert('OJT import successful!');
+        alert(`OJT import successful for section ${section}!`);
         setShowModal(false);
-        // Reload OJT data
         await refreshOJTData();
       } else {
         alert(result.message || 'OJT import failed');
@@ -87,6 +105,13 @@ export default function Dashboard() {
       const data = await fetchOJTStatistics();
       console.log('Refreshed OJT data:', data);
       setOjtYears(data.years || []);
+      
+      // Also refresh coordinator sections
+      const sectionsData = await fetchCoordinatorSections(coordinatorUsername);
+      if (sectionsData.success) {
+        setAvailableSections(sectionsData.sections || []);
+        console.log('Refreshed coordinator sections:', sectionsData.sections);
+      }
     } catch (error) {
       console.error('Error refreshing OJT data:', error);
       setOjtYears([]);
@@ -108,6 +133,7 @@ export default function Dashboard() {
       'Email',
       'Address',
       'Course',
+      'Section',
       'Company',
       'Start_Date',
       'End_Date',
@@ -489,12 +515,36 @@ export default function Dashboard() {
 
             <label style={styles.modalLabel}>Batch Graduated</label>
             <input
-              type="text"
+              type="number"
               placeholder="Enter batch year..."
               style={styles.modalInput}
               value={batchYear}
               onChange={(e) => setBatchYear(e.target.value)}
+              min="2000"
+              max="2030"
             />
+
+            <label style={styles.modalLabel}>Section to Import</label>
+            <input
+              type="text"
+              placeholder="Enter section (e.g., 4-A, 4-B, 4-1, etc.)..."
+              style={styles.modalInput}
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
+              list="section-options"
+            />
+            <datalist id="section-options">
+              {availableSections.map((sectionOption) => (
+                <option key={sectionOption} value={sectionOption}>
+                  {sectionOption}
+                </option>
+              ))}
+            </datalist>
+            {availableSections.length === 0 && (
+              <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+                No previous sections found. You can type any section name.
+              </div>
+            )}
 
             {/* Course selection removed; default course state will be used */}
 
@@ -515,7 +565,13 @@ export default function Dashboard() {
               </button>
               <button
                 style={styles.cancelBtn}
-                onClick={() => setShowModal(false)}
+                onClick={() => {
+                  setShowModal(false);
+                  // Reset form state
+                  setSelectedFile(null);
+                  setBatchYear('');
+                  setSection('');
+                }}
                 disabled={importLoading}
               >
                 Cancel
