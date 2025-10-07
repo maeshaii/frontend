@@ -249,7 +249,8 @@ const AlumniProfile: React.FC = () => {
             profile_pic: profileData.profile_pic,
             social_media: profileData.social_media,
             email: profileData.email,
-            account_type: currentUserObj.account_type || {} // Use current user's account type
+            account_type: profileData.account_type || currentUserObj.account_type || {},
+            partnered_companies: profileData.partnered_companies || []
           };
           
           setUser(userData);
@@ -463,6 +464,9 @@ getPosts()
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [emailLoading, setEmailLoading] = useState(false);
+  // PESO Partnered Companies modal state
+  const [partnerModalOpen, setPartnerModalOpen] = useState(false);
+  const [partnerCompaniesDraft, setPartnerCompaniesDraft] = useState<{ name: string; url: string }[]>([]);
 
   const [resumeFile, setResumeFile] = useState<File | null>(null);
 
@@ -1217,6 +1221,48 @@ getPosts()
           </div>
 
           {/* Followers - Hide for admin and PESO accounts */}
+          {/* PESO-specific: Partnered Companies card under Introduction */}
+          {user?.account_type?.peso && (
+          <div className="profile-card">
+            <div className="profile-intro-title">Partnered Companies</div>
+            <div className="profile-bio-container">
+              {Array.isArray((user as any).partnered_companies) && (user as any).partnered_companies.length > 0 ? (
+                <ul style={{ margin: 0, paddingLeft: 16 }}>
+                  {(user as any).partnered_companies.map((company: any, idx: number) => {
+                    const name = typeof company === 'string' ? company : (company?.name || 'Unnamed Company');
+                    const url = typeof company === 'object' ? (company?.url || '') : '';
+                    const display = name;
+                    return (
+                      <li key={idx} style={{ marginBottom: 6 }}>
+                        {url ? (
+                          <a href={/^https?:\/\//i.test(url) ? url : `http://${url}`} target="_blank" rel="noopener noreferrer">
+                            {display}
+                          </a>
+                        ) : (
+                          <span>{display}</span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <span className="profile-contact-empty">No partnered companies added</span>
+              )}
+            </div>
+            {/* Allow PESO owner to edit partnered companies */}
+            {isOwnProfile && (user?.account_type?.peso || user?.account_type?.ccict) && (
+              <button
+                className="profile-contact-edit-btn"
+                onClick={() => setPartnerModalOpen(true)}
+                style={{ marginTop: 10 }}
+              >
+                Edit Companies
+              </button>
+            )}
+          </div>
+          )}
+
+          {/* Followers - Hide for admin and PESO accounts */}
           {!user?.account_type?.admin && 
            !user?.account_type?.peso && 
            !user?.account_type?.ccict &&
@@ -1432,7 +1478,12 @@ getPosts()
           {/* Posts List for this profile */}
           {posts.length === 0 && !isOwnProfile && (
             <div style={{ textAlign: 'center', padding: '40px', color: '#666', fontSize: '16px' }}>
-              This user has not posted anything yet.
+              {(user?.account_type?.admin || user?.account_type?.peso || user?.account_type?.ccict ||
+                user?.name?.toLowerCase().includes('admin') || user?.name?.toLowerCase().includes('peso'))
+                ? "This user has not posted anything yet."
+                : (isFollowing
+                    ? "This user has not posted anything yet."
+                    : "Follow this user to view their posts")}
             </div>
           )}
           {posts.map((item: any) => {
@@ -2217,6 +2268,114 @@ getPosts()
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Partnered Companies Modal (PESO only) */}
+      {partnerModalOpen && (
+        <div 
+          className="profile-bio-modal-overlay" 
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setPartnerModalOpen(false); }}
+        >
+          <div
+            className="profile-bio-modal-content"
+            style={{
+              background: '#fff', borderRadius: 12, padding: 20, width: '90%', maxWidth: 520, maxHeight: '70vh', overflowY: 'auto', position: 'relative'
+            }}
+          >
+            <button
+              onClick={() => setPartnerModalOpen(false)}
+              style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: 'none', fontSize: 22, cursor: 'pointer' }}
+              title="Close"
+            >
+              ×
+            </button>
+            <h3 style={{ margin: 0, marginBottom: 12 }}>Edit Partnered Companies</h3>
+            <p style={{ marginTop: 0, color: '#666' }}>Add company name and website/page URL.</p>
+
+            {/* Editor rows */}
+            {(partnerCompaniesDraft.length === 0 ? [{ name: '', url: '' }] : partnerCompaniesDraft).map((c, idx) => (
+              <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <input
+                  type="text"
+                  placeholder="Company name"
+                  value={c.name}
+                  onChange={(e) => {
+                    const next = [...(partnerCompaniesDraft.length ? partnerCompaniesDraft : [{ name: '', url: '' }])];
+                    next[idx] = { ...next[idx], name: e.target.value };
+                    setPartnerCompaniesDraft(next);
+                  }}
+                  style={{ flex: 1, padding: 8, border: '1px solid #ddd', borderRadius: 8 }}
+                />
+                <input
+                  type="text"
+                  placeholder="https://example.com"
+                  value={c.url}
+                  onChange={(e) => {
+                    const next = [...(partnerCompaniesDraft.length ? partnerCompaniesDraft : [{ name: '', url: '' }])];
+                    next[idx] = { ...next[idx], url: e.target.value };
+                    setPartnerCompaniesDraft(next);
+                  }}
+                  style={{ flex: 1, padding: 8, border: '1px solid #ddd', borderRadius: 8 }}
+                />
+                <button
+                  onClick={() => {
+                    const base = partnerCompaniesDraft.length ? partnerCompaniesDraft : [{ name: '', url: '' }];
+                    const next = base.filter((_, i) => i !== idx);
+                    setPartnerCompaniesDraft(next);
+                  }}
+                  style={{ padding: '8px 10px', border: '1px solid #ddd', background: '#fafafa', borderRadius: 8, cursor: 'pointer' }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+
+            <div style={{ marginBottom: 12 }}>
+              <button
+                onClick={() => setPartnerCompaniesDraft([...(partnerCompaniesDraft || []), { name: '', url: '' }])}
+                style={{ padding: '8px 12px', border: '1px solid #ddd', background: '#f7f7f7', borderRadius: 8, cursor: 'pointer' }}
+              >
+                + Add Company
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button onClick={() => setPartnerModalOpen(false)} style={{ padding: '10px 14px', border: '1px solid #ddd', background: '#fff', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
+              <button
+                onClick={async () => {
+                  try {
+                    const meRaw = localStorage.getItem('user');
+                    const me = meRaw ? JSON.parse(meRaw) : null;
+                    const meId = me?.user_id || me?.id;
+                    const payloadCompanies = partnerCompaniesDraft.filter((c) => (c.name || '').trim());
+                    const res = await fetch(`http://127.0.0.1:8000/api/alumni/profile/${meId}/`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}` },
+                      body: JSON.stringify({ partnered_companies: payloadCompanies })
+                    });
+                    if (res.ok) {
+                      // update local state to reflect changes immediately
+                      setUser((prev: any) => prev ? { ...prev, partnered_companies: payloadCompanies } : prev);
+                      setPartnerModalOpen(false);
+                    } else {
+                      alert('Failed to save companies');
+                    }
+                  } catch (e) {
+                    console.error(e);
+                    alert('Error saving companies');
+                  }
+                }}
+                style={{ padding: '10px 14px', border: 'none', background: '#174f84', color: '#fff', borderRadius: 8, cursor: 'pointer' }}
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
       )}

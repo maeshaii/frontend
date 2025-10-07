@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import RepostModal from './RepostModal';
-import { repostPost, repostForumPost } from '../services/api';
+import { repostPost, repostForumPost, repostDonation } from '../services/api';
 
 interface RepostButtonProps {
   originalPost: {
@@ -30,6 +30,7 @@ interface RepostButtonProps {
   style?: React.CSSProperties;
   className?: string;
   isForum?: boolean; // New prop to indicate if this is a forum post
+  isDonation?: boolean; // New prop to indicate if this is a donation post
 }
 
 const RepostButton: React.FC<RepostButtonProps> = ({
@@ -40,7 +41,8 @@ const RepostButton: React.FC<RepostButtonProps> = ({
   formatTime,
   style,
   className,
-  isForum = false
+  isForum = false,
+  isDonation = false
 }) => {
   const [showRepostModal, setShowRepostModal] = useState(false);
 
@@ -66,6 +68,10 @@ const RepostButton: React.FC<RepostButtonProps> = ({
         // Use forum repost API
         console.log('Using forum repost API');
         result = await repostForumPost(postId, caption);
+      } else if (isDonation) {
+        // Use donation repost API
+        console.log('Using donation repost API');
+        result = await repostDonation(postId, caption);
       } else {
         // Use regular post repost API
         console.log('Using regular post repost API');

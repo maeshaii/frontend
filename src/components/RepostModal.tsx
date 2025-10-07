@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import ctulogo from '../images/ctulogo.png';
-
+  import ctulogo from '../images/ctulogo.png';
 interface RepostModalProps {
   isOpen: boolean;
   onClose: () => void;

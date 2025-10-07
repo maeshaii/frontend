@@ -3,11 +3,12 @@ import { useNavigate, Link } from 'react-router-dom';
 import AlumniTopBar from '../alumni/AlumniTopBar';
 import PostCreate from '../alumni/PostCreate';
 import PostCard from '../../components/PostCard';
-import DonationCard from '../../components/DonationCard';
+import TrackerReminderModal from '../../components/TrackerReminderModal';
 import ctulogo from '../../images/ctulogo.png';
 import '../alumni/dashboard.css';
 import '../alumni/profile.css';
-import { getPosts, followUser, getAdminPesoUsers, api, getDonationRequests } from '../../services/api';
+import { getPosts, followUser, getAdminPesoUsers, api } from '../../services/api';
+import { trackerApi } from '../../services/trackerApi';
 
 interface UnifiedDashboardProps {
   userType: 'alumni' | 'peso' | 'admin' | 'ojt';
@@ -53,87 +54,6 @@ interface CommentItem {
     l_name: string;
     profile_pic?: string;
   };
-}
-interface DonationRequest {
-  donation_id: number;
-  user: {
-    user_id: number;
-    f_name: string;
-    m_name: string;
-    l_name: string;
-    profile_pic?: string;
-    name: string;
-  };
-  description: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  images: Array<{
-    image_id: number;
-    image_url: string;
-    order: number;
-  }>;
-  likes_count?: number;
-  comments_count?: number;
-  reposts_count?: number;
-  likes?: Array<{
-    like_id: number;
-    user: {
-      user_id: number;
-      f_name: string;
-      m_name?: string;
-      l_name: string;
-      profile_pic?: string;
-    };
-  }>;
-  comments?: Array<{
-    comment_id: number;
-    comment_content: string;
-    date_created: string;
-    user: {
-      user_id: number;
-      f_name: string;
-      m_name?: string;
-      l_name: string;
-      profile_pic?: string;
-    };
-  }>;
-  reposts?: Array<{
-    repost_id: number;
-    repost_date: string;
-    repost_caption?: string;
-    user: {
-      user_id: number;
-      f_name: string;
-      m_name?: string;
-      l_name: string;
-      profile_pic?: string;
-    };
-    likes_count?: number;
-    comments_count?: number;
-    likes?: Array<{
-      like_id: number;
-      user: {
-        user_id: number;
-        f_name: string;
-        m_name?: string;
-        l_name: string;
-        profile_pic?: string;
-      };
-    }>;
-    comments?: Array<{
-      comment_id: number;
-      comment_content: string;
-      date_created: string;
-      user: {
-        user_id: number;
-        f_name: string;
-        m_name?: string;
-        l_name: string;
-        profile_pic?: string;
-      };
-    }>;
-  }>;
 }
 interface LikeItem {
   user_id: number;
@@ -271,7 +191,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [user, setUser] = useState<AlumniUser | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [posts, setPosts] = useState<PostItem[]>([]);
-  const [donationRequests, setDonationRequests] = useState<DonationRequest[]>([]);
+  // Donation feature removed
+  // const [donationRequests, setDonationRequests] = useState<DonationRequest[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
   const [followLoading, setFollowLoading] = useState<{ [key: number]: boolean }>({});
   const [showComposer, setShowComposer] = useState(false);
@@ -283,6 +204,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [showCommentInput, setShowCommentInput] = useState<{ [key: number]: boolean }>({});
   const [showAllComments, setShowAllComments] = useState<{ [key: number]: boolean }>({});
   const [likedPosts, setLikedPosts] = useState<{ [key: number]: boolean }>({});
+  const [likedDonations, setLikedDonations] = useState<{ [key: number]: boolean }>({});
   const [repostedPosts, setRepostedPosts] = useState<{ [key: number]: boolean }>({});
   const [repostError, setRepostError] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState<{ [key: string | number]: boolean }>({});
@@ -290,6 +212,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [editPostContent, setEditPostContent] = useState<{ [key: number]: string }>({});
   const [editingComment, setEditingComment] = useState<{ [key: number]: boolean }>({});
   const [editCommentContent, setEditCommentContent] = useState<{ [key: number]: string }>({});
+  const [editingDonationComment, setEditingDonationComment] = useState<{ [key: number]: boolean }>({});
+  const [editDonationCommentContent, setEditDonationCommentContent] = useState<{ [key: number]: string }>({});
   const [following, setFollowing] = useState<any[]>([]);
   const [showPostModal, setShowPostModal] = useState(false);
   const [modalPost, setModalPost] = useState<any | null>(null);
@@ -297,6 +221,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [showAllUsersModal, setShowAllUsersModal] = useState(false);
   const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
   const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
+  const [showTrackerModal, setShowTrackerModal] = useState(false);
   const navigate = useNavigate();
 
   // Determine user type from localStorage instead of props
@@ -357,8 +282,26 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     console.log('🔍 AUTH DEBUG: User object:', userObj);
     setUser(userObj);
 
-    // Fetch following list for current user
+    // Check tracker status for alumni users
     const currentUserId = userObj.user_id || userObj.id;
+    if (currentUserId && (userObj.account_type?.user || userObj.account_type?.alumni)) {
+      // Only show tracker modal for alumni users
+      trackerApi.checkSubmissionStatus(String(currentUserId))
+        .then((response) => {
+          console.log('🔍 Tracker status:', response);
+          if (!response.has_submitted) {
+            // Show modal after a short delay to let the dashboard load
+            setTimeout(() => {
+              setShowTrackerModal(true);
+            }, 2000);
+          }
+        })
+        .catch((error) => {
+          console.error('Error checking tracker status:', error);
+        });
+    }
+
+    // Fetch following list for current user
     if (currentUserId) {
       import('../../services/api').then(({ api }) => {
         api.get(`alumni/${currentUserId}/following/`)
@@ -565,18 +508,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
       setPosts([]);
     });
 
-    // Fetch donation requests
-    getDonationRequests().then((response) => {
-      if (response.success) {
-        setDonationRequests(response.donations);
-      } else {
-        console.error('Failed to fetch donation requests:', response.message);
-      }
-    }).catch((error) => {
-      console.error('Error fetching donation requests:', error);
-      setDonationRequests([]);
-    });
+  // Donation feature removed: skip fetching donation requests
   }, [navigate]);
+
+  // Donation feature removed: no donationRequests sync
 
   // Listen for user data updates from Settings
   useEffect(() => {
@@ -839,27 +774,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 });
               });
               
-              // Add donations to the unified feed
-              donationRequests.forEach(donation => {
-                // Add the original donation
-                unifiedFeed.push({
-                  ...donation,
-                  feed_type: 'donation',
-                  sort_date: donation.created_at
-                });
-                
-                // Add donation reposts as separate feed items
-                if (donation.reposts && donation.reposts.length > 0) {
-                  donation.reposts.forEach(repost => {
-                    unifiedFeed.push({
-                      ...donation,
-                      feed_type: 'donation_repost',
-                      repostData: repost,
-                      sort_date: repost.repost_date
-                    });
-                  });
-                }
-              });
+              // Donation feature removed: do not include donation items
               
               // Sort the unified feed by date (newest first)
               const sortedUnifiedFeed = unifiedFeed.sort((a: any, b: any) => {
@@ -886,14 +801,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                     itemUserId = item.user?.user_id;
                     itemUser = item.user;
                   }
-                } else if (item.feed_type === 'donation') {
-                  // This is a regular donation
-                  itemUserId = item.user?.user_id;
-                  itemUser = item.user;
-                } else if (item.feed_type === 'donation_repost') {
-                  // This is a donation repost
-                  itemUserId = item.repostData?.user?.user_id;
-                  itemUser = item.repostData?.user;
+                } else if (item.feed_type === 'donation' || item.feed_type === 'donation_repost') {
+                  // Donation feature removed: exclude from feed
+                  return false;
                 }
                 
                 const isOwn = currentUserId && itemUserId && Number(itemUserId) === Number(currentUserId);
@@ -953,94 +863,12 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 return shouldShow;
               });
               
-              return filteredFeed.reduce((acc: any[], item: any) => {
+              const renderedItems = filteredFeed.reduce((acc: any[], item: any) => {
                 const currentUserId = getCurrentUserId(user);
                 
                 // Handle different feed item types
-                if (item.feed_type === 'donation') {
-                  // Render donation card
-                  const donationCard = (
-                    <DonationCard 
-                      key={item.donation_id} 
-                      donation={item}
-                      currentUserId={currentUserId}
-                      onDonationUpdate={() => {
-                        // Refresh donation requests
-                        getDonationRequests().then((response) => {
-                          if (response.success) {
-                            setDonationRequests(response.donations);
-                          }
-                        }).catch((error) => {
-                          console.error('Error refreshing donation requests:', error);
-                        });
-                      }}
-                      onDonationEdit={(donationId: number, newDescription: string) => {
-                        // Update local state immediately without page refresh
-                        setDonationRequests(prev => 
-                          prev.map(donation => 
-                            donation.donation_id === donationId 
-                              ? { ...donation, description: newDescription }
-                              : donation
-                          )
-                        );
-                      }}
-                      likedDonations={likedPosts} // Reuse likedPosts state
-                      setLikedDonations={setLikedPosts} // Reuse setLikedPosts
-                      commentInput={commentInput}
-                      setCommentInput={setCommentInput}
-                      showCommentInput={showCommentInput}
-                      setShowCommentInput={setShowCommentInput}
-                      showAllComments={showAllComments}
-                      setShowAllComments={setShowAllComments}
-                      showOptions={showOptions}
-                      setShowOptions={setShowOptions}
-                      isRepost={false}
-                    />
-                  );
-                  acc.push(donationCard);
-                  return acc;
-                } else if (item.feed_type === 'donation_repost') {
-                  // Render donation repost card
-                  const donationRepostCard = (
-                    <DonationCard 
-                      key={`donation-repost-${item.repostData.repost_id}`} 
-                      donation={item}
-                      currentUserId={currentUserId}
-                      onDonationUpdate={() => {
-                        // Refresh donation requests
-                        getDonationRequests().then((response) => {
-                          if (response.success) {
-                            setDonationRequests(response.donations);
-                          }
-                        }).catch((error) => {
-                          console.error('Error refreshing donation requests:', error);
-                        });
-                      }}
-                      onDonationEdit={(donationId: number, newDescription: string) => {
-                        // Update local state immediately without page refresh
-                        setDonationRequests(prev => 
-                          prev.map(donation => 
-                            donation.donation_id === donationId 
-                              ? { ...donation, description: newDescription }
-                              : donation
-                          )
-                        );
-                      }}
-                      likedDonations={likedPosts} // Reuse likedPosts state
-                      setLikedDonations={setLikedPosts} // Reuse setLikedPosts
-                      commentInput={commentInput}
-                      setCommentInput={setCommentInput}
-                      showCommentInput={showCommentInput}
-                      setShowCommentInput={setShowCommentInput}
-                      showAllComments={showAllComments}
-                      setShowAllComments={setShowAllComments}
-                      showOptions={showOptions}
-                      setShowOptions={setShowOptions}
-                      isRepost={true}
-                      repostData={item.repostData}
-                    />
-                  );
-                  acc.push(donationRepostCard);
+                if (item.feed_type === 'donation' || item.feed_type === 'donation_repost') {
+                  // Donation feature removed: skip rendering
                   return acc;
                 } else if (item.feed_type === 'post') {
                   // Handle post items (existing logic)
@@ -1191,9 +1019,24 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 }
                 return acc;
               }, []);
+
+              if (renderedItems.length === 0) {
+                return (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '40px',
+                    color: '#666',
+                    fontSize: '16px'
+                  }}>
+                    No posts yet. Start following users or create your first post.
+                  </div>
+                );
+              }
+
+              return renderedItems;
             } else {
               // For admin/peso users, show regular posts
-              return posts.reduce((acc: any[], item: FeedItem) => {
+              const renderedItems = posts.reduce((acc: any[], item: FeedItem) => {
                 const currentUserId = getCurrentUserId(user);
                 
                 // Check if this is a repost item or a regular post item
@@ -1320,6 +1163,21 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 
                 return acc;
               }, []);
+
+              if (renderedItems.length === 0) {
+                return (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '40px',
+                    color: '#666',
+                    fontSize: '16px'
+                  }}>
+                    No posts available.
+                  </div>
+                );
+              }
+
+              return renderedItems;
             }
           })()}
         </div>
@@ -1763,6 +1621,13 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
           </div>
         </div>
       )}
+      
+      {/* Tracker Reminder Modal */}
+      <TrackerReminderModal
+        isOpen={showTrackerModal}
+        onClose={() => setShowTrackerModal(false)}
+        userId={user?.user_id || user?.id || 0}
+      />
     </div>
   );
 };

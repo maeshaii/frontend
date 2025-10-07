@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment } from '../services/api';
+import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, repostDonation, deleteDonationRequest, updateDonationRequest } from '../services/api';
 import { 
   commentOnForumPost, 
   deleteForumComment, 
@@ -116,6 +116,7 @@ interface PostCardProps {
   editCommentContent?: { [key: number]: string };
   setEditCommentContent?: (fn: (prev: { [key: number]: string }) => { [key: number]: string }) => void;
   isForum?: boolean; // New prop to indicate forum context
+  isDonation?: boolean; // New prop to indicate donation context
   isRepost?: boolean; // New prop to indicate if this is a repost
   repostData?: RepostItem; // Data about the repost
   onViewOriginalPost?: (originalPost: PostItem) => void; // Callback to view original post in modal
@@ -150,6 +151,7 @@ const PostCard: React.FC<PostCardProps> = ({
   editCommentContent = {},
   setEditCommentContent,
   isForum = false, // Default to false for backward compatibility
+  isDonation = false, // Default to false for backward compatibility
   isRepost = false, // Default to false for backward compatibility
   repostData, // Optional repost data
   onViewOriginalPost, // Optional callback to view original post
@@ -274,10 +276,12 @@ const PostCard: React.FC<PostCardProps> = ({
 
   const handleLike = async () => {
     if (!setLikedPosts) return;
+    console.log('handleLike called for post:', post.post_id, 'isForum:', isForum, 'isDonation:', isDonation);
     try {
       if (isRepostPost) {
         // Use unified like API with repost_id
         const repostId = repostData?.repost_id || post.post_id;
+        console.log('Liking repost:', repostId);
         await api.post(`reposts/${repostId}/like/`);
         setLikedPosts(prev => ({ ...prev, [repostId]: true }));
         
@@ -286,12 +290,21 @@ const PostCard: React.FC<PostCardProps> = ({
         post.liked_by_user = true;
       } else if (isForum) {
         // Use forum like API
+        console.log('Liking forum post:', post.post_id);
         await likeForumPost(post.post_id);
         setLikedPosts(prev => ({ ...prev, [post.post_id]: true }));
+        console.log('Forum post liked successfully');
+      } else if (isDonation) {
+        // Use donation like API
+        console.log('Liking donation post:', post.post_id);
+        await likeDonation(post.post_id);
+        setLikedPosts(prev => ({ ...prev, [post.post_id]: true }));
+        console.log('Donation post liked successfully');
       } else {
         // Use regular post like API
+        console.log('Liking regular post:', post.post_id);
         await likePost(post.post_id);
-      setLikedPosts(prev => ({ ...prev, [post.post_id]: true }));
+        setLikedPosts(prev => ({ ...prev, [post.post_id]: true }));
       }
       onPostUpdate?.();
     } catch (error) {
@@ -301,10 +314,12 @@ const PostCard: React.FC<PostCardProps> = ({
 
   const handleUnlike = async () => {
     if (!setLikedPosts) return;
+    console.log('handleUnlike called for post:', post.post_id, 'isForum:', isForum, 'isDonation:', isDonation);
     try {
       if (isRepostPost) {
         // Use unified unlike API with repost_id
         const repostId = repostData?.repost_id || post.post_id;
+        console.log('Unliking repost:', repostId);
         await api.delete(`reposts/${repostId}/like/`);
         setLikedPosts(prev => ({ ...prev, [repostId]: false }));
         
@@ -313,12 +328,21 @@ const PostCard: React.FC<PostCardProps> = ({
         post.liked_by_user = false;
       } else if (isForum) {
         // Use forum unlike API
+        console.log('Unliking forum post:', post.post_id);
         await unlikeForumPost(post.post_id);
         setLikedPosts(prev => ({ ...prev, [post.post_id]: false }));
+        console.log('Forum post unliked successfully');
+      } else if (isDonation) {
+        // Use donation unlike API
+        console.log('Unliking donation post:', post.post_id);
+        await unlikeDonation(post.post_id);
+        setLikedPosts(prev => ({ ...prev, [post.post_id]: false }));
+        console.log('Donation post unliked successfully');
       } else {
         // Use regular post unlike API
+        console.log('Unliking regular post:', post.post_id);
         await unlikePost(post.post_id);
-      setLikedPosts(prev => ({ ...prev, [post.post_id]: false }));
+        setLikedPosts(prev => ({ ...prev, [post.post_id]: false }));
       }
       onPostUpdate?.();
     } catch (error) {
@@ -369,6 +393,29 @@ const PostCard: React.FC<PostCardProps> = ({
         result = await commentOnForumPost(post.post_id, commentContent);
         
         // Immediately update local state for forum comments
+        if (result && result.success && result.comment) {
+          // Add the new comment to the local post.comments array
+          const newComment = {
+            comment_id: result.comment.comment_id,
+            comment_content: commentContent,
+            date_created: new Date().toISOString(),
+            user: {
+              user_id: currentUserId || 0,
+              f_name: displayName.split(' ')[0] || '',
+              l_name: displayName.split(' ').slice(1).join(' ') || '',
+              profile_pic: displayAvatar
+            }
+          };
+          
+          // Update the post object with the new comment
+          post.comments = [...(post.comments || []), newComment as any];
+          post.comments_count = (post.comments_count || 0) + 1;
+        }
+      } else if (isDonation) {
+        // Use donation comment API
+        result = await commentOnDonation(post.post_id, commentContent);
+        
+        // Immediately update local state for donation comments
         if (result && result.success && result.comment) {
           // Add the new comment to the local post.comments array
           const newComment = {
@@ -445,6 +492,9 @@ const PostCard: React.FC<PostCardProps> = ({
         if (isForum) {
           // Use forum post API
           await deleteForumPost(post.post_id);
+        } else if (isDonation) {
+          // Use donation API
+          await deleteDonationRequest(post.post_id);
         } else {
           // Use regular post API
           await deletePost(post.post_id);
@@ -472,6 +522,9 @@ const PostCard: React.FC<PostCardProps> = ({
       if (isForum) {
         // Use forum post API
         await editForumPost(post.post_id, { content: editPostContent[post.post_id] });
+      } else if (isDonation) {
+        // Use donation API
+        await updateDonationRequest(post.post_id, { description: editPostContent[post.post_id] });
       } else {
         // Use regular post API
         await editPost(post.post_id, { post_content: editPostContent[post.post_id] });
@@ -1117,10 +1170,10 @@ const PostCard: React.FC<PostCardProps> = ({
                       }}
                     >👍
                       {post.likes.length === 1 
-                        ? `${post.likes[0].f_name} ${post.likes[0].m_name} ${post.likes[0].l_name} liked this`
+                        ? `${post.likes[0].f_name || ''} ${post.likes[0].m_name || ''} ${post.likes[0].l_name || ''}`.trim() + ' liked this'
                         : post.likes.length === 2
-                        ? `${post.likes[0].f_name} ${post.likes[0].m_name} ${post.likes[0].l_name} and ${post.likes[1].f_name} ${post.likes[1].m_name} ${post.likes[1].l_name} liked this`
-                        : `${post.likes[0].f_name} ${post.likes[0].m_name} ${post.likes[0].l_name} and ${post.likes.length - 1} others liked this`
+                        ? `${post.likes[0].f_name || ''} ${post.likes[0].m_name || ''} ${post.likes[0].l_name || ''}`.trim() + ` and ${post.likes[1].f_name || ''} ${post.likes[1].m_name || ''} ${post.likes[1].l_name || ''}`.trim() + ' liked this'
+                        : `${post.likes[0].f_name || ''} ${post.likes[0].m_name || ''} ${post.likes[0].l_name || ''}`.trim() + ` and ${post.likes.length - 1} others liked this`
                       }
                     </span>
                   ) : (
@@ -1215,6 +1268,8 @@ const PostCard: React.FC<PostCardProps> = ({
                 isReposted={repostedPosts[post.post_id] || false}
                 onRepost={onPostUpdate}
                 formatTime={formatTime}
+                isForum={isForum}
+                isDonation={isDonation}
                 className={`profile-repost-action-item ${repostedPosts[post.post_id] ? 'reposted' : ''}`}
               />
             </div>
@@ -1890,10 +1945,10 @@ const PostCard: React.FC<PostCardProps> = ({
                 }}
               >👍
                 {post.likes.length === 1 
-                  ? `${post.likes[0].f_name} ${post.likes[0].m_name} ${post.likes[0].l_name} liked this`
+                  ? `${post.likes[0].f_name || ''} ${post.likes[0].m_name || ''} ${post.likes[0].l_name || ''}`.trim() + ' liked this'
                   : post.likes.length === 2
-                  ? `${post.likes[0].f_name} ${post.likes[0].m_name} ${post.likes[0].l_name} and ${post.likes[1].f_name} ${post.likes[1].m_name} ${post.likes[1].l_name} liked this`
-                  : `${post.likes[0].f_name} ${post.likes[0].m_name} ${post.likes[0].l_name} and ${post.likes.length - 1} others liked this`
+                  ? `${post.likes[0].f_name || ''} ${post.likes[0].m_name || ''} ${post.likes[0].l_name || ''}`.trim() + ` and ${post.likes[1].f_name || ''} ${post.likes[1].m_name || ''} ${post.likes[1].l_name || ''}`.trim() + ' liked this'
+                  : `${post.likes[0].f_name || ''} ${post.likes[0].m_name || ''} ${post.likes[0].l_name || ''}`.trim() + ` and ${post.likes.length - 1} others liked this`
                 }
               </span>
             ) : (
@@ -1933,9 +1988,11 @@ const PostCard: React.FC<PostCardProps> = ({
       }}>
         <button
           onClick={() => {
+            console.log('Like button clicked for post:', post.post_id, 'likedPosts:', likedPosts[post.post_id]);
             if (post.likes && post.likes.length > 0 && !likedPosts[post.post_id]) {
               setShowLikesModal(true);
             } else {
+              console.log('Calling like/unlike handler');
               likedPosts[post.post_id] ? handleUnlike() : handleLike();
             }
           }}
@@ -2018,6 +2075,7 @@ const PostCard: React.FC<PostCardProps> = ({
           onRepost={onPostUpdate}
           formatTime={formatTime}
           isForum={isForum}
+          isDonation={isDonation}
           style={{
             color: repostedPosts[post.post_id] ? '#007bff' : '#6c757d',
             fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
@@ -2413,8 +2471,8 @@ const PostCard: React.FC<PostCardProps> = ({
         </div>
       )}
 
-      {/* Reposts section - hidden for forum posts as they use individual repost cards */}
-      {!isForum && post.reposts && post.reposts.length > 0 && (
+      {/* Reposts section - hidden for forum and donation posts */}
+      {!isForum && !isDonation && post.reposts && post.reposts.length > 0 && (
         <div className="reposts-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
           <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '8px' }}>
             Reposts ({post.reposts.length})
