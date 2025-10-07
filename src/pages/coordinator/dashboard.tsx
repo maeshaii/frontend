@@ -10,17 +10,21 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [showStats, setShowStats] = useState(false);
-  const [selectedCard, setSelectedCard] = useState<number | null>(null);
+  const [selectedCard, setSelectedCard] = useState<{ year: number; section?: string } | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [batchYear, setBatchYear] = useState('');
   const [section, setSection] = useState('');
   const [course, setCourse] = useState('BSIT');
   const [availableSections, setAvailableSections] = useState<string[]>([]);
-  const [ojtYears, setOjtYears] = useState<{ year: number; count: number }[]>([]);
+  const [ojtYears, setOjtYears] = useState<{ year: number; section?: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [importLoading, setImportLoading] = useState(false);
   const [coordinatorUsername, setCoordinatorUsername] = useState('');
   const [activePage, setActivePage] = useState('dashboard'); // 'dashboard' or 'imports'
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('ALL');
+  const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
+  const [showDateModal, setShowDateModal] = useState(false);
+  const [sendDate, setSendDate] = useState('');
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -35,7 +39,7 @@ export default function Dashboard() {
     const loadOJTData = async () => {
       try {
         console.log('Loading OJT data for coordinator:', coordinatorUsername);
-        const data = await fetchOJTStatistics();
+        const data = await fetchOJTStatistics(coordinatorUsername);
         console.log('OJT data received:', data);
         setOjtYears(data.years || []);
       } catch (error) {
@@ -448,37 +452,162 @@ export default function Dashboard() {
                 >
                   Download Template
                 </button>
+                <button
+                  style={{ 
+                    ...styles.importBtn, 
+                    marginLeft: '10px',
+                    backgroundColor: '#10B981',
+                    borderColor: '#10B981'
+                  }}
+                  onClick={() => setShowDateModal(true)}
+                >
+                  Set Send Date
+                </button>
               </>
             )}
             {/* Header search removed */}
           </div>
         </div>
 
-        <button style={styles.filter}>BSIT</button>
+        {/* Filters */}
+        {!showStats && !selectedCard && (
+          <div style={{ 
+            display: 'flex', 
+            gap: '24px', 
+            marginBottom: '24px', 
+            alignItems: 'center',
+            padding: '16px 0'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <label style={{ 
+                fontWeight: 600, 
+                color: '#1e3a8a', 
+                fontSize: '15px',
+                minWidth: '120px'
+              }}>
+                Filter by Batch:
+              </label>
+              <select
+                value={selectedBatchFilter}
+                onChange={(e) => setSelectedBatchFilter(e.target.value)}
+                style={{ 
+                  padding: '10px 16px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: 12,
+                  minWidth: 150,
+                  fontSize: '14px',
+                  backgroundColor: 'white',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#5A6DFE';
+                  e.target.style.boxShadow = '0 4px 12px rgba(90, 109, 254, 0.2)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#e5e7eb';
+                  e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                }}
+              >
+                <option value="ALL">All Batches</option>
+                {Array.from(new Set(ojtYears.map(y => y.year))).sort((a, b) => b - a).map(year => (
+                  <option key={year} value={year.toString()}>{year}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <label style={{ 
+                fontWeight: 600, 
+                color: '#1e3a8a', 
+                fontSize: '15px',
+                minWidth: '120px'
+              }}>
+                Filter by Section:
+              </label>
+              <select
+                value={selectedSectionFilter}
+                onChange={(e) => setSelectedSectionFilter(e.target.value)}
+                style={{ 
+                  padding: '10px 16px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: 12,
+                  minWidth: 150,
+                  fontSize: '14px',
+                  backgroundColor: 'white',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#5A6DFE';
+                  e.target.style.boxShadow = '0 4px 12px rgba(90, 109, 254, 0.2)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#e5e7eb';
+                  e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                }}
+              >
+                <option value="ALL">All Sections</option>
+                {Array.from(new Set(ojtYears.map(y => y.section).filter(s => s))).sort().map(section => (
+                  <option key={section} value={section}>{section}</option>
+                ))}
+              </select>
+            </div>
+            
+            <button style={{
+              ...styles.filter,
+              padding: '10px 24px',
+              fontSize: '14px',
+              fontWeight: 600,
+              borderRadius: 12
+            }}>
+              BSIT
+            </button>
+          </div>
+        )}
 
         {/* ============== Cards OR Details Table OR Statistics ============== */}
         {!showStats ? (
           selectedCard ? (
-            <DetailsTable onBack={() => setSelectedCard(null)} selectedYear={selectedCard} />
+            <DetailsTable 
+              onBack={() => setSelectedCard(null)} 
+              selectedYear={selectedCard.year}
+              selectedSection={selectedCard.section}
+            />
           ) : (
             <div style={styles.cards}>
               {loading ? (
                 <div style={{ width: '100%', textAlign: 'center', padding: '20px' }}>
                   Loading OJT data...
                 </div>
-              ) : ojtYears.length === 0 ? (
+              ) : ojtYears.filter(yearData => {
+                const batchMatch = selectedBatchFilter === 'ALL' || yearData.year.toString() === selectedBatchFilter;
+                const sectionMatch = selectedSectionFilter === 'ALL' || yearData.section === selectedSectionFilter;
+                return batchMatch && sectionMatch;
+              }).length === 0 ? (
                 <div style={{ width: '100%', textAlign: 'center', padding: '20px' }}>
-                  No OJT data found.
+                  No OJT data found for the selected filters.
                 </div>
               ) : (
-                ojtYears.map((yearData) => (
+                ojtYears.filter(yearData => {
+                  const batchMatch = selectedBatchFilter === 'ALL' || yearData.year.toString() === selectedBatchFilter;
+                  const sectionMatch = selectedSectionFilter === 'ALL' || yearData.section === selectedSectionFilter;
+                  return batchMatch && sectionMatch;
+                }).map((yearData) => (
                   <div
-                    key={yearData.year}
+                    key={`${yearData.year}-${yearData.section || 'default'}`}
                     style={styles.card}
-                    onClick={() => setSelectedCard(yearData.year)}
+                    onClick={() => setSelectedCard({ year: yearData.year, section: yearData.section })}
                   >
                     <div style={styles.cardImage}></div>
                     <p style={styles.cardText}>CLASS OF {yearData.year}</p>
+                    {yearData.section && <p style={styles.cardText}>Section: {yearData.section}</p>}
                     <p style={styles.cardText}>OJT: {yearData.count}</p>
                   </div>
                 ))
@@ -575,6 +704,103 @@ export default function Dashboard() {
                 disabled={importLoading}
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Date Modal for Setting Send Date */}
+      {showDateModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+            width: '400px',
+            maxWidth: '90vw'
+          }}>
+            <h3 style={{ margin: '0 0 20px 0', color: '#1e3a8a' }}>
+              Set Date to Send Completed OJT to Admin
+            </h3>
+            <p style={{ margin: '0 0 15px 0', color: '#6b7280', fontSize: '14px' }}>
+              Choose a date when:
+            </p>
+            <ul style={{ margin: '0 0 15px 0', color: '#6b7280', fontSize: '14px', paddingLeft: '20px' }}>
+              <li>All students with "Completed" status will be sent to admin for approval</li>
+              <li>All students with "Ongoing" status will be changed to "Incomplete"</li>
+            </ul>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#374151' }}>
+                Send Date:
+              </label>
+              <input
+                type="date"
+                value={sendDate}
+                onChange={(e) => setSendDate(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  outline: 'none'
+                }}
+                min={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowDateModal(false);
+                  setSendDate('');
+                }}
+                style={{
+                  padding: '10px 20px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  backgroundColor: 'white',
+                  color: '#6b7280',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (sendDate) {
+                    // TODO: Implement the actual functionality to set the send date
+                    alert(`Send date set to: ${sendDate}\n\nOn this date:\n• All completed OJT students will be sent to admin\n• All ongoing students will be marked as incomplete`);
+                    setShowDateModal(false);
+                    setSendDate('');
+                  } else {
+                    alert('Please select a date');
+                  }
+                }}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  backgroundColor: '#10B981',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                Set Date
               </button>
             </div>
           </div>

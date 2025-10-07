@@ -4,10 +4,11 @@ import { fetchOJTByYear, updateOJTStatus, sendCompletedOJTToAdmin } from '../../
 interface DetailsTableProps {
   onBack: () => void;
   selectedYear?: number;
+  selectedSection?: string;
   searchQuery?: string;
 }
 
-export default function DetailsTable({ onBack, selectedYear, searchQuery }: DetailsTableProps) {
+export default function DetailsTable({ onBack, selectedYear, selectedSection, searchQuery }: DetailsTableProps) {
   const [ojtData, setOjtData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [coordinatorUsername, setCoordinatorUsername] = useState('');
@@ -258,17 +259,25 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
     if (typeof searchQuery === 'string') setSearch(searchQuery);
   }, [searchQuery]);
   const filtered = ojtData.filter((ojt) => {
-    // Remove Carlo Mendoza (4-B) - coordinator only imported 4-A students
     const ctuIdStr = String(ojt.ctu_id || '');
     const first = (ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : '') || '').toLowerCase();
     const last = (ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : '') || '').toLowerCase();
-    const section = (ojt.section || '').toUpperCase();
-    if (
-      ctuIdStr === '1334335' ||
-      (first === 'carlo' && last === 'mendoza') ||
-      section === '4-B'
-    ) {
-      return false;
+    
+    // Filter by section if specified
+    if (selectedSection) {
+      if (selectedSection === '4-B') {
+        // For 4-B section, show only Carlo Mendoza
+        const isCarlo = ctuIdStr === '1334335' || (first === 'carlo' && last === 'mendoza');
+        if (!isCarlo) {
+          return false;
+        }
+      } else {
+        // For 4-A or other sections, exclude Carlo Mendoza
+        const isCarlo = ctuIdStr === '1334335' || (first === 'carlo' && last === 'mendoza');
+        if (isCarlo) {
+          return false;
+        }
+      }
     }
     
     // Search filter
@@ -299,18 +308,56 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
 
   return (
     <div style={styles.detailsTable}>
-      {/* Search and Filter inputs */}
-      <div style={styles.searchRow}>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+      {/* Batch and Section Header with Filters */}
+      <div style={{
+        marginBottom: '20px',
+        padding: '20px 24px',
+        background: 'linear-gradient(135deg, #5A6DFE 0%, #4C5FE8 100%)',
+        borderRadius: '12px',
+        color: 'white',
+        boxShadow: '0 4px 12px rgba(90, 109, 254, 0.3)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        {/* Left side: Batch and Section info */}
+        <div>
+          <h2 style={{ 
+            margin: 0, 
+            fontSize: '24px', 
+            fontWeight: 700,
+            marginBottom: '6px'
+          }}>
+            Class of {selectedYear}
+          </h2>
+          {selectedSection && (
+            <p style={{ 
+              margin: 0, 
+              fontSize: '16px', 
+              fontWeight: 500,
+              opacity: 0.95
+            }}>
+              Section: {selectedSection}
+            </p>
+          )}
+        </div>
+        
+        {/* Right side: Search and Filter inputs */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             style={{
-              padding: '10px 14px',
-              border: '1px solid #ccc',
+              padding: '9px 14px',
+              border: 'none',
               borderRadius: '20px',
-              backgroundColor: 'white',
-              cursor: 'pointer'
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: '#374151',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+              width: '160px'
             }}
           >
             <option value="all">All Students</option>
@@ -319,10 +366,19 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
           </select>
           <input
             type="text"
-            placeholder="Search by name, company, or CTU ID..."
+            placeholder="Search by name or CTU ID..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={styles.searchInput}
+            style={{
+              padding: '9px 16px',
+              border: 'none',
+              borderRadius: '20px',
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+              fontSize: '13px',
+              outline: 'none',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+              width: '240px'
+            }}
           />
         </div>
       </div>
@@ -332,7 +388,7 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
             <th style={styles.th}>Last Name</th>
             <th style={styles.th}>First Name</th>
             <th style={styles.th}>Company</th>
-            <th style={styles.th}>OJT Status</th>
+            <th style={{ ...styles.th, textAlign: 'center' }}>OJT Status</th>
           </tr>
         </thead>
         <tbody>
@@ -352,7 +408,7 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
                 <td style={styles.td}>{ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : '')}</td>
                 <td style={styles.td}>{ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : '')}</td>
                 <td style={styles.td}>{ojt.company || ''}</td>
-                <td style={styles.td}>
+                <td style={{ ...styles.td, textAlign: 'center' }}>
                   {ojt.is_alumni ? (
                     <div style={{
                       padding: '8px 12px',
@@ -380,6 +436,16 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
                       onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
                       value={ojt.ojt_status || 'Ongoing'}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        backgroundColor: 'white',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        textAlign: 'center'
+                      }}
                       onChange={async (e) => {
                         const newStatus = e.target.value;
                         try {
