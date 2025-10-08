@@ -210,12 +210,12 @@ export const changePassword = async (old_password: string, new_password: string)
 };
 
 // --- Import alumni: expects Password column, generates if missing, and backend will export passwords after import. ---
-export const importAlumni = async (file: File, batchYear: string, course: string) => {
+export const importAlumni = async (file: File, batchYear: string, program: string) => {
   try {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('batch_year', batchYear);
-    formData.append('course', course);
+    formData.append('program', program);
 
     const response = await api.post('import-alumni/', formData, {
       headers: {
@@ -254,30 +254,30 @@ export const fetchAlumniByYear = async (year: string) => {
 };
 
 // Fetch alumni employment statistics by year and course
-export const fetchAlumniEmploymentStats = async (year = 'ALL', course = 'ALL') => {
-  const response = await api.get(`statistics/alumni/?year=${year}&course=${course}`);
+export const fetchAlumniEmploymentStats = async (year = 'ALL', program = 'ALL') => {
+  const response = await api.get(`statistics/alumni/?year=${year}&program=${program}`);
   return response.data;
 };
 
 // Generate specific type of statistics (QPRO, CHED, SUC, AACUP)
-export const generateSpecificStats = async (year = 'ALL', course = 'ALL', statsType = 'ALL') => {
+export const generateSpecificStats = async (year = 'ALL', program = 'ALL', statsType = 'ALL') => {
   try {
     const response = await api.get(
-      `statistics/generate/?year=${year}&course=${course}&type=${statsType}`
+      `statistics/generate/?year=${year}&program=${program}&type=${statsType}`
     );
     return response.data;
   } catch (error: any) {
     // Fallback to regular employment stats if specific endpoint doesn't exist
     console.warn('Specific stats endpoint not available, falling back to employment stats');
-    return await fetchAlumniEmploymentStats(year, course);
+    return await fetchAlumniEmploymentStats(year, program);
   }
 };
 
 // Export detailed alumni data for specific statistics types
-export const exportDetailedAlumniData = async (year = 'ALL', course = 'ALL', statsType = 'ALL') => {
+export const exportDetailedAlumniData = async (year = 'ALL', program = 'ALL', statsType = 'ALL') => {
   try {
     const response = await api.get(
-      `statistics/export-detailed/?year=${year}&course=${course}&type=${statsType}`
+      `statistics/export-detailed/?year=${year}&program=${program}&type=${statsType}`
     );
     return response.data;
   } catch (error) {
@@ -290,14 +290,14 @@ export const exportDetailedAlumniData = async (year = 'ALL', course = 'ALL', sta
 export const importOJT = async (
   file: File,
   batchYear: string,
-  course: string,
+  program: string,
   coordinatorUsername: string
 ) => {
   try {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('batch_year', batchYear);
-    formData.append('course', course);
+    formData.append('program', program);
     formData.append('coordinator_username', coordinatorUsername);
 
     const response = await api.post('ojt/import/', formData, {
@@ -333,10 +333,10 @@ export const fetchOJTByYear = async (year: string, coordinatorUsername?: string)
   return response.data;
 };
 
-// Clear OJT data by batch year (and optional coordinator/course)
-export const clearOJT = async (batchYear: string, course?: string, coordinatorUsername?: string) => {
+// Clear OJT data by batch year (and optional coordinator/program)
+export const clearOJT = async (batchYear: string, program?: string, coordinatorUsername?: string) => {
   const body: any = { batch_year: batchYear };
-  if (course) body.course = course;
+  if (program) body.program = program;
   if (coordinatorUsername) body.coordinator = coordinatorUsername;
   const response = await api.post('ojt/clear/', body);
   return response.data;

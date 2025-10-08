@@ -59,10 +59,11 @@ const ViewStats: React.FC = () => {
   };
 
   const handleExportedImport = async () => {
-    if (!importFile || !selectedBatchYear) { alert('Please select a file and batch year to import.'); return; }
+    if (!importFile) { alert('Please select a file to import.'); return; }
     const formData = new FormData();
     formData.append('file', importFile);
-    formData.append('batch_year', selectedBatchYear);
+    // Batch year optional: backend will read Year_Graduated/Batch Year per row; include only if selected
+    if (selectedBatchYear) formData.append('batch_year', selectedBatchYear);
     const token = localStorage.getItem('accessToken');
     try {
       const response = await fetch('http://localhost:8000/api/import-alumni/', {

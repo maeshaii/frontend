@@ -9,7 +9,7 @@ const UsersIndex: React.FC = () => {
   const [alumni, setAlumni] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCourse, setSelectedCourse] = useState('All');
+  const [selectedProgram, setSelectedProgram] = useState('All');
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
 
   useEffect(() => {
@@ -31,7 +31,7 @@ const UsersIndex: React.FC = () => {
     setLoading(true);
     setSelectedBatch(year);
     setSearchTerm('');
-    setSelectedCourse('All');
+    setSelectedProgram('All');
     try {
       const data = await fetchAlumniByYear(year.toString());
       setAlumni(data.alumni || []);
@@ -46,17 +46,17 @@ const UsersIndex: React.FC = () => {
     setSelectedBatch(null);
     setAlumni([]);
     setSearchTerm('');
-    setSelectedCourse('All');
+    setSelectedProgram('All');
   };
 
-  // Get unique courses for dropdown
-  const courseOptions = Array.from(new Set(alumni.map((a) => a.course).filter(Boolean)));
+  // Get unique programs for dropdown
+  const programOptions = Array.from(new Set(alumni.map((a) => a.program).filter(Boolean)));
 
   // Filtered alumni
   const filteredAlumni = alumni.filter((user) => {
-    const matchCourse = selectedCourse === 'All' || user.course === selectedCourse;
+    const matchProgram = selectedProgram === 'All' || user.program === selectedProgram;
     const matchSearch = (user.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    return matchCourse && matchSearch;
+    return matchProgram && matchSearch;
   });
 
   const calculateAge = (birthDateStr?: string) => {
@@ -178,11 +178,11 @@ const UsersIndex: React.FC = () => {
                 />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <label style={{ marginRight: 8, fontWeight: 500, color: '#222', fontSize: 15 }}>
-                    COURSE:
+                    PROGRAM:
                   </label>
                   <select
-                    value={selectedCourse}
-                    onChange={(e) => setSelectedCourse(e.target.value)}
+                    value={selectedProgram}
+                    onChange={(e) => setSelectedProgram(e.target.value)}
                     style={{
                       padding: '8px 28px 8px 18px',
                       borderRadius: '20px',
@@ -198,9 +198,9 @@ const UsersIndex: React.FC = () => {
                     }}
                   >
                     <option value="All">All</option>
-                    {courseOptions.map((course) => (
-                      <option key={course} value={course}>
-                        {course}
+                    {programOptions.map((program) => (
+                      <option key={program} value={program}>
+                        {program}
                       </option>
                     ))}
                   </select>
@@ -219,7 +219,7 @@ const UsersIndex: React.FC = () => {
                 <tr style={{ background: '#174f84', color: 'white' }}>
                   <th style={{ padding: '12px' }}>Name</th>
                   <th style={{ padding: '12px' }}>ID Number</th>
-                  <th style={{ padding: '12px' }}>Course</th>
+                  <th style={{ padding: '12px' }}>Program</th>
                   <th style={{ padding: '12px' }}>Batch Graduated</th>
                   <th style={{ padding: '12px' }}>Status</th>
                 </tr>
@@ -256,7 +256,7 @@ const UsersIndex: React.FC = () => {
                     >
                       <td>{user.name}</td>
                       <td>{user.ctu_id}</td>
-                      <td>{user.course}</td>
+                      <td>{user.program}</td>
                       <td>{user.batch}</td>
                       <td
                         style={{

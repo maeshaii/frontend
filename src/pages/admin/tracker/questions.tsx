@@ -463,7 +463,8 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
     const flat: { catIdx: number; qIdx: number; number: number }[] = [];
     let num = 1;
     categories.forEach((cat, catIdx) => {
-      cat.questions.forEach((_, qIdx) => {
+      cat.questions.forEach((q, qIdx) => {
+        if (shouldHideQuestionText(q.text)) return; // don't count hidden questions
         flat.push({ catIdx, qIdx, number: num++ });
       });
     });
@@ -485,6 +486,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         placeholder: 'e.g. 09123456789 or 1234567',
         validate: (v: string) =>
           /^(09|\+639)\d{9}$|^\d{7}$/.test(v) ? '' : 'Invalid Philippine phone/landline number.',
+        options: undefined,
       };
     }
     if (text.includes('email')) {
@@ -493,6 +495,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         placeholder: 'e.g. user@email.com',
         validate: (v: string) =>
           /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? '' : 'Invalid email address.',
+        options: undefined,
       };
     }
     if (text.includes('birth') || text.includes('bday')) {
@@ -500,6 +503,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         type: 'date',
         placeholder: 'YYYY-MM-DD',
         validate: (v: string) => (v ? '' : 'Birthday required.'),
+        options: undefined,
       };
     }
     if (
@@ -513,10 +517,30 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         type: 'url',
         placeholder: 'https://socialmedia.com/yourprofile',
         validate: (v: string) => (/^https?:\/\//.test(v) ? '' : 'Invalid URL.'),
+        options: undefined,
       };
     }
-    // Add numerical validation for age, salary, income, and other numerical fields
-    if (text.includes('age') || text.includes('salary') || text.includes('income') || text.includes('amount') || text.includes('number') || text.includes('monthly') || text.includes('annual') || text.includes('yearly')) {
+    // Handle salary fields as select dropdowns
+    if (text.includes('salary') || text.includes('salary range')) {
+      return {
+        type: 'select',
+        options: [
+          { value: 'below_5000', label: '5,000 below' },
+          { value: '5001_10000', label: '5,001 to 10,000' },
+          { value: '10001_20000', label: '10,001 to 20,000' },
+          { value: '20001_30000', label: '20,001 to 30,000' },
+          { value: 'above_30000', label: '30,000 above' }
+        ],
+        placeholder: 'Select salary range',
+        validate: (v: string) => {
+          if (!v) return ''; // Allow empty for optional fields
+          return '';
+        }
+      };
+    }
+    
+    // Add numerical validation for age, income, and other numerical fields (excluding salary)
+    if (text.includes('age') || text.includes('income') || text.includes('amount') || text.includes('number') || text.includes('monthly') || text.includes('annual') || text.includes('yearly')) {
       return { 
         type: 'number', 
         placeholder: 'Enter numbers only', 
@@ -524,10 +548,11 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
           if (!v) return ''; // Allow empty for optional fields
           if (/^\d+$/.test(v)) return ''; // Only digits allowed
           return 'This field only accepts numbers (0-9)';
-        }
+        },
+        options: undefined,
       };
     }
-    return { type: 'text', placeholder: '', validate: (_: string) => '' };
+    return { type: 'text', placeholder: '', validate: (_: string) => '', options: undefined };
   };
 
   // Initial load handled by React Query above
@@ -751,6 +776,23 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
     setCustomJobInputs(prev => ({ ...prev, [qId]: Boolean(isCustom) }));
   };
 
+  // Senior-level customization for specific questions
+  function shouldHideQuestionText(text: string): boolean {
+    const t = (text || '').toLowerCase();
+    // Remove "Current Scope of your Job"
+    return t.includes('current scope of your job');
+  }
+
+  function getDisplayOptions(q: any): string[] | undefined {
+    if (!q?.options) return q?.options;
+    const t = (q.text || '').toLowerCase();
+    // Rename Public -> Government for sector question
+    if (t.includes('current sector of your job')) {
+      return q.options.map((o: string) => (String(o).toLowerCase() === 'public' ? 'Government' : o));
+    }
+    return q.options;
+  }
+
   return (
     <div className="tracker-container">
       <div className="tracker-inner">
@@ -795,6 +837,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                     cat.title.toLowerCase().includes('unemployed') ||
                     cat.title.toLowerCase().includes('further study')}
                   {cat.questions.map((q, qIdx) => {
+                    if (shouldHideQuestionText(q.text)) return null;
                     if (q.text.toLowerCase().includes('current position')) {
                       const currentInput = jobInputValues[q.id] || '';
                       const filterJobs = (input: string) => {
@@ -874,8 +917,42 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                               const isAge = lower.includes('age');
                               const isBirth = lower.includes('birth') || lower.includes('bday') || lower.includes('date of birth');
                               const isPhone = lower.includes('phone') || lower.includes('mobile') || lower.includes('contact');
+                              const isSalary = lower.includes('salary') || lower.includes('salary range');
                               const type = isAge ? 'number' : isBirth ? 'date' : inputProps.type;
                               const placeholder = isBirth ? 'YYYY-MM-DD' : inputProps.placeholder;
+                              
+                              // Handle select dropdown for salary fields
+                              if (inputProps.type === 'select' && inputProps.options) {
+                                return (
+                                  <>
+                                    <select
+                                      value={getPrefilledValue(q)}
+                                      onChange={(e) => {
+                                        handleResponseChange(cat.id, q.id, e.target.value);
+                                        const err = inputProps.validate(e.target.value);
+                                        setValidationErrors((prev) => ({
+                                          ...prev,
+                                          [`${q.id}`]: err,
+                                        }));
+                                      }}
+                                      style={{ width: '100%', marginTop: 4, padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                                    >
+                                      <option value="">{inputProps.placeholder}</option>
+                                      {inputProps.options.map((option: any) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {validationErrors[`${q.id}`] && (
+                                      <div style={{ color: 'red', fontSize: 12 }}>
+                                        {validationErrors[`${q.id}`]}
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              }
+                              
                               return (
                                 <>
                                   <input
@@ -953,8 +1030,8 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                             </div>
                           )}
                           {q.type === 'radio' &&
-                            q.options &&
-                            q.options.map((opt) => (
+                            getDisplayOptions(q) &&
+                            getDisplayOptions(q)!.map((opt) => (
                               <label key={opt} style={{ marginRight: 12 }}>
                                 <input
                                   type="radio"
