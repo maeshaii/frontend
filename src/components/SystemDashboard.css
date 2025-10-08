@@ -1,0 +1,523 @@
+/* System Dashboard - Mobile-First Responsive Design */
+
+.system-dashboard {
+  padding: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.dashboard-header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.last-updated {
+  font-size: 14px;
+  color: #6c757d;
+  background: #f8f9fa;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.dashboard-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e9ecef;
+  transition: box-shadow 0.2s ease;
+}
+
+.dashboard-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.card-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.status-indicator {
+  padding: 4px 12px;
+  border-radius: 20px;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Health Metrics */
+.health-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.metric {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.metric-label {
+  font-size: 14px;
+  color: #6c757d;
+  min-width: 100px;
+  font-weight: 500;
+}
+
+.metric-bar {
+  flex: 1;
+  height: 8px;
+  background: #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 120px;
+}
+
+.metric-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.metric-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+  min-width: 50px;
+  text-align: right;
+}
+
+/* Performance Metrics */
+.performance-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.metric-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.metric-item .metric-label {
+  font-size: 12px;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.metric-item .metric-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.metric-value.warning {
+  color: #ffc107;
+}
+
+.metric-value.error {
+  color: #dc3545;
+}
+
+.metric-value.success {
+  color: #28a745;
+}
+
+/* Business Metrics */
+.business-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Alignment Metrics */
+.alignment-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alignment-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f3f4;
+}
+
+.alignment-item:last-child {
+  border-bottom: none;
+}
+
+.alignment-label {
+  font-size: 14px;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.alignment-value {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Program Distribution */
+.program-distribution {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.program-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f3f4;
+}
+
+.program-item:last-child {
+  border-bottom: none;
+}
+
+.program-name {
+  font-size: 14px;
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+.program-count {
+  font-size: 14px;
+  color: #6c757d;
+  font-weight: 600;
+}
+
+/* Activity Metrics */
+.activity-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.activity-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f3f4;
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-label {
+  font-size: 14px;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.activity-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+/* Loading and Error States */
+.dashboard-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.dashboard-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.error-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.dashboard-error h3 {
+  margin: 0 0 8px 0;
+  color: #dc3545;
+  font-size: 20px;
+}
+
+.dashboard-error p {
+  margin: 0 0 20px 0;
+  color: #6c757d;
+  font-size: 16px;
+}
+
+.retry-button {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.retry-button:hover {
+  background: #0056b3;
+}
+
+/* Tablet Styles */
+@media (min-width: 768px) {
+  .system-dashboard {
+    padding: 24px;
+  }
+  
+  .dashboard-header h1 {
+    font-size: 28px;
+  }
+  
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+  
+  .dashboard-card {
+    padding: 24px;
+  }
+  
+  .card-header h2 {
+    font-size: 20px;
+  }
+  
+  .health-metrics {
+    gap: 20px;
+  }
+  
+  .metric {
+    gap: 16px;
+  }
+  
+  .metric-label {
+    min-width: 120px;
+  }
+  
+  .metric-bar {
+    min-width: 150px;
+  }
+}
+
+/* Desktop Styles */
+@media (min-width: 1024px) {
+  .system-dashboard {
+    padding: 32px;
+  }
+  
+  .dashboard-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  
+  .health-card {
+    grid-column: span 2;
+  }
+  
+  .performance-card {
+    grid-column: span 1;
+  }
+  
+  .business-card {
+    grid-column: span 2;
+  }
+  
+  .alignment-card {
+    grid-column: span 1;
+  }
+  
+  .program-card {
+    grid-column: span 2;
+  }
+  
+  .activity-card {
+    grid-column: span 1;
+  }
+  
+  .metric-row {
+    gap: 24px;
+  }
+  
+  .metric-item {
+    min-width: 150px;
+  }
+}
+
+/* Large Desktop Styles */
+@media (min-width: 1440px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .health-card {
+    grid-column: span 2;
+  }
+  
+  .performance-card {
+    grid-column: span 2;
+  }
+  
+  .business-card {
+    grid-column: span 2;
+  }
+  
+  .alignment-card {
+    grid-column: span 1;
+  }
+  
+  .program-card {
+    grid-column: span 2;
+  }
+  
+  .activity-card {
+    grid-column: span 1;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .system-dashboard {
+    background: #1a1a1a;
+    color: #e2e8f0;
+  }
+  
+  .dashboard-header h1 {
+    color: #e2e8f0;
+  }
+  
+  .last-updated {
+    background: #2d3748;
+    color: #a0aec0;
+    border-color: #4a5568;
+  }
+  
+  .dashboard-card {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+  
+  .card-header h2 {
+    color: #e2e8f0;
+  }
+  
+  .metric-label {
+    color: #a0aec0;
+  }
+  
+  .metric-value {
+    color: #e2e8f0;
+  }
+  
+  .metric-bar {
+    background: #4a5568;
+  }
+  
+  .program-name {
+    color: #e2e8f0;
+  }
+  
+  .program-count {
+    color: #a0aec0;
+  }
+  
+  .activity-value {
+    color: #e2e8f0;
+  }
+  
+  .alignment-label {
+    color: #a0aec0;
+  }
+  
+  .activity-label {
+    color: #a0aec0;
+  }
+  
+  .dashboard-error {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+  
+  .dashboard-error h3 {
+    color: #fc8181;
+  }
+  
+  .dashboard-error p {
+    color: #a0aec0;
+  }
+}
