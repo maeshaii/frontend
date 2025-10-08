@@ -24,7 +24,6 @@ import Settings from './pages/alumni/Settings';
 // import AlumniProfile from './pages/alumni/Profile';
 import PesoProfile from './pages/peso/Profile';
 import AdminDashboard from './pages/admin/dashboard/AdminDashboard';
-import AdminNotificationPage from './pages/admin/dashboard/AdminNotification';
 import AdminProfilePage from './pages/admin/dashboard/AdminProfilePage';
 import CoordinatorDashboard from './pages/coordinator/dashboard';
 import RequestsPage from './pages/admin/pages/RequestsPage';
@@ -238,7 +237,7 @@ const App: React.FC = () => {
             path="/ccict/notification"
             element={
               <PrivateRoute>
-                <AdminNotificationPage />
+                <NotificationPage />
               </PrivateRoute>
             }
           />

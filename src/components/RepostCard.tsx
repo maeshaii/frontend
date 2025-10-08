@@ -109,6 +109,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
   const [editCaptionContent, setEditCaptionContent] = useState(repostData.repost_caption || '');
   const [editingComment, setEditingComment] = useState<{ [key: number]: boolean }>({});
   const [editCommentContent, setEditCommentContent] = useState<{ [key: number]: string }>({});
+  const [showCommentOptions, setShowCommentOptions] = useState<{ [key: number]: boolean }>({});
 
   const isOwn = currentUserId === repostData.user.user_id;
   const reposterName = `${repostData.user.f_name} ${repostData.user.m_name || ''} ${repostData.user.l_name}`.trim();
@@ -468,10 +469,46 @@ const RepostCard: React.FC<RepostCardProps> = ({
           </div>
         </div>
 
+        {/* Like Display Section */}
+        {repostData.likes && repostData.likes.length > 0 && (
+          <div style={{ 
+            padding: '8px 16px',
+            borderTop: '1px solid #f0f0f0',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span
+              style={{ 
+                cursor: 'pointer', 
+                fontSize: '12px',
+                fontWeight: '500',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                transition: 'background-color 0.2s ease',
+                color: '#6b7280'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f8f9fa';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >👍
+              {repostData.likes.length === 1 
+                ? `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ' liked this'
+                : repostData.likes.length === 2
+                ? `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ` and ${repostData.likes[1].f_name || ''} ${repostData.likes[1].l_name || ''}`.trim() + ' liked this'
+                : `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ` and ${repostData.likes.length - 1} others liked this`
+              }
+            </span>
+          </div>
+        )}
+
         {/* Repost Actions */}
         <div style={{ 
           padding: '12px 16px 0',
-          borderTop: '1px solid #f0f0f0',
+          borderTop: repostData.likes && repostData.likes.length > 0 ? '1px solid #f0f0f0' : 'none',
           display: 'flex',
           alignItems: 'center',
           gap: '16px'
@@ -491,7 +528,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
             }}
           >
             <span style={{ fontSize: '16px' }}>{isLiked ?  '👍' : '👍'}</span>
-            <span>{repostData.likes_count || 0}</span>
+            <span>{repostData.likes_count === 1 ? '1 like' : (repostData.likes_count && repostData.likes_count > 1) ? `${repostData.likes_count} likes` : 'Like'}</span>
           </button>
 
           <button
@@ -512,7 +549,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
             }}
           >
             <span style={{ fontSize: '16px' }}>💬</span>
-            <span>{repostData.comments_count || 0}</span>
+            <span>{repostData.comments_count && repostData.comments_count > 0 ? repostData.comments_count : ''}</span>
           </button>
         </div>
 
@@ -584,17 +621,127 @@ const RepostCard: React.FC<RepostCardProps> = ({
                     }}
                   />
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: '600', fontSize: '13px', color: '#1a1a1a' }}>
-                        {`${comment.user.f_name} ${comment.user.l_name}`}
-                      </span>
-                      <span style={{ fontSize: '12px', color: '#666' }}>
-                        {formatTime(comment.date_created)}
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: '600', fontSize: '13px', color: '#1a1a1a' }}>
+                          {`${comment.user.f_name} ${comment.user.l_name}`}
+                        </span>
+                        <span style={{ fontSize: '12px', color: '#666' }}>
+                          {formatTime(comment.date_created)}
+                        </span>
+                      </div>
+                      {currentUserId === comment.user.user_id && !editingComment[comment.comment_id] && (
+                        <div style={{ position: 'relative' }}>
+                          <button
+                            onClick={() => setShowCommentOptions(prev => ({ 
+                              ...prev, 
+                              [comment.comment_id]: !prev[comment.comment_id] 
+                            }))}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '16px',
+                              color: '#666',
+                              padding: '4px',
+                            }}
+                          >
+                            ⋯
+                          </button>
+                          {showCommentOptions[comment.comment_id] && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                right: 0,
+                                top: '100%',
+                                background: '#fff',
+                                border: '1px solid #ddd',
+                                borderRadius: '8px',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                zIndex: 1000,
+                                width: '120px',
+                              }}
+                            >
+                              <button
+                                onClick={() => {
+                                  setEditingComment(prev => ({ ...prev, [comment.comment_id]: true }));
+                                  setEditCommentContent(prev => ({ 
+                                    ...prev, 
+                                    [comment.comment_id]: comment.comment_content 
+                                  }));
+                                  setShowCommentOptions(prev => ({ ...prev, [comment.comment_id]: false }));
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  background: 'none',
+                                  border: 'none',
+                                  textAlign: 'left',
+                                  cursor: 'pointer',
+                                  fontSize: '14px',
+                                  gap: '8px',
+                                  borderRadius: '4px',
+                                  transition: 'all 0.2s ease',
+                                  color: '#374151'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#f3f4f6';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'transparent';
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (window.confirm('Are you sure you want to delete this comment?')) {
+                                    handleDeleteComment(comment.comment_id);
+                                  }
+                                  setShowCommentOptions(prev => ({ ...prev, [comment.comment_id]: false }));
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  background: 'none',
+                                  border: 'none',
+                                  textAlign: 'left',
+                                  cursor: 'pointer',
+                                  fontSize: '14px',
+                                  gap: '8px',
+                                  borderRadius: '4px',
+                                  transition: 'all 0.2s ease',
+                                  color: '#dc2626'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#fef2f2';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'transparent';
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <polyline points="3,6 5,6 21,6"></polyline>
+                                  <path d="M19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
+                                </svg>
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     
                     {editingComment[comment.comment_id] ? (
-                      <div>
+                      <div style={{ marginTop: 4 }}>
                         <textarea
                           value={editCommentContent[comment.comment_id] || comment.comment_content}
                           onChange={(e) => setEditCommentContent(prev => ({ 
@@ -603,27 +750,47 @@ const RepostCard: React.FC<RepostCardProps> = ({
                           }))}
                           style={{
                             width: '100%',
-                            padding: '6px 8px',
+                            minHeight: '60px',
+                            padding: '6px',
                             border: '1px solid #ddd',
-                            borderRadius: '4px',
-                            fontSize: '13px',
+                            borderRadius: '8px',
+                            fontSize: '14px',
                             resize: 'vertical',
-                            minHeight: '60px'
                           }}
+                          placeholder="Edit your comment..."
                         />
-                        <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
                           <button
                             onClick={() => handleEditComment(comment.comment_id)}
                             style={{
-                              padding: '4px 8px',
-                              backgroundColor: '#007bff',
-                              color: 'white',
+                              display: 'flex',
+                              alignItems: 'center',
+                              background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                              color: '#fff',
                               border: 'none',
-                              borderRadius: '3px',
+                              borderRadius: '6px',
+                              padding: '8px 16px',
                               cursor: 'pointer',
-                              fontSize: '12px'
+                              fontSize: '12px',
+                              gap: '6px',
+                              fontWeight: '500',
+                              transition: 'all 0.2s ease',
+                              boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.transform = 'translateY(-1px)';
+                              e.currentTarget.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = 'translateY(0)';
+                              e.currentTarget.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
                             }}
                           >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                              <polyline points="17,21 17,13 7,13 7,21"/>
+                              <polyline points="7,3 7,8 15,8"/>
+                            </svg>
                             Save
                           </button>
                           <button
@@ -632,61 +799,43 @@ const RepostCard: React.FC<RepostCardProps> = ({
                               setEditCommentContent(prev => ({ ...prev, [comment.comment_id]: '' }));
                             }}
                             style={{
-                              padding: '4px 8px',
-                              backgroundColor: '#6c757d',
-                              color: 'white',
+                              display: 'flex',
+                              alignItems: 'center',
+                              background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
+                              color: '#fff',
                               border: 'none',
-                              borderRadius: '3px',
+                              borderRadius: '6px',
+                              padding: '8px 16px',
                               cursor: 'pointer',
-                              fontSize: '12px'
+                              fontSize: '12px',
+                              gap: '6px',
+                              fontWeight: '500',
+                              transition: 'all 0.2s ease',
+                              boxShadow: '0 2px 4px rgba(107, 114, 128, 0.3)'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.transform = 'translateY(-1px)';
+                              e.currentTarget.style.boxShadow = '0 4px 8px rgba(107, 114, 128, 0.4)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = 'translateY(0)';
+                              e.currentTarget.style.boxShadow = '0 2px 4px rgba(107, 114, 128, 0.3)';
                             }}
                           >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18"/>
+                              <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
                             Cancel
                           </button>
                         </div>
                       </div>
                     ) : (
-                      <div style={{ fontSize: '13px', color: '#1a1a1a', lineHeight: '1.4' }}>
+                      <div style={{ fontSize: '14px', color: '#555', marginTop: '2px' }}>
                         {comment.comment_content}
                       </div>
                     )}
                     
-                    {currentUserId === comment.user.user_id && !editingComment[comment.comment_id] && (
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                        <button
-                          onClick={() => {
-                            setEditingComment(prev => ({ ...prev, [comment.comment_id]: true }));
-                            setEditCommentContent(prev => ({ 
-                              ...prev, 
-                              [comment.comment_id]: comment.comment_content 
-                            }));
-                          }}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#007bff',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            padding: '0'
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteComment(comment.comment_id)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#dc3545',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            padding: '0'
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -694,6 +843,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
           </div>
         )}
       </div>
+
     </div>
   );
 };

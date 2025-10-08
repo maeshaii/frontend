@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createPost, createForumPost } from '../../services/api';
+import { createPost, createForumPost, createDonationRequest } from '../../services/api';
 import ctulogo from '../../images/ctulogo.png';
 import './postcreate.css';
 
@@ -70,6 +70,20 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
           content: postContent,
           image: postImage
         });
+      } else if (postType === 'donation') {
+        // Create donation request
+        console.log('Creating donation request with data:', {
+          description: postContent,
+          images: postImages,
+          images_count: postImages.length
+        });
+        
+        const result = await createDonationRequest({
+          description: postContent,
+          images: postImages
+        });
+        
+        console.log('Donation request creation result:', result);
       } else {
         // Determine post type based on logged-in account role
         const raw = localStorage.getItem('user');

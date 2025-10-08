@@ -86,6 +86,9 @@ const ForumPage: React.FC = () => {
   const [membersLoading, setMembersLoading] = useState(false);
   const [followLoading, setFollowLoading] = useState<{ [key: number]: boolean }>({});
   const [followingStatus, setFollowingStatus] = useState<{ [key: number]: boolean }>({});
+  const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
+  const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
+  const [postLoading, setPostLoading] = useState(false);
 
   // Get current user info
   const userObj = JSON.parse(localStorage.getItem('user') || '{}');
@@ -215,6 +218,34 @@ const ForumPage: React.FC = () => {
       alert(error?.response?.data?.error || error?.message || 'Failed to follow/unfollow user.');
     } finally {
       setFollowLoading(prev => ({ ...prev, [userId]: false }));
+    }
+  };
+
+  const handleViewOriginalPost = async (originalPost: any) => {
+    console.log('handleViewOriginalPost called with original post:', originalPost);
+    setPostLoading(true);
+    try {
+      // Fetch the full post data from the API
+      const { api } = await import('../../services/api');
+      const response = await api.get(`forum/${originalPost.post_id}/`);
+      console.log('Original post API response:', response.data);
+      if (response.data) {
+        setOriginalPostModalData(response.data);
+        
+        // Update the liked state for the modal post
+        setLikedPosts(prev => ({
+          ...prev,
+          [response.data.post_id]: response.data.liked_by_user || false
+        }));
+        
+        setShowOriginalPostModal(true);
+        console.log('Original post modal should now be visible');
+      }
+    } catch (error) {
+      console.error('Error fetching original post:', error);
+      alert('Failed to load original post.');
+    } finally {
+      setPostLoading(false);
     }
   };
 
@@ -359,7 +390,7 @@ const ForumPage: React.FC = () => {
 
 
       {/* Main Content */}
-      <Box sx={{ maxWidth: 1200, mx: 'auto', p: 2 }}>
+      <Box sx={{ maxWidth: '100%', mx: 0, px: 2, py: 2 }}>
         {/* Header Section */}
         <Box sx={{ mb: 3 }}>
           <Card
@@ -702,6 +733,7 @@ const ForumPage: React.FC = () => {
                         editCommentContent={editCommentContent}
                         setEditCommentContent={setEditCommentContent}
                         isForum={true}
+                        onViewOriginalPost={handleViewOriginalPost}
                       />
                     );
                   }
@@ -841,6 +873,7 @@ const ForumPage: React.FC = () => {
                       editCommentContent={editCommentContent}
                       setEditCommentContent={setEditCommentContent}
                       isForum={true}
+                      onViewOriginalPost={handleViewOriginalPost}
                     />
                   );
                 })
@@ -1045,6 +1078,115 @@ const ForumPage: React.FC = () => {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Original Post Modal */}
+      {showOriginalPostModal && originalPostModalData && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '20px',
+          }}
+          onClick={() => setShowOriginalPostModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowOriginalPostModal(false)}
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                background: 'none',
+                border: 'none',
+                fontSize: 24,
+                cursor: 'pointer',
+                color: '#666',
+                zIndex: 10,
+              }}
+              title="Close"
+            >
+              ×
+            </button>
+            <div style={{ padding: '20px' }}>
+              <PostCard
+                post={originalPostModalData}
+                currentUserId={currentUserId}
+                isOwn={currentUserId === originalPostModalData.user?.user_id}
+                displayName={originalPostModalData.user?.name || `${originalPostModalData.user?.f_name || ''} ${originalPostModalData.user?.l_name || ''}`.trim() || 'Unknown User'}
+                displayAvatar={originalPostModalData.user?.profile_pic ? (String(originalPostModalData.user.profile_pic).startsWith('http') ? originalPostModalData.user.profile_pic : `http://127.0.0.1:8000${originalPostModalData.user.profile_pic}`) : ctulogo}
+                formatTime={formatTime}
+                onViewOriginalPost={handleViewOriginalPost}
+                onPostUpdate={async () => {
+                  // Refresh the original post data in modal
+                  const postId = originalPostModalData.post_id;
+                  if (postId) {
+                    console.log('Modal onPostUpdate called, refreshing post:', postId);
+                    // Re-fetch the post data from server to get updated like status
+                    try {
+                      const { api } = await import('../../services/api');
+                      const response = await api.get(`forum/${postId}/`);
+                      if (response.data) {
+                        setOriginalPostModalData(response.data);
+                        // Update the liked state for the modal post
+                        setLikedPosts(prev => ({
+                          ...prev,
+                          [response.data.post_id]: response.data.liked_by_user || false
+                        }));
+                      }
+                    } catch (error) {
+                      console.error('Error refreshing modal post:', error);
+                    }
+                  }
+                  
+                  // Also refresh the main posts list to keep everything in sync
+                  fetchForumPosts();
+                }}
+                isForum={true}
+                showOptions={showOptions}
+                setShowOptions={setShowOptions}
+                editingPost={editingPost}
+                setEditingPost={setEditingPost}
+                editPostContent={editPostContent}
+                setEditPostContent={setEditPostContent}
+                likedPosts={likedPosts}
+                setLikedPosts={setLikedPosts}
+                repostedPosts={repostedPosts}
+                setRepostedPosts={setRepostedPosts}
+                showCommentInput={showCommentInput}
+                setShowCommentInput={setShowCommentInput}
+                showAllComments={showAllComments}
+                setShowAllComments={setShowAllComments}
+                commentInput={commentInput}
+                setCommentInput={setCommentInput}
+                editingComment={editingComment}
+                setEditingComment={setEditingComment}
+                editCommentContent={editCommentContent}
+                setEditCommentContent={setEditCommentContent}
+              />
             </div>
           </div>
         </div>

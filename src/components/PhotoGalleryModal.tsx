@@ -160,11 +160,12 @@ const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({
       {/* Main Image */}
       <div
         style={{
-          maxWidth: '90vw',
-          maxHeight: '90vh',
+          maxWidth: '95vw',
+          maxHeight: '95vh',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          padding: '20px',
         }}
         onClick={(e) => {
           e.stopPropagation();
@@ -183,8 +184,33 @@ const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({
           style={{
             maxWidth: '100%',
             maxHeight: '100%',
+            width: 'auto',
+            height: 'auto',
             objectFit: 'contain',
             borderRadius: 8,
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+          }}
+          onLoad={(e) => {
+            // Ensure the image displays at its natural size within constraints
+            const img = e.target as HTMLImageElement;
+            const naturalWidth = img.naturalWidth;
+            const naturalHeight = img.naturalHeight;
+            
+            // If image is very tall (portrait), allow it to use more height
+            if (naturalHeight > naturalWidth * 1.5) {
+              img.style.maxHeight = '90vh';
+              img.style.maxWidth = '80vw';
+            }
+            // If image is very wide (landscape), allow it to use more width
+            else if (naturalWidth > naturalHeight * 1.5) {
+              img.style.maxWidth = '90vw';
+              img.style.maxHeight = '80vh';
+            }
+            // For square images, use balanced constraints
+            else {
+              img.style.maxWidth = '85vw';
+              img.style.maxHeight = '85vh';
+            }
           }}
         />
       </div>
