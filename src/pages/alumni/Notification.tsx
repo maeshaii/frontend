@@ -456,9 +456,9 @@ const NotificationPage: React.FC = () => {
                     return <span>{openNotif.content}</span>;
                   })()}
                 </div>
-              ) : (openNotif.type && (openNotif.type.toLowerCase() === 'like' || openNotif.type.toLowerCase() === 'comment')) ? (
+              ) : (openNotif.type && (openNotif.type.toLowerCase() === 'like' || openNotif.type.toLowerCase() === 'comment' || openNotif.type.toLowerCase() === 'admin_peso_post')) ? (
                 <div>
-                  <div dangerouslySetInnerHTML={{ __html: openNotif.content.replace(/\n/g, '<br>') }} />
+                  <div dangerouslySetInnerHTML={{ __html: openNotif.content.replace(/\n/g, '<br>').replace(/<!--[^>]+-->/g, '') }} />
                   <br />
                   <br />
                   <button
@@ -474,29 +474,66 @@ const NotificationPage: React.FC = () => {
                       marginTop: '12px',
                     }}
                     onClick={async () => {
-                      // Try to extract post ID from notification content (hidden format: <!--POST_ID:123-->)
-                      const hiddenIdMatch = openNotif.content.match(/<!--POST_ID:(\d+)-->/);
+                      // Try to extract post ID from notification content (hidden format: <!--POST_ID:123-->, <!--FORUM_ID:123-->, <!--DONATION_ID:123-->)
+                      const postIdMatch = openNotif.content.match(/<!--POST_ID:(\d+)-->/);
+                      const forumIdMatch = openNotif.content.match(/<!--FORUM_ID:(\d+)-->/);
+                      const donationIdMatch = openNotif.content.match(/<!--DONATION_ID:(\d+)-->/);
                       const visibleIdMatch = openNotif.content.match(/Post ID:\s*(\d+)/i);
-                      const postIdMatch = hiddenIdMatch || visibleIdMatch;
                       
-                      if (postIdMatch) {
-                        const postId = postIdMatch[1];
+                      const matchResult = postIdMatch || forumIdMatch || donationIdMatch || visibleIdMatch;
+                      
+                      if (matchResult) {
+                        const postId = matchResult[1];
                         setPostLoading(true);
                         
                         try {
-                          // Try to fetch the post to check if it exists
-                          const response = await api.get(`posts/${postId}/detail/`);
+                          let response;
+                          let dashboardPath = '';
+                          
+                          // Determine which API endpoint to call based on the ID type
+                          if (forumIdMatch) {
+                            // Forum post
+                            response = await api.get(`forums/${postId}/`);
+                          } else if (donationIdMatch) {
+                            // Donation post
+                            response = await api.get(`donations/${postId}/`);
+                          } else {
+                            // Regular post
+                            response = await api.get(`posts/${postId}/detail/`);
+                          }
                           
                           if (response.data) {
-                            // Post exists, navigate to dashboard to view it
+                            // Post exists, navigate to appropriate dashboard to view it
                             setOpenNotif(null);
                             const userStr = localStorage.getItem('user');
                             const user = userStr ? JSON.parse(userStr) : null;
                             const userId = user?.user_id || user?.id;
                             
                             if (userId) {
-                              localStorage.setItem('pendingPostView', postId);
-                              navigate(`/alumni/dashboard/${userId}`);
+                              // Determine dashboard path based on user type
+                              const isAdmin = !!(user && user.account_type && user.account_type.admin);
+                              const isPeso = !!(user && user.account_type && user.account_type.peso);
+                              const userRole = user?.role || user?.user_type;
+                              
+                              if (isAdmin) {
+                                dashboardPath = `/ccict/dashboard/${userId}`;
+                              } else if (isPeso) {
+                                dashboardPath = `/peso/dashboard/${userId}`;
+                              } else if (userRole === 'ojt' || userRole === 'coordinator') {
+                                dashboardPath = `/ojt/dashboard/${userId}`;
+                              } else {
+                                dashboardPath = `/alumni/dashboard/${userId}`;
+                              }
+                              
+                              // Store post ID with type indicator
+                              if (forumIdMatch) {
+                                localStorage.setItem('pendingPostView', `forum:${postId}`);
+                              } else if (donationIdMatch) {
+                                localStorage.setItem('pendingPostView', `donation:${postId}`);
+                              } else {
+                                localStorage.setItem('pendingPostView', postId);
+                              }
+                              navigate(dashboardPath);
                             }
                           }
                         } catch (error: any) {
@@ -517,7 +554,22 @@ const NotificationPage: React.FC = () => {
                         const userId = user?.user_id || user?.id;
                         
                         if (userId) {
-                          navigate(`/alumni/dashboard/${userId}`);
+                          const isAdmin = !!(user && user.account_type && user.account_type.admin);
+                          const isPeso = !!(user && user.account_type && user.account_type.peso);
+                          const userRole = user?.role || user?.user_type;
+                          let dashboardPath = '';
+                          
+                          if (isAdmin) {
+                            dashboardPath = `/ccict/dashboard/${userId}`;
+                          } else if (isPeso) {
+                            dashboardPath = `/peso/dashboard/${userId}`;
+                          } else if (userRole === 'ojt' || userRole === 'coordinator') {
+                            dashboardPath = `/ojt/dashboard/${userId}`;
+                          } else {
+                            dashboardPath = `/alumni/dashboard/${userId}`;
+                          }
+                          
+                          navigate(dashboardPath);
                           setOpenNotif(null);
                         }
                       }

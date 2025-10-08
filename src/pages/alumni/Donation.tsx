@@ -129,9 +129,9 @@ const DonationPage: React.FC = () => {
   // Removed member-related functions since we're using About card instead
 
   // Fetch donation requests
-  const fetchDonationPosts = async () => {
+  const fetchDonationPosts = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const response = await getDonationRequests();
       if (response.success) {
         // Transform donation data to match PostItem interface
@@ -193,9 +193,12 @@ const DonationPage: React.FC = () => {
                   original_post: {
                     donation_id: donation.donation_id,
                     description: donation.description,
+                    post_content: donation.description, // Add post_content for compatibility with PostCard
                     images: donation.images,
                     created_at: donation.created_at,
-                    user: donation.user
+                    user: donation.user,
+                    likes: donation.likes || [],
+                    likes_count: donation.likes_count || 0
                   }
                 }
               });
@@ -221,7 +224,10 @@ const DonationPage: React.FC = () => {
         
         sortedFeed.forEach((item: any) => {
           if (item.item_type === 'repost') {
-            liked[item.post_id] = item.likes?.some((like: any) => like.user_id === currentUserId) || false;
+            // For donation reposts, likes have nested user structure
+            liked[item.post_id] = item.likes?.some((like: any) => 
+              (like.user?.user_id === currentUserId) || (like.user_id === currentUserId)
+            ) || false;
             reposted[item.post_id] = false;
           } else {
             const donation = response.donations.find((d: any) => d.donation_id === item.donation_id);
@@ -243,7 +249,7 @@ const DonationPage: React.FC = () => {
       console.error('Error fetching donation requests:', error);
       setDonations([]);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -425,7 +431,7 @@ const DonationPage: React.FC = () => {
                       isRepost={true}
                       repostData={item.repostData}
                       onPostUpdate={() => {
-                        fetchDonationPosts();
+                        fetchDonationPosts(false); // No loading indicator for updates
                       }}
                       likedPosts={likedDonations}
                       setLikedPosts={setLikedDonations}
@@ -466,7 +472,7 @@ const DonationPage: React.FC = () => {
                     formatTime={formatTime}
                     onPostUpdate={() => {
                       // Immediate update without page refresh
-                      fetchDonationPosts();
+                      fetchDonationPosts(false); // No loading indicator for updates
                     }}
                     likedPosts={likedDonations}
                     setLikedPosts={setLikedDonations}
@@ -554,7 +560,7 @@ const DonationPage: React.FC = () => {
             <PostCreate 
               onPosted={() => {
                 setShowPostCreate(false);
-                fetchDonationPosts();
+                fetchDonationPosts(false); // No loading indicator for new posts
               }}
               onCancel={() => setShowPostCreate(false)}
               postType="donation"
@@ -653,7 +659,7 @@ const DonationPage: React.FC = () => {
                   }
                   
                   // Also refresh the main donations list to keep everything in sync
-                  fetchDonationPosts();
+                  fetchDonationPosts(false); // No loading indicator for modal updates
                 }}
                 isForum={false}
                 isDonation={true} // This is a donation post in modal

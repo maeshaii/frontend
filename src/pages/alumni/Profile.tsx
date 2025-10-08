@@ -153,6 +153,7 @@ interface PostItem {
 
 const AlumniProfile: React.FC = () => {
   const [user, setUser] = useState<AlumniUser | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
   const navigate = useNavigate();
   const { id } = useParams<{ id?: string }>();
@@ -250,7 +251,6 @@ const AlumniProfile: React.FC = () => {
             social_media: profileData.social_media,
             email: profileData.email,
             account_type: profileData.account_type || currentUserObj.account_type || {},
-            partnered_companies: profileData.partnered_companies || []
           };
           
           setUser(userData);
@@ -430,8 +430,10 @@ getPosts()
           navigate('/login');
         }
       } catch (error) {
-        alert('Network error: ' + error);
-        navigate('/login');
+        console.error('Network error:', error);
+        setLoading(false);
+      } finally {
+        setLoading(false);
       }
     };
     loadUser();
@@ -1079,12 +1081,38 @@ getPosts()
     }
   };
 
-  // Defensive render guard: if user is not loaded, show fallback and login button
+  // Defensive render guard: show minimal loading state while fetching
   if (!user) {
     return (
-      <div style={{ color: 'red', textAlign: 'center', marginTop: 40 }}>
-        Unable to load profile. You may not be authorized or your session has expired.<br/>
-        <button onClick={() => navigate('/login')} style={{ marginTop: 20, padding: '8px 16px', borderRadius: 6, background: '#174f84', color: '#fff', border: 'none', cursor: 'pointer' }}>Go to Login</button>
+      <div style={{ 
+        minHeight: '100vh',
+        background: '#f5f5f5',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '16px'
+        }}>
+          {/* Simple animated spinner */}
+          <div style={{
+            width: '40px',
+            height: '40px',
+            border: '4px solid #e0e0e0',
+            borderTop: '4px solid #174f84',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }} />
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
       </div>
     );
   }
@@ -1221,46 +1249,7 @@ getPosts()
           </div>
 
           {/* Followers - Hide for admin and PESO accounts */}
-          {/* PESO-specific: Partnered Companies card under Introduction */}
-          {user?.account_type?.peso && (
-          <div className="profile-card">
-            <div className="profile-intro-title">Partnered Companies</div>
-            <div className="profile-bio-container">
-              {Array.isArray((user as any).partnered_companies) && (user as any).partnered_companies.length > 0 ? (
-                <ul style={{ margin: 0, paddingLeft: 16 }}>
-                  {(user as any).partnered_companies.map((company: any, idx: number) => {
-                    const name = typeof company === 'string' ? company : (company?.name || 'Unnamed Company');
-                    const url = typeof company === 'object' ? (company?.url || '') : '';
-                    const display = name;
-                    return (
-                      <li key={idx} style={{ marginBottom: 6 }}>
-                        {url ? (
-                          <a href={/^https?:\/\//i.test(url) ? url : `http://${url}`} target="_blank" rel="noopener noreferrer">
-                            {display}
-                          </a>
-                        ) : (
-                          <span>{display}</span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <span className="profile-contact-empty">No partnered companies added</span>
-              )}
-            </div>
-            {/* Allow PESO owner to edit partnered companies */}
-            {isOwnProfile && (user?.account_type?.peso || user?.account_type?.ccict) && (
-              <button
-                className="profile-contact-edit-btn"
-                onClick={() => setPartnerModalOpen(true)}
-                style={{ marginTop: 10 }}
-              >
-                Edit Companies
-              </button>
-            )}
-          </div>
-          )}
+
 
           {/* Followers - Hide for admin and PESO accounts */}
           {!user?.account_type?.admin && 
@@ -2357,11 +2346,11 @@ getPosts()
                     const res = await fetch(`http://127.0.0.1:8000/api/alumni/profile/${meId}/`, {
                       method: 'PUT',
                       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}` },
-                      body: JSON.stringify({ partnered_companies: payloadCompanies })
+                      body: JSON.stringify({})
                     });
                     if (res.ok) {
                       // update local state to reflect changes immediately
-                      setUser((prev: any) => prev ? { ...prev, partnered_companies: payloadCompanies } : prev);
+                      setUser((prev: any) => prev ? { ...prev } : prev);
                       setPartnerModalOpen(false);
                     } else {
                       alert('Failed to save companies');
