@@ -827,6 +827,16 @@ export const commentOnDonation = async (donationId: number, commentContent: stri
   return response.data;
 };
 
+export const deleteDonationComment = async (donationId: number, commentId: number) => {
+  const response = await api.delete(`donations/${donationId}/comments/${commentId}/`);
+  return response.data;
+};
+
+export const editDonationComment = async (donationId: number, commentId: number, commentData: { comment_content: string }) => {
+  const response = await api.put(`donations/${donationId}/comments/${commentId}/`, commentData);
+  return response.data;
+};
+
 export const repostDonation = async (donationId: number, repostCaption: string) => {
   const response = await api.post(`donations/${donationId}/repost/`, {
     caption: repostCaption

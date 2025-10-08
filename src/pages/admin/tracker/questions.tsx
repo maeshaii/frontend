@@ -85,6 +85,11 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
     }
   }, [questionsQuery.data]);
 
+  // Debug: Log when categories state changes
+  useEffect(() => {
+    console.log('🔍 Categories state updated:', categories);
+  }, [categories]);
+
   // Show privacy modal when component loads in preview mode
   useEffect(() => {
     if (previewMode && !privacyAccepted) {
@@ -360,13 +365,16 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   const [editQuestionDraft, setEditQuestionDraft] = useState<Partial<QuestionItem>>({});
 
   const openEditQuestionInline = (catIdx: number, qIdx: number) => {
+    const question = categories[catIdx].questions[qIdx];
+    console.log('🔍 Opening edit for question:', question);
     setEditingQuestion({ catIdx, qIdx });
-    setEditQuestionDraft({ ...categories[catIdx].questions[qIdx] });
+    setEditQuestionDraft({ ...question });
   };
   const handleEditQuestionChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
+      console.log('🔍 Checkbox change:', name, checked);
       setEditQuestionDraft({ ...editQuestionDraft, [name]: checked });
     } else {
       setEditQuestionDraft({ ...editQuestionDraft, [name]: value });
@@ -391,27 +399,47 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   const handleUpdateQuestion = async (catIdx: number, qIdx: number) => {
     try {
       const questionId = categories[catIdx].questions[qIdx].id;
-      const data = await trackerApi.updateQuestion(questionId, {
+      // Build payload defensively: only include fields that are intentionally set/changed
+      const updateData: any = {
         text: editQuestionDraft.text,
         type: editQuestionDraft.type,
-        options:
-          editQuestionDraft.type !== 'text' ? editQuestionDraft.options?.filter((opt) => opt) : [],
-        required: editQuestionDraft.required || false,
-      });
+      };
+      if (editQuestionDraft.type && editQuestionDraft.type !== 'text') {
+        updateData.options = (editQuestionDraft.options || []).filter((opt) => !!opt);
+      } else if ('options' in editQuestionDraft) {
+        // If text type and options present in draft, clear them explicitly
+        updateData.options = [];
+      }
+      if (typeof editQuestionDraft.required === 'boolean') {
+        updateData.required = editQuestionDraft.required;
+      }
+      console.log('🔍 Updating question with data:', updateData);
+      
+      const data = await trackerApi.updateQuestion(questionId, updateData);
+      console.log('🔍 API response:', data);
 
       if (data.success) {
+        console.log('🔍 Updating local state with question:', data.question);
         setCategories((cats) =>
-          cats.map((cat, i) =>
-            i === catIdx
-              ? {
-                  ...cat,
-                  questions: cat.questions.map((q, idx) => (idx === qIdx ? data.question : q)),
-                }
-              : cat
-          )
+          cats.map((cat, i) => {
+            if (i !== catIdx) return cat;
+            const currentQuestion = cat.questions[qIdx];
+            const merged: any = { ...currentQuestion, ...data.question };
+            if (typeof merged.required === 'undefined') {
+              // Fallback to the edited value so UI reflects immediately
+              merged.required = editQuestionDraft.required || false;
+              console.log('🔍 Required missing in API response, using edited value:', merged.required);
+            }
+            console.log('🔍 Final merged question for UI:', merged);
+            return {
+              ...cat,
+              questions: cat.questions.map((q, idx) => (idx === qIdx ? merged : q)),
+            };
+          })
         );
         setEditingQuestion(null);
         setEditQuestionDraft({});
+        // Ensure cache is refreshed so the value persists across reloads
         await queryClient.invalidateQueries({ queryKey: ['tracker', 'questions'] });
       } else {
         alert(data.message || 'Failed to update question');
