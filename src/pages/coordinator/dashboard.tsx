@@ -4,21 +4,27 @@ import { useNavigate } from 'react-router-dom';
 import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaFileImport } from 'react-icons/fa';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
-import { fetchOJTStatistics, importOJT } from '../../services/api';
+import { fetchOJTStatistics, importOJT, fetchCoordinatorSections } from '../../services/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [showStats, setShowStats] = useState(false);
-  const [selectedCard, setSelectedCard] = useState<number | null>(null);
+  const [selectedCard, setSelectedCard] = useState<{ year: number; section?: string } | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [batchYear, setBatchYear] = useState('');
+  const [section, setSection] = useState('');
   const [course, setCourse] = useState('BSIT');
-  const [ojtYears, setOjtYears] = useState<{ year: number; count: number }[]>([]);
+  const [availableSections, setAvailableSections] = useState<string[]>([]);
+  const [ojtYears, setOjtYears] = useState<{ year: number; section?: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [importLoading, setImportLoading] = useState(false);
   const [coordinatorUsername, setCoordinatorUsername] = useState('');
   const [activePage, setActivePage] = useState('dashboard'); // 'dashboard' or 'imports'
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('ALL');
+  const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
+  const [showDateModal, setShowDateModal] = useState(false);
+  const [sendDate, setSendDate] = useState('');
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -27,11 +33,13 @@ export default function Dashboard() {
       const userData = JSON.parse(user);
       setCoordinatorUsername(userData.name || '');
     }
+  }, []);
 
+  useEffect(() => {
     const loadOJTData = async () => {
       try {
         console.log('Loading OJT data for coordinator:', coordinatorUsername);
-        const data = await fetchOJTStatistics();
+        const data = await fetchOJTStatistics(coordinatorUsername);
         console.log('OJT data received:', data);
         setOjtYears(data.years || []);
       } catch (error) {
@@ -42,8 +50,23 @@ export default function Dashboard() {
       }
     };
 
+    const loadCoordinatorSections = async () => {
+      try {
+        console.log('Loading sections for coordinator:', coordinatorUsername);
+        const data = await fetchCoordinatorSections(coordinatorUsername);
+        if (data.success) {
+          setAvailableSections(data.sections || []);
+          console.log('Coordinator sections loaded:', data.sections);
+        }
+      } catch (error) {
+        console.error('Error loading coordinator sections:', error);
+        setAvailableSections([]);
+      }
+    };
+
     if (coordinatorUsername) {
       loadOJTData();
+      loadCoordinatorSections();
     }
   }, [coordinatorUsername]);
 
@@ -56,18 +79,17 @@ export default function Dashboard() {
   };
 
   const handleImport = async () => {
-    if (!selectedFile || !batchYear) {
-      alert('Please select a file and enter the batch year');
+    if (!selectedFile || !batchYear || !section) {
+      alert('Please select a file, enter the batch year, and choose a section');
       return;
     }
 
     setImportLoading(true);
     try {
-      const result = await importOJT(selectedFile, batchYear, course, coordinatorUsername);
+      const result = await importOJT(selectedFile, batchYear, course, coordinatorUsername, section);
       if (result.success) {
-        alert('OJT import successful!');
+        alert(`OJT import successful for section ${section}!`);
         setShowModal(false);
-        // Reload OJT data
         await refreshOJTData();
       } else {
         alert(result.message || 'OJT import failed');
@@ -87,6 +109,13 @@ export default function Dashboard() {
       const data = await fetchOJTStatistics();
       console.log('Refreshed OJT data:', data);
       setOjtYears(data.years || []);
+      
+      // Also refresh coordinator sections
+      const sectionsData = await fetchCoordinatorSections(coordinatorUsername);
+      if (sectionsData.success) {
+        setAvailableSections(sectionsData.sections || []);
+        console.log('Refreshed coordinator sections:', sectionsData.sections);
+      }
     } catch (error) {
       console.error('Error refreshing OJT data:', error);
       setOjtYears([]);
@@ -108,6 +137,7 @@ export default function Dashboard() {
       'Email',
       'Address',
       'Course',
+      'Section',
       'Company',
       'Start_Date',
       'End_Date',
@@ -422,37 +452,162 @@ export default function Dashboard() {
                 >
                   Download Template
                 </button>
+                <button
+                  style={{ 
+                    ...styles.importBtn, 
+                    marginLeft: '10px',
+                    backgroundColor: '#10B981',
+                    borderColor: '#10B981'
+                  }}
+                  onClick={() => setShowDateModal(true)}
+                >
+                  Set Send Date
+                </button>
               </>
             )}
             {/* Header search removed */}
           </div>
         </div>
 
-        <button style={styles.filter}>BSIT</button>
+        {/* Filters */}
+        {!showStats && !selectedCard && (
+          <div style={{ 
+            display: 'flex', 
+            gap: '24px', 
+            marginBottom: '24px', 
+            alignItems: 'center',
+            padding: '16px 0'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <label style={{ 
+                fontWeight: 600, 
+                color: '#1e3a8a', 
+                fontSize: '15px',
+                minWidth: '120px'
+              }}>
+                Filter by Batch:
+              </label>
+              <select
+                value={selectedBatchFilter}
+                onChange={(e) => setSelectedBatchFilter(e.target.value)}
+                style={{ 
+                  padding: '10px 16px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: 12,
+                  minWidth: 150,
+                  fontSize: '14px',
+                  backgroundColor: 'white',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#5A6DFE';
+                  e.target.style.boxShadow = '0 4px 12px rgba(90, 109, 254, 0.2)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#e5e7eb';
+                  e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                }}
+              >
+                <option value="ALL">All Batches</option>
+                {Array.from(new Set(ojtYears.map(y => y.year))).sort((a, b) => b - a).map(year => (
+                  <option key={year} value={year.toString()}>{year}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <label style={{ 
+                fontWeight: 600, 
+                color: '#1e3a8a', 
+                fontSize: '15px',
+                minWidth: '120px'
+              }}>
+                Filter by Section:
+              </label>
+              <select
+                value={selectedSectionFilter}
+                onChange={(e) => setSelectedSectionFilter(e.target.value)}
+                style={{ 
+                  padding: '10px 16px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: 12,
+                  minWidth: 150,
+                  fontSize: '14px',
+                  backgroundColor: 'white',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#5A6DFE';
+                  e.target.style.boxShadow = '0 4px 12px rgba(90, 109, 254, 0.2)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#e5e7eb';
+                  e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                }}
+              >
+                <option value="ALL">All Sections</option>
+                {Array.from(new Set(ojtYears.map(y => y.section).filter(s => s))).sort().map(section => (
+                  <option key={section} value={section}>{section}</option>
+                ))}
+              </select>
+            </div>
+            
+            <button style={{
+              ...styles.filter,
+              padding: '10px 24px',
+              fontSize: '14px',
+              fontWeight: 600,
+              borderRadius: 12
+            }}>
+              BSIT
+            </button>
+          </div>
+        )}
 
         {/* ============== Cards OR Details Table OR Statistics ============== */}
         {!showStats ? (
           selectedCard ? (
-            <DetailsTable onBack={() => setSelectedCard(null)} selectedYear={selectedCard} />
+            <DetailsTable 
+              onBack={() => setSelectedCard(null)} 
+              selectedYear={selectedCard.year}
+              selectedSection={selectedCard.section}
+            />
           ) : (
             <div style={styles.cards}>
               {loading ? (
                 <div style={{ width: '100%', textAlign: 'center', padding: '20px' }}>
                   Loading OJT data...
                 </div>
-              ) : ojtYears.length === 0 ? (
+              ) : ojtYears.filter(yearData => {
+                const batchMatch = selectedBatchFilter === 'ALL' || yearData.year.toString() === selectedBatchFilter;
+                const sectionMatch = selectedSectionFilter === 'ALL' || yearData.section === selectedSectionFilter;
+                return batchMatch && sectionMatch;
+              }).length === 0 ? (
                 <div style={{ width: '100%', textAlign: 'center', padding: '20px' }}>
-                  No OJT data found.
+                  No OJT data found for the selected filters.
                 </div>
               ) : (
-                ojtYears.map((yearData) => (
+                ojtYears.filter(yearData => {
+                  const batchMatch = selectedBatchFilter === 'ALL' || yearData.year.toString() === selectedBatchFilter;
+                  const sectionMatch = selectedSectionFilter === 'ALL' || yearData.section === selectedSectionFilter;
+                  return batchMatch && sectionMatch;
+                }).map((yearData) => (
                   <div
-                    key={yearData.year}
+                    key={`${yearData.year}-${yearData.section || 'default'}`}
                     style={styles.card}
-                    onClick={() => setSelectedCard(yearData.year)}
+                    onClick={() => setSelectedCard({ year: yearData.year, section: yearData.section })}
                   >
                     <div style={styles.cardImage}></div>
                     <p style={styles.cardText}>CLASS OF {yearData.year}</p>
+                    {yearData.section && <p style={styles.cardText}>Section: {yearData.section}</p>}
                     <p style={styles.cardText}>OJT: {yearData.count}</p>
                   </div>
                 ))
@@ -489,12 +644,36 @@ export default function Dashboard() {
 
             <label style={styles.modalLabel}>Batch Graduated</label>
             <input
-              type="text"
+              type="number"
               placeholder="Enter batch year..."
               style={styles.modalInput}
               value={batchYear}
               onChange={(e) => setBatchYear(e.target.value)}
+              min="2000"
+              max="2030"
             />
+
+            <label style={styles.modalLabel}>Section to Import</label>
+            <input
+              type="text"
+              placeholder="Enter section (e.g., 4-A, 4-B, 4-1, etc.)..."
+              style={styles.modalInput}
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
+              list="section-options"
+            />
+            <datalist id="section-options">
+              {availableSections.map((sectionOption) => (
+                <option key={sectionOption} value={sectionOption}>
+                  {sectionOption}
+                </option>
+              ))}
+            </datalist>
+            {availableSections.length === 0 && (
+              <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+                No previous sections found. You can type any section name.
+              </div>
+            )}
 
             {/* Course selection removed; default course state will be used */}
 
@@ -515,10 +694,113 @@ export default function Dashboard() {
               </button>
               <button
                 style={styles.cancelBtn}
-                onClick={() => setShowModal(false)}
+                onClick={() => {
+                  setShowModal(false);
+                  // Reset form state
+                  setSelectedFile(null);
+                  setBatchYear('');
+                  setSection('');
+                }}
                 disabled={importLoading}
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Date Modal for Setting Send Date */}
+      {showDateModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+            width: '400px',
+            maxWidth: '90vw'
+          }}>
+            <h3 style={{ margin: '0 0 20px 0', color: '#1e3a8a' }}>
+              Set Date to Send Completed OJT to Admin
+            </h3>
+            <p style={{ margin: '0 0 15px 0', color: '#6b7280', fontSize: '14px' }}>
+              Choose a date when:
+            </p>
+            <ul style={{ margin: '0 0 15px 0', color: '#6b7280', fontSize: '14px', paddingLeft: '20px' }}>
+              <li>All students with "Completed" status will be sent to admin for approval</li>
+              <li>All students with "Ongoing" status will be changed to "Incomplete"</li>
+            </ul>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#374151' }}>
+                Send Date:
+              </label>
+              <input
+                type="date"
+                value={sendDate}
+                onChange={(e) => setSendDate(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  outline: 'none'
+                }}
+                min={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowDateModal(false);
+                  setSendDate('');
+                }}
+                style={{
+                  padding: '10px 20px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  backgroundColor: 'white',
+                  color: '#6b7280',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (sendDate) {
+                    // TODO: Implement the actual functionality to set the send date
+                    alert(`Send date set to: ${sendDate}\n\nOn this date:\n• All completed OJT students will be sent to admin\n• All ongoing students will be marked as incomplete`);
+                    setShowDateModal(false);
+                    setSendDate('');
+                  } else {
+                    alert('Please select a date');
+                  }
+                }}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  backgroundColor: '#10B981',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                Set Date
               </button>
             </div>
           </div>

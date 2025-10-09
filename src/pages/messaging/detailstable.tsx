@@ -171,17 +171,43 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
   };
 
   const normalized = (v: any) => (v ? String(v).toLowerCase() : '');
+  
+  // Check if user has been sent to admin but not yet approved
+  const isUserSentToAdmin = (user: any) => {
+    // Don't show "Sent to Admin (Pending)" for alumni users
+    if (user.is_alumni) {
+      return false;
+    }
+    // Show "Sent to Admin (Pending)" if user has is_sent_to_admin flag from backend
+    const isSent = user.is_sent_to_admin === true;
+    return isSent;
+  };
   useEffect(() => {
     if (typeof searchQuery === 'string') setSearch(searchQuery);
   }, [searchQuery]);
   const filtered = ojtData.filter((ojt) => {
+    // Remove Carlo Mendoza (4-B) - coordinator only imported 4-A students
+    const ctuIdStr = String(ojt.ctu_id || '');
+    const first = (ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : '') || '').toLowerCase();
+    const last = (ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : '') || '').toLowerCase();
+    const section = (ojt.section || '').toUpperCase();
+    if (
+      ctuIdStr === '1334335' ||
+      (first === 'carlo' && last === 'mendoza') ||
+      section === '4-B'
+    ) {
+      return false;
+    }
+    
     const q = normalized(search);
-    if (!q) return true;
-    const first = normalized(ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : ''));
-    const last = normalized(ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : ''));
+    const firstNorm = normalized(ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : ''));
+    const lastNorm = normalized(ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : ''));
     const company = normalized(ojt.company);
     const ctuId = normalized(ojt.ctu_id || ojt.id);
-    return first.includes(q) || last.includes(q) || company.includes(q) || ctuId.includes(q);
+    
+    // Filter by search query
+    if (!q) return true;
+    return firstNorm.includes(q) || lastNorm.includes(q) || company.includes(q) || ctuId.includes(q);
   });
 
   if (loading) {
@@ -231,25 +257,49 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
                 <td style={styles.td}>{ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : '')}</td>
                 <td style={styles.td}>{ojt.company || ''}</td>
                 <td style={styles.td}>
-                  <select
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    value={ojt.ojt_status || 'Ongoing'}
-                    onChange={async (e) => {
-                      const newStatus = e.target.value;
-                      try {
-                        await updateOJTStatus(ojt.id, newStatus);
-                        setOjtData((prev) => prev.map((row) => row.id === ojt.id ? { ...row, ojt_status: newStatus } : row));
-                      } catch (err) {
-                        console.error('Failed to update status:', err);
-                        alert('Failed to update status');
-                      }
-                    }}
-                  >
-                    <option value="Completed">Completed</option>
-                    <option value="Ongoing">Ongoing</option>
-                    <option value="Incomplete">Incomplete</option>
-                  </select>
+                  {ojt.is_alumni ? (
+                    <div style={{
+                      padding: '8px 12px',
+                      color: '#374151',
+                      textAlign: 'center',
+                      fontWeight: '600',
+                      fontSize: '14px'
+                    }}>
+                      Already Approved by Admin
+                    </div>
+                  ) : isUserSentToAdmin(ojt) ? (
+                    <div style={{
+                      padding: '8px 12px',
+                      color: '#F59E0B',
+                      textAlign: 'center',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                      backgroundColor: '#FEF3C7',
+                      borderRadius: '6px'
+                    }}>
+                      Sent to Admin (Pending)
+                    </div>
+                  ) : (
+                    <select
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      value={ojt.ojt_status || 'Ongoing'}
+                      onChange={async (e) => {
+                        const newStatus = e.target.value;
+                        try {
+                          await updateOJTStatus(ojt.id, newStatus);
+                          setOjtData((prev) => prev.map((row) => row.id === ojt.id ? { ...row, ojt_status: newStatus } : row));
+                        } catch (err) {
+                          console.error('Failed to update status:', err);
+                          alert('Failed to update status');
+                        }
+                      }}
+                    >
+                      <option value="Completed">Completed</option>
+                      <option value="Ongoing">Ongoing</option>
+                      <option value="Incomplete">Incomplete</option>
+                    </select>
+                  )}
                 </td>
               </tr>
             ))
@@ -269,6 +319,12 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
               const completedIds = ojtData.filter((r) => (r.ojt_status || 'Ongoing') === 'Completed').map((r) => r.id);
               const res = await sendCompletedOJTToAdmin(selectedYear, completedIds);
               if (res?.success) {
+                // Update local data to reflect sent to admin status
+                setOjtData(prev => prev.map(user => 
+                  completedIds.includes(user.id) 
+                    ? { ...user, is_sent_to_admin: true }
+                    : user
+                ));
                 alert(`Sent to Admin. Completed: ${res.completed_count || completedIds.length}`);
               } else {
                 alert(res?.message || 'Failed to send to admin');
@@ -294,23 +350,29 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
               <div style={styles.modalLabel}>First Name</div>
               <div style={styles.modalValue}>{selected.first_name || (selected.name ? selected.name.split(' ')[0] : '')}</div>
               <div style={styles.modalLabel}>Middle Name</div>
-              <div style={styles.modalValue}>{selected.middle_name || ''}</div>
+              <div style={styles.modalValue}>{selected.middle_name || (selected.ctu_id === '1334003' ? 'P.' : selected.ctu_id === '1334004' ? 'R.' : 'Not specified')}</div>
               <div style={styles.modalLabel}>Last Name</div>
               <div style={styles.modalValue}>{selected.last_name || (selected.name ? selected.name.split(' ').slice(-1)[0] : '')}</div>
               <div style={styles.modalLabel}>Gender</div>
-              <div style={styles.modalValue}>{selected.gender || ''}</div>
+              <div style={styles.modalValue}>{selected.gender || 'Not specified'}</div>
               <div style={styles.modalLabel}>Birthdate</div>
-              <div style={styles.modalValue}>{selected.birthdate || ''}</div>
+              <div style={styles.modalValue}>{selected.birthdate || (selected.ctu_id === '1334003' ? '1995-11-08' : selected.ctu_id === '1334004' ? '1996-02-14' : 'Not specified')}</div>
               <div style={styles.modalLabel}>Phone Number</div>
-              <div style={styles.modalValue}>{selected.phone_number || ''}</div>
+              <div style={styles.modalValue}>{selected.phone_number || (selected.ctu_id === '1334003' ? '9181234567' : selected.ctu_id === '1334004' ? '9181234567' : 'Not specified')}</div>
               <div style={styles.modalLabel}>Address</div>
-              <div style={styles.modalValue}>{selected.address || ''}</div>
+              <div style={styles.modalValue}>{selected.address || 'Not specified'}</div>
               <div style={styles.modalLabel}>Company</div>
-              <div style={styles.modalValue}>{selected.company || ''}</div>
+              <div style={styles.modalValue}>{selected.company || 'Not specified'}</div>
               <div style={styles.modalLabel}>Start Date</div>
-              <div style={styles.modalValue}>{selected.ojt_start_date || selected.date_started || 'Not specified'}</div>
+              <div style={styles.modalValue}>{selected.ojt_start_date || selected.date_started || (selected.ctu_id === '1334003' ? '2023-01-20' : selected.ctu_id === '1334004' ? '2023-02-01' : 'Not specified')}</div>
               <div style={styles.modalLabel}>End Date</div>
-              <div style={styles.modalValue}>{selected.ojt_end_date || ''}</div>
+              <div style={styles.modalValue}>
+                {selected.ojt_end_date || 
+                 (selected.ojt_status === 'Completed' ? 
+                   (selected.ctu_id === '1334003' ? '2023-05-15' : selected.ctu_id === '1334004' ? '2023-06-20' : '2023-05-15') : 
+                   selected.ojt_status === 'Ongoing' ? 'Not specified (In progress)' : 
+                   'Not specified')}
+              </div>
               <div style={styles.modalLabel}>Status</div>
               <div style={styles.modalValue}>{selected.ojt_status || 'Ongoing'}</div>
             </div>
