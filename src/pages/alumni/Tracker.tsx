@@ -5,16 +5,40 @@ import Question from '../admin/tracker/questions';
 
 function useQuery() {
   const [searchParams] = useSearchParams();
-  return searchParams.get('user_id');
+  const userId = searchParams.get('user_id');
+  console.log('🔍 URL Debug - All search params:', Object.fromEntries(searchParams.entries()));
+  console.log('🔍 URL Debug - user_id param:', userId);
+  return userId;
 }
 
 const AlumniTracker: React.FC = () => {
   const query = useQuery();
-  const userId = query; // Get user_id from URL parameters
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   
-  console.log('🔍 Tracker Debug - User ID from URL:', userId);
+  // Get user_id from URL or fallback to logged-in user
+  const getUserId = () => {
+    if (query) {
+      return query; // Use URL parameter if available
+    }
+    
+    // Fallback to logged-in user
+    const user = localStorage.getItem('user');
+    if (user) {
+      try {
+        const userObj = JSON.parse(user);
+        return userObj.user_id || userObj.id;
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+      }
+    }
+    
+    return null;
+  };
+  
+  const userId = getUserId();
+  console.log('🔍 Tracker Debug - User ID from URL:', query);
+  console.log('🔍 Tracker Debug - Final User ID:', userId);
   
   // Check authentication
   useEffect(() => {
@@ -32,8 +56,8 @@ const AlumniTracker: React.FC = () => {
         const userObj = JSON.parse(user);
         console.log('🔍 Tracker Debug - Current user:', userObj);
         
-        // Check if the user_id in URL matches the logged-in user
-        if (userId && userObj.user_id && userObj.user_id.toString() !== userId) {
+        // Check if the user_id in URL matches the logged-in user (only if URL has user_id)
+        if (query && userObj.user_id && userObj.user_id.toString() !== query) {
           console.log('🔍 Tracker Debug - User ID mismatch, redirecting to login');
           setIsAuthenticated(false);
           return;

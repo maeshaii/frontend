@@ -19,7 +19,7 @@ const FirstLoginChangePassword: React.FC = () => {
     const s = { score: 0, message: '' } as { score: number; message: string };
     const val = newPassword;
     let score = 0;
-    if (val.length >= 10) score++;
+    if (val.length >= 16) score++;
     if (/[A-Z]/.test(val)) score++;
     if (/[a-z]/.test(val)) score++;
     if (/\d/.test(val)) score++;
@@ -70,7 +70,7 @@ const FirstLoginChangePassword: React.FC = () => {
             <input type={showNew ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} style={styles.input} />
             <button type="button" onClick={() => setShowNew((s) => !s)} style={styles.eyeBtn}>{showNew ? '🙈' : '👁️'}</button>
           </div>
-          <div style={styles.hint}>Must be 10+ chars with upper, lower, number, and symbol.</div>
+          <div style={styles.hint}>Must be 16+ chars with upper, lower, number, and symbol.</div>
           <div style={styles.strength}>Strength: {strength.message}</div>
           <label style={styles.label}>Confirm Password</label>
           <div style={styles.inputWrap}>

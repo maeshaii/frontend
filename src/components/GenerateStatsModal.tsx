@@ -23,6 +23,10 @@ import {
 } from 'recharts';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType, AlignmentType, HeadingLevel, BorderStyle } from 'docx';
+import { saveAs } from 'file-saver';
 
 interface Props {
   onClose: () => void;
@@ -568,7 +572,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           createElement(XAxis, { dataKey: 'name' }),
           createElement(YAxis),
           createElement(Tooltip),
-          createElement(Bar, { dataKey: 'value', fill: '#1D4E89' })
+          createElement(Bar, { dataKey: 'value', fill: '#7161EF' })
         )
       )
     );
@@ -632,7 +636,457 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     return images;
   };
 
-  const handleExportCompleteData = async () => {
+  // PDF Export Utility Function
+  const exportToPDF = async (
+    statsByType: Record<string, any>,
+    detailedDataByType: Record<string, any[]>,
+    exportType: string
+  ) => {
+    const doc = new jsPDF('landscape', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let yPosition = 20;
+
+    // Title
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Alumni Statistics Report', pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 10;
+
+    // Metadata
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, yPosition);
+    yPosition += 6;
+    doc.text(`Year Filter: ${selectedYear || 'ALL'}`, 20, yPosition);
+    yPosition += 6;
+    doc.text(`Program Filter: ${selectedProgram || 'ALL'}`, 20, yPosition);
+    yPosition += 6;
+    doc.text(`Report Type: ${exportType}`, 20, yPosition);
+    yPosition += 12;
+
+    // Helper function to add a new page if needed
+    const checkPageBreak = (needed: number) => {
+      if (yPosition + needed > pageHeight - 20) {
+        doc.addPage();
+        yPosition = 20;
+        return true;
+      }
+      return false;
+    };
+
+    // Export based on type
+    if (exportType === 'QPRO' && statsByType['QPRO']) {
+      const stats = statsByType['QPRO'];
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('QPRO Statistics Summary', 20, yPosition);
+      yPosition += 8;
+
+      const summaryData = [
+        ['Metric', 'Value', 'Percentage'],
+        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+        ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+        ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
+        ['Employment Rate', '', `${stats.employment_rate || 0}%`],
+        ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)],
+      ];
+
+      autoTable(doc, {
+        head: [summaryData[0]],
+        body: summaryData.slice(1),
+        startY: yPosition,
+        theme: 'grid',
+        headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 9 },
+      });
+
+      yPosition = (doc as any).lastAutoTable.finalY + 10;
+      checkPageBreak(20);
+
+      // Detailed data
+      const detailedData = detailedDataByType['QPRO'] || [];
+      if (detailedData.length > 0) {
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Detailed Alumni Data', 20, yPosition);
+        yPosition += 6;
+
+        const headers = ['Course', 'First Name', 'Last Name', 'Status', 'Company', 'Position'];
+        const rows = detailedData.slice(0, 100).map((row: any) => [
+          row.Course || '',
+          row.First_Name || '',
+          row.Last_Name || '',
+          row.Status || '',
+          (row['Current Company Name'] || row.Company_Name_Current || '').substring(0, 30),
+          (row.Position_Current || '').substring(0, 30),
+        ]);
+
+        autoTable(doc, {
+          head: [headers],
+          body: rows,
+          startY: yPosition,
+          theme: 'striped',
+          styles: { fontSize: 7, cellPadding: 2 },
+          headStyles: { fillColor: [29, 78, 137], textColor: 255 },
+          columnStyles: {
+            4: { cellWidth: 40 },
+            5: { cellWidth: 40 },
+          },
+        });
+      }
+    } else if (exportType === 'CHED' && statsByType['CHED']) {
+      const stats = statsByType['CHED'];
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('CHED Statistics Summary', 20, yPosition);
+      yPosition += 8;
+
+      const summaryData = [
+        ['Metric', 'Value', 'Percentage'],
+        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+        ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
+        ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
+        ['Further Study Rate', '', `${stats.further_study_rate || 0}%`],
+        ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
+        ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
+      ];
+
+      autoTable(doc, {
+        head: [summaryData[0]],
+        body: summaryData.slice(1),
+        startY: yPosition,
+        theme: 'grid',
+        headStyles: { fillColor: [23, 162, 184], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 9 },
+      });
+    } else if (exportType === 'AACUP' && statsByType['AACUP']) {
+      const stats = statsByType['AACUP'];
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('AACUP Statistics Summary', 20, yPosition);
+      yPosition += 8;
+
+      const summaryData = [
+        ['Metric', 'Value', 'Percentage'],
+        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+        ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+        ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
+        ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+        ['Employment Rate', '', `${stats.employment_rate || 0}%`],
+        ['Absorption Rate', '', `${stats.absorption_rate || 0}%`],
+      ];
+
+      autoTable(doc, {
+        head: [summaryData[0]],
+        body: summaryData.slice(1),
+        startY: yPosition,
+        theme: 'grid',
+        headStyles: { fillColor: [40, 167, 69], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 9 },
+      });
+    } else if (exportType === 'SUC' && statsByType['SUC']) {
+      const stats = statsByType['SUC'];
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('SUC Statistics Summary', 20, yPosition);
+      yPosition += 8;
+
+      const summaryData = [
+        ['Metric', 'Value', 'Percentage'],
+        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+        ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+        ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
+        ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
+        ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
+        ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
+        ['International', String(stats.international_count || 0), pct(stats.international_count, stats.total_alumni)],
+      ];
+
+      autoTable(doc, {
+        head: [summaryData[0]],
+        body: summaryData.slice(1),
+        startY: yPosition,
+        theme: 'grid',
+        headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 9 },
+      });
+    } else if (exportType === 'HIGH_POSITION' && statsByType['HIGH_POSITION']) {
+      const stats = statsByType['HIGH_POSITION'];
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('High Position Statistics Summary', 20, yPosition);
+      yPosition += 8;
+
+      const summaryData = [
+        ['Metric', 'Value', 'Percentage'],
+        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+        ['High Position Alumni', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+        ['High Position Rate', '', `${stats.high_position_rate || 0}%`],
+      ];
+
+      autoTable(doc, {
+        head: [summaryData[0]],
+        body: summaryData.slice(1),
+        startY: yPosition,
+        theme: 'grid',
+        headStyles: { fillColor: [255, 193, 7], textColor: 0, fontStyle: 'bold' },
+        styles: { fontSize: 9 },
+      });
+    } else if (exportType === 'ALL') {
+      // Summary for all types
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Complete Statistics Summary - All Types', 20, yPosition);
+      yPosition += 10;
+
+      for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP']) {
+        const stats = statsByType[type];
+        if (!stats) continue;
+
+        checkPageBreak(60);
+
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${type} Statistics`, 20, yPosition);
+        yPosition += 6;
+
+        let summaryData: string[][] = [['Metric', 'Value', 'Percentage']];
+
+        if (type === 'QPRO') {
+          summaryData.push(
+            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+            ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+            ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)]
+          );
+        } else if (type === 'CHED') {
+          summaryData.push(
+            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+            ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)]
+          );
+        } else if (type === 'SUC') {
+          summaryData.push(
+            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+            ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)]
+          );
+        } else if (type === 'AACUP') {
+          summaryData.push(
+            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+            ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+            ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)]
+          );
+        }
+
+        autoTable(doc, {
+          head: [summaryData[0]],
+          body: summaryData.slice(1),
+          startY: yPosition,
+          theme: 'grid',
+          headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+          styles: { fontSize: 8 },
+        });
+
+        yPosition = (doc as any).lastAutoTable.finalY + 10;
+      }
+    }
+
+    // Save PDF
+    const filename = `Alumni_Statistics_${exportType}_${selectedYear}_${selectedProgram}.pdf`;
+    doc.save(filename);
+  };
+
+  // Word Export Utility Function
+  const exportToWord = async (
+    statsByType: Record<string, any>,
+    detailedDataByType: Record<string, any[]>,
+    exportType: string
+  ) => {
+    const children: (Paragraph | Table)[] = [];
+
+    // Title
+    children.push(
+      new Paragraph({
+        text: 'Alumni Statistics Report',
+        heading: HeadingLevel.HEADING_1,
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 200 },
+      })
+    );
+
+    // Metadata
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: 'Generated: ', bold: true }),
+          new TextRun(new Date().toLocaleDateString()),
+        ],
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: 'Year Filter: ', bold: true }),
+          new TextRun(selectedYear || 'ALL'),
+        ],
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: 'Program Filter: ', bold: true }),
+          new TextRun(selectedProgram || 'ALL'),
+        ],
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: 'Report Type: ', bold: true }),
+          new TextRun(exportType),
+        ],
+        spacing: { after: 400 },
+      })
+    );
+
+    // Helper function to create summary table
+    const createSummaryTable = (title: string, data: string[][]): (Paragraph | Table)[] => {
+      const elements: (Paragraph | Table)[] = [];
+
+      elements.push(
+        new Paragraph({
+          text: title,
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: 400, after: 200 },
+        })
+      );
+
+      elements.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: data.map((row, index) =>
+            new TableRow({
+              children: row.map(
+                (cell) =>
+                  new TableCell({
+                    children: [
+                      new Paragraph({
+                        text: cell,
+                        alignment: AlignmentType.CENTER,
+                        style: index === 0 ? 'strong' : undefined,
+                      }),
+                    ],
+                    shading: index === 0 ? { fill: '1D4E89' } : undefined,
+                  })
+              ),
+            })
+          ),
+        })
+      );
+
+      return elements;
+    };
+
+    // Export based on type
+    if (exportType === 'QPRO' && statsByType['QPRO']) {
+      const stats = statsByType['QPRO'];
+      const summaryData = [
+        ['Metric', 'Value', 'Percentage'],
+        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+        ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+        ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
+        ['Employment Rate', '', `${stats.employment_rate || 0}%`],
+        ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)],
+      ];
+      children.push(...createSummaryTable('QPRO Statistics Summary', summaryData));
+    } else if (exportType === 'CHED' && statsByType['CHED']) {
+      const stats = statsByType['CHED'];
+      const summaryData = [
+        ['Metric', 'Value', 'Percentage'],
+        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+        ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
+        ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
+        ['Further Study Rate', '', `${stats.further_study_rate || 0}%`],
+        ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
+      ];
+      children.push(...createSummaryTable('CHED Statistics Summary', summaryData));
+    } else if (exportType === 'AACUP' && statsByType['AACUP']) {
+      const stats = statsByType['AACUP'];
+      const summaryData = [
+        ['Metric', 'Value', 'Percentage'],
+        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+        ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+        ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
+        ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+        ['Employment Rate', '', `${stats.employment_rate || 0}%`],
+      ];
+      children.push(...createSummaryTable('AACUP Statistics Summary', summaryData));
+    } else if (exportType === 'SUC' && statsByType['SUC']) {
+      const stats = statsByType['SUC'];
+      const summaryData = [
+        ['Metric', 'Value', 'Percentage'],
+        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+        ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+        ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
+        ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
+      ];
+      children.push(...createSummaryTable('SUC Statistics Summary', summaryData));
+    } else if (exportType === 'HIGH_POSITION' && statsByType['HIGH_POSITION']) {
+      const stats = statsByType['HIGH_POSITION'];
+      const summaryData = [
+        ['Metric', 'Value', 'Percentage'],
+        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+        ['High Position Alumni', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+        ['High Position Rate', '', `${stats.high_position_rate || 0}%`],
+      ];
+      children.push(...createSummaryTable('High Position Statistics Summary', summaryData));
+    } else if (exportType === 'ALL') {
+      // Summary for all types
+      for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP']) {
+        const stats = statsByType[type];
+        if (!stats) continue;
+
+        let summaryData: string[][] = [['Metric', 'Value', 'Percentage']];
+
+        if (type === 'QPRO') {
+          summaryData.push(
+            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+            ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+            ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)]
+          );
+        } else if (type === 'CHED') {
+          summaryData.push(
+            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+            ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)]
+          );
+        } else if (type === 'SUC') {
+          summaryData.push(
+            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+            ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)]
+          );
+        } else if (type === 'AACUP') {
+          summaryData.push(
+            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+            ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+            ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)]
+          );
+        }
+
+        children.push(...createSummaryTable(`${type} Statistics`, summaryData));
+      }
+    }
+
+    // Create document
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: children,
+      }],
+    });
+
+    // Generate and save
+    const blob = await Packer.toBlob(doc);
+    const filename = `Alumni_Statistics_${exportType}_${selectedYear}_${selectedProgram}.docx`;
+    saveAs(blob, filename);
+  };
+
+  const handleExportCompleteData = async (format: 'excel' | 'pdf' | 'word' = 'excel') => {
     if (!generatedStats && !allStats) return;
     setExporting(true);
     try {
@@ -680,7 +1134,23 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         statsByType[generatedStats.type] = generatedStats;
       }
 
-      // Create a new Excel workbook and worksheet
+      // Determine export type name
+      const exportType = allStats ? 'ALL' : (generatedStats?.type || 'ALL');
+
+      // Route to appropriate export function based on format
+      if (format === 'pdf') {
+        await exportToPDF(statsByType, detailedDataByType, exportType);
+        setExporting(false);
+        alert('PDF exported successfully!');
+        return;
+      } else if (format === 'word') {
+        await exportToWord(statsByType, detailedDataByType, exportType);
+        setExporting(false);
+        alert('Word document exported successfully!');
+        return;
+      }
+
+      // Continue with Excel export if format is 'excel'
       const workbook = new ExcelJS.Workbook();
 
       // If exporting only QPRO, produce a single-tab workbook with summary + details (no charts)
@@ -1814,11 +2284,28 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             </select>
           </div>
           <button
-            style={exportButton}
-            onClick={handleExportCompleteData}
+            style={{...exportButton, backgroundColor: '#28a745', marginRight: '8px'}}
+            onClick={() => handleExportCompleteData('excel')}
             disabled={exporting || loading}
+            title="Export data to Excel format"
           >
-            Export Complete Report
+            {exporting ? '⏳ Exporting...' : '📊 Export Excel'}
+          </button>
+          <button
+            style={{...exportButton, backgroundColor: '#dc3545', marginRight: '8px'}}
+            onClick={() => handleExportCompleteData('pdf')}
+            disabled={exporting || loading}
+            title="Export data to PDF format"
+          >
+            {exporting ? '⏳ Exporting...' : '📄 Export PDF'}
+          </button>
+          <button
+            style={{...exportButton, backgroundColor: '#0d6efd', marginRight: '8px'}}
+            onClick={() => handleExportCompleteData('word')}
+            disabled={exporting || loading}
+            title="Export data to Word format"
+          >
+            {exporting ? '⏳ Exporting...' : '📝 Export Word'}
           </button>
           <button
             style={generateButton}
@@ -1859,7 +2346,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                   <XAxis dataKey="name" />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="value" fill="#1D4E89" />
+                  <Bar dataKey="value" fill="#7161EF" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

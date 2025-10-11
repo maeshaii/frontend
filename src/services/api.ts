@@ -16,6 +16,12 @@ const api = axios.create({
   withCredentials: false, 
 });
 
+// Public API instance for endpoints that don't require authentication
+const publicApi = axios.create({
+  baseURL: API_BASE,
+  withCredentials: false,
+});
+
 // Attach Authorization automatically with dev logging
 api.interceptors.request.use(
   (config) => {
@@ -843,3 +849,6 @@ export const repostDonation = async (donationId: number, repostCaption: string) 
   });
   return response.data;
 };
+
+export default api;
+export { publicApi };

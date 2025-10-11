@@ -258,7 +258,7 @@ const Dashboard = () => {
                 }}
               >
                 <div style={{ fontSize: 16, opacity: 0.9 }}>Untracked</div>
-                <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>{loading ? '…' : untrackedCount}</div>
+                <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>{loading ? '…' : `${untrackedCount}/${totalAlumni}`}</div>
               </div>
 
               <div

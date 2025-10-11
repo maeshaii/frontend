@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart,
@@ -11,6 +11,7 @@ import {
   Legend,
   Cell,
 } from 'recharts';
+import { FaFilter, FaChartLine, FaUsers, FaDownload, FaUpload } from 'react-icons/fa';
 import Sidebar from '../global/sidebar';
 import {
   importAlumni,
@@ -33,10 +34,10 @@ const initialData: EmploymentData[] = [
 ];
 
 const barColors: Record<string, string> = {
-  Pending: '#EE82EE',
-  Employed: '#662d91',
-  Unemployed: '#800080',
-  Absorb: '#1d1160',
+  Pending: '#DEC0F1',
+  Employed: '#B79CED',
+  Unemployed: '#957FEF',
+  Absorb: '#7161EF',
 };
 
 export default function Statistics() {
@@ -53,36 +54,46 @@ export default function Statistics() {
   const [stats, setStats] = useState<{ year: number; count: number }[]>([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [employmentStats, setEmploymentStats] = useState<{ [key: string]: number }>({});
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [selectedBar, setSelectedBar] = useState<string | null>(null);
+  const [chartAnimation, setChartAnimation] = useState(true);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const loadStats = async () => {
-      setStatsLoading(true);
-      try {
-        const data = await fetchAlumniStatistics();
-        setStats(data.years || []);
-        setYearOptions(['ALL', ...(data.years || []).map((y: any) => String(y.year))]);
-      } catch (e) {
-        setStats([]);
-        setYearOptions(['ALL']);
-      } finally {
-        setStatsLoading(false);
-      }
-    };
-    loadStats();
+  // Dynamic data loading
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const data = await fetchAlumniStatistics();
+      setStats(data.years || []);
+      setYearOptions(['ALL', ...(data.years || []).map((y: any) => String(y.year))]);
+      setLastUpdated(new Date());
+    } catch (e) {
+      setStats([]);
+      setYearOptions(['ALL']);
+    } finally {
+      setStatsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    const loadEmploymentStats = async () => {
-      try {
-        const data = await fetchAlumniEmploymentStats(selectedYear, selectedProgram);
-        setEmploymentStats(data.status_counts || {});
-      } catch (e) {
-        setEmploymentStats({});
-      }
-    };
-    loadEmploymentStats();
+    loadStats();
+  }, [loadStats]);
+
+  // Dynamic employment stats loading
+  const loadEmploymentStats = useCallback(async () => {
+    try {
+      const data = await fetchAlumniEmploymentStats(selectedYear, selectedProgram);
+      setEmploymentStats(data.status_counts || {});
+      setLastUpdated(new Date());
+    } catch (e) {
+      setEmploymentStats({});
+    }
   }, [selectedYear, selectedProgram]);
+
+  useEffect(() => {
+    loadEmploymentStats();
+  }, [loadEmploymentStats]);
+
 
   // Helper: normalize arbitrary backend status keys to canonical buckets
   const normalizeStatusCounts = (raw: { [key: string]: number } = {}) => {
@@ -129,8 +140,39 @@ export default function Statistics() {
   })();
 
   const maxCount = chartData.length > 0 ? Math.max(...chartData.map((d) => d.count)) : 0;
-  const maxTick = Math.ceil(maxCount / 10) * 10;
-  const ticks = Array.from({ length: maxTick / 10 + 1 }, (_, i) => i * 10);
+  
+  // Dynamic scaling for large numbers (up to 5000+ alumni)
+  const getScaleInfo = (max: number) => {
+    if (max <= 50) {
+      return { step: 10, maxTick: Math.ceil(max / 10) * 10 };
+    } else if (max <= 500) {
+      return { step: 50, maxTick: Math.ceil(max / 50) * 50 };
+    } else if (max <= 1000) {
+      return { step: 100, maxTick: Math.ceil(max / 100) * 100 };
+    } else if (max <= 5000) {
+      return { step: 250, maxTick: Math.ceil(max / 250) * 250 };
+    } else {
+      return { step: 500, maxTick: Math.ceil(max / 500) * 500 };
+    }
+  };
+  
+  const { step, maxTick } = getScaleInfo(maxCount);
+  const ticks = Array.from({ length: maxTick / step + 1 }, (_, i) => i * step);
+
+
+  const handleFilterChange = useCallback((type: 'year' | 'program', value: string) => {
+    if (type === 'year') {
+      setSelectedYear(value);
+    } else {
+      setSelectedProgram(value);
+    }
+    setChartAnimation(false);
+    setTimeout(() => setChartAnimation(true), 100);
+  }, []);
+
+  const handleBarClick = useCallback((data: any) => {
+    setSelectedBar(selectedBar === data.category ? null : data.category);
+  }, [selectedBar]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -271,63 +313,187 @@ export default function Statistics() {
 
         {/* Filters */}
         <div className="filter-container">
-          <div className="filter-group">
-            <label className="filter-label">Year:</label>
-            <select
-              className="filter-select"
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-            >
-              {yearOptions.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
+          <div style={styles.filterControls}>
+            <div style={styles.filterGroup}>
+              <label htmlFor="year-filter" style={styles.filterLabel}>
+                <FaChartLine style={{ marginRight: '6px' }} />
+                Year:
+              </label>
+              <select
+                id="year-filter"
+                value={selectedYear}
+                onChange={(e) => handleFilterChange('year', e.target.value)}
+                style={styles.filterSelect}
+              >
+                {yearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={styles.filterGroup}>
+              <label htmlFor="program-filter" style={styles.filterLabel}>
+                <FaUsers style={{ marginRight: '6px' }} />
+                Program:
+              </label>
+              <select
+                id="program-filter"
+                value={selectedProgram}
+                onChange={(e) => handleFilterChange('program', e.target.value)}
+                style={styles.filterSelect}
+              >
+                {courseOptions.map((course) => (
+                  <option key={course} value={course}>
+                    {course}
+                  </option>
+                ))}
+              </select>
+            </div>
+
           </div>
 
-          <div className="filter-group">
-            <label className="filter-label">Program:</label>
-            <select
-              className="filter-select"
-              value={selectedProgram}
-              onChange={(e) => setSelectedProgram(e.target.value)}
-            >
-              {courseOptions.map((course) => (
-                <option key={course} value={course}>
-                  {course}
-                </option>
-              ))}
-            </select>
+          <div style={styles.lastUpdated}>
+            Last updated: {lastUpdated.toLocaleTimeString()}
           </div>
 
           {/* Buttons aligned to right */}
           <div className="filter-buttons">
             <button className="action-button" onClick={() => setShowModal(true)}>
+              <FaUpload style={{ marginRight: '8px' }} />
               Import Alumni
             </button>
             <button className="action-button" onClick={() => navigate('/ViewStats')}>
-              View Statistics
+              <FaDownload style={{ marginRight: '8px' }} />
+              View Users
             </button>
           </div>
         </div>
 
-        {/* Bar Chart */}
-        <div style={{ width: '100%', height: '600px', marginTop: '24px' }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 20, right: 30, left: 10, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="category" />
-              <YAxis domain={[0, maxTick]} ticks={ticks} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="count" name="Statistics" radius={[5, 5, 0, 0]}>
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={barColors[entry.category]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        {/* Enhanced Bar Chart */}
+        <div style={styles.chartContainer}>
+          <div style={styles.chartHeader}>
+            <h3 style={styles.chartTitle}>
+              📊 Alumni Employment Statistics
+            </h3>
+            <p style={styles.chartSubtitle}>
+              Employment status distribution by category
+            </p>
+            <div style={styles.totalCount}>
+              Total Alumni: <strong>{chartData.reduce((sum, item) => sum + item.count, 0).toLocaleString()}</strong>
+            </div>
+          </div>
+          
+          <div style={styles.chartWrapper}>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart 
+                data={chartData} 
+                margin={{ top: 20, right: 30, left: 20, bottom: 40 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" strokeOpacity={0.6} />
+                <XAxis 
+                  dataKey="category" 
+                  tick={{ fontSize: 14, fill: '#666', fontWeight: '500' }}
+                  tickLine={{ stroke: '#ccc' }}
+                  axisLine={{ stroke: '#ddd' }}
+                  height={50}
+                />
+                <YAxis 
+                  domain={[0, maxTick]} 
+                  ticks={ticks}
+                  tick={{ fontSize: 14, fill: '#666', fontWeight: '500' }}
+                  tickLine={{ stroke: '#ccc' }}
+                  axisLine={{ stroke: '#ddd' }}
+                  width={50}
+                />
+                <Tooltip 
+                  contentStyle={styles.tooltip}
+                  labelStyle={styles.tooltipLabel}
+                  formatter={(value: any, name: any) => [
+                    <span style={styles.tooltipValue}>{value.toLocaleString()} alumni</span>,
+                    name
+                  ]}
+                />
+                <Legend 
+                  wrapperStyle={styles.legend}
+                  iconType="rect"
+                />
+                <Bar 
+                  dataKey="count" 
+                  name="Alumni Count" 
+                  radius={[6, 6, 0, 0]}
+                  maxBarSize={60}
+                  onClick={handleBarClick}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={barColors[entry.category]}
+                      stroke={selectedBar === entry.category ? '#374151' : 'none'}
+                      strokeWidth={selectedBar === entry.category ? 2 : 0}
+                      style={{ 
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        transform: selectedBar === entry.category ? 'scale(1.05)' : 'scale(1)',
+                      }}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Dynamic Chart Summary Cards */}
+          <div style={styles.summaryCards}>
+            {chartData.map((entry, index) => (
+              <div 
+                key={entry.category} 
+                style={{
+                  ...styles.summaryCard,
+                  ...(selectedBar === entry.category ? styles.summaryCardSelected : {}),
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onClick={() => handleBarClick({ category: entry.category })}
+                onMouseEnter={(e) => {
+                  if (selectedBar !== entry.category) {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.12)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (selectedBar !== entry.category) {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
+                  }
+                }}
+              >
+                <div 
+                  style={{
+                    ...styles.summaryIndicator,
+                    backgroundColor: barColors[entry.category],
+                    transform: selectedBar === entry.category ? 'scale(1.2)' : 'scale(1)',
+                    transition: 'transform 0.2s ease',
+                  }}
+                />
+                <div style={styles.summaryContent}>
+                  <div style={{
+                    ...styles.summaryNumber,
+                    color: selectedBar === entry.category ? '#1f2937' : '#1f2937',
+                  }}>
+                    {entry.count.toLocaleString()}
+                  </div>
+                  <div style={{
+                    ...styles.summaryLabel,
+                    fontWeight: selectedBar === entry.category ? '600' : '400',
+                  }}>
+                    {entry.category}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Modal */}
@@ -468,6 +634,132 @@ export default function Statistics() {
           </>
         )}
 
+        {/* Enhanced Chart Styles */}
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          
+          @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          
+          @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+          }
+          
+          .chart-container {
+            animation: fadeIn 0.5s ease-out;
+          }
+          
+          .summary-card:hover {
+            animation: pulse 0.3s ease-in-out;
+          }
+        `}</style>
+
+        {/* Enhanced Chart Styles */}
+        <style>{`
+          /* Chart Styles */
+          .chart-container {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e5e7eb;
+            margin-top: 24px;
+          }
+
+          .chart-header {
+            text-align: center;
+            margin-bottom: 24px;
+          }
+
+          .chart-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1f2937;
+            margin: 0 0 8px 0;
+          }
+
+          .chart-subtitle {
+            font-size: 16px;
+            color: #6b7280;
+            margin: 0;
+          }
+
+          .chart-wrapper {
+            height: 400px;
+            margin-bottom: 24px;
+          }
+
+          .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 16px;
+            margin-top: 24px;
+          }
+
+          .summary-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+          }
+
+          .summary-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+          }
+
+          .summary-content {
+            display: flex;
+            flex-direction: column;
+          }
+
+          .summary-number {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1f2937;
+            line-height: 1;
+          }
+
+          .summary-label {
+            font-size: 14px;
+            color: #6b7280;
+            margin-top: 2px;
+          }
+
+          .tooltip {
+            background: white !important;
+            border: 1px solid #e5e7eb !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+            padding: 12px !important;
+          }
+
+          .tooltip-label {
+            font-weight: 600 !important;
+            color: #374151 !important;
+            margin-bottom: 4px !important;
+          }
+
+          .tooltip-value {
+            font-weight: 700 !important;
+            color: #1f2937 !important;
+          }
+
+          .legend {
+            padding-top: 16px !important;
+          }
+        `}</style>
+
         {/* Embedded CSS */}
         <style>{`
           .filter-container {
@@ -607,3 +899,144 @@ export default function Statistics() {
     </div>
   );
 }
+
+// Enhanced Chart Styles
+const styles: { [key: string]: React.CSSProperties } = {
+  chartContainer: {
+    background: 'white',
+    borderRadius: '16px',
+    padding: '20px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+    border: '1px solid #e5e7eb',
+    marginTop: '16px',
+    maxHeight: 'fit-content',
+  },
+  chartHeader: {
+    textAlign: 'center',
+    marginBottom: '16px',
+  },
+  chartTitle: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#1f2937',
+    margin: '0 0 8px 0',
+  },
+  chartSubtitle: {
+    fontSize: '16px',
+    color: '#6b7280',
+    margin: '0',
+  },
+  totalCount: {
+    fontSize: '14px',
+    color: '#374151',
+    marginTop: '8px',
+    fontWeight: '500',
+  },
+  chartWrapper: {
+    height: '300px',
+    marginBottom: '20px',
+  },
+  summaryCards: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+    gap: '12px',
+    marginTop: '16px',
+  },
+  summaryCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '16px',
+    background: '#f8fafc',
+    borderRadius: '12px',
+    border: '1px solid #e5e7eb',
+  },
+  summaryIndicator: {
+    width: '12px',
+    height: '12px',
+    borderRadius: '50%',
+  },
+  summaryContent: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  summaryNumber: {
+    fontSize: '18px',
+    fontWeight: '700',
+    color: '#1f2937',
+    lineHeight: 1,
+    wordBreak: 'break-all',
+  },
+  summaryLabel: {
+    fontSize: '14px',
+    color: '#6b7280',
+    marginTop: '2px',
+  },
+  tooltip: {
+    background: 'white',
+    border: '1px solid #e5e7eb',
+    borderRadius: '8px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    padding: '12px',
+  },
+  tooltipLabel: {
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: '4px',
+  },
+  tooltipValue: {
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  legend: {
+    paddingTop: '16px',
+  },
+  filterContainer: {
+    background: 'white',
+    borderRadius: '12px',
+    padding: '20px',
+    marginBottom: '20px',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+    border: '1px solid #e5e7eb',
+  },
+  filterControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '20px',
+    flexWrap: 'wrap',
+    marginBottom: '12px',
+  },
+  filterGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  filterLabel: {
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#374151',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  filterSelect: {
+    padding: '8px 12px',
+    border: '1px solid #d1d5db',
+    borderRadius: '8px',
+    fontSize: '14px',
+    backgroundColor: 'white',
+    cursor: 'pointer',
+    transition: 'border-color 0.2s ease',
+  },
+  lastUpdated: {
+    fontSize: '12px',
+    color: '#9ca3af',
+    fontStyle: 'italic',
+  },
+  summaryCardSelected: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#3b82f6',
+    borderWidth: '2px',
+    transform: 'translateY(-2px)',
+    boxShadow: '0 8px 20px rgba(59, 130, 246, 0.15)',
+  },
+};
