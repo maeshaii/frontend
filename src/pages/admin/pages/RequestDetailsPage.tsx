@@ -62,22 +62,72 @@ const RequestDetailsPage: React.FC = () => {
     loadOJTData();
   }, [year]);
 
+  const downloadPasswords = (passwords: any[]) => {
+    // Create CSV content
+    const csvContent = [
+      'Username,Password,Name',
+      ...passwords.map(p => `${p.username},${p.password},"${p.name}"`)
+    ].join('\n');
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `alumni_passwords_${year}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleApprove = async () => {
     if (!year) return;
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to approve all completed OJT students for Class of ${year}? This will convert them to alumni and generate new passwords.`
+    );
+    
+    if (!confirmed) return;
+    
     try {
       const res = await approveCoordinatorRequest(parseInt(year));
       if (res?.success) {
-        alert(`Approved ${year}. Records updated: ${res.approved}`);
-        navigate('/admin/requests');
+        alert(`Successfully approved ${res.approved} students from Class of ${year}!`);
+        
+        // Download passwords file if available
+        if (res.passwords && res.passwords.length > 0) {
+          downloadPasswords(res.passwords);
+          alert(`Password file downloaded successfully! ${res.passwords.length} alumni accounts created.`);
+        }
+        
+        // Navigate back to requests list - the card should now be gone since status changed to "Approved"
+        // Force a page reload to ensure fresh data
+        window.location.href = '/requests';
       } else {
-        alert('Approval failed');
+        alert('Approval failed. Please try again.');
       }
-    } catch {
-      alert('Approval failed');
+    } catch (error) {
+      console.error('Approval error:', error);
+      alert('Approval failed. Please try again.');
     }
   };
 
-  const completedRows = filteredRows.filter((r) => (r.ojt_status || 'Ongoing') === 'Completed');
+  const completedRows = filteredRows.filter((r) => 
+    (r.ojt_status || 'Ongoing') === 'Completed' && !r.is_alumni
+  );
+
+  // Debug logging
+  console.log('🔍 Admin Debug - All filtered rows:', filteredRows.map(r => ({
+    name: r.name,
+    ojt_status: r.ojt_status,
+    is_alumni: r.is_alumni
+  })));
+  console.log('🔍 Admin Debug - Completed rows for approval:', completedRows.map(r => ({
+    name: r.name,
+    ojt_status: r.ojt_status,
+    is_alumni: r.is_alumni
+  })));
 
   // Consistent table styling to fix header/body alignment
   const styles = {
@@ -182,10 +232,19 @@ const RequestDetailsPage: React.FC = () => {
             Back
           </button>
           <button
-            disabled
-            style={{ padding: '8px 20px', background: '#ccc', color: '#666', border: 'none', borderRadius: '20px', cursor: 'not-allowed' }}
+            onClick={handleApprove}
+            disabled={completedRows.length === 0}
+            style={{ 
+              padding: '8px 20px', 
+              background: completedRows.length > 0 ? '#5A6DFE' : '#ccc', 
+              color: completedRows.length > 0 ? 'white' : '#666', 
+              border: 'none', 
+              borderRadius: '20px', 
+              cursor: completedRows.length > 0 ? 'pointer' : 'not-allowed',
+              fontWeight: '600'
+            }}
           >
-            Approve
+            Approve ({completedRows.length})
           </button>
         </div>
 

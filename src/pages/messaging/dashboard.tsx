@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [batchYear, setBatchYear] = useState('');
+  const [section, setSection] = useState('');
   const [course, setCourse] = useState('BSIT');
   const [ojtYears, setOjtYears] = useState<{ year: number; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,14 +57,14 @@ export default function Dashboard() {
   };
 
   const handleImport = async () => {
-    if (!selectedFile || !batchYear) {
-      alert('Please select a file and enter the batch year');
+    if (!selectedFile || !batchYear || !section) {
+      alert('Please select a file, enter the batch year, and section');
       return;
     }
 
     setImportLoading(true);
     try {
-      const result = await importOJT(selectedFile, batchYear, course, coordinatorUsername);
+      const result = await importOJT(selectedFile, batchYear, course, coordinatorUsername, section);
       if (result.success) {
         alert('OJT import successful!');
         setShowModal(false);
@@ -93,6 +94,7 @@ export default function Dashboard() {
       'Email',
       'Address',
       'Course',
+      'Section',
       'Company',
       'Start_Date',
       'End_Date',
@@ -475,11 +477,22 @@ export default function Dashboard() {
 
             <label style={styles.modalLabel}>Batch Graduated</label>
             <input
-              type="text"
+              type="number"
               placeholder="Enter batch year..."
               style={styles.modalInput}
               value={batchYear}
               onChange={(e) => setBatchYear(e.target.value)}
+              min="2000"
+              max="2030"
+            />
+
+            <label style={styles.modalLabel}>Section</label>
+            <input
+              type="text"
+              placeholder="Enter section (e.g., 4-1, 4-A)..."
+              style={styles.modalInput}
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
             />
 
             {/* Course selection removed; default course state will be used */}

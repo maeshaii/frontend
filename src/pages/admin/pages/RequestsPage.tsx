@@ -13,7 +13,9 @@ const RequestsPage: React.FC = () => {
     const load = async () => {
       try {
         const res = await fetchCoordinatorRequestsList();
+        console.log('🔍 RequestsPage - API Response:', res);
         const rows: any[] = Array.isArray(res?.items) ? res.items : [];
+        console.log('🔍 RequestsPage - Raw rows:', rows);
         // Process items with course information
         const processedItems = rows
           .map(row => ({
@@ -23,13 +25,16 @@ const RequestsPage: React.FC = () => {
           }))
           .filter(item => Number.isFinite(item.batch_year))
           .sort((a, b) => b.batch_year - a.batch_year);
+        console.log('🔍 RequestsPage - Processed items:', processedItems);
         setItems(processedItems);
       } catch (e) {
+        console.error('🔍 RequestsPage - Error:', e);
         setItems([]);
       }
     };
     load();
   }, []);
+
 
   const openDetails = (year: number, course: string) => {
     const courseParam = selectedCourse !== 'ALL' ? `?course=${selectedCourse}` : '';
@@ -56,7 +61,7 @@ const RequestsPage: React.FC = () => {
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar />
       <div style={{ flex: 1, padding: '24px 32px', backgroundColor: '#f5f6fa', marginLeft: 240 }}>
-        <h2 style={{ margin: 0, color: '#0b2a55' }}>Coordinator Requests</h2>
+        <h2 style={{ margin: 0, color: '#0b2a55', marginBottom: '16px' }}>Coordinator Requests</h2>
         
         {/* Filters */}
         <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
