@@ -1106,6 +1106,17 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           isRepost={true}
                           repostData={donationRepostItem.repostData}
                           onViewOriginalPost={handleViewOriginalPost}
+                          likedPosts={likedDonations}
+                          setLikedPosts={setLikedDonations}
+                          showCommentInput={showCommentInput}
+                          setShowCommentInput={setShowCommentInput}
+                          commentInput={commentInput}
+                          setCommentInput={setCommentInput}
+                          editingComment={editingComment}
+                          setEditingComment={setEditingComment}
+                          editCommentContent={editCommentContent}
+                          setEditCommentContent={setEditCommentContent}
+                          isDonation={true}
                         onPostUpdate={() => {
                           console.log('onPostUpdate called for donation repost - refreshing...');
                           // Refresh both posts and donations
@@ -1207,22 +1218,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         setEditingPost={setEditingPost}
                         editPostContent={editPostContent}
                         setEditPostContent={setEditPostContent}
-                        likedPosts={likedDonations}
-                        setLikedPosts={setLikedDonations}
                         repostedPosts={repostedDonations}
                         setRepostedPosts={setRepostedDonations}
-                        showCommentInput={showCommentInput}
-                        setShowCommentInput={setShowCommentInput}
-                        showAllComments={showAllComments}
-                        setShowAllComments={setShowAllComments}
-                        commentInput={commentInput}
-                        setCommentInput={setCommentInput}
-                        editingComment={editingComment}
-                        setEditingComment={setEditingComment}
-                        editCommentContent={editCommentContent}
-                        setEditCommentContent={setEditCommentContent}
                         isForum={false}
-                        isDonation={true}
                       />
                     );
                     acc.push(donationRepostCard);
@@ -1245,6 +1243,16 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           displayAvatar={displayAvatar}
                           formatTime={formatHybrid}
                           onViewOriginalPost={handleViewOriginalPost}
+                          likedPosts={likedDonations}
+                          setLikedPosts={setLikedDonations}
+                          showCommentInput={showCommentInput}
+                          setShowCommentInput={setShowCommentInput}
+                          commentInput={commentInput}
+                          setCommentInput={setCommentInput}
+                          editingComment={editingComment}
+                          setEditingComment={setEditingComment}
+                          editCommentContent={editCommentContent}
+                          setEditCommentContent={setEditCommentContent}
                         onPostUpdate={() => {
                           console.log('onPostUpdate called for donation - refreshing...');
                           // Refresh both posts and donations
@@ -1346,20 +1354,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         setEditingPost={setEditingPost}
                         editPostContent={editPostContent}
                         setEditPostContent={setEditPostContent}
-                        likedPosts={likedDonations}
-                        setLikedPosts={setLikedDonations}
                         repostedPosts={repostedDonations}
                         setRepostedPosts={setRepostedDonations}
-                        showCommentInput={showCommentInput}
-                        setShowCommentInput={setShowCommentInput}
-                        showAllComments={showAllComments}
-                        setShowAllComments={setShowAllComments}
-                        commentInput={commentInput}
-                        setCommentInput={setCommentInput}
-                        editingComment={editingComment}
-                        setEditingComment={setEditingComment}
-                        editCommentContent={editCommentContent}
-                        setEditCommentContent={setEditCommentContent}
                         isForum={false}
                         isDonation={true}
                       />
@@ -1392,6 +1388,16 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         isRepost={true}
                         repostData={repostItem as any}
                         onViewOriginalPost={handleViewOriginalPost}
+                        likedPosts={likedPosts}
+                        setLikedPosts={setLikedPosts}
+                        showCommentInput={showCommentInput}
+                        setShowCommentInput={setShowCommentInput}
+                        commentInput={commentInput}
+                        setCommentInput={setCommentInput}
+                        editingComment={editingComment}
+                        setEditingComment={setEditingComment}
+                        editCommentContent={editCommentContent}
+                        setEditCommentContent={setEditCommentContent}
                         onPostUpdate={() => {
                           console.log('onPostUpdate called - refreshing posts...');
                           getPosts().then(updatedPosts => {
@@ -1425,20 +1431,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         setEditingPost={setEditingPost}
                         editPostContent={editPostContent}
                         setEditPostContent={setEditPostContent}
-                        likedPosts={likedPosts}
-                        setLikedPosts={setLikedPosts}
                         repostedPosts={repostedPosts}
                         setRepostedPosts={setRepostedPosts}
-                        showCommentInput={showCommentInput}
-                        setShowCommentInput={setShowCommentInput}
-                        showAllComments={showAllComments}
-                        setShowAllComments={setShowAllComments}
-                        commentInput={commentInput}
-                        setCommentInput={setCommentInput}
-                        editingComment={editingComment}
-                        setEditingComment={setEditingComment}
-                        editCommentContent={editCommentContent}
-                        setEditCommentContent={setEditCommentContent}
                       />
                     );
                     acc.push(repostCard);

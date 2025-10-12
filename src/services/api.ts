@@ -746,6 +746,21 @@ export const searchUsersForMessaging = async (q: string) => {
   return data as { users: Array<{ user_id: number; f_name: string; l_name: string }>; count: number; query: string };
 };
 
+export const searchAlumni = async (q: string) => {
+  const { data } = await api.get(`alumni/search/?q=${encodeURIComponent(q)}`);
+  return data as { results: Array<{ id: number; name: string; profile_pic: string | null; account_type: { user: boolean; admin: boolean; peso: boolean } }> };
+};
+
+export const getPostFromComment = async (commentId: number) => {
+  const { data } = await api.get(`comments/${commentId}/post/`);
+  return data as { success: boolean; post_id: number; post_type: string };
+};
+
+export const getFollowingForMentions = async () => {
+  const { data } = await api.get(`following/mentions/`);
+  return data as { success: boolean; following: Array<{ user_id: number; name: string; f_name: string; m_name: string; l_name: string; profile_pic: string }> };
+};
+
 export const uploadAttachment = async (file: File): Promise<{
   attachment_id: number;
   file_name: string;
@@ -887,6 +902,57 @@ export const repostDonation = async (donationId: number, repostCaption: string) 
   const response = await api.post(`donations/${donationId}/repost/`, {
     caption: repostCaption
   });
+  return response.data;
+};
+
+// -------- Reply API Functions --------
+// These functions handle comment replies
+
+// Create a reply to a comment
+export const createReply = async (commentId: number, replyContent: string) => {
+  const response = await api.post(`comments/${commentId}/replies/`, {
+    reply_content: replyContent
+  });
+  return response.data;
+};
+
+// Get replies for a comment
+export const getCommentReplies = async (commentId: number) => {
+  const response = await api.get(`comments/${commentId}/replies/`);
+  return response.data;
+};
+
+// Edit a reply
+export const editReply = async (commentId: number, replyId: number, replyData: { reply_content: string }) => {
+  const response = await api.put(`comments/${commentId}/replies/${replyId}/`, replyData);
+  return response.data;
+};
+
+// Delete a reply
+export const deleteReply = async (commentId: number, replyId: number) => {
+  const response = await api.delete(`comments/${commentId}/replies/${replyId}/`);
+  return response.data;
+};
+
+// -------- Recent Search API Functions --------
+
+// Save a recent search
+export const saveRecentSearch = async (searchedUserId: number) => {
+  const response = await api.post('recent-searches/', {
+    searched_user_id: searchedUserId
+  });
+  return response.data;
+};
+
+// Get recent searches
+export const getRecentSearches = async () => {
+  const response = await api.get('recent-searches/');
+  return response.data;
+};
+
+// Delete a recent search
+export const deleteRecentSearch = async (searchId: number) => {
+  const response = await api.delete(`recent-searches/${searchId}/`);
   return response.data;
 };
 

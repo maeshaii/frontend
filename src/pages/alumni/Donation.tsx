@@ -5,6 +5,7 @@ import AlumniTopBar from './AlumniTopBar';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import ctulogo from '../../images/ctulogo.png';
+import { getProfilePicUrl, handleProfilePicError } from '../../utils/profilePicUtils';
 import { getDonationRequests, followUser, unfollowUser, checkFollowStatus } from '../../services/api';
 import './profile.css'; 
 
@@ -179,6 +180,7 @@ const DonationPage: React.FC = () => {
                 type: 'donation',
                 item_type: 'repost',
                 sort_date: repost.repost_date,
+                feed_type: 'donation_repost',
                 user: repost.user,
                 likes: repost.likes || [],
                 comments: repost.comments || [],
@@ -195,6 +197,8 @@ const DonationPage: React.FC = () => {
                     description: donation.description,
                     post_content: donation.description, // Add post_content for compatibility with PostCard
                     images: donation.images,
+                    post_images: donation.images, // Add post_images for compatibility with getImagesFromPost
+                    post_image: donation.images && donation.images.length > 0 ? donation.images[0].image_url : null, // Add post_image for single image compatibility
                     created_at: donation.created_at,
                     user: donation.user,
                     likes: donation.likes || [],
@@ -412,11 +416,7 @@ const DonationPage: React.FC = () => {
                 // Handle both donations and reposts to match post/forum design
                 const isOwn = Number(item.user?.user_id) === Number(currentUserId);
                 const displayName = item.user?.name || `${item.user?.f_name || ''} ${item.user?.m_name || ''} ${item.user?.l_name || ''}`.trim() || 'Unknown User';
-                const displayAvatar = item.user?.profile_pic ? 
-                  (String(item.user.profile_pic).startsWith('http') ? 
-                    item.user.profile_pic : 
-                    `http://127.0.0.1:8000${item.user.profile_pic}`) : 
-                  ctulogo;
+                const displayAvatar = getProfilePicUrl(item.user?.profile_pic);
                 
                 if (item.item_type === 'repost') {
                   return (
@@ -476,6 +476,8 @@ const DonationPage: React.FC = () => {
                     }}
                     likedPosts={likedDonations}
                     setLikedPosts={setLikedDonations}
+                    repostedPosts={repostedDonations}
+                    setRepostedPosts={setRepostedDonations}
                     showAllComments={showAllComments}
                     setShowAllComments={setShowAllComments}
                     showCommentInput={showCommentInput}
@@ -640,7 +642,7 @@ const DonationPage: React.FC = () => {
                 currentUserId={currentUserId}
                 isOwn={currentUserId === originalDonationModalData.user?.user_id}
                 displayName={originalDonationModalData.user?.name || `${originalDonationModalData.user?.f_name || ''} ${originalDonationModalData.user?.m_name || ''} ${originalDonationModalData.user?.l_name || ''}`.trim() || 'Unknown User'}
-                displayAvatar={originalDonationModalData.user?.profile_pic ? (String(originalDonationModalData.user.profile_pic).startsWith('http') ? originalDonationModalData.user.profile_pic : `http://127.0.0.1:8000${originalDonationModalData.user.profile_pic}`) : ctulogo}
+                displayAvatar={getProfilePicUrl(originalDonationModalData.user?.profile_pic)}
                 formatTime={formatTime}
                 onViewOriginalPost={handleViewOriginalDonation}
                 onPostUpdate={async () => {
@@ -671,6 +673,8 @@ const DonationPage: React.FC = () => {
                 setEditPostContent={setEditDonationContent}
                 likedPosts={likedDonations}
                 setLikedPosts={setLikedDonations}
+                repostedPosts={repostedDonations}
+                setRepostedPosts={setRepostedDonations}
                 showAllComments={showAllComments}
                 setShowAllComments={setShowAllComments}
                 showCommentInput={showCommentInput}

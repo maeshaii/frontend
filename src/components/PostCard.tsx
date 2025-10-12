@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest } from '../services/api';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions } from '../services/api';
 import { 
   commentOnForumPost, 
   deleteForumComment, 
@@ -16,9 +16,12 @@ import {
   deleteRepost
 } from '../services/api';
 import ctulogo from '../images/ctulogo.png';
+import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
 import RepostModal from './RepostModal';
 import RepostButton from './RepostButton';
 import PhotoGalleryModal from './PhotoGalleryModal';
+import Reply from './Reply';
+import ReplyInput from './ReplyInput';
 
 interface RepostItem {
   repost_id: number;
@@ -42,6 +45,7 @@ interface CommentItem {
   comment_id: number;
   comment_content: string;
   date_created: string;
+  replies_count?: number;
   user: {
     user_id: number;
     f_name: string;
@@ -182,11 +186,114 @@ const PostCard: React.FC<PostCardProps> = ({
   const [showCommentOptions, setShowCommentOptions] = useState<{ [key: number]: boolean }>({});
   const [editingRepostCaption, setEditingRepostCaption] = useState<{ [key: number]: boolean }>({});
   const [editRepostCaptionContent, setEditRepostCaptionContent] = useState<{ [key: number]: string }>({});
+  
+  // Reply state management
+  const [showReplyInput, setShowReplyInput] = useState<{ [key: number]: boolean }>({});
+  const [showReplies, setShowReplies] = useState<{ [key: number]: boolean }>({});
+  const [commentReplies, setCommentReplies] = useState<{ [key: number]: any[] }>({});
+
+  // @mention functionality for comments
+  const [followingUsers, setFollowingUsers] = useState<any[]>([]);
+  const [showMentionSuggestions, setShowMentionSuggestions] = useState<{ [key: number]: boolean }>({});
+  const [mentionSuggestions, setMentionSuggestions] = useState<{ [key: number]: any[] }>({});
+  const [mentionStart, setMentionStart] = useState<{ [key: number]: number }>({});
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState<{ [key: number]: number }>({});
+
+  // Load following users for @mentions
+  useEffect(() => {
+    const loadFollowing = async () => {
+      try {
+        const response = await getFollowingForMentions();
+        if (response.success) {
+          setFollowingUsers(response.following);
+        }
+      } catch (error) {
+        console.error('Error loading following users:', error);
+      }
+    };
+    loadFollowing();
+  }, []);
+
+  // Helper function to get the correct profile path
+  const getProfilePath = (userId: number) => {
+    const currentPath = window.location.pathname;
+    if (currentPath.startsWith('/peso')) {
+      return `/peso/profile/${userId}`;
+    } else if (currentPath.startsWith('/ccict')) {
+      return `/ccict/profile/${userId}`;
+    } else {
+      return `/alumni/profile/${userId}`;
+    }
+  };
+
+  const handleUserSearch = async (searchTerm: string) => {
+    try {
+      const response = await searchAlumni(searchTerm);
+      if (response.results && response.results.length > 0) {
+        // Take the first result (most relevant match)
+        const user = response.results[0];
+        const currentPath = window.location.pathname;
+        if (currentPath.startsWith('/peso')) {
+          window.location.href = `/peso/profile/${user.id}`;
+        } else if (currentPath.startsWith('/ccict')) {
+          window.location.href = `/ccict/profile/${user.id}`;
+        } else {
+          window.location.href = `/alumni/profile/${user.id}`;
+        }
+      } else {
+        alert(`No user found with name "${searchTerm}"`);
+      }
+    } catch (error) {
+      console.error('Error searching for user:', error);
+      alert('Error searching for user. Please try again.');
+    }
+  };
 
   // Helper function to get proper singular/plural form
   const getPluralForm = (count: number, singular: string, plural: string) => {
     return count === 1 ? `${count} ${singular}` : `${count} ${plural}`;
   };
+
+  // Reply helper functions
+  const loadReplies = useCallback(async (commentId: number) => {
+    try {
+      console.log(`PostCard: Loading replies for comment ${commentId}`);
+      const response = await getCommentReplies(commentId);
+      console.log(`PostCard: Replies response for comment ${commentId}:`, response);
+      setCommentReplies(prev => ({ ...prev, [commentId]: response.replies || [] }));
+    } catch (error) {
+      console.error('PostCard: Error loading replies:', error);
+    }
+  }, []);
+
+  const handleReplyAdded = (commentId: number) => {
+    loadReplies(commentId);
+    setShowReplyInput(prev => ({ ...prev, [commentId]: false }));
+    // Automatically show replies after creating one
+    setShowReplies(prev => ({ ...prev, [commentId]: true }));
+    // Update the post to refresh replies_count
+    onPostUpdate?.();
+  };
+
+  const toggleReplies = (commentId: number) => {
+    if (!showReplies[commentId]) {
+      loadReplies(commentId);
+    }
+    setShowReplies(prev => ({ ...prev, [commentId]: !prev[commentId] }));
+  };
+
+  // Facebook-style: Load ALL replies for ALL comments immediately
+  useEffect(() => {
+    if (post.comments && post.comments.length > 0) {
+      console.log('PostCard: Facebook-style loading ALL replies for ALL comments');
+      post.comments.forEach(comment => {
+        // Load replies for every comment (Facebook approach)
+        loadReplies(comment.comment_id);
+        // Always show replies (Facebook shows them by default)
+        setShowReplies(prev => ({ ...prev, [comment.comment_id]: true }));
+      });
+    }
+  }, [post.comments, loadReplies]);
 
   // Photo gallery helpers
   const getImagesFromPost = (post: PostItem): string[] => {
@@ -229,11 +336,16 @@ const PostCard: React.FC<PostCardProps> = ({
     setCurrentPhotoIndex(prev => prev < images.length - 1 ? prev + 1 : 0);
   };
 
-  // Helper function to detect and make URLs clickable
+  // Helper function to detect and make URLs and names clickable
   const renderTextWithLinks = (text: string | undefined | null) => {
     if (!text) return null;
     
     const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const mentionRegex = /@(\w+)/g;
+    
+    // Enhanced regex to detect names (First Last format)
+    const nameRegex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
+    
     const parts = text.split(urlRegex);
     
     return parts.map((part, index) => {
@@ -258,7 +370,80 @@ const PostCard: React.FC<PostCardProps> = ({
           </a>
         );
       }
-      return part;
+      
+      // Handle mentions (@username)
+      const mentionParts = part.split(mentionRegex);
+      const processedMentionParts = mentionParts.map((mentionPart, mentionIndex) => {
+        if (mentionRegex.test(mentionPart)) {
+          // Extract username from @username
+          const username = mentionPart.substring(1); // Remove @
+          
+          return (
+            <button
+              key={`${index}-${mentionIndex}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                // Search for the user and redirect to their profile
+                handleUserSearch(username);
+              }}
+              style={{ 
+                color: '#007bff', 
+                fontWeight: '600',
+                background: 'none',
+                border: 'none',
+                padding: '0',
+                cursor: 'pointer',
+                textDecoration: 'none'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.textDecoration = 'underline';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.textDecoration = 'none';
+              }}
+            >
+              {mentionPart}
+            </button>
+          );
+        }
+        
+        // Handle names (First Last format)
+        const nameParts = mentionPart.split(nameRegex);
+        return nameParts.map((namePart, nameIndex) => {
+          if (nameRegex.test(namePart)) {
+            return (
+              <button
+                key={`${index}-${mentionIndex}-${nameIndex}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Search for the user and redirect to their profile
+                  handleUserSearch(namePart);
+                }}
+                style={{ 
+                  color: '#007bff', 
+                  fontWeight: '600',
+                  background: 'none',
+                  border: 'none',
+                  padding: '0',
+                  cursor: 'pointer',
+                  textDecoration: 'none'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                {namePart}
+              </button>
+            );
+          }
+          return namePart;
+        });
+      });
+      
+      return processedMentionParts;
     });
   };
 
@@ -509,6 +694,96 @@ const PostCard: React.FC<PostCardProps> = ({
       }
     } catch (error) {
       console.error('Error submitting comment:', error);
+    }
+  };
+
+  // @mention functionality for comments
+  const handleCommentInputChange = (e: React.ChangeEvent<HTMLInputElement>, itemId: number) => {
+    const newValue = e.target.value;
+    setCommentInput?.(prev => ({ ...prev, [itemId]: newValue }));
+
+    const cursorPosition = e.target.selectionStart || 0;
+    const textBeforeCursor = newValue.substring(0, cursorPosition);
+    
+    // Find the last @ symbol before cursor
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+    
+    if (lastAtIndex !== -1) {
+      const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+      
+      // Check if there's no space after @ (meaning we're typing a mention)
+      if (!textAfterAt.includes(' ')) {
+        setMentionStart(prev => ({ ...prev, [itemId]: lastAtIndex }));
+        setShowMentionSuggestions(prev => ({ ...prev, [itemId]: true }));
+        
+        // Filter suggestions based on what's typed after @
+        const filteredSuggestions = followingUsers.filter(user =>
+          user.name.toLowerCase().includes(textAfterAt.toLowerCase()) ||
+          user.f_name.toLowerCase().includes(textAfterAt.toLowerCase()) ||
+          user.l_name.toLowerCase().includes(textAfterAt.toLowerCase())
+        );
+        setMentionSuggestions(prev => ({ ...prev, [itemId]: filteredSuggestions }));
+        setSelectedMentionIndex(prev => ({ ...prev, [itemId]: 0 }));
+      } else {
+        setShowMentionSuggestions(prev => ({ ...prev, [itemId]: false }));
+      }
+    } else {
+      setShowMentionSuggestions(prev => ({ ...prev, [itemId]: false }));
+    }
+  };
+
+  const selectMention = (user: any, itemId: number) => {
+    const mentionStartPos = mentionStart[itemId];
+    if (mentionStartPos === undefined) return;
+
+    const currentValue = commentInput[itemId] || '';
+    const beforeMention = currentValue.substring(0, mentionStartPos);
+    const afterMention = currentValue.substring(currentValue.length);
+    
+    const newValue = beforeMention + `@${user.name} ` + afterMention;
+    setCommentInput?.(prev => ({ ...prev, [itemId]: newValue }));
+    
+    setShowMentionSuggestions(prev => ({ ...prev, [itemId]: false }));
+    setMentionStart(prev => ({ ...prev, [itemId]: -1 }));
+  };
+
+  const handleCommentKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, itemId: number) => {
+    if (!showMentionSuggestions[itemId]) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleCommentSubmit();
+      }
+      return;
+    }
+
+    const suggestions = mentionSuggestions[itemId] || [];
+    const selectedIndex = selectedMentionIndex[itemId] || 0;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedMentionIndex(prev => ({ 
+          ...prev, 
+          [itemId]: selectedIndex < suggestions.length - 1 ? selectedIndex + 1 : 0 
+        }));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedMentionIndex(prev => ({ 
+          ...prev, 
+          [itemId]: selectedIndex > 0 ? selectedIndex - 1 : suggestions.length - 1 
+        }));
+        break;
+      case 'Enter':
+      case 'Tab':
+        e.preventDefault();
+        if (suggestions[selectedIndex]) {
+          selectMention(suggestions[selectedIndex], itemId);
+        }
+        break;
+      case 'Escape':
+        setShowMentionSuggestions(prev => ({ ...prev, [itemId]: false }));
+        break;
     }
   };
 
@@ -1404,14 +1679,84 @@ const PostCard: React.FC<PostCardProps> = ({
 
             {/* Comment input for repost */}
             {showCommentInput[repostData?.repost_id || post.post_id] && (
-              <div className="comment-input-container">
+              <div className="comment-input-container" style={{ position: 'relative' }}>
                 <input
                   type="text"
                   placeholder="Type your comment..."
                   value={commentInput[repostData?.repost_id || post.post_id] || ''}
-                  onChange={(e) => setCommentInput?.(prev => ({ ...prev, [repostData?.repost_id || post.post_id]: e.target.value }))}
+                  onChange={(e) => handleCommentInputChange(e, repostData?.repost_id || post.post_id)}
+                  onKeyDown={(e) => handleCommentKeyDown(e, repostData?.repost_id || post.post_id)}
                 />
                 <button onClick={handleCommentSubmit}>➡️</button>
+                
+                {/* @mention suggestions dropdown */}
+                {showMentionSuggestions[repostData?.repost_id || post.post_id] && mentionSuggestions[repostData?.repost_id || post.post_id]?.length > 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    backgroundColor: 'white',
+                    border: '1px solid #e4e6ea',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 12px rgba(0, 0, 0, 0.15)',
+                    zIndex: 1000,
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    marginTop: '4px'
+                  }}>
+                    <div style={{
+                      padding: '8px 12px',
+                      borderBottom: '1px solid #e4e6ea',
+                      backgroundColor: '#f8f9fa',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      color: '#65676b'
+                    }}>
+                      Mention someone
+                    </div>
+                    {mentionSuggestions[repostData?.repost_id || post.post_id]?.map((user, index) => (
+                      <div
+                        key={user.user_id}
+                        onClick={() => selectMention(user, repostData?.repost_id || post.post_id)}
+                        style={{
+                          padding: '8px 12px',
+                          cursor: 'pointer',
+                          backgroundColor: index === selectedMentionIndex[repostData?.repost_id || post.post_id] ? '#e3f2fd' : 'transparent',
+                          borderBottom: index < (mentionSuggestions[repostData?.repost_id || post.post_id]?.length - 1) ? '1px solid #f0f0f0' : 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          transition: 'background-color 0.1s ease'
+                        }}
+                        onMouseEnter={() => setSelectedMentionIndex(prev => ({ ...prev, [repostData?.repost_id || post.post_id]: index }))}
+                      >
+                        <img
+                          src={getProfilePicUrl(user.profile_pic)}
+                          alt={user.name}
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            border: '1px solid #e4e6ea'
+                          }}
+                          onError={(e) => handleProfilePicError(e)}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ 
+                            fontSize: '14px', 
+                            fontWeight: '600',
+                            color: '#1c1e21',
+                            marginBottom: '2px'
+                          }}>
+                            {user.f_name} {user.m_name || ''} {user.l_name}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1434,7 +1779,29 @@ const PostCard: React.FC<PostCardProps> = ({
                       />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span>{comment.user.f_name} {comment.user.m_name} {comment.user.l_name}</span>
+                          <button
+                            onClick={() => window.location.href = getProfilePath(comment.user.user_id)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              padding: '0',
+                              cursor: 'pointer',
+                              fontWeight: 'bold',
+                              fontSize: '12px',
+                              color: '#333',
+                              textDecoration: 'none'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.color = '#007bff';
+                              e.currentTarget.style.textDecoration = 'underline';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.color = '#333';
+                              e.currentTarget.style.textDecoration = 'none';
+                            }}
+                          >
+                            {comment.user.f_name} {comment.user.m_name} {comment.user.l_name}
+                          </button>
                           {((Number(currentUserId) === Number(comment.user.user_id) && setEditingComment && setEditCommentContent) || isOwn) && !editingComment[comment.comment_id] && (
                             <div style={{ position: 'relative' }} ref={(el) => { commentOptionsRefs.current[comment.comment_id] = el; }}>
                               <button
@@ -1626,9 +1993,76 @@ const PostCard: React.FC<PostCardProps> = ({
                             {renderTextWithLinks(comment.comment_content)}
                           </div>
                         )}
-                        <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
-                          {formatTime(comment.date_created)}
+                        <div style={{ fontSize: '11px', color: '#888', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span>{formatTime(comment.date_created)}</span>
+                          <button
+                            onClick={() => setShowReplyInput(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#007bff',
+                              cursor: 'pointer',
+                              fontSize: '11px',
+                              padding: '2px 4px',
+                              borderRadius: '4px',
+                              transition: 'background-color 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#f0f8ff';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                          >
+                            Reply
+                          </button>
                         </div>
+                        
+                        {/* Reply Input */}
+                        {showReplyInput[comment.comment_id] && (
+                          <ReplyInput
+                            commentId={comment.comment_id}
+                            currentUserId={currentUserId || undefined}
+                            displayName={displayName}
+                            displayAvatar={displayAvatar}
+                            onReplyAdded={() => handleReplyAdded(comment.comment_id)}
+                            commentAuthor={{
+                              user_id: comment.user.user_id,
+                              f_name: comment.user.f_name,
+                              m_name: comment.user.m_name,
+                              l_name: comment.user.l_name,
+                              name: `${comment.user.f_name} ${comment.user.m_name || ''} ${comment.user.l_name}`.trim()
+                            }}
+                          />
+                        )}
+                        
+                        {/* Facebook-style Replies - Always show if available */}
+                        {(() => {
+                          const replies = commentReplies[comment.comment_id];
+                          console.log(`PostCard: Facebook-style rendering replies for comment ${comment.comment_id}:`, {
+                            hasReplies: !!replies,
+                            repliesLength: replies?.length || 0,
+                            repliesData: replies
+                          });
+                          return replies && replies.length > 0;
+                        })() && (
+                          <div style={{ marginTop: '8px' }}>
+                            {/* Facebook-style: Show ALL replies by default */}
+                            {commentReplies[comment.comment_id].map((reply) => (
+                              <Reply
+                                key={reply.reply_id}
+                                reply={reply}
+                                commentId={comment.comment_id}
+                                currentUserId={currentUserId || undefined}
+                                formatTime={formatTime}
+                                onReplyUpdate={() => loadReplies(comment.comment_id)}
+                                displayName={displayName}
+                                displayAvatar={displayAvatar}
+                              />
+                            ))}
+                          </div>
+                        )}
+                        
                       </div>
                     </div>
                   );
@@ -2266,14 +2700,84 @@ const PostCard: React.FC<PostCardProps> = ({
       </div>
 
       {showCommentInput[post.post_id] && (
-        <div className="comment-input-container">
+        <div className="comment-input-container" style={{ position: 'relative' }}>
           <input
             type="text"
             placeholder="Type your comment..."
             value={commentInput[post.post_id] || ''}
-            onChange={(e) => setCommentInput?.(prev => ({ ...prev, [post.post_id]: e.target.value }))}
+            onChange={(e) => handleCommentInputChange(e, post.post_id)}
+            onKeyDown={(e) => handleCommentKeyDown(e, post.post_id)}
           />
           <button onClick={handleCommentSubmit}>➡️</button>
+          
+          {/* @mention suggestions dropdown */}
+          {showMentionSuggestions[post.post_id] && mentionSuggestions[post.post_id]?.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              backgroundColor: 'white',
+              border: '1px solid #e4e6ea',
+              borderRadius: '8px',
+              boxShadow: '0 2px 12px rgba(0, 0, 0, 0.15)',
+              zIndex: 1000,
+              maxHeight: '200px',
+              overflowY: 'auto',
+              marginTop: '4px'
+            }}>
+              <div style={{
+                padding: '8px 12px',
+                borderBottom: '1px solid #e4e6ea',
+                backgroundColor: '#f8f9fa',
+                fontSize: '12px',
+                fontWeight: '600',
+                color: '#65676b'
+              }}>
+                Mention someone
+              </div>
+              {mentionSuggestions[post.post_id]?.map((user, index) => (
+                <div
+                  key={user.user_id}
+                  onClick={() => selectMention(user, post.post_id)}
+                  style={{
+                    padding: '8px 12px',
+                    cursor: 'pointer',
+                    backgroundColor: index === selectedMentionIndex[post.post_id] ? '#e3f2fd' : 'transparent',
+                    borderBottom: index < (mentionSuggestions[post.post_id]?.length - 1) ? '1px solid #f0f0f0' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'background-color 0.1s ease'
+                  }}
+                  onMouseEnter={() => setSelectedMentionIndex(prev => ({ ...prev, [post.post_id]: index }))}
+                >
+                  <img
+                    src={getProfilePicUrl(user.profile_pic)}
+                    alt={user.name}
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: '1px solid #e4e6ea'
+                    }}
+                    onError={(e) => handleProfilePicError(e)}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ 
+                      fontSize: '14px', 
+                      fontWeight: '600',
+                      color: '#1c1e21',
+                      marginBottom: '2px'
+                    }}>
+                      {user.f_name} {user.m_name || ''} {user.l_name}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -2296,7 +2800,29 @@ const PostCard: React.FC<PostCardProps> = ({
                         />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>{comment.user.f_name} {comment.user.m_name} {comment.user.l_name}</span>
+                            <button
+                              onClick={() => window.location.href = getProfilePath(comment.user.user_id)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                padding: '0',
+                                cursor: 'pointer',
+                                fontWeight: 'bold',
+                                fontSize: '12px',
+                                color: '#333',
+                                textDecoration: 'none'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.color = '#007bff';
+                                e.currentTarget.style.textDecoration = 'underline';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.color = '#333';
+                                e.currentTarget.style.textDecoration = 'none';
+                              }}
+                            >
+                              {comment.user.f_name} {comment.user.m_name} {comment.user.l_name}
+                            </button>
                             {((Number(currentUserId) === Number(comment.user.user_id) && setEditingComment && setEditCommentContent) || isOwn) && !editingComment[comment.comment_id] && (
                               <div style={{ position: 'relative' }} ref={(el) => { commentOptionsRefs.current[comment.comment_id] = el; }}>
                                 <button
@@ -2488,9 +3014,72 @@ const PostCard: React.FC<PostCardProps> = ({
                               {renderTextWithLinks(comment.comment_content)}
                             </div>
                           )}
-                          <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
-                            {formatTime(comment.date_created)}
+                          <div style={{ fontSize: '11px', color: '#888', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span>{formatTime(comment.date_created)}</span>
+                            <button
+                              onClick={() => setShowReplyInput(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#007bff',
+                                cursor: 'pointer',
+                                fontSize: '11px',
+                                padding: '2px 4px',
+                                borderRadius: '4px',
+                                transition: 'background-color 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#f0f8ff';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                              }}
+                            >
+                              Reply
+                            </button>
                           </div>
+                          
+                          {/* Reply Input */}
+                          {showReplyInput[comment.comment_id] && (
+                            <ReplyInput
+                              commentId={comment.comment_id}
+                              currentUserId={currentUserId || undefined}
+                              displayName={displayName}
+                              displayAvatar={displayAvatar}
+                              onReplyAdded={() => handleReplyAdded(comment.comment_id)}
+                              commentAuthor={{
+                                user_id: comment.user.user_id,
+                                f_name: comment.user.f_name,
+                                m_name: comment.user.m_name,
+                                l_name: comment.user.l_name,
+                                name: `${comment.user.f_name} ${comment.user.m_name || ''} ${comment.user.l_name}`.trim()
+                              }}
+                            />
+                          )}
+                          
+                          {/* Replies */}
+                          {commentReplies[comment.comment_id] && commentReplies[comment.comment_id].length > 0 && (
+                            <div style={{ marginTop: '8px' }}>
+                              {/* Show all replies if less than 2, otherwise show first 2 with toggle */}
+                              {commentReplies[comment.comment_id].slice(0, 
+                                commentReplies[comment.comment_id].length < 2 ? 
+                                  commentReplies[comment.comment_id].length : 
+                                  (showReplies[comment.comment_id] ? commentReplies[comment.comment_id].length : 2)
+                              ).map((reply) => (
+                                <Reply
+                                  key={reply.reply_id}
+                                  reply={reply}
+                                  commentId={comment.comment_id}
+                                  currentUserId={currentUserId || undefined}
+                                  formatTime={formatTime}
+                                  onReplyUpdate={() => loadReplies(comment.comment_id)}
+                                  displayName={displayName}
+                                  displayAvatar={displayAvatar}
+                                />
+                              ))}
+                            </div>
+                          )}
+                          
                         </div>
                       </div>
                     );

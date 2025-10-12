@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchNotifications, deleteNotifications, markNotificationAsRead, api } from '../../services/api';
+import { fetchNotifications, deleteNotifications, markNotificationAsRead, api, getPostFromComment } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 
@@ -59,6 +59,31 @@ const NotificationPage: React.FC = () => {
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     navigate('/login');
+  };
+
+  const handleReplyNotificationClick = async (notif: any) => {
+    try {
+      // Extract comment ID from notification content
+      const commentIdMatch = notif.content.match(/<!--COMMENT_ID:(\d+)-->/);
+      if (commentIdMatch) {
+        const commentId = parseInt(commentIdMatch[1]);
+        const response = await getPostFromComment(commentId);
+        if (response.success) {
+          // Redirect to the post page
+          const currentPath = window.location.pathname;
+          if (currentPath.startsWith('/peso')) {
+            window.location.href = `/peso/dashboard/${response.post_id}`;
+          } else if (currentPath.startsWith('/ccict')) {
+            window.location.href = `/ccict/dashboard/${response.post_id}`;
+          } else {
+            window.location.href = `/alumni/dashboard/${response.post_id}`;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error redirecting to post:', error);
+      alert('Error redirecting to post. Please try again.');
+    }
   };
 
   const handleDelete = async () => {
@@ -456,7 +481,7 @@ const NotificationPage: React.FC = () => {
                     return <span>{openNotif.content}</span>;
                   })()}
                 </div>
-              ) : (openNotif.type && (openNotif.type.toLowerCase() === 'like' || openNotif.type.toLowerCase() === 'comment' || openNotif.type.toLowerCase() === 'admin_peso_post')) ? (
+              ) : (openNotif.type && (openNotif.type.toLowerCase() === 'like' || openNotif.type.toLowerCase() === 'comment' || openNotif.type.toLowerCase() === 'admin_peso_post' || openNotif.type.toLowerCase() === 'reply' || openNotif.type.toLowerCase() === 'mention')) ? (
                 <div>
                   <div dangerouslySetInnerHTML={{ __html: openNotif.content.replace(/\n/g, '<br>').replace(/<!--[^>]+-->/g, '') }} />
                   <br />
@@ -474,6 +499,18 @@ const NotificationPage: React.FC = () => {
                       marginTop: '12px',
                     }}
                     onClick={async () => {
+                      // Handle reply notifications specially
+                      if (openNotif.type && openNotif.type.toLowerCase() === 'reply' && openNotif.content.includes('replied to your comment')) {
+                        await handleReplyNotificationClick(openNotif);
+                        return;
+                      }
+                      
+                      // Handle mention notifications specially
+                      if (openNotif.type && openNotif.type.toLowerCase() === 'mention' && openNotif.content.includes('mentioned you')) {
+                        await handleReplyNotificationClick(openNotif);
+                        return;
+                      }
+                      
                       // Try to extract post ID from notification content (hidden format: <!--POST_ID:123-->, <!--FORUM_ID:123-->, <!--DONATION_ID:123-->)
                       const postIdMatch = openNotif.content.match(/<!--POST_ID:(\d+)-->/);
                       const forumIdMatch = openNotif.content.match(/<!--FORUM_ID:(\d+)-->/);

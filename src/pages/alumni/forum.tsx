@@ -5,6 +5,7 @@ import AlumniTopBar from './AlumniTopBar';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import ctulogo from '../../images/ctulogo.png';
+import { getProfilePicUrl, handleProfilePicError } from '../../utils/profilePicUtils';
 import { getForums, followUser, unfollowUser, checkFollowStatus } from '../../services/api';
 import './profile.css';
 
@@ -589,11 +590,7 @@ const ForumPage: React.FC = () => {
                   // Handle both posts and reposts as separate items
                   const isOwn = Number(item.user?.user_id) === Number(currentUserId);
                   const displayName = item.user?.name || `${item.user?.f_name || ''} ${item.user?.l_name || ''}`.trim() || 'Unknown User';
-                  const displayAvatar = item.user?.profile_pic ? 
-                    (String(item.user.profile_pic).startsWith('http') ? 
-                      item.user.profile_pic : 
-                      `http://127.0.0.1:8000${item.user.profile_pic}`) : 
-                    ctulogo;
+                  const displayAvatar = getProfilePicUrl(item.user?.profile_pic);
                   
                   // Render as repost if item_type is 'repost'
                   if (item.item_type === 'repost') {
@@ -1137,7 +1134,7 @@ const ForumPage: React.FC = () => {
                 currentUserId={currentUserId}
                 isOwn={currentUserId === originalPostModalData.user?.user_id}
                 displayName={originalPostModalData.user?.name || `${originalPostModalData.user?.f_name || ''} ${originalPostModalData.user?.l_name || ''}`.trim() || 'Unknown User'}
-                displayAvatar={originalPostModalData.user?.profile_pic ? (String(originalPostModalData.user.profile_pic).startsWith('http') ? originalPostModalData.user.profile_pic : `http://127.0.0.1:8000${originalPostModalData.user.profile_pic}`) : ctulogo}
+                displayAvatar={getProfilePicUrl(originalPostModalData.user?.profile_pic)}
                 formatTime={formatTime}
                 onViewOriginalPost={handleViewOriginalPost}
                 onPostUpdate={async () => {
