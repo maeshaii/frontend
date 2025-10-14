@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useParams } from 'react-router-dom';
 import AlumniTopBar from '../alumni/AlumniTopBar';
 import PostCreate from '../alumni/PostCreate';
 import PostCard from '../../components/PostCard';
@@ -9,6 +9,7 @@ import '../alumni/dashboard.css';
 import '../alumni/profile.css';
 import { getPosts, followUser, getAdminPesoUsers, api, getDonationRequests } from '../../services/api';
 import { trackerApi } from '../../services/trackerApi';
+import RepostNotificationModal from '../../components/RepostNotificationModal';
 
 interface UnifiedDashboardProps {
   userType: 'alumni' | 'peso' | 'admin' | 'ojt';
@@ -187,6 +188,9 @@ function formatDisplayName(user: any, isOwn: boolean, currentUser: AlumniUser | 
 }
 
 const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId }) => {
+  // Get URL parameters
+  const params = useParams();
+  
   // All state and logic from AlumniDashboard, but use userType for admin/peso logic
   const [user, setUser] = useState<AlumniUser | null>(null);
   const [showProfile, setShowProfile] = useState(false);
@@ -222,6 +226,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
   const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
   const [showTrackerModal, setShowTrackerModal] = useState(false);
+  const [showRepostModal, setShowRepostModal] = useState(false);
+  const [repostModalData, setRepostModalData] = useState<{repostId: string, reposterName?: string} | null>(null);
   const navigate = useNavigate();
 
   // Determine user type from localStorage instead of props
@@ -484,13 +490,19 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
       // Initialize likedPosts state based on current user's likes
       const currentUserId = getCurrentUserId(userObj);
       const liked: { [key: number]: boolean } = {};
+      console.log('🔍 DEBUG: Initializing likedPosts for currentUserId:', currentUserId);
       sortedPosts.forEach((post: any) => {
         if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
-          liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+          const isLiked = post.likes.some((like: any) => like.user_id === currentUserId);
+          liked[post.post_id] = isLiked;
+          console.log('🔍 DEBUG: Post', post.post_id, 'isLiked:', isLiked, 'likes:', post.likes);
         } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
-          liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+          const isLiked = post.likes.some((like: any) => like.user_id === currentUserId);
+          liked[post.repost_id] = isLiked;
+          console.log('🔍 DEBUG: Repost', post.repost_id, 'isLiked:', isLiked, 'likes:', post.likes);
         }
       });
+      console.log('🔍 DEBUG: Final likedPosts state:', liked);
       setLikedPosts(liked);
 
       // Initialize repostedPosts state based on current user's reposts
@@ -660,25 +672,57 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
 
   // Check for pending post view when component mounts or navigates here
   useEffect(() => {
+    // First check localStorage for pending post view
     const pendingPostId = localStorage.getItem('pendingPostView');
     if (pendingPostId) {
-      console.log('Found pending post view:', pendingPostId);
+      console.log('Found pending post view in localStorage:', pendingPostId);
       // Clear the pending post ID
       localStorage.removeItem('pendingPostView');
       
-      // Check if it's a forum or donation post
+      // Check if it's a forum, donation, or comment post
       if (pendingPostId.startsWith('forum:')) {
         const forumId = pendingPostId.replace('forum:', '');
         handleViewForumPost(forumId);
       } else if (pendingPostId.startsWith('donation:')) {
         const donationId = pendingPostId.replace('donation:', '');
         handleViewDonationPost(donationId);
+      } else if (pendingPostId.startsWith('comment:')) {
+        // For comment notifications, we need to get the post ID from the comment
+        const commentId = pendingPostId.replace('comment:', '');
+        handleViewPostFromComment(commentId);
+      } else if (pendingPostId.startsWith('reply:')) {
+        // For reply notifications, we need to get the post ID from the reply
+        const replyId = pendingPostId.replace('reply:', '');
+        handleViewPostFromReply(replyId);
       } else {
         // Regular post
         handleViewPost(pendingPostId);
       }
     }
-  }, [userId]); // Check when userId changes (navigation)
+    // If no localStorage pendingPostView, check URL parameters
+    else if (params && Object.keys(params).length > 0) {
+      // Extract post ID from URL parameters (e.g., /alumni/dashboard/123)
+      const urlPostId = Object.values(params)[0]; // Get the first parameter value
+      if (urlPostId && urlPostId !== userId) { // Make sure it's not the userId
+        console.log('Found post ID in URL parameters:', urlPostId);
+        // Regular post from URL
+        handleViewPost(urlPostId);
+      }
+    }
+
+    // Check for pending repost view when component mounts or navigates here
+    const pendingRepostId = localStorage.getItem('pendingRepostView');
+    if (pendingRepostId) {
+      console.log('Found pending repost view:', pendingRepostId);
+      // Clear the pending repost ID
+      localStorage.removeItem('pendingRepostView');
+      
+      // Show repost modal
+      setRepostModalData({ repostId: pendingRepostId });
+      setShowRepostModal(true);
+    }
+
+  }, [userId, params]); // Check when userId or params change (navigation)
 
   // ... (all handlers from AlumniDashboard, unchanged)
 
@@ -757,6 +801,121 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     } catch (error) {
       console.error('Error fetching donation post:', error);
       alert('Failed to load donation post.');
+    } finally {
+      setPostLoading(false);
+    }
+  };
+
+  const handleViewPostFromComment = async (commentId: string) => {
+    console.log('handleViewPostFromComment called with commentId:', commentId);
+    setPostLoading(true);
+    try {
+      // First get the post ID from the comment
+      const commentResponse = await api.get(`comments/${commentId}/post/`);
+      console.log('Comment to post API response:', commentResponse.data);
+      
+      if (commentResponse.data && commentResponse.data.post_id) {
+        const postId = commentResponse.data.post_id;
+        const postType = commentResponse.data.post_type;
+        console.log('Found post ID from comment:', postId, 'Type:', postType);
+        
+        // Handle different post types
+        if (postType === 'post') {
+          // Regular post
+        const postResponse = await api.get(`posts/${postId}/detail/`);
+        console.log('Post API response:', postResponse.data);
+        
+        if (postResponse.data) {
+          setModalPost(postResponse.data);
+          setShowPostModal(true);
+          console.log('Post modal should now be visible for comment');
+        }
+        } else if (postType === 'forum') {
+          // Forum post
+          handleViewForumPost(postId);
+        } else if (postType === 'donation') {
+          // Donation post
+          handleViewDonationPost(postId);
+        } else if (postType === 'repost') {
+          // Repost - show repost modal
+          setRepostModalData({ repostId: postId });
+          setShowRepostModal(true);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error fetching post from comment:', error);
+      
+      // Better error handling - don't show alert for 404s, just log and continue
+      if (error.response?.status === 404) {
+        console.log('Comment not found, this might be a deleted comment or invalid ID');
+        // Don't show error alert for missing comments
+      } else {
+        console.error('Unexpected error:', error);
+        // Only show alert for unexpected errors
+        alert('Failed to load post from comment. The comment may have been deleted.');
+      }
+    } finally {
+      setPostLoading(false);
+    }
+  };
+
+  const handleViewPostFromReply = async (replyId: string) => {
+    console.log('handleViewPostFromReply called with replyId:', replyId);
+    setPostLoading(true);
+    try {
+      // First get the comment ID from the reply, then get the post ID from the comment
+      const replyResponse = await api.get(`replies/${replyId}/comment/`);
+      console.log('Reply to comment API response:', replyResponse.data);
+      
+      if (replyResponse.data && replyResponse.data.comment_id) {
+        const commentId = replyResponse.data.comment_id;
+        console.log('Found comment ID from reply:', commentId);
+        
+        // Now get the post ID from the comment
+        const commentResponse = await api.get(`comments/${commentId}/post/`);
+        console.log('Comment to post API response:', commentResponse.data);
+        
+        if (commentResponse.data && commentResponse.data.post_id) {
+          const postId = commentResponse.data.post_id;
+          const postType = commentResponse.data.post_type;
+          console.log('Found post ID from reply:', postId, 'Type:', postType);
+          
+          // Handle different post types
+          if (postType === 'post') {
+            // Regular post
+            const postResponse = await api.get(`posts/${postId}/detail/`);
+            console.log('Post API response:', postResponse.data);
+            
+            if (postResponse.data) {
+              setModalPost(postResponse.data);
+              setShowPostModal(true);
+              console.log('Post modal should now be visible for reply');
+            }
+          } else if (postType === 'forum') {
+            // Forum post
+            handleViewForumPost(postId);
+          } else if (postType === 'donation') {
+            // Donation post
+            handleViewDonationPost(postId);
+          } else if (postType === 'repost') {
+            // Repost - show repost modal
+            setRepostModalData({ repostId: postId });
+            setShowRepostModal(true);
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Error fetching post from reply:', error);
+      
+      // Better error handling - don't show alert for 404s, just log and continue
+      if (error.response?.status === 404) {
+        console.log('Reply not found, this might be a deleted reply or invalid ID');
+        // Don't show error alert for missing replies
+      } else {
+        console.error('Unexpected error:', error);
+        // Only show alert for unexpected errors
+        alert('Failed to load post from reply. The reply may have been deleted.');
+      }
     } finally {
       setPostLoading(false);
     }
@@ -2128,6 +2287,17 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         isOpen={showTrackerModal}
         onClose={() => setShowTrackerModal(false)}
         userId={user?.user_id || user?.id || 0}
+      />
+      
+      {/* Repost Notification Modal */}
+      <RepostNotificationModal
+        isOpen={showRepostModal}
+        onClose={() => {
+          setShowRepostModal(false);
+          setRepostModalData(null);
+        }}
+        repostId={repostModalData?.repostId || ''}
+        reposterName={repostModalData?.reposterName}
       />
     </div>
   );

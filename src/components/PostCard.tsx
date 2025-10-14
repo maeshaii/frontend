@@ -17,7 +17,6 @@ import {
 } from '../services/api';
 import ctulogo from '../images/ctulogo.png';
 import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
-import RepostModal from './RepostModal';
 import RepostButton from './RepostButton';
 import PhotoGalleryModal from './PhotoGalleryModal';
 import Reply from './Reply';
@@ -487,22 +486,21 @@ const PostCard: React.FC<PostCardProps> = ({
     if (!setLikedPosts) return;
     console.log('handleLike called for post:', post.post_id, 'isForum:', isForum, 'isDonation:', isDonation);
     try {
-      if (isRepostPost && isDonation) {
-        // Use donation repost like API
-        const repostId = repostData?.repost_id || post.post_id;
-        console.log('Liking donation repost:', repostId);
+      if (isRepostPost) {
+        // Use unified like API with repost_id for ALL reposts (donation, forum, and regular post reposts)
+        const repostId = repostData?.repost_id;
+        console.log('🔍 DEBUG: Liking repost:', {
+          repostId,
+          isDonation,
+          currentLikedPosts: likedPosts,
+          willSetTo: true
+        });
         await api.post(`reposts/${repostId}/like/`);
-        setLikedPosts(prev => ({ ...prev, [repostId]: true }));
-        
-        // Immediately update local state for repost likes
-        post.likes_count = (post.likes_count || 0) + 1;
-        post.liked_by_user = true;
-      } else if (isRepostPost) {
-        // Use unified like API with repost_id for forum reposts
-        const repostId = repostData?.repost_id || post.post_id;
-        console.log('Liking forum repost:', repostId);
-        await api.post(`reposts/${repostId}/like/`);
-        setLikedPosts(prev => ({ ...prev, [repostId]: true }));
+        setLikedPosts(prev => {
+          const newState = { ...prev, [repostId]: true };
+          console.log('🔍 DEBUG: Updated likedPosts state:', newState);
+          return newState;
+        });
         
         // Immediately update local state for repost likes
         post.likes_count = (post.likes_count || 0) + 1;
@@ -535,20 +533,10 @@ const PostCard: React.FC<PostCardProps> = ({
     if (!setLikedPosts) return;
     console.log('handleUnlike called for post:', post.post_id, 'isForum:', isForum, 'isDonation:', isDonation);
     try {
-      if (isRepostPost && isDonation) {
-        // Use donation repost unlike API
-        const repostId = repostData?.repost_id || post.post_id;
-        console.log('Unliking donation repost:', repostId);
-        await api.delete(`reposts/${repostId}/like/`);
-        setLikedPosts(prev => ({ ...prev, [repostId]: false }));
-        
-        // Immediately update local state for repost likes
-        post.likes_count = Math.max((post.likes_count || 0) - 1, 0);
-        post.liked_by_user = false;
-      } else if (isRepostPost) {
-        // Use unified unlike API with repost_id for forum reposts
-        const repostId = repostData?.repost_id || post.post_id;
-        console.log('Unliking forum repost:', repostId);
+      if (isRepostPost) {
+        // Use unified unlike API with repost_id for ALL reposts (donation, forum, and regular post reposts)
+        const repostId = repostData?.repost_id;
+        console.log('Unliking repost:', repostId, 'isDonation:', isDonation);
         await api.delete(`reposts/${repostId}/like/`);
         setLikedPosts(prev => ({ ...prev, [repostId]: false }));
         
@@ -616,6 +604,12 @@ const PostCard: React.FC<PostCardProps> = ({
           // Update the post object with the new comment
           post.comments = [...(post.comments || []), newComment as any];
           post.comments_count = (post.comments_count || 0) + 1;
+          
+          // Also update the repostData comments if it exists
+          if (repostData) {
+            repostData.comments = [...(repostData.comments || []), newComment as any];
+            repostData.comments_count = (repostData.comments_count || 0) + 1;
+          }
         }
       } else if (isForum) {
         // Use forum comment API
@@ -1020,8 +1014,22 @@ const PostCard: React.FC<PostCardProps> = ({
     ? renderName({ f_name: repostData.user.f_name, m_name: repostData.user.m_name, l_name: repostData.user.l_name })
     : displayName;
   const repostDisplayAvatar = isRepostPost 
-    ? (repostData.user.profile_pic ? (String(repostData.user.profile_pic).startsWith('http') ? repostData.user.profile_pic : `http://127.0.0.1:8000${repostData.user.profile_pic}`) : ctulogo)
+    ? getProfilePicUrl(repostData.user.profile_pic)
     : displayAvatar;
+
+  // Debug repost data
+  if (isRepostPost) {
+    console.log('🔍 DEBUG: PostCard rendering repost:', {
+      repostData,
+      repostId: repostData?.repost_id,
+      postId: post.post_id,
+      likedPosts,
+      isLiked: likedPosts[repostData?.repost_id],
+      likes: post.likes,
+      likesCount: post.likes_count,
+      currentUserId: currentUserId
+    });
+  }
 
   return (
     <>
@@ -1037,6 +1045,7 @@ const PostCard: React.FC<PostCardProps> = ({
                   src={repostDisplayAvatar}
                   alt="Profile"
                   className="profile-repost-profile-image"
+                  onError={handleProfilePicError}
                   onClick={() => {
                     if (displayUser?.user_id) {
                       const currentPath = window.location.pathname;
@@ -1048,11 +1057,6 @@ const PostCard: React.FC<PostCardProps> = ({
                         window.location.href = `/alumni/profile/${displayUser.user_id}`;
                       }
                     }
-                  }}
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.onerror = null;
-                    target.src = ctulogo as unknown as string;
                   }}
                 />
                 <div>
@@ -1596,28 +1600,31 @@ const PostCard: React.FC<PostCardProps> = ({
             <div className="profile-repost-actions">
               <button
                 onClick={() => {
-                  const repostId = repostData?.repost_id || post.post_id;
+                  const repostId = repostData?.repost_id;
                   console.log('Repost like button clicked:', {
                     repost_id: repostId,
                     likedPosts: likedPosts,
                     isLiked: likedPosts[repostId],
-                    likes: post.likes
+                    likes: post.likes,
+                    buttonColor: likedPosts[repostId] ? '#ef4444' : '#6c757d',
+                    textColor: likedPosts[repostId] ? '#ef4444' : '#6c757d'
                   });
                   likedPosts[repostId] ? handleUnlike() : handleLike();
                 }}
-                className="profile-repost-action-item"
+                className="post-action-item"
                 style={{
-                  color: likedPosts[repostData?.repost_id || post.post_id] ? '#ef4444' : '#6c757d',
-                  fontWeight: likedPosts[repostData?.repost_id || post.post_id] ? '600' : '400',
+                  color: likedPosts[repostData?.repost_id] ? '#ef4444' : '#6c757d',
+                  fontWeight: likedPosts[repostData?.repost_id] ? '600' : '400',
                   background: 'transparent',
                   border: 'none',
                   cursor: 'pointer',
                   padding: '8px 16px',
                   borderRadius: 8,
-                  transition: 'all 0.2s ease',
+                  fontSize: '14px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px'
+                  gap: 6,
+                  transition: 'all 0.3s ease'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = '#f8f9fa';
@@ -1628,18 +1635,34 @@ const PostCard: React.FC<PostCardProps> = ({
               >
                 <span style={{ 
                   fontSize: '16px', 
-                  color: likedPosts[repostData?.repost_id || post.post_id] ? '#3b82f6' : '#6b7280',
-                  fontWeight: likedPosts[repostData?.repost_id || post.post_id] ? '900' : '400'
+                  color: likedPosts[repostData?.repost_id] ? '#3b82f6' : '#6b7280',
+                  fontWeight: likedPosts[repostData?.repost_id] ? '900' : '400'
                 }}>
-                  👍
+                  {likedPosts[repostData?.repost_id] ? '👍' : '👍'}
                 </span>
-                <span>
+                <span style={{
+                  color: likedPosts[repostData?.repost_id] ? '#ef4444' : '#6c757d',
+                  fontWeight: likedPosts[repostData?.repost_id] ? '600' : '400'
+                }}>
                   {post.likes_count === 1 ? '1 like' : (post.likes_count && post.likes_count > 1) ? `${post.likes_count} likes` : 'Like'}
                 </span>
               </button>
               <button
                 onClick={() => setShowCommentInput?.(prev => ({ ...prev, [repostData?.repost_id || post.post_id]: !prev[repostData?.repost_id || post.post_id] }))}
-                className="profile-repost-action-item"
+                className="post-action-item"
+                style={{
+                  color: '#6c757d',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'background-color 0.2s'
+                }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = '#f8f9fa';
                 }}
@@ -1765,17 +1788,23 @@ const PostCard: React.FC<PostCardProps> = ({
               <div className="comments-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
                 {(showAllComments[repostData?.repost_id || post.post_id] ? post.comments : post.comments.slice(0, 2)).map((comment) => {
                   return (
-                    <div key={comment.comment_id} className="comment-item" style={{ display: 'flex', gap: '8px', marginBottom: '8px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                    <div key={comment.comment_id} className="comment-item" style={{ 
+                      display: 'flex', 
+                      gap: '8px', 
+                      marginBottom: '8px', 
+                      padding: '12px', 
+                      backgroundColor: '#f8f9fa', 
+                      borderRadius: '12px',
+                      border: '1px solid #e9ecef',
+                      marginLeft: '8px',
+                      marginRight: '8px'
+                    }}>
                       <img
-                        src={comment.user.profile_pic ? (String(comment.user.profile_pic).startsWith('http') ? comment.user.profile_pic : `http://127.0.0.1:8000${comment.user.profile_pic}`) : ctulogo}
+                        src={getProfilePicUrl(comment.user.profile_pic)}
                         alt="Profile"
                         className="comment-profile-image"
                         style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.onerror = null;
-                          target.src = ctulogo as unknown as string;
-                        }}
+                        onError={handleProfilePicError}
                       />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2099,6 +2128,7 @@ const PostCard: React.FC<PostCardProps> = ({
             alt="Profile"
             className="post-header-profile-image"
             style={{ cursor: 'pointer' }}
+            onError={handleProfilePicError}
             onClick={() => {
               if (displayUser?.user_id) {
                 // Navigate to user profile based on current path
@@ -2111,11 +2141,6 @@ const PostCard: React.FC<PostCardProps> = ({
                   window.location.href = `/alumni/profile/${displayUser.user_id}`;
                 }
               }
-            }}
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.onerror = null;
-              target.src = ctulogo as unknown as string;
             }}
           />
           <div>
@@ -2637,7 +2662,12 @@ const PostCard: React.FC<PostCardProps> = ({
           }}>
             {likedPosts[post.post_id] ? '👍' : '👍'}
           </span>
-          {post.likes_count === 1 ? '1 like' : (post.likes_count && post.likes_count > 1) ? `${post.likes_count} likes` : 'Like'}
+          <span style={{
+            color: likedPosts[post.post_id] ? '#ef4444' : '#6c757d',
+            fontWeight: likedPosts[post.post_id] ? '600' : '400'
+          }}>
+            {post.likes_count === 1 ? '1 like' : (post.likes_count && post.likes_count > 1) ? `${post.likes_count} likes` : 'Like'}
+          </span>
         </button>
         <button
           onClick={() => setShowCommentInput?.(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
@@ -2786,17 +2816,23 @@ const PostCard: React.FC<PostCardProps> = ({
                   {(showAllComments[post.post_id] ? post.comments : post.comments.slice(0, 2)).map((comment) => {
                     console.log('PostCard comment user_id:', comment.user.user_id);
                     return (
-                      <div key={comment.comment_id} className="comment-item" style={{ display: 'flex', gap: '8px', marginBottom: '8px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                      <div key={comment.comment_id} className="comment-item" style={{ 
+                        display: 'flex', 
+                        gap: '8px', 
+                        marginBottom: '8px', 
+                        padding: '12px', 
+                        backgroundColor: '#f8f9fa', 
+                        borderRadius: '12px',
+                        border: '1px solid #e9ecef',
+                        marginLeft: '8px',
+                        marginRight: '8px'
+                      }}>
                         <img
-                          src={comment.user.profile_pic ? (String(comment.user.profile_pic).startsWith('http') ? comment.user.profile_pic : `http://127.0.0.1:8000${comment.user.profile_pic}`) : ctulogo}
+                          src={getProfilePicUrl(comment.user.profile_pic)}
                           alt="Profile"
                           className="comment-profile-image"
                           style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.onerror = null;
-                            target.src = ctulogo as unknown as string;
-                          }}
+                          onError={handleProfilePicError}
                         />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3108,109 +3144,6 @@ const PostCard: React.FC<PostCardProps> = ({
         </div>
       )}
 
-      {/* Reposts section - hidden for forum and donation posts */}
-      {!isForum && !isDonation && post.reposts && post.reposts.length > 0 && (
-        <div className="reposts-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
-          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '8px' }}>
-            Reposts ({post.reposts.length})
-          </div>
-          {post.reposts.map((repost) => (
-            <div key={repost.repost_id} className="profile-repost-card" style={{ 
-              marginBottom: '12px',
-              backgroundColor: '#fff',
-              border: '1px solid #e1e5e9',
-              borderRadius: '12px',
-              padding: '16px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-            }}>
-              {/* Reposter's header - matching main repost structure */}
-              <div className="profile-repost-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div className="profile-repost-header-left" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <img
-                    src={repost.user.profile_pic ? (String(repost.user.profile_pic).startsWith('http') ? repost.user.profile_pic : `http://127.0.0.1:8000${repost.user.profile_pic}`) : ctulogo}
-                    alt="Profile"
-                    className="profile-repost-profile-image"
-                    style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }}
-                    onClick={() => {
-                      if (repost.user?.user_id) {
-                        const currentPath = window.location.pathname;
-                        if (currentPath.startsWith('/peso')) {
-                          window.location.href = `/peso/profile/${repost.user.user_id}`;
-                        } else if (currentPath.startsWith('/ccict')) {
-                          window.location.href = `/ccict/profile/${repost.user.user_id}`;
-                        } else {
-                          window.location.href = `/alumni/profile/${repost.user.user_id}`;
-                        }
-                      }
-                    }}
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.onerror = null;
-                      target.src = ctulogo as unknown as string;
-                    }}
-                  />
-                  <div>
-                    <div 
-                      className="post-author-info"
-                      style={{ fontSize: '16px', fontWeight: 'bold', color: '#333', cursor: 'pointer', marginBottom: '4px' }}
-                      onClick={() => {
-                        if (repost.user?.user_id) {
-                          const currentPath = window.location.pathname;
-                          if (currentPath.startsWith('/peso')) {
-                            window.location.href = `/peso/profile/${repost.user.user_id}`;
-                          } else if (currentPath.startsWith('/ccict')) {
-                            window.location.href = `/ccict/profile/${repost.user.user_id}`;
-                          } else {
-                            window.location.href = `/alumni/profile/${repost.user.user_id}`;
-                          }
-                        }
-                      }}
-                    >
-                      {repost.user.f_name} {repost.user.m_name} {repost.user.l_name}
-                    </div>
-                    <div className="profile-repost-author-details" style={{ fontSize: '14px', color: '#666' }}>
-                      <span>{formatTime(repost.repost_date)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Repost caption - matching main repost structure */}
-              {repost.repost_caption && (
-                <div className="profile-repost-caption" style={{ 
-                  fontSize: '16px', 
-                  color: '#333', 
-                  marginBottom: '12px',
-                  lineHeight: '1.5',
-                  padding: '12px',
-                  backgroundColor: '#f8f9fa',
-                  borderRadius: '8px',
-                  border: '1px solid #e9ecef'
-                }}>
-                  {repost.repost_caption}
-                </div>
-              )}
-              
-              {/* Repost indicator - matching main repost structure */}
-              <div style={{ 
-                fontSize: '14px', 
-                color: '#007bff', 
-                fontWeight: '600',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '8px 12px',
-                backgroundColor: '#e3f2fd',
-                borderRadius: '6px',
-                border: '1px solid #bbdefb'
-              }}>
-                <span style={{ fontSize: '16px' }}>🔄</span>
-                <span>Reposted</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
 
       {/* Likes Modal */}
