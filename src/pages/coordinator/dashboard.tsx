@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
-import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaFileImport } from 'react-icons/fa';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
 import { fetchOJTStatistics, importOJT, fetchCoordinatorSections } from '../../services/api';
@@ -14,7 +13,7 @@ export default function Dashboard() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [batchYear, setBatchYear] = useState('');
   const [section, setSection] = useState('');
-  const [course, setCourse] = useState('BSIT');
+  const [program, setProgram] = useState('BSIT');
   const [availableSections, setAvailableSections] = useState<string[]>([]);
   const [ojtYears, setOjtYears] = useState<{ year: number; section?: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,7 +85,7 @@ export default function Dashboard() {
 
     setImportLoading(true);
     try {
-      const result = await importOJT(selectedFile, batchYear, course, coordinatorUsername, section);
+      const result = await importOJT(selectedFile, batchYear, program, coordinatorUsername, section);
       if (result.success) {
         alert(`OJT import successful for section ${section}!`);
         setShowModal(false);
@@ -387,8 +386,8 @@ export default function Dashboard() {
   };
 
   const links = [
-    { to: `/coordinator/dashboard/${coordinatorUsername}`, label: 'Dashboard', icon: <FaTh style={styles.icon} /> },
-    { to: '/coordinator/imports', label: 'Imports', icon: <FaFileImport style={styles.icon} /> },
+    { to: `/coordinator/dashboard/${coordinatorUsername}`, label: 'Dashboard' },
+    { to: '/coordinator/imports', label: 'Imports' },
   ];
 
   return (
@@ -424,7 +423,9 @@ export default function Dashboard() {
                     }
                   }}
                 >
-                  {link.icon} {link.label}
+                  {link.to.includes('/dashboard') && <span style={styles.icon}>📊</span>}
+                  {link.to === '/coordinator/imports' && <span style={styles.icon}>📁</span>}
+                  {link.label}
                 </div>
               </li>
             ))}
@@ -432,7 +433,7 @@ export default function Dashboard() {
         </div>
 
         <div style={styles.logout} onClick={handleLogout}>
-          <FaPowerOff style={styles.icon} /> Logout
+          <span style={styles.icon}>🚪</span> Logout
         </div>
       </div>
 
@@ -675,7 +676,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Course selection removed; default course state will be used */}
+            {/* Program selection removed; default program state will be used */}
 
             <label style={styles.modalLabel}>Upload File</label>
             <label style={styles.fileLabel}>

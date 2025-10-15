@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
-import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaFileImport } from 'react-icons/fa';
 // import Statistics from './statistics'; // Commented out - file doesn't exist
 import DetailsTable from './detailstable'; // ✅ Your new table component
 import { fetchOJTStatistics, importOJT } from '../../services/api';
@@ -359,8 +358,8 @@ export default function Dashboard() {
   };
 
   const links = [
-    { to: '/coordinator/dashboard', label: 'Dashboard', icon: <FaTh style={styles.icon} /> },
-    { to: '/coordinator/imports', label: 'Imports', icon: <FaFileImport style={styles.icon} /> },
+    { to: '/coordinator/dashboard', label: 'Dashboard' },
+    { to: '/coordinator/imports', label: 'Imports' },
   ];
 
   return (
@@ -396,7 +395,9 @@ export default function Dashboard() {
                     }
                   }}
                 >
-                  {link.icon} {link.label}
+                  {link.to === '/coordinator/dashboard' && <span style={styles.icon}>📊</span>}
+                  {link.to === '/coordinator/imports' && <span style={styles.icon}>📁</span>}
+                  {link.label}
                 </div>
               </li>
             ))}
@@ -404,7 +405,7 @@ export default function Dashboard() {
         </div>
 
         <div style={styles.logout} onClick={handleLogout}>
-          <FaPowerOff style={styles.icon} /> Logout
+          <span style={styles.icon}>🚪</span> Logout
         </div>
       </div>
 

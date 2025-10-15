@@ -25,7 +25,9 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
     const loadOJTData = async () => {
       if (selectedYear) {
         try {
+          console.log('🔍 Loading OJT data for year:', selectedYear);
           const data = await fetchOJTByYear(selectedYear.toString());
+          console.log('🔍 OJT Data received from API:', data);
           setOjtData(data.ojt_data || []);
         } catch (error) {
           console.error('Error loading OJT data:', error);

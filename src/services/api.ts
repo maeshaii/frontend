@@ -98,6 +98,7 @@ export const getUserInfo = () => {
     return null;
   }
 };
+
 // Fetch followers for a user
 export const fetchFollowers = async (userId: number) => {
   const response = await api.get(`alumni/${userId}/followers/`);
@@ -220,12 +221,12 @@ export const changePassword = async (old_password: string, new_password: string)
 };
 
 // --- Import alumni: expects Password column, generates if missing, and backend will export passwords after import. ---
-export const importAlumni = async (file: File, batchYear: string, course: string) => {
+export const importAlumni = async (file: File, batchYear: string, program: string) => {
   try {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('batch_year', batchYear);
-    formData.append('course', course);
+    formData.append('program', program);
 
     const response = await api.post('import-alumni/', formData, {
       headers: {
@@ -263,31 +264,31 @@ export const fetchAlumniByYear = async (year: string) => {
   return response.data;
 };
 
-// Fetch alumni employment statistics by year and course
-export const fetchAlumniEmploymentStats = async (year = 'ALL', course = 'ALL') => {
-  const response = await api.get(`statistics/alumni/?year=${year}&course=${course}`);
+// Fetch alumni employment statistics by year and program
+export const fetchAlumniEmploymentStats = async (year = 'ALL', program = 'ALL') => {
+  const response = await api.get(`statistics/alumni/?year=${year}&program=${program}`);
   return response.data;
 };
 
 // Generate specific type of statistics (QPRO, CHED, SUC, AACUP)
-export const generateSpecificStats = async (year = 'ALL', course = 'ALL', statsType = 'ALL') => {
+export const generateSpecificStats = async (year = 'ALL', program = 'ALL', statsType = 'ALL') => {
   try {
     const response = await api.get(
-      `statistics/generate/?year=${year}&course=${course}&type=${statsType}`
+      `statistics/generate/?year=${year}&program=${program}&type=${statsType}`
     );
     return response.data;
   } catch (error: any) {
     // Fallback to regular employment stats if specific endpoint doesn't exist
     console.warn('Specific stats endpoint not available, falling back to employment stats');
-    return await fetchAlumniEmploymentStats(year, course);
+    return await fetchAlumniEmploymentStats(year, program);
   }
 };
 
 // Export detailed alumni data for specific statistics types
-export const exportDetailedAlumniData = async (year = 'ALL', course = 'ALL', statsType = 'ALL') => {
+export const exportDetailedAlumniData = async (year = 'ALL', program = 'ALL', statsType = 'ALL') => {
   try {
     const response = await api.get(
-      `statistics/export-detailed/?year=${year}&course=${course}&type=${statsType}`
+      `statistics/export-detailed/?year=${year}&program=${program}&type=${statsType}`
     );
     return response.data;
   } catch (error) {
@@ -300,7 +301,7 @@ export const exportDetailedAlumniData = async (year = 'ALL', course = 'ALL', sta
 export const importOJT = async (
   file: File,
   batchYear: string,
-  course: string,
+  program: string,
   coordinatorUsername: string,
   section: string
 ) => {
@@ -308,7 +309,7 @@ export const importOJT = async (
     const formData = new FormData();
     formData.append('file', file);
     formData.append('batch_year', batchYear);
-    formData.append('course', course);
+    formData.append('program', program);
     formData.append('coordinator_username', coordinatorUsername);
     formData.append('section', section);
 
@@ -316,9 +317,35 @@ export const importOJT = async (
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      responseType: 'blob', // Important for file downloads
     });
 
-    return response.data;
+    // Check if response is a file download (Excel file)
+    const contentType = response.headers['content-type'];
+    if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+      // This is an Excel file download
+      const blob = new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ojt_passwords.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      return { success: true, message: 'OJT import successful! Password file downloaded.' };
+    } else {
+      // This is a JSON response
+      const text = await response.data.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        return { success: true, message: 'OJT import completed' };
+      }
+    }
   } catch (error: any) {
     if (error.response?.data) {
       return error.response.data;
@@ -350,18 +377,24 @@ export const fetchOJTStatistics = async (coordinatorUsername?: string) => {
 };
 
 // Fetch OJT data by year for coordinators
-export const fetchOJTByYear = async (year: string, coordinatorUsername?: string) => {
-  const path = coordinatorUsername
+export const fetchOJTByYear = async (year: string, coordinatorUsername?: string, section?: string) => {
+  let path = coordinatorUsername
     ? `ojt/by-year/?year=${year}&coordinator=${coordinatorUsername}`
     : `ojt/by-year/?year=${year}`;
+  
+  if (section) {
+    path += `&section=${encodeURIComponent(section)}`;
+  }
+  
+  console.log('🔍 API Call:', path);
   const response = await api.get(path);
   return response.data;
 };
 
-// Clear OJT data by batch year (and optional coordinator/course)
-export const clearOJT = async (batchYear: string, course?: string, coordinatorUsername?: string) => {
+// Clear OJT data by batch year (and optional coordinator/program)
+export const clearOJT = async (batchYear: string, program?: string, coordinatorUsername?: string) => {
   const body: any = { batch_year: batchYear };
-  if (course) body.course = course;
+  if (program) body.program = program;
   if (coordinatorUsername) body.coordinator = coordinatorUsername;
   const response = await api.post('ojt/clear/', body);
   return response.data;

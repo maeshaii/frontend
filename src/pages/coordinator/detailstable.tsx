@@ -30,7 +30,8 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
     const loadOJTData = async () => {
       if (selectedYear) {
         try {
-          const data = await fetchOJTByYear(selectedYear.toString(), coordinatorUsername);
+          console.log('🔍 Loading OJT data for year:', selectedYear, 'section:', selectedSection);
+          const data = await fetchOJTByYear(selectedYear.toString(), coordinatorUsername, selectedSection);
           console.log('🔍 OJT Data received from API:', data);
           console.log('🔍 OJT Data array:', data.ojt_data);
           if (data.ojt_data && data.ojt_data.length > 0) {
@@ -42,6 +43,8 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
             data.ojt_data.forEach((user: any, index: number) => {
               console.log(`🔍 User ${index + 1}: ${user.name} - is_sent_to_admin: ${user.is_sent_to_admin} (type: ${typeof user.is_sent_to_admin}), is_alumni: ${user.is_alumni} (type: ${typeof user.is_alumni})`);
             });
+          } else {
+            console.log('🔍 No OJT data found for year:', selectedYear, 'section:', selectedSection);
           }
           setOjtData(data.ojt_data || []);
         } catch (error) {
@@ -56,7 +59,7 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
     };
 
     loadOJTData();
-  }, [selectedYear, coordinatorUsername]);
+  }, [selectedYear, selectedSection, coordinatorUsername]);
 
   // Inline styles
   const styles = {
@@ -265,19 +268,8 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
     
     // Filter by section if specified
     if (selectedSection) {
-      if (selectedSection === '4-B') {
-        // For 4-B section, show only Carlo Mendoza
-        const isCarlo = ctuIdStr === '1334335' || (first === 'carlo' && last === 'mendoza');
-        if (!isCarlo) {
-          return false;
-        }
-      } else {
-        // For 4-A or other sections, exclude Carlo Mendoza
-        const isCarlo = ctuIdStr === '1334335' || (first === 'carlo' && last === 'mendoza');
-        if (isCarlo) {
-          return false;
-        }
-      }
+      // The backend already filters by section, so we don't need additional filtering here
+      // This allows all users returned by the API to be displayed
     }
     
     // Search filter
@@ -557,6 +549,16 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
               <div style={styles.modalValue}>{selected.address || 'Not specified'}</div>
               <div style={styles.modalLabel}>Company</div>
               <div style={styles.modalValue}>{selected.company || 'Not specified'}</div>
+              <div style={styles.modalLabel}>Company Address</div>
+              <div style={styles.modalValue}>{selected.company_address || 'Not specified'}</div>
+              <div style={styles.modalLabel}>Company Email</div>
+              <div style={styles.modalValue}>{selected.company_email || 'Not specified'}</div>
+              <div style={styles.modalLabel}>Company Contact</div>
+              <div style={styles.modalValue}>{selected.company_contact || 'Not specified'}</div>
+              <div style={styles.modalLabel}>Contact Person</div>
+              <div style={styles.modalValue}>{selected.contact_person || 'Not specified'}</div>
+              <div style={styles.modalLabel}>Position</div>
+              <div style={styles.modalValue}>{selected.position || 'Not specified'}</div>
               <div style={styles.modalLabel}>Start Date</div>
               <div style={styles.modalValue}>{selected.ojt_start_date || selected.date_started || (selected.ctu_id === '1334003' ? '2023-01-20' : selected.ctu_id === '1334004' ? '2023-02-01' : 'Not specified')}</div>
               <div style={styles.modalLabel}>End Date</div>
