@@ -7,13 +7,13 @@ import {
   fetchAlumniDetails,
 } from '../../../services/api';
 import { trackerApi } from '../../../services/trackerApi';
-import { FaSearch, FaFilter, FaEye, FaDownload, FaSort, FaSortUp, FaSortDown, FaUser, FaBuilding, FaDollarSign, FaCalendarAlt, FaGraduationCap } from 'react-icons/fa';
+import { FaSearch, FaFilter, FaEye, FaDownload, FaSort, FaSortUp, FaSortDown, FaUser, FaBuilding, FaCalendarAlt, FaGraduationCap, FaArrowLeft } from 'react-icons/fa';
 
 const AlumniData: React.FC = () => {
   const { year } = useParams<{ year: string }>();
   const navigate = useNavigate();
 
-  const [selectedCourse, setSelectedCourse] = useState('All');
+  const [selectedProgram, setSelectedProgram] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [alumniList, setAlumniList] = useState<any[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -22,7 +22,7 @@ const AlumniData: React.FC = () => {
   const [trackerQuestions, setTrackerQuestions] = useState<any[]>([]);
   const [trackerAnswersMap, setTrackerAnswersMap] = useState<Record<number, any>>({});
   const [loading, setLoading] = useState(true);
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'lastName', direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
 
@@ -90,18 +90,25 @@ const AlumniData: React.FC = () => {
 
   // Enhanced filtering and sorting
   const filteredAlumni = alumniList.filter((alumni) => {
-    const matchCourse = selectedCourse === 'All' || alumni.course === selectedCourse;
+    const matchProgram = selectedProgram === 'All' || 
+      alumni.program === selectedProgram ||
+      (alumni.program && alumni.program.toLowerCase() === selectedProgram.toLowerCase());
     const matchSearch = 
       (alumni.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (alumni.f_name || alumni.First_Name || alumni.first_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (alumni.l_name || alumni.Last_Name || alumni.last_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (alumni.m_name || alumni.Middle_Name || alumni.middle_name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    return matchCourse && matchSearch;
+    return matchProgram && matchSearch;
   });
 
   // Sorting functionality
   const sortedAlumni = [...filteredAlumni].sort((a, b) => {
-    if (!sortConfig) return 0;
+    if (!sortConfig) {
+      // Default alphabetical sorting by last name if no sort config
+      const aLastName = a.l_name || a.Last_Name || a.last_name || (a.name ? a.name.split(' ').slice(-1)[0] : '');
+      const bLastName = b.l_name || b.Last_Name || b.last_name || (b.name ? b.name.split(' ').slice(-1)[0] : '');
+      return aLastName.localeCompare(bLastName);
+    }
     
     const getValue = (obj: any, key: string) => {
       switch (key) {
@@ -236,28 +243,21 @@ const AlumniData: React.FC = () => {
         <div style={styles.header}>
           <div style={styles.headerContent}>
             <button onClick={() => navigate(-1)} style={styles.backButton}>
-              <FaCalendarAlt style={{ marginRight: '8px' }} />
-              Back to Statistics
+              <FaArrowLeft style={{ marginRight: '8px' }} />
+              
             </button>
             
             <div style={styles.titleSection}>
               <h1 style={styles.title}>
-                <FaGraduationCap style={{ marginRight: '12px', color: '#3b82f6' }} />
+                <FaGraduationCap style={{ marginRight: '12px', color: 'white' }} />
                 Alumni Data
               </h1>
-              <p style={styles.subtitle}>Class of {year} • {sortedAlumni.length} Alumni</p>
-            </div>
-
-            <div style={styles.headerActions}>
-              <button style={styles.exportButton}>
-                <FaDownload style={{ marginRight: '8px' }} />
-                Export
-              </button>
+              <p style={styles.subtitle}>Class of {year}</p>
             </div>
           </div>
         </div>
 
-        {/* Enhanced Controls */}
+        {/* Compact Controls */}
         <div style={styles.controlsSection}>
           <div style={styles.filtersContainer}>
             <div style={styles.searchContainer}>
@@ -274,44 +274,15 @@ const AlumniData: React.FC = () => {
             <div style={styles.filterGroup}>
               <FaFilter style={styles.filterIcon} />
               <select
-                value={selectedCourse}
-                onChange={(e) => setSelectedCourse(e.target.value)}
+                value={selectedProgram}
+                onChange={(e) => setSelectedProgram(e.target.value)}
                 style={styles.courseSelect}
               >
                 <option value="All">All Programs</option>
                 <option value="BSIT">BSIT</option>
                 <option value="BSIS">BSIS</option>
-                <option value="BSCT">BIT-CT</option>
+                <option value="BIT-CT">BIT-CT</option>
               </select>
-            </div>
-          </div>
-
-          {/* Stats Cards */}
-          <div style={styles.statsContainer}>
-            <div style={styles.statCard}>
-              <FaUser style={styles.statIcon} />
-              <div>
-                <div style={styles.statNumber}>{sortedAlumni.length}</div>
-                <div style={styles.statLabel}>Total Alumni</div>
-              </div>
-            </div>
-            <div style={styles.statCard}>
-              <FaBuilding style={styles.statIcon} />
-              <div>
-                <div style={styles.statNumber}>
-                  {sortedAlumni.filter(a => a.position_current || trackerAnswersMap[a.id]?.position_current).length}
-                </div>
-                <div style={styles.statLabel}>Employed</div>
-              </div>
-            </div>
-            <div style={styles.statCard}>
-              <FaDollarSign style={styles.statIcon} />
-              <div>
-                <div style={styles.statNumber}>
-                  {sortedAlumni.filter(a => a.salary_current || trackerAnswersMap[a.id]?.salary_current).length}
-                </div>
-                <div style={styles.statLabel}>With Salary Data</div>
-              </div>
             </div>
           </div>
         </div>
@@ -352,7 +323,7 @@ const AlumniData: React.FC = () => {
                         {getSortIcon('firstName')}
                       </th>
                       <th style={styles.sortableHeader} onClick={() => handleSort('status')}>
-                        Status
+                        Employment Status
                         {getSortIcon('status')}
                       </th>
                       <th style={styles.sortableHeader} onClick={() => handleSort('position')}>
@@ -364,7 +335,7 @@ const AlumniData: React.FC = () => {
                       </th>
                       <th style={styles.sortableHeader} onClick={() => handleSort('salary')}>
                         <div style={styles.headerContent}>
-                          <FaDollarSign style={styles.headerIcon} />
+                          <span style={{ fontSize: '16px', fontWeight: 'bold' }}>₱</span>
                           Current Salary
                           {getSortIcon('salary')}
                         </div>
@@ -380,7 +351,7 @@ const AlumniData: React.FC = () => {
                             <FaUser style={styles.emptyIcon} />
                             <h3 style={styles.emptyTitle}>No alumni found</h3>
                             <p style={styles.emptyText}>
-                              {searchTerm || selectedCourse !== 'All' 
+                              {searchTerm || selectedProgram !== 'All' 
                                 ? 'Try adjusting your search or filter criteria'
                                 : 'No alumni data available for this batch'
                               }
@@ -434,20 +405,24 @@ const AlumniData: React.FC = () => {
                           <td style={styles.tableCell}>
                             <span style={{
                               ...styles.statusBadge,
-                              backgroundColor: (alumni.status || alumni.Status || alumni.user_status) === 'active' ? '#10b981' : '#6b7280'
+                              backgroundColor: (alumni.employment_status || alumni.status || alumni.Status || alumni.user_status) === 'Employed' ? '#10b981' : 
+                                             (alumni.employment_status || alumni.status || alumni.Status || alumni.user_status) === 'Unemployed' ? '#ef4444' :
+                                             (alumni.employment_status || alumni.status || alumni.Status || alumni.user_status) === 'Pending' ? '#f59e0b' : '#6b7280'
                             }}>
-                              {alumni.status || alumni.Status || alumni.user_status || 'Unknown'}
+                              {alumni.employment_status || alumni.status || alumni.Status || alumni.user_status || 'Unknown'}
                             </span>
                           </td>
                           <td style={styles.tableCell}>
                             <div style={styles.positionContainer}>
                               {alumni.position_current ||
+                                alumni.company_name_current ||
                                 trackerAnswersMap[alumni.id]?.position_current ||
                                 trackerAnswersMap[alumni.user_id]?.position_current ? (
                                 <>
                                   <FaBuilding style={styles.positionIcon} />
                                   <span>
                                     {alumni.position_current ||
+                                      alumni.company_name_current ||
                                       trackerAnswersMap[alumni.id]?.position_current ||
                                       trackerAnswersMap[alumni.user_id]?.position_current}
                                   </span>
@@ -462,9 +437,9 @@ const AlumniData: React.FC = () => {
                               trackerAnswersMap[alumni.id]?.salary_current ||
                               trackerAnswersMap[alumni.user_id]?.salary_current ? (
                               <div style={styles.salaryContainer}>
-                                <FaDollarSign style={styles.salaryIcon} />
+                                <span style={{ fontSize: '14px', fontWeight: 'bold', marginRight: '6px' }}>₱</span>
                                 <span>
-                                  ₱{alumni.salary_current ||
+                                  {alumni.salary_current ||
                                     trackerAnswersMap[alumni.id]?.salary_current ||
                                     trackerAnswersMap[alumni.user_id]?.salary_current}
                                 </span>
@@ -548,7 +523,7 @@ const AlumniData: React.FC = () => {
             <div style={styles.modalContent}>
               <div style={styles.modalHeader}>
                 <h2 style={styles.modalTitle}>
-                  <FaUser style={{ marginRight: '12px', color: '#3b82f6' }} />
+                  <FaUser style={{ marginRight: '12px', color: '#6C63FF' }} />
                   Alumni Details
                 </h2>
                 <button onClick={closeModal} style={styles.modalCloseButton}>
@@ -571,7 +546,7 @@ const AlumniData: React.FC = () => {
                     'Age': modalAlumni.age || modalAlumni.Age || getTrackerAnswerByLabel('age'),
                     'Email': modalAlumni.email || modalAlumni.Email || getTrackerAnswerByLabel('email'),
                     'Program Name': modalAlumni.program || modalAlumni.Program_Name || modalAlumni.course || getTrackerAnswerByLabel('program'),
-                    'Status': modalAlumni.status || modalAlumni.Status || modalAlumni.user_status || getTrackerAnswerByLabel('status'),
+                    'Status': modalAlumni.employment_status || modalAlumni.status || modalAlumni.Status || modalAlumni.user_status || getTrackerAnswerByLabel('status'),
                     'Company': modalAlumni.company_name_current || modalAlumni['Company name current'] || modalAlumni.company || getTrackerAnswerByLabel('company') || getTrackerAnswerByLabel('employer') || getTrackerAnswerByLabel('current company'),
                     'Position': modalAlumni.position_current || modalAlumni['Position current'] || getTrackerAnswerByLabel('current position'),
                     'Sector': modalAlumni.sector_current || modalAlumni['Sector current'] || getTrackerAnswerByLabel('sector'),
@@ -612,29 +587,32 @@ const AlumniData: React.FC = () => {
 const styles: { [key: string]: React.CSSProperties } = {
   // Header styles
   header: {
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    background: '#1c4e80',
     color: 'white',
-    padding: '24px 32px',
+    padding: '24px 32px 24px 0px',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
   },
   headerContent: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     maxWidth: '1200px',
     margin: '0 auto',
+    position: 'relative',
   },
   backButton: {
-    background: 'rgba(255, 255, 255, 0.2)',
+    background: 'transparent',
     border: 'none',
     color: 'white',
-    padding: '10px 16px',
-    borderRadius: '8px',
+    padding: '0',
     cursor: 'pointer',
     fontWeight: '600',
     display: 'flex',
     alignItems: 'center',
     transition: 'all 0.2s ease',
+    position: 'absolute',
+    left: '-64px',
+    fontSize: '24px',
   },
   titleSection: {
     textAlign: 'center',
@@ -658,9 +636,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '12px',
   },
   exportButton: {
-    background: 'rgba(255, 255, 255, 0.2)',
-    border: 'none',
-    color: 'white',
+    background: 'white',
+    border: '2px solid #6C63FF',
+    color: '#6C63FF',
     padding: '10px 16px',
     borderRadius: '8px',
     cursor: 'pointer',
@@ -672,7 +650,7 @@ const styles: { [key: string]: React.CSSProperties } = {
 
   // Controls section
   controlsSection: {
-    padding: '24px 32px',
+    padding: '8px 32px',
     backgroundColor: 'white',
     borderBottom: '1px solid #e5e7eb',
   },
@@ -680,7 +658,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     gap: '16px',
     alignItems: 'center',
-    marginBottom: '24px',
+    justifyContent: 'space-between',
+    marginBottom: '0px',
+    width: '100%',
   },
   searchContainer: {
     position: 'relative',
@@ -707,7 +687,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   filterGroup: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
+    maxWidth: '200px',
   },
   filterIcon: {
     color: '#6b7280',
@@ -723,37 +704,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
   },
 
-  // Stats cards
-  statsContainer: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '16px',
-  },
-  statCard: {
-    background: 'white',
-    padding: '20px',
-    borderRadius: '12px',
-    border: '1px solid #e5e7eb',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-  },
-  statIcon: {
-    fontSize: '24px',
-    color: '#3b82f6',
-  },
-  statNumber: {
-    fontSize: '24px',
-    fontWeight: '700',
-    color: '#1f2937',
-  },
-  statLabel: {
-    fontSize: '14px',
-    color: '#6b7280',
-    marginTop: '4px',
-  },
 
   // Table styles
   tableContainer: {
@@ -774,7 +724,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '40px',
     height: '40px',
     border: '4px solid #e5e7eb',
-    borderTop: '4px solid #3b82f6',
+    borderTop: '4px solid #6C63FF',
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
   },
@@ -856,8 +806,8 @@ const styles: { [key: string]: React.CSSProperties } = {
 
   // Data display styles
   programBadge: {
-    background: '#dbeafe',
-    color: '#1e40af',
+    background: '#f0f0ff',
+    color: '#4A47E0',
     padding: '4px 8px',
     borderRadius: '6px',
     fontSize: '12px',
@@ -906,7 +856,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontStyle: 'italic',
   },
   viewButton: {
-    background: '#3b82f6',
+    background: '#4A47E0',
     color: 'white',
     border: 'none',
     padding: '6px 12px',

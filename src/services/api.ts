@@ -13,7 +13,7 @@ const API_BASE = ensureApiSuffix(process.env.REACT_APP_API_URL);
 
 const api = axios.create({
   baseURL: API_BASE,
-  withCredentials: false, 
+  withCredentials: true, // Enable for session-based WebSocket auth
 });
 
 // Public API instance for endpoints that don't require authentication
@@ -29,9 +29,8 @@ api.interceptors.request.use(
     if (token) {
       config.headers = config.headers || {};
       config.headers['Authorization'] = `Bearer ${token}`;
-    } else {
-      console.warn('No access token found in localStorage');
     }
+    // Don't warn about missing token - user might be using session auth
     if (process.env.NODE_ENV === 'development') {
       console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, {
         headers: config.headers,
@@ -254,6 +253,12 @@ export { api };
 // Fetch alumni statistics (counts per year)
 export const fetchAlumniStatistics = async () => {
   const response = await api.get('alumni/statistics/');
+  return response.data;
+};
+
+// Fetch graduation years for dropdowns
+export const fetchGraduationYears = async () => {
+  const response = await api.get('alumni/graduation-years/');
   return response.data;
 };
 
@@ -771,11 +776,14 @@ export const getWebSocketBase = (): string => {
   return `ws://${http}`;
 };
 
-export const getConversationWsUrl = (conversationId: number): string => {
-  const token = localStorage.getItem('accessToken');
+export const getConversationWsUrl = (conversationId: number, token?: string): string => {
   const base = getWebSocketBase();
-  const url = `${base}/ws/chat/${conversationId}/`;
-  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+  // Use token in URL as fallback for WebSocket authentication
+  // WebSocket connections cannot send cookies/headers in browsers
+  if (token) {
+    return `${base}/ws/chat/${conversationId}/?token=${token}`;
+  }
+  return `${base}/ws/chat/${conversationId}/`;
 };
 
 // User Management API functions

@@ -324,7 +324,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
   // QPRO export helpers (placed before export to avoid hoist issues)
   const qproHeaders = [
-    'Course',
+    'Program',
     'First_Name',
     'Middle_Name',
     'Last_Name',
@@ -356,7 +356,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     }
 
     return [
-      safe(row['Course']),
+      safe(row['Program']),
       safe(row['First_Name']),
       safe(row['Middle_Name']),
       safe(row['Last_Name']),
@@ -369,13 +369,33 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     ];
   };
 
+  // Enhanced sorting function: answered tracker first (alphabetical), not answered last (alphabetical)
+  const sortAlumniData = (mappedData: any[][]) => {
+    return mappedData.sort((a, b) => {
+      const aAnswered = a[4] !== 'Not Tracked'; // Status is at index 4
+      const bAnswered = b[4] !== 'Not Tracked';
+      
+      // First priority: answered vs not answered
+      if (aAnswered !== bAnswered) {
+        return aAnswered ? -1 : 1; // answered first
+      }
+      
+      // Second priority: alphabetical by last name (index 3)
+      const aLastName = (a[3] || '').toLowerCase();
+      const bLastName = (b[3] || '').toLowerCase();
+      return aLastName.localeCompare(bLastName);
+    });
+  };
+
   const addQPRODetailedSheet = (workbook: ExcelJS.Workbook, rows: any[], sheetName = 'QPRO Detailed Alumni Data') => {
     const detail = workbook.addWorksheet(sheetName);
-    detail.addRow(qproHeaders);
+    const headerRow = detail.addRow(qproHeaders);
+    // Make headers bold
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true };
+    });
     const mapped = (rows || []).map(mapQPRORow);
-    mapped
-      .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1))
-      .forEach((vals) => detail.addRow(vals));
+    sortAlumniData(mapped).forEach((vals) => detail.addRow(vals));
     // Move to first position
     const idx = workbook.worksheets.indexOf(detail);
     if (idx > 0) {
@@ -417,7 +437,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           const c2 = String(row.getCell(2)?.value || '');
           const c3 = String(row.getCell(3)?.value || '');
           // Match QPRO/Detail headers
-          const isQproHeader = c1 === 'Course' && c2 === 'First_Name' && c3 === 'Middle_Name';
+          const isQproHeader = c1 === 'Program' && c2 === 'First_Name' && c3 === 'Middle_Name';
           const isMetricHeader = c1 === 'Metric' && c2 === 'Value';
           return isQproHeader || isMetricHeader;
         } catch (_) {
@@ -436,7 +456,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
       // If we find the QPRO detailed header, enforce user-friendly widths per column
       const explicitHeaderWidths: Record<string, number> = {
-        Course: 14,
+        Program: 14,
         First_Name: 18,
         Middle_Name: 22,
         Last_Name: 18,
@@ -454,7 +474,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           const c1 = String(row.getCell(1)?.value || '');
           const c2 = String(row.getCell(2)?.value || '');
           const c3 = String(row.getCell(3)?.value || '');
-          if (c1 === 'Course' && c2 === 'First_Name' && c3 === 'Middle_Name') {
+          if (c1 === 'Program' && c2 === 'First_Name' && c3 === 'Middle_Name') {
             headerRowIndex = rowNumber;
             throw 'found';
           }
@@ -481,10 +501,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   };
 
   // High Position helpers for ALL export reuse
-  const headersHighPosition = ['Course','First_Name','Middle_Name','Last_Name','Company_Name_Current','Position_Current'];
+  const headersHighPosition = ['Program','First_Name','Middle_Name','Last_Name','Company_Name_Current','Position_Current'];
   const mapHighPositionRow = (alumnusOrRow: any) => {
     // Supports both high_position_data shape and detailed row shape
-    const course = alumnusOrRow.course || alumnusOrRow['Course'] || '';
+    const course = alumnusOrRow.course || alumnusOrRow['Program'] || '';
     const company = alumnusOrRow.company || alumnusOrRow['Company_Name_Current'] || '';
     const position = alumnusOrRow.position || alumnusOrRow['Position_Current'] || '';
     if (alumnusOrRow.name) {
@@ -712,26 +732,24 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         doc.text('Detailed Alumni Data', 20, yPosition);
         yPosition += 6;
 
-        const headers = ['Course', 'First Name', 'Last Name', 'Status', 'Company', 'Position'];
-        const rows = detailedData.slice(0, 100).map((row: any) => [
-          row.Course || '',
-          row.First_Name || '',
-          row.Last_Name || '',
-          row.Status || '',
-          (row['Current Company Name'] || row.Company_Name_Current || '').substring(0, 30),
-          (row.Position_Current || '').substring(0, 30),
-        ]);
+        // Use the same headers as Excel export for consistency
+        const headers = qproHeaders;
+        const rows = sortAlumniData(detailedData.map((row: any) => mapQPRORow(row)));
 
         autoTable(doc, {
           head: [headers],
           body: rows,
           startY: yPosition,
           theme: 'striped',
-          styles: { fontSize: 7, cellPadding: 2 },
+          styles: { fontSize: 6, cellPadding: 1 },
           headStyles: { fillColor: [29, 78, 137], textColor: 255 },
           columnStyles: {
-            4: { cellWidth: 40 },
-            5: { cellWidth: 40 },
+            4: { cellWidth: 20 }, // Status
+            5: { cellWidth: 35 }, // Company
+            6: { cellWidth: 30 }, // Position
+            7: { cellWidth: 25 }, // Salary
+            8: { cellWidth: 20 }, // Sector
+            9: { cellWidth: 30 }, // Post graduate
           },
         });
       }
@@ -760,6 +778,39 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         headStyles: { fillColor: [23, 162, 184], textColor: 255, fontStyle: 'bold' },
         styles: { fontSize: 9 },
       });
+
+      yPosition = (doc as any).lastAutoTable.finalY + 10;
+      checkPageBreak(20);
+
+      // Detailed data for CHED
+      const detailedData = detailedDataByType['CHED'] || [];
+      if (detailedData.length > 0) {
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Detailed Alumni Data', 20, yPosition);
+        yPosition += 6;
+
+        // Use the same headers as Excel export for consistency
+        const headers = qproHeaders;
+        const rows = detailedData.map((row: any) => mapQPRORow(row));
+
+        autoTable(doc, {
+          head: [headers],
+          body: rows,
+          startY: yPosition,
+          theme: 'striped',
+          styles: { fontSize: 6, cellPadding: 1 },
+          headStyles: { fillColor: [23, 162, 184], textColor: 255 },
+          columnStyles: {
+            4: { cellWidth: 20 }, // Status
+            5: { cellWidth: 35 }, // Company
+            6: { cellWidth: 30 }, // Position
+            7: { cellWidth: 25 }, // Salary
+            8: { cellWidth: 20 }, // Sector
+            9: { cellWidth: 30 }, // Post graduate
+          },
+        });
+      }
     } else if (exportType === 'AACUP' && statsByType['AACUP']) {
       const stats = statsByType['AACUP'];
       doc.setFontSize(14);
@@ -785,6 +836,39 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         headStyles: { fillColor: [40, 167, 69], textColor: 255, fontStyle: 'bold' },
         styles: { fontSize: 9 },
       });
+
+      yPosition = (doc as any).lastAutoTable.finalY + 10;
+      checkPageBreak(20);
+
+      // Detailed data for AACUP
+      const detailedData = detailedDataByType['AACUP'] || [];
+      if (detailedData.length > 0) {
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Detailed Alumni Data', 20, yPosition);
+        yPosition += 6;
+
+        // Use the same headers as Excel export for consistency
+        const headers = qproHeaders;
+        const rows = detailedData.map((row: any) => mapQPRORow(row));
+
+        autoTable(doc, {
+          head: [headers],
+          body: rows,
+          startY: yPosition,
+          theme: 'striped',
+          styles: { fontSize: 6, cellPadding: 1 },
+          headStyles: { fillColor: [40, 167, 69], textColor: 255 },
+          columnStyles: {
+            4: { cellWidth: 20 }, // Status
+            5: { cellWidth: 35 }, // Company
+            6: { cellWidth: 30 }, // Position
+            7: { cellWidth: 25 }, // Salary
+            8: { cellWidth: 20 }, // Sector
+            9: { cellWidth: 30 }, // Post graduate
+          },
+        });
+      }
     } else if (exportType === 'SUC' && statsByType['SUC']) {
       const stats = statsByType['SUC'];
       doc.setFontSize(14);
@@ -811,6 +895,39 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
         styles: { fontSize: 9 },
       });
+
+      yPosition = (doc as any).lastAutoTable.finalY + 10;
+      checkPageBreak(20);
+
+      // Detailed data for SUC
+      const detailedData = detailedDataByType['SUC'] || [];
+      if (detailedData.length > 0) {
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Detailed Alumni Data', 20, yPosition);
+        yPosition += 6;
+
+        // Use the same headers as Excel export for consistency
+        const headers = qproHeaders;
+        const rows = sortAlumniData(detailedData.map((row: any) => mapQPRORow(row)));
+
+        autoTable(doc, {
+          head: [headers],
+          body: rows,
+          startY: yPosition,
+          theme: 'striped',
+          styles: { fontSize: 6, cellPadding: 1 },
+          headStyles: { fillColor: [29, 78, 137], textColor: 255 },
+          columnStyles: {
+            4: { cellWidth: 20 }, // Status
+            5: { cellWidth: 35 }, // Company
+            6: { cellWidth: 30 }, // Position
+            7: { cellWidth: 25 }, // Salary
+            8: { cellWidth: 20 }, // Sector
+            9: { cellWidth: 30 }, // Post graduate
+          },
+        });
+      }
     } else if (exportType === 'HIGH_POSITION' && statsByType['HIGH_POSITION']) {
       const stats = statsByType['HIGH_POSITION'];
       doc.setFontSize(14);
@@ -833,6 +950,39 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         headStyles: { fillColor: [255, 193, 7], textColor: 0, fontStyle: 'bold' },
         styles: { fontSize: 9 },
       });
+
+      yPosition = (doc as any).lastAutoTable.finalY + 10;
+      checkPageBreak(20);
+
+      // Detailed data for HIGH_POSITION
+      const detailedData = detailedDataByType['HIGH_POSITION'] || [];
+      if (detailedData.length > 0) {
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Detailed Alumni Data', 20, yPosition);
+        yPosition += 6;
+
+        // Use the same headers as Excel export for consistency
+        const headers = qproHeaders;
+        const rows = detailedData.map((row: any) => mapQPRORow(row));
+
+        autoTable(doc, {
+          head: [headers],
+          body: rows,
+          startY: yPosition,
+          theme: 'striped',
+          styles: { fontSize: 6, cellPadding: 1 },
+          headStyles: { fillColor: [255, 193, 7], textColor: 0 },
+          columnStyles: {
+            4: { cellWidth: 20 }, // Status
+            5: { cellWidth: 35 }, // Company
+            6: { cellWidth: 30 }, // Position
+            7: { cellWidth: 25 }, // Salary
+            8: { cellWidth: 20 }, // Sector
+            9: { cellWidth: 30 }, // Post graduate
+          },
+        });
+      }
     } else if (exportType === 'ALL') {
       // Summary for all types
       doc.setFontSize(14);
@@ -857,23 +1007,38 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           summaryData.push(
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
             ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
-            ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)]
+            ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
+            ['Employment Rate', '', `${stats.employment_rate || 0}%`],
+            ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)]
           );
         } else if (type === 'CHED') {
           summaryData.push(
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-            ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)]
+            ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
+            ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
+            ['Further Study Rate', '', `${stats.further_study_rate || 0}%`],
+            ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
+            ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)]
           );
         } else if (type === 'SUC') {
           summaryData.push(
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-            ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)]
+            ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+            ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
+            ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
+            ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
+            ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
+            ['International', String(stats.international_count || 0), pct(stats.international_count, stats.total_alumni)]
           );
         } else if (type === 'AACUP') {
           summaryData.push(
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
             ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
-            ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)]
+            ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
+            ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+            ['Employment Rate', '', `${stats.employment_rate || 0}%`],
+            ['Absorption Rate', '', `${stats.absorption_rate || 0}%`],
+            ['High Position Rate', '', `${stats.high_position_rate || 0}%`]
           );
         }
 
@@ -887,6 +1052,40 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         });
 
         yPosition = (doc as any).lastAutoTable.finalY + 10;
+        
+        // Add detailed alumni data for each type
+        const detailedData = detailedDataByType[type] || [];
+        if (detailedData.length > 0) {
+          checkPageBreak(40);
+          
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.text(`${type} Detailed Alumni Data`, 20, yPosition);
+          yPosition += 6;
+
+          // Use the same headers as Excel export for consistency
+          const headers = qproHeaders;
+          const rows = detailedData.map((row: any) => mapQPRORow(row));
+
+          autoTable(doc, {
+            head: [headers],
+            body: rows,
+            startY: yPosition,
+            theme: 'striped',
+            styles: { fontSize: 6, cellPadding: 1 },
+            headStyles: { fillColor: [29, 78, 137], textColor: 255 },
+            columnStyles: {
+              4: { cellWidth: 20 }, // Status
+              5: { cellWidth: 35 }, // Company
+              6: { cellWidth: 30 }, // Position
+              7: { cellWidth: 25 }, // Salary
+              8: { cellWidth: 20 }, // Sector
+              9: { cellWidth: 30 }, // Post graduate
+            },
+        });
+
+        yPosition = (doc as any).lastAutoTable.finalY + 10;
+        }
       }
     }
 
@@ -983,6 +1182,65 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       return elements;
     };
 
+    // Helper function to create detailed alumni data table
+    const createDetailedTable = (title: string, detailedData: any[]): (Paragraph | Table)[] => {
+      const elements: (Paragraph | Table)[] = [];
+
+      if (detailedData.length === 0) return elements;
+
+      elements.push(
+        new Paragraph({
+          text: title,
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: 400, after: 200 },
+        })
+      );
+
+      // Use the same headers as Excel export for consistency
+      const headers = qproHeaders;
+      const rows = sortAlumniData(detailedData.map((row: any) => mapQPRORow(row)));
+
+      elements.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            // Header row
+            new TableRow({
+              children: headers.map((header) =>
+                new TableCell({
+                  children: [
+                    new Paragraph({
+                      text: header,
+                      alignment: AlignmentType.CENTER,
+                      style: 'strong',
+                    }),
+                  ],
+                  shading: { fill: '1D4E89' },
+                })
+              ),
+            }),
+            // Data rows
+            ...rows.map((row) =>
+              new TableRow({
+                children: row.map((cell: any) =>
+                  new TableCell({
+                    children: [
+                      new Paragraph({
+                        text: String(cell || ''),
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                  })
+                ),
+              })
+            ),
+          ],
+        })
+      );
+
+      return elements;
+    };
+
     // Export based on type
     if (exportType === 'QPRO' && statsByType['QPRO']) {
       const stats = statsByType['QPRO'];
@@ -995,6 +1253,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)],
       ];
       children.push(...createSummaryTable('QPRO Statistics Summary', summaryData));
+      
+      // Add detailed alumni data
+      const detailedData = detailedDataByType['QPRO'] || [];
+      children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
     } else if (exportType === 'CHED' && statsByType['CHED']) {
       const stats = statsByType['CHED'];
       const summaryData = [
@@ -1006,6 +1268,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
       ];
       children.push(...createSummaryTable('CHED Statistics Summary', summaryData));
+      
+      // Add detailed alumni data
+      const detailedData = detailedDataByType['CHED'] || [];
+      children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
     } else if (exportType === 'AACUP' && statsByType['AACUP']) {
       const stats = statsByType['AACUP'];
       const summaryData = [
@@ -1017,6 +1283,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Employment Rate', '', `${stats.employment_rate || 0}%`],
       ];
       children.push(...createSummaryTable('AACUP Statistics Summary', summaryData));
+      
+      // Add detailed alumni data
+      const detailedData = detailedDataByType['AACUP'] || [];
+      children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
     } else if (exportType === 'SUC' && statsByType['SUC']) {
       const stats = statsByType['SUC'];
       const summaryData = [
@@ -1027,6 +1297,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
       ];
       children.push(...createSummaryTable('SUC Statistics Summary', summaryData));
+      
+      // Add detailed alumni data
+      const detailedData = detailedDataByType['SUC'] || [];
+      children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
     } else if (exportType === 'HIGH_POSITION' && statsByType['HIGH_POSITION']) {
       const stats = statsByType['HIGH_POSITION'];
       const summaryData = [
@@ -1036,6 +1310,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['High Position Rate', '', `${stats.high_position_rate || 0}%`],
       ];
       children.push(...createSummaryTable('High Position Statistics Summary', summaryData));
+      
+      // Add detailed alumni data
+      const detailedData = detailedDataByType['HIGH_POSITION'] || [];
+      children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
     } else if (exportType === 'ALL') {
       // Summary for all types
       for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP']) {
@@ -1048,27 +1326,46 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           summaryData.push(
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
             ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
-            ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)]
+            ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
+            ['Employment Rate', '', `${stats.employment_rate || 0}%`],
+            ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)]
           );
         } else if (type === 'CHED') {
           summaryData.push(
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-            ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)]
+            ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
+            ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
+            ['Further Study Rate', '', `${stats.further_study_rate || 0}%`],
+            ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
+            ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)]
           );
         } else if (type === 'SUC') {
           summaryData.push(
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-            ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)]
+            ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+            ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
+            ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
+            ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
+            ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
+            ['International', String(stats.international_count || 0), pct(stats.international_count, stats.total_alumni)]
           );
         } else if (type === 'AACUP') {
           summaryData.push(
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
             ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
-            ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)]
+            ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
+            ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+            ['Employment Rate', '', `${stats.employment_rate || 0}%`],
+            ['Absorption Rate', '', `${stats.absorption_rate || 0}%`],
+            ['High Position Rate', '', `${stats.high_position_rate || 0}%`]
           );
         }
 
         children.push(...createSummaryTable(`${type} Statistics`, summaryData));
+        
+        // Add detailed alumni data for each type
+        const detailedData = detailedDataByType[type] || [];
+        children.push(...createDetailedTable(`${type} Detailed Alumni Data`, detailedData));
       }
     }
 
@@ -1157,12 +1454,23 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       if (!allStats && generatedStats?.type === 'QPRO') {
         const sheet = workbook.addWorksheet('QPRO Report');
         let r = 1;
-        sheet.getCell(`A${r}`).value = 'QPRO Complete Statistics Report'; r++;
-        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
-        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
+        sheet.getCell(`A${r}`).value = 'QPRO Complete Statistics Report';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
+        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
         sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
-        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
+        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
+        // Make summary headers bold
+        sheet.getCell(`A${r}`).font = { bold: true };
+        sheet.getCell(`B${r}`).font = { bold: true };
+        sheet.getCell(`C${r}`).font = { bold: true };
+        r++;
         // Employed
         sheet.getCell(`A${r}`).value = 'Employed';
         sheet.getCell(`B${r}`).value = generatedStats.employed_count;
@@ -1188,9 +1496,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`C${r}`).value = '100%'; r += 2;
 
         sheet.getCell(`A${r}`).value = 'QPRO Detailed Alumni Data'; r++;
-        sheet.addRow(qproHeaders); r++;
-        const mapped = (detailedDataByType['QPRO'] || []).map(mapQPRORow)
-          .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
+        const headerRow = sheet.addRow(qproHeaders);
+        // Make headers bold
+        headerRow.eachCell((cell) => {
+          cell.font = { bold: true };
+        });
+        r++;
+        const mapped = sortAlumniData((detailedDataByType['QPRO'] || []).map(mapQPRORow));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
 
         // Auto size and wrap
@@ -1211,12 +1523,23 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       if (!allStats && generatedStats?.type === 'CHED') {
         const sheet = workbook.addWorksheet('CHED Report');
         let r = 1;
-        sheet.getCell(`A${r}`).value = 'CHED Complete Statistics Report'; r++;
-        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
-        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
+        sheet.getCell(`A${r}`).value = 'CHED Complete Statistics Report';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
+        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
         sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
-        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
+        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
+        // Make summary headers bold
+        sheet.getCell(`A${r}`).font = { bold: true };
+        sheet.getCell(`B${r}`).font = { bold: true };
+        sheet.getCell(`C${r}`).font = { bold: true };
+        r++;
         // Pursuing Further Study
         const pursuing = Number(generatedStats.pursuing_further_study) || 0;
         sheet.getCell(`A${r}`).value = 'Pursuing Further Study';
@@ -1247,9 +1570,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
         // Detailed
         sheet.getCell(`A${r}`).value = 'CHED Detailed Alumni Data'; r++;
-        sheet.addRow(qproHeaders); r++;
-        const mapped = (detailedDataByType['CHED'] || []).map(mapQPRORow)
-          .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
+        const headerRow = sheet.addRow(qproHeaders);
+        // Make headers bold
+        headerRow.eachCell((cell) => {
+          cell.font = { bold: true };
+        });
+        r++;
+        const mapped = sortAlumniData((detailedDataByType['CHED'] || []).map(mapQPRORow));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
 
         // Auto size and wrap
@@ -1270,12 +1597,23 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       if (!allStats && generatedStats?.type === 'AACUP') {
         const sheet = workbook.addWorksheet('AACUP Report');
         let r = 1;
-        sheet.getCell(`A${r}`).value = 'AACUP Complete Statistics Report'; r++;
-        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
-        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
+        sheet.getCell(`A${r}`).value = 'AACUP Complete Statistics Report';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
+        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
         sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
-        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
+        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
+        // Make summary headers bold
+        sheet.getCell(`A${r}`).font = { bold: true };
+        sheet.getCell(`B${r}`).font = { bold: true };
+        sheet.getCell(`C${r}`).font = { bold: true };
+        r++;
         // Employed
         const employed = Number(generatedStats.employed_count) || 0;
         sheet.getCell(`A${r}`).value = 'Employed';
@@ -1305,9 +1643,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
         // Detailed
         sheet.getCell(`A${r}`).value = 'AACUP Detailed Alumni Data'; r++;
-        sheet.addRow(qproHeaders); r++;
-        const mapped2 = (detailedDataByType['AACUP'] || []).map(mapQPRORow)
-          .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
+        const headerRow = sheet.addRow(qproHeaders);
+        // Make headers bold
+        headerRow.eachCell((cell) => {
+          cell.font = { bold: true };
+        });
+        r++;
+        const mapped2 = sortAlumniData((detailedDataByType['AACUP'] || []).map(mapQPRORow));
         mapped2.forEach((vals) => { sheet.addRow(vals); r++; });
 
         // Auto size and wrap
@@ -1328,12 +1670,23 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       if (!allStats && generatedStats?.type === 'HIGH_POSITION') {
         const sheet = workbook.addWorksheet('High Position Report');
         let r = 1;
-        sheet.getCell(`A${r}`).value = 'HIGH POSITION Complete Statistics Report'; r++;
-        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
-        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
+        sheet.getCell(`A${r}`).value = 'HIGH POSITION Complete Statistics Report';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
+        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
         sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
-        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
+        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
+        // Make summary headers bold
+        sheet.getCell(`A${r}`).font = { bold: true };
+        sheet.getCell(`B${r}`).font = { bold: true };
+        sheet.getCell(`C${r}`).font = { bold: true };
+        r++;
         // High Position metrics
         const hpCount = Number(generatedStats.high_position_count) || 0;
         sheet.getCell(`A${r}`).value = 'High Position Alumni';
@@ -1346,7 +1699,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`C${r}`).value = '100%'; r += 2;
 
         // Detailed: only high-position alumni with limited columns
-        const headersHP = ['Course','First_Name','Middle_Name','Last_Name','Company_Name_Current','Position_Current'];
+        const headersHP = ['Program','First_Name','Middle_Name','Last_Name','Company_Name_Current','Position_Current'];
         sheet.getCell(`A${r}`).value = 'High Position Detailed Alumni Data'; r++;
         sheet.addRow(headersHP); r++;
 
@@ -1373,7 +1726,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           raw.forEach((row: any) => {
             if (row['Position_Current']) {
               rows.push([
-                row['Course'] || '',
+                row['Program'] || '',
                 row['First_Name'] || '',
                 row['Middle_Name'] || '',
                 row['Last_Name'] || '',
@@ -1409,12 +1762,23 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       if (!allStats && generatedStats?.type === 'SUC') {
         const sheet = workbook.addWorksheet('SUC Report');
         let r = 1;
-        sheet.getCell(`A${r}`).value = 'SUC Complete Statistics Report'; r++;
-        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
-        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
+        sheet.getCell(`A${r}`).value = 'SUC Complete Statistics Report';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
+        sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r++;
         sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
-        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
+        sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
+        // Make summary headers bold
+        sheet.getCell(`A${r}`).font = { bold: true };
+        sheet.getCell(`B${r}`).font = { bold: true };
+        sheet.getCell(`C${r}`).font = { bold: true };
+        r++;
         // High Position
         const highPos = Number(generatedStats.high_position_count) || 0;
         sheet.getCell(`A${r}`).value = 'High Position';
@@ -1444,9 +1808,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
         // Detailed
         sheet.getCell(`A${r}`).value = 'SUC Detailed Alumni Data'; r++;
-        sheet.addRow(qproHeaders); r++;
-        const mapped = (detailedDataByType['SUC'] || []).map(mapQPRORow)
-          .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
+        const headerRow = sheet.addRow(qproHeaders);
+        // Make headers bold
+        headerRow.eachCell((cell) => {
+          cell.font = { bold: true };
+        });
+        r++;
+        const mapped = sortAlumniData((detailedDataByType['SUC'] || []).map(mapQPRORow));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
 
         // Auto size and wrap
@@ -1468,15 +1836,19 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       let rowIdx = 1;
       if (allStats) {
         worksheet.getCell(`A${rowIdx}`).value = `All Complete Statistics Report`;
+        worksheet.getCell(`A${rowIdx}`).font = { bold: true };
         rowIdx++;
         worksheet.getCell(`A${rowIdx}`).value = `Generated Date`;
         worksheet.getCell(`B${rowIdx}`).value = new Date().toLocaleDateString();
+        worksheet.getCell(`A${rowIdx}`).font = { bold: true };
         rowIdx++;
         worksheet.getCell(`A${rowIdx}`).value = `Year Filter`;
         worksheet.getCell(`B${rowIdx}`).value = selectedYear || 'All';
+        worksheet.getCell(`A${rowIdx}`).font = { bold: true };
         rowIdx++;
         worksheet.getCell(`A${rowIdx}`).value = `Program Filter`;
         worksheet.getCell(`B${rowIdx}`).value = selectedProgram || 'All';
+        worksheet.getCell(`A${rowIdx}`).font = { bold: true };
         rowIdx += 2;
         for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
           const stats = statsByType[type];
@@ -1485,10 +1857,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             continue;
           }
           worksheet.getCell(`A${rowIdx}`).value = `${type} Statistics`;
+          worksheet.getCell(`A${rowIdx}`).font = { bold: true };
           rowIdx++;
           worksheet.getCell(`A${rowIdx}`).value = 'Metric';
           worksheet.getCell(`B${rowIdx}`).value = 'Value';
           worksheet.getCell(`C${rowIdx}`).value = 'Percentage';
+          // Make headers bold
+          worksheet.getCell(`A${rowIdx}`).font = { bold: true };
+          worksheet.getCell(`B${rowIdx}`).font = { bold: true };
+          worksheet.getCell(`C${rowIdx}`).font = { bold: true };
           rowIdx++;
 
           // Set current chart section for this type
@@ -1654,11 +2031,22 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               worksheet.getCell(`C${rowIdx}`).value = 'Position';
               worksheet.getCell(`D${rowIdx}`).value = 'Company';
               worksheet.getCell(`E${rowIdx}`).value = 'Sector';
-              worksheet.getCell(`F${rowIdx}`).value = 'Course';
+              worksheet.getCell(`F${rowIdx}`).value = 'Program';
               worksheet.getCell(`G${rowIdx}`).value = 'Year Graduated';
               worksheet.getCell(`H${rowIdx}`).value = 'Email';
               worksheet.getCell(`I${rowIdx}`).value = 'Phone';
               worksheet.getCell(`J${rowIdx}`).value = 'Address';
+              // Make headers bold
+              worksheet.getCell(`A${rowIdx}`).font = { bold: true };
+              worksheet.getCell(`B${rowIdx}`).font = { bold: true };
+              worksheet.getCell(`C${rowIdx}`).font = { bold: true };
+              worksheet.getCell(`D${rowIdx}`).font = { bold: true };
+              worksheet.getCell(`E${rowIdx}`).font = { bold: true };
+              worksheet.getCell(`F${rowIdx}`).font = { bold: true };
+              worksheet.getCell(`G${rowIdx}`).font = { bold: true };
+              worksheet.getCell(`H${rowIdx}`).font = { bold: true };
+              worksheet.getCell(`I${rowIdx}`).font = { bold: true };
+              worksheet.getCell(`J${rowIdx}`).font = { bold: true };
               rowIdx++;
               
               stats.high_position_data.forEach((alumnus: any) => {
@@ -1711,20 +2099,211 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               }
               
               const mappedHP = highPositionRows.map(mapHighPositionRow);
-              worksheet.addRow(headersHighPosition); rowIdx++;
+              const headerRow = worksheet.addRow(headersHighPosition);
+              // Make headers bold
+              headerRow.eachCell((cell) => {
+                cell.font = { bold: true };
+              });
+              rowIdx++;
               mappedHP.forEach((vals: (string | number)[]) => { worksheet.addRow(vals); rowIdx++; });
               // Excel sheet names must be <= 31 chars; use a concise, clear name
               const detailSheet = workbook.addWorksheet('High Position Details');
-              detailSheet.addRow(headersHighPosition);
+              
+              // Add summary metrics to HIGH_POSITION sheet
+              let detailRowIdx = 1;
+              detailSheet.getCell(`A${detailRowIdx}`).value = 'HIGH_POSITION Statistics Summary';
+              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
+              detailRowIdx++;
+              detailSheet.getCell(`A${detailRowIdx}`).value = 'Generated Date';
+              detailSheet.getCell(`B${detailRowIdx}`).value = new Date().toLocaleDateString();
+              detailRowIdx++;
+              detailSheet.getCell(`A${detailRowIdx}`).value = 'Year Filter';
+              detailSheet.getCell(`B${detailRowIdx}`).value = selectedYear || 'ALL';
+              detailRowIdx++;
+              detailSheet.getCell(`A${detailRowIdx}`).value = 'Program Filter';
+              detailSheet.getCell(`B${detailRowIdx}`).value = selectedProgram || 'ALL';
+              detailRowIdx += 2;
+              detailSheet.getCell(`A${detailRowIdx}`).value = '=== SUMMARY STATISTICS ===';
+              detailRowIdx++;
+              detailSheet.getCell(`A${detailRowIdx}`).value = 'Metric';
+              detailSheet.getCell(`B${detailRowIdx}`).value = 'Value';
+              detailSheet.getCell(`C${detailRowIdx}`).value = 'Percentage';
+              // Make summary headers bold
+              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
+              detailSheet.getCell(`B${detailRowIdx}`).font = { bold: true };
+              detailSheet.getCell(`C${detailRowIdx}`).font = { bold: true };
+              detailRowIdx++;
+              
+              detailSheet.getCell(`A${detailRowIdx}`).value = 'Total Alumni';
+              detailSheet.getCell(`B${detailRowIdx}`).value = stats.total_alumni || 0;
+              detailSheet.getCell(`C${detailRowIdx}`).value = '100%';
+              detailRowIdx++;
+              detailSheet.getCell(`A${detailRowIdx}`).value = 'High Position Alumni';
+              detailSheet.getCell(`B${detailRowIdx}`).value = stats.high_position_count || 0;
+              detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.high_position_count, stats.total_alumni);
+              detailRowIdx++;
+              detailSheet.getCell(`A${detailRowIdx}`).value = 'High Position Rate';
+              detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.high_position_rate || 0}%`;
+              detailRowIdx++;
+              
+              detailRowIdx += 2;
+              detailSheet.getCell(`A${detailRowIdx}`).value = '=== HIGH POSITION DETAILED ALUMNI DATA ===';
+              detailRowIdx++;
+              
+              const detailHeaderRow = detailSheet.addRow(headersHighPosition);
+              // Make headers bold
+              detailHeaderRow.eachCell((cell) => {
+                cell.font = { bold: true };
+              });
               mappedHP.forEach((vals: (string | number)[]) => detailSheet.addRow(vals));
               autoSizeAndWrapSheet(detailSheet);
             } else {
-              const mapped = rows.map(mapQPRORow)
-                .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
-              worksheet.addRow(qproHeaders); rowIdx++;
+              const mapped = sortAlumniData(rows.map(mapQPRORow));
+              const headerRow = worksheet.addRow(qproHeaders);
+              // Make headers bold
+              headerRow.eachCell((cell) => {
+                cell.font = { bold: true };
+              });
+              rowIdx++;
               mapped.forEach((vals) => { worksheet.addRow(vals); rowIdx++; });
               const detailSheet = workbook.addWorksheet(`${type} Detailed Alumni Data`);
-              detailSheet.addRow(qproHeaders);
+              
+              // Add summary metrics to individual sheets
+              let detailRowIdx = 1;
+              detailSheet.getCell(`A${detailRowIdx}`).value = `${type} Statistics Summary`;
+              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
+              detailRowIdx++;
+              detailSheet.getCell(`A${detailRowIdx}`).value = 'Generated Date';
+              detailSheet.getCell(`B${detailRowIdx}`).value = new Date().toLocaleDateString();
+              detailRowIdx++;
+              detailSheet.getCell(`A${detailRowIdx}`).value = 'Year Filter';
+              detailSheet.getCell(`B${detailRowIdx}`).value = selectedYear || 'ALL';
+              detailRowIdx++;
+              detailSheet.getCell(`A${detailRowIdx}`).value = 'Program Filter';
+              detailSheet.getCell(`B${detailRowIdx}`).value = selectedProgram || 'ALL';
+              detailRowIdx += 2;
+              detailSheet.getCell(`A${detailRowIdx}`).value = '=== SUMMARY STATISTICS ===';
+              detailRowIdx++;
+              detailSheet.getCell(`A${detailRowIdx}`).value = 'Metric';
+              detailSheet.getCell(`B${detailRowIdx}`).value = 'Value';
+              detailSheet.getCell(`C${detailRowIdx}`).value = 'Percentage';
+              // Make summary headers bold
+              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
+              detailSheet.getCell(`B${detailRowIdx}`).font = { bold: true };
+              detailSheet.getCell(`C${detailRowIdx}`).font = { bold: true };
+              detailRowIdx++;
+              
+              // Add type-specific metrics
+              if (type === 'QPRO') {
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Total Alumni';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.total_alumni || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = '100%';
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Employed';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.employed_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.employed_count, stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Unemployed';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.unemployed_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.unemployed_count, stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Employment Rate';
+                detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.employment_rate || 0}%`;
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Untracked';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.untracked_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.untracked_count, stats.total_alumni);
+                detailRowIdx++;
+              } else if (type === 'CHED') {
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Total Alumni';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.total_alumni || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = '100%';
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Pursuing Further Study';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.pursuing_further_study || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.pursuing_further_study, stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Not Pursuing';
+                detailSheet.getCell(`B${detailRowIdx}`).value = (stats.total_alumni || 0) - (stats.pursuing_further_study || 0);
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Further Study Rate';
+                detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.further_study_rate || 0}%`;
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Job Aligned';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.job_aligned_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.job_aligned_count, stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Self-Employed';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.self_employed_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.self_employed_count, stats.total_alumni);
+                detailRowIdx++;
+              } else if (type === 'SUC') {
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Total Alumni';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.total_alumni || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = '100%';
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'High Position';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.high_position_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.high_position_count, stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Other Positions';
+                detailSheet.getCell(`B${detailRowIdx}`).value = (stats.total_alumni || 0) - (stats.high_position_count || 0);
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Government';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.public_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.public_count, stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Private';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.private_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.private_count, stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Local';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.local_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.local_count, stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'International';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.international_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.international_count, stats.total_alumni);
+                detailRowIdx++;
+              } else if (type === 'AACUP') {
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Total Alumni';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.total_alumni || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = '100%';
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Employed';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.employed_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.employed_count, stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Absorbed';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.absorbed_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.absorbed_count, stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'High Position';
+                detailSheet.getCell(`B${detailRowIdx}`).value = stats.high_position_count || 0;
+                detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.high_position_count, stats.total_alumni);
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Employment Rate';
+                detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.employment_rate || 0}%`;
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'Absorption Rate';
+                detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.absorption_rate || 0}%`;
+                detailRowIdx++;
+                detailSheet.getCell(`A${detailRowIdx}`).value = 'High Position Rate';
+                detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.high_position_rate || 0}%`;
+                detailRowIdx++;
+              }
+              
+              detailRowIdx += 2;
+              detailSheet.getCell(`A${detailRowIdx}`).value = `=== ${type} DETAILED ALUMNI DATA ===`;
+              detailRowIdx++;
+              
+              const detailHeaderRow = detailSheet.addRow(qproHeaders);
+              // Make headers bold
+              detailHeaderRow.eachCell((cell) => {
+                cell.font = { bold: true };
+              });
               mapped.forEach((vals) => detailSheet.addRow(vals));
               autoSizeAndWrapSheet(detailSheet);
             }
@@ -1733,15 +2312,19 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       } else {
         worksheet.getCell(`A${rowIdx}`).value =
           `${generatedStats?.type || 'All'} Complete Statistics Report`;
+        worksheet.getCell(`A${rowIdx}`).font = { bold: true };
         rowIdx++;
         worksheet.getCell(`A${rowIdx}`).value = `Generated Date`;
         worksheet.getCell(`B${rowIdx}`).value = new Date().toLocaleDateString();
+        worksheet.getCell(`A${rowIdx}`).font = { bold: true };
         rowIdx++;
         worksheet.getCell(`A${rowIdx}`).value = `Year Filter`;
         worksheet.getCell(`B${rowIdx}`).value = generatedStats?.year || 'All';
+        worksheet.getCell(`A${rowIdx}`).font = { bold: true };
         rowIdx++;
         worksheet.getCell(`A${rowIdx}`).value = `Program Filter`;
         worksheet.getCell(`B${rowIdx}`).value = generatedStats?.course || 'All';
+        worksheet.getCell(`A${rowIdx}`).font = { bold: true };
         rowIdx += 2;
         worksheet.getCell(`A${rowIdx}`).value = '=== SUMMARY STATISTICS ===';
         rowIdx++;
@@ -2253,7 +2836,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             </select>
           </div>
           <div style={{ flex: 1 }}>
-            <label style={label}>Course:</label>
+            <label style={label}>Program:</label>
             <select
               value={selectedProgram}
               onChange={(e) => setSelectedProgram(e.target.value)}
@@ -2261,7 +2844,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             >
               {courseOptions.map((course) => (
                 <option key={course} value={course}>
-                  {course === 'ALL' ? 'All Courses' : course}
+                  {course === 'ALL' ? 'All Programs' : course}
                 </option>
               ))}
             </select>

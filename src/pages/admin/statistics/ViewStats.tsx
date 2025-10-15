@@ -98,74 +98,33 @@ const ViewStats: React.FC = () => {
           <div style={styles.headerContent}>
             <button onClick={() => navigate(-1)} style={styles.backButton}>
               <FaArrowLeft style={{ marginRight: '8px' }} />
-              Back to Dashboard
+              
             </button>
             
             <div style={styles.titleSection}>
               <h1 style={styles.title}>
-                <FaChartBar style={{ marginRight: '12px', color: '#3b82f6' }} />
-                Alumni Statistics
+                <FaChartBar style={{ marginRight: '12px', color: 'white' }} />
+                View Users
               </h1>
-              <p style={styles.subtitle}>View and manage alumni data by graduation year</p>
             </div>
 
-            <div style={styles.headerActions}>
-              <button style={styles.actionButton} onClick={() => setShowExportModal(true)}>
-                <FaUpload style={{ marginRight: '8px' }} />
-                Import/Export
-              </button>
-              <button style={styles.generateButton} onClick={handleGenerateClick}>
-                <FaCog style={{ marginRight: '8px' }} />
-                Generate Statistics
-              </button>
-            </div>
           </div>
         </div>
 
-        {/* Stats Overview */}
-        <div style={styles.statsOverview}>
-          <div style={styles.overviewCard}>
-            <div style={styles.overviewIcon}>
-              <FaGraduationCap />
-            </div>
-            <div style={styles.overviewContent}>
-              <div style={styles.overviewNumber}>{years.length}</div>
-              <div style={styles.overviewLabel}>Graduation Years</div>
-            </div>
-          </div>
-          <div style={styles.overviewCard}>
-            <div style={styles.overviewIcon}>
-              <FaUsers />
-            </div>
-            <div style={styles.overviewContent}>
-              <div style={styles.overviewNumber}>{years.reduce((sum, year) => sum + year.count, 0)}</div>
-              <div style={styles.overviewLabel}>Total Alumni</div>
-            </div>
-          </div>
-          <div style={styles.overviewCard}>
-            <div style={styles.overviewIcon}>
-              <FaCalendarAlt />
-            </div>
-            <div style={styles.overviewContent}>
-              <div style={styles.overviewNumber}>
-                {years.length > 0 ? Math.max(...years.map(y => y.year)) : 'N/A'}
-              </div>
-              <div style={styles.overviewLabel}>Latest Batch</div>
-            </div>
-          </div>
+        {/* Action Buttons */}
+        <div style={styles.actionButtonsContainer}>
+          <button style={styles.actionButton} onClick={() => setShowExportModal(true)}>
+            <FaUpload style={{ marginRight: '8px', color: 'white' }} />
+            Import/Export
+          </button>
+          <button style={styles.generateButton} onClick={handleGenerateClick}>
+            <FaCog style={{ marginRight: '8px', color: 'white' }} />
+            Generate Statistics
+          </button>
         </div>
 
         {/* Alumni Cards Grid */}
         <div style={styles.cardsContainer}>
-          <div style={styles.cardsHeader}>
-            <h2 style={styles.cardsTitle}>
-              <FaFilter style={{ marginRight: '8px', color: '#6b7280' }} />
-              Alumni by Graduation Year
-            </h2>
-            <p style={styles.cardsSubtitle}>
-              Click on any year card to view detailed alumni information
-            </p>
-          </div>
 
           {loading ? (
             <div style={styles.loadingContainer}>
@@ -212,7 +171,7 @@ const ViewStats: React.FC = () => {
                     <div style={styles.cardIcon}>
                       <FaGraduationCap />
                     </div>
-                    <div style={styles.cardYear}>{grad.year}</div>
+                    <div style={styles.cardYear}>CLASS OF {grad.year}</div>
                   </div>
                   <div style={styles.cardContent}>
                     <div style={styles.cardStats}>
@@ -223,7 +182,7 @@ const ViewStats: React.FC = () => {
                       </div>
                     </div>
                     <div style={styles.cardFooter}>
-                      <span style={styles.viewText}>Click to view details</span>
+                      
                     </div>
                   </div>
                 </div>
@@ -240,7 +199,7 @@ const ViewStats: React.FC = () => {
             <div style={styles.modalContent}>
               <div style={styles.modalHeader}>
                 <h2 style={styles.modalTitle}>
-                  <FaDownload style={{ marginRight: '12px', color: '#3b82f6' }} />
+                  <FaDownload style={{ marginRight: '12px', color: '#6C63FF' }} />
                   Import & Export Alumni Data
                 </h2>
                 <button onClick={() => setShowExportModal(false)} style={styles.modalCloseButton}>
@@ -302,29 +261,32 @@ const ViewStats: React.FC = () => {
 const styles: { [key: string]: React.CSSProperties } = {
   // Header styles
   header: {
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    background: '#1c4e80',
     color: 'white',
-    padding: '24px 32px',
+    padding: '24px 32px 24px 0px',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
   },
   headerContent: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     maxWidth: '1200px',
     margin: '0 auto',
+    position: 'relative',
   },
   backButton: {
-    background: 'rgba(255, 255, 255, 0.2)',
+    background: 'transparent',
     border: 'none',
     color: 'white',
-    padding: '10px 16px',
-    borderRadius: '8px',
+    padding: '0',
     cursor: 'pointer',
     fontWeight: '600',
     display: 'flex',
     alignItems: 'center',
     transition: 'all 0.2s ease',
+    position: 'absolute',
+    left: '-64px',
+    fontSize: '24px',
   },
   titleSection: {
     textAlign: 'center',
@@ -343,15 +305,24 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '16px',
     opacity: 0.9,
   },
+  actionButtonsContainer: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'flex-end',
+    padding: '16px 32px',
+    backgroundColor: 'transparent',
+  },
   headerActions: {
     display: 'flex',
     gap: '12px',
+    position: 'absolute',
+    right: '-32px',
   },
   actionButton: {
-    background: 'rgba(255, 255, 255, 0.2)',
-    border: 'none',
+    background: '#1C4E80',
+    border: '2px solid #1C4E80',
     color: 'white',
-    padding: '10px 16px',
+    padding: '14px 20px',
     borderRadius: '8px',
     cursor: 'pointer',
     fontWeight: '600',
@@ -360,10 +331,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
   },
   generateButton: {
-    background: 'rgba(255, 255, 255, 0.9)',
-    border: 'none',
-    color: '#1f2937',
-    padding: '10px 16px',
+    background: '#1C4E80',
+    border: '2px solid #1C4E80',
+    color: 'white',
+    padding: '14px 20px',
     borderRadius: '8px',
     cursor: 'pointer',
     fontWeight: '600',
@@ -394,13 +365,13 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   overviewIcon: {
     fontSize: '32px',
-    color: '#3b82f6',
+    color: '#6C63FF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     width: '60px',
     height: '60px',
-    background: '#dbeafe',
+    background: '#f0f0ff',
     borderRadius: '12px',
   },
   overviewContent: {
@@ -421,7 +392,9 @@ const styles: { [key: string]: React.CSSProperties } = {
 
   // Cards container
   cardsContainer: {
-    padding: '32px',
+    padding: '32px 32px 32px 32px',
+    display: 'flex',
+    justifyContent: 'flex-start',
   },
   cardsHeader: {
     textAlign: 'center',
@@ -446,7 +419,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
     gap: '24px',
     maxWidth: '1200px',
-    margin: '0 auto',
+    margin: '0',
   },
 
   // Year card styles
@@ -460,7 +433,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: '1px solid #e5e7eb',
   },
   cardHeader: {
-    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+    background: '#1C4E80',
     color: 'white',
     padding: '20px',
     display: 'flex',
@@ -474,12 +447,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     width: '48px',
     height: '48px',
-    background: 'rgba(255, 255, 255, 0.2)',
+    background: 'rgba(255, 255, 255, 0.15)',
     borderRadius: '12px',
   },
   cardYear: {
-    fontSize: '24px',
-    fontWeight: '700',
+    fontSize: '16px',
+    fontWeight: '600',
   },
   cardContent: {
     padding: '20px',
@@ -510,7 +483,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   viewText: {
     fontSize: '12px',
-    color: '#3b82f6',
+    color: '#4A47E0',
     fontWeight: '600',
   },
 
@@ -526,7 +499,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '40px',
     height: '40px',
     border: '4px solid #e5e7eb',
-    borderTop: '4px solid #3b82f6',
+    borderTop: '4px solid #6C63FF',
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
   },
@@ -681,7 +654,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
   },
   exportButton: {
-    background: '#10b981',
+    background: '#4A47E0',
     color: 'white',
     border: 'none',
     padding: '12px 20px',
@@ -693,7 +666,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
   },
   importButton: {
-    background: '#3b82f6',
+    background: '#6C63FF',
     color: 'white',
     border: 'none',
     padding: '12px 20px',
