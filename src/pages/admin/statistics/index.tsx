@@ -321,7 +321,7 @@ export default function Statistics() {
           <div style={styles.filterControls}>
             <div style={styles.filterGroup}>
               <label htmlFor="year-filter" style={styles.filterLabel}>
-                <FaChartLine style={{ marginRight: '6px' }} />
+                {FaChartLine({ style: { marginRight: '6px' } })}
                 Year:
               </label>
               <select
@@ -340,7 +340,7 @@ export default function Statistics() {
 
             <div style={styles.filterGroup}>
               <label htmlFor="program-filter" style={styles.filterLabel}>
-                <FaUsers style={{ marginRight: '6px' }} />
+                {FaUsers({ style: { marginRight: '6px' } })}
                 Program:
               </label>
               <select
@@ -366,11 +366,11 @@ export default function Statistics() {
           {/* Buttons aligned to right */}
           <div className="filter-buttons">
             <button className="action-button" onClick={() => setShowModal(true)}>
-              <FaUpload style={{ marginRight: '8px' }} />
+              {FaUpload({ style: { marginRight: '8px' } })}
               Import Alumni
             </button>
             <button className="action-button" onClick={() => navigate('/ViewStats')}>
-              <FaDownload style={{ marginRight: '8px' }} />
+              {FaDownload({ style: { marginRight: '8px' } })}
               View Users
             </button>
           </div>
@@ -382,7 +382,7 @@ export default function Statistics() {
             <div>
               <div style={styles.chartTitleContainer}>
                 <div style={styles.chartIcon}>
-                  <FaChartLine />
+                  {FaChartLine({})}
                 </div>
                 <div>
                   <h3 style={styles.chartTitle}>
@@ -488,10 +488,10 @@ export default function Statistics() {
                       backgroundColor: barColors[entry.category],
                     }}
                   >
-                    {entry.category === 'Employed' && <FaBriefcase />}
-                    {entry.category === 'Pending' && <FaClock />}
-                    {entry.category === 'Unemployed' && <FaTimes />}
-                    {entry.category === 'Absorb' && <FaBullseye />}
+                    {entry.category === 'Employed' && FaBriefcase({})}
+                    {entry.category === 'Pending' && FaClock({})}
+                    {entry.category === 'Unemployed' && FaTimes({})}
+                    {entry.category === 'Absorb' && FaBullseye({})}
                   </div>
                 </div>
                 <div style={styles.summaryContent}>

@@ -97,13 +97,13 @@ const ViewStats: React.FC = () => {
         <div style={styles.header}>
           <div style={styles.headerContent}>
             <button onClick={() => navigate(-1)} style={styles.backButton}>
-              <FaArrowLeft style={{ marginRight: '8px' }} />
+              {FaArrowLeft({ style: { marginRight: '8px' } })}
               
             </button>
             
             <div style={styles.titleSection}>
               <h1 style={styles.title}>
-                <FaChartBar style={{ marginRight: '12px', color: 'white' }} />
+                {FaChartBar({ style: { marginRight: '12px', color: 'white' } })}
                 View Users
               </h1>
             </div>
@@ -114,11 +114,11 @@ const ViewStats: React.FC = () => {
         {/* Action Buttons */}
         <div style={styles.actionButtonsContainer}>
           <button style={styles.actionButton} onClick={() => setShowExportModal(true)}>
-            <FaUpload style={{ marginRight: '8px', color: 'white' }} />
+            {FaUpload({ style: { marginRight: '8px', color: 'white' } })}
             Import/Export
           </button>
           <button style={styles.generateButton} onClick={handleGenerateClick}>
-            <FaCog style={{ marginRight: '8px', color: 'white' }} />
+            {FaCog({ style: { marginRight: '8px', color: 'white' } })}
             Generate Statistics
           </button>
         </div>
@@ -134,7 +134,7 @@ const ViewStats: React.FC = () => {
           ) : years.length === 0 ? (
             <div style={styles.emptyState}>
               <div style={styles.emptyIcon}>
-                <FaGraduationCap />
+                {FaGraduationCap({})}
               </div>
               <h3 style={styles.emptyTitle}>No Alumni Data Found</h3>
               <p style={styles.emptyText}>
@@ -142,11 +142,11 @@ const ViewStats: React.FC = () => {
               </p>
               <div style={styles.emptyActions}>
                 <button style={styles.emptyButton} onClick={() => setShowExportModal(true)}>
-                  <FaUpload style={{ marginRight: '8px' }} />
+                  {FaUpload({ style: { marginRight: '8px' } })}
                   Import Data
                 </button>
                 <button style={styles.emptyButton} onClick={handleGenerateClick}>
-                  <FaCog style={{ marginRight: '8px' }} />
+                  {FaCog({ style: { marginRight: '8px' } })}
                   Generate Statistics
                 </button>
               </div>
@@ -169,14 +169,14 @@ const ViewStats: React.FC = () => {
                 >
                   <div style={styles.cardHeader}>
                     <div style={styles.cardIcon}>
-                      <FaGraduationCap />
+                      {FaGraduationCap({})}
                     </div>
                     <div style={styles.cardYear}>CLASS OF {grad.year}</div>
                   </div>
                   <div style={styles.cardContent}>
                     <div style={styles.cardStats}>
                       <div style={styles.statItem}>
-                        <FaUsers style={styles.statIcon} />
+                        {FaUsers({ style: styles.statIcon })}
                         <span style={styles.statNumber}>{grad.count}</span>
                         <span style={styles.statLabel}>Alumni</span>
                       </div>
@@ -199,7 +199,7 @@ const ViewStats: React.FC = () => {
             <div style={styles.modalContent}>
               <div style={styles.modalHeader}>
                 <h2 style={styles.modalTitle}>
-                  <FaDownload style={{ marginRight: '12px', color: '#6C63FF' }} />
+                  {FaDownload({ style: { marginRight: '12px', color: '#6C63FF' } })}
                   Import & Export Alumni Data
                 </h2>
                 <button onClick={() => setShowExportModal(false)} style={styles.modalCloseButton}>
@@ -225,7 +225,7 @@ const ViewStats: React.FC = () => {
                     </select>
                   </div>
                   <button style={styles.exportButton} onClick={handleExport}>
-                    <FaDownload style={{ marginRight: '8px' }} />
+                    {FaDownload({ style: { marginRight: '8px' } })}
                     Export to Excel
                   </button>
                 </div>
@@ -245,7 +245,7 @@ const ViewStats: React.FC = () => {
                     />
                   </div>
                   <button style={styles.importButton} onClick={handleExportedImport}>
-                    <FaUpload style={{ marginRight: '8px' }} />
+                    {FaUpload({ style: { marginRight: '8px' } })}
                     Import Data
                   </button>
                 </div>

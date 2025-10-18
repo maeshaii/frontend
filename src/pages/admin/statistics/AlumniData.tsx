@@ -154,8 +154,8 @@ const AlumniData: React.FC = () => {
   };
 
   const getSortIcon = (key: string) => {
-    if (!sortConfig || sortConfig.key !== key) return <FaSort />;
-    return sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />;
+    if (!sortConfig || sortConfig.key !== key) return <>{FaSort({})}</>;
+    return sortConfig.direction === 'asc' ? <>{FaSortUp({})}</> : <>{FaSortDown({})}</>;
   };
 
   const openModal = async (alumni: any) => {
@@ -243,13 +243,13 @@ const AlumniData: React.FC = () => {
         <div style={styles.header}>
           <div style={styles.headerContent}>
             <button onClick={() => navigate(-1)} style={styles.backButton}>
-              <FaArrowLeft style={{ marginRight: '8px' }} />
+              {FaArrowLeft({ style: { marginRight: '8px' } })}
               
             </button>
             
             <div style={styles.titleSection}>
               <h1 style={styles.title}>
-                <FaGraduationCap style={{ marginRight: '12px', color: 'white' }} />
+                {FaGraduationCap({ style: { marginRight: '12px', color: 'white' } })}
                 Alumni Data
               </h1>
               <p style={styles.subtitle}>Class of {year}</p>
@@ -261,7 +261,7 @@ const AlumniData: React.FC = () => {
         <div style={styles.controlsSection}>
           <div style={styles.filtersContainer}>
             <div style={styles.searchContainer}>
-              <FaSearch style={styles.searchIcon} />
+              {FaSearch({ style: styles.searchIcon })}
               <input
                 type="text"
                 placeholder="Search alumni by name..."
@@ -272,7 +272,7 @@ const AlumniData: React.FC = () => {
             </div>
 
             <div style={styles.filterGroup}>
-              <FaFilter style={styles.filterIcon} />
+              {FaFilter({ style: styles.filterIcon })}
               <select
                 value={selectedProgram}
                 onChange={(e) => setSelectedProgram(e.target.value)}
@@ -302,14 +302,14 @@ const AlumniData: React.FC = () => {
                     <tr style={styles.tableHeader}>
                       <th style={styles.sortableHeader} onClick={() => handleSort('program')}>
                         <div style={styles.headerContent}>
-                          <FaGraduationCap style={styles.headerIcon} />
+                          {FaGraduationCap({ style: styles.headerIcon })}
                           Program
                           {getSortIcon('program')}
                         </div>
                       </th>
                       <th style={styles.sortableHeader} onClick={() => handleSort('lastName')}>
                         <div style={styles.headerContent}>
-                          <FaUser style={styles.headerIcon} />
+                          {FaUser({ style: styles.headerIcon })}
                           Last Name
                           {getSortIcon('lastName')}
                         </div>
@@ -328,7 +328,7 @@ const AlumniData: React.FC = () => {
                       </th>
                       <th style={styles.sortableHeader} onClick={() => handleSort('position')}>
                         <div style={styles.headerContent}>
-                          <FaBuilding style={styles.headerIcon} />
+                          {FaBuilding({ style: styles.headerIcon })}
                           Current Position
                           {getSortIcon('position')}
                         </div>
@@ -348,7 +348,7 @@ const AlumniData: React.FC = () => {
                       <tr>
                         <td colSpan={8} style={styles.emptyState}>
                           <div style={styles.emptyStateContent}>
-                            <FaUser style={styles.emptyIcon} />
+                            {FaUser({ style: styles.emptyIcon })}
                             <h3 style={styles.emptyTitle}>No alumni found</h3>
                             <p style={styles.emptyText}>
                               {searchTerm || selectedProgram !== 'All' 
@@ -373,7 +373,7 @@ const AlumniData: React.FC = () => {
                           </td>
                           <td style={styles.tableCell}>
                             <div style={styles.nameContainer}>
-                              <FaUser style={styles.nameIcon} />
+                              {FaUser({ style: styles.nameIcon })}
                               <span style={styles.nameText}>
                                 {alumni.l_name ||
                                   alumni.Last_Name ||
@@ -419,7 +419,7 @@ const AlumniData: React.FC = () => {
                                 trackerAnswersMap[alumni.id]?.position_current ||
                                 trackerAnswersMap[alumni.user_id]?.position_current ? (
                                 <>
-                                  <FaBuilding style={styles.positionIcon} />
+                                  {FaBuilding({ style: styles.positionIcon })}
                                   <span>
                                     {alumni.position_current ||
                                       alumni.company_name_current ||
@@ -456,7 +456,7 @@ const AlumniData: React.FC = () => {
                                 openModal(alumni);
                               }}
                             >
-                              <FaEye />
+                              {FaEye({})}
                               View Details
                             </button>
                           </td>
@@ -523,7 +523,7 @@ const AlumniData: React.FC = () => {
             <div style={styles.modalContent}>
               <div style={styles.modalHeader}>
                 <h2 style={styles.modalTitle}>
-                  <FaUser style={{ marginRight: '12px', color: '#6C63FF' }} />
+                  {FaUser({ style: { marginRight: '12px', color: '#6C63FF' } })}
                   Alumni Details
                 </h2>
                 <button onClick={closeModal} style={styles.modalCloseButton}>
