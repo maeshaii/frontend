@@ -412,6 +412,22 @@ export const sendCompletedOJTToAdmin = async (year?: number | string, userIds?: 
   return response.data;
 };
 
+// Set send date for OJT students
+export const setSendDate = async (coordinator: string, batchYear: number, section: string | null, sendDate: string): Promise<{ success: boolean; message: string; send_date?: string }> => {
+  try {
+    const response = await api.post('ojt/set-send-date/', {
+      coordinator,
+      batch_year: batchYear,
+      section,
+      send_date: sendDate
+    });
+    return response.data;
+  } catch (error: any) {
+    const message = error.response?.data?.message || 'Failed to set send date';
+    return { success: false, message };
+  }
+};
+
 // Approve coordinator request for a batch year (converts OJT users to alumni)
 export const approveCoordinatorRequest = async (year: number | string) => {
   const response = await api.post('ojt/approve-to-alumni/', { year });
@@ -905,3 +921,8 @@ export const repostDonation = async (donationId: number, repostCaption: string) 
   });
   return response.data;
 };
+
+
+
+
+

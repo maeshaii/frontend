@@ -61,11 +61,16 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
     loadOJTData();
   }, [selectedYear, selectedSection, coordinatorUsername]);
 
-  // Inline styles
+  // Modern, neat design styles
   const styles = {
     detailsTable: {
-      margin: '40px auto',
-      maxWidth: '90%',
+      margin: '24px auto',
+      maxWidth: '96%',
+      backgroundColor: 'white',
+      borderRadius: '16px',
+      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+      overflow: 'hidden',
+      border: '1px solid #f1f5f9',
     },
     searchRow: {
       display: 'flex',
@@ -82,53 +87,134 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
     },
     table: {
       width: '100%',
+      borderCollapse: 'separate' as const,
+      borderSpacing: '0',
+      textAlign: 'left' as const,
+      tableLayout: 'fixed' as const,
+    },
+    tableHeader: {
+      position: 'sticky' as const,
+      top: 0,
+      zIndex: 10,
+      backgroundColor: 'white',
+      borderBottom: '2px solid #e5e7eb',
+    },
+    tableHeaderTable: {
+      width: '100%',
       borderCollapse: 'collapse' as const,
-      borderRadius: '8px',
-      overflow: 'hidden',
+      textAlign: 'left' as const,
+    },
+    tableBodyContainer: {
+      maxHeight: '450px',
+      overflowY: 'auto' as const,
+    },
+    tableBodyTable: {
+      width: '100%',
+      borderCollapse: 'collapse' as const,
       textAlign: 'left' as const,
     },
     th: {
-      backgroundColor: '#5A6DFE',
-      color: 'white',
-      padding: '12px',
+      backgroundColor: 'white',
+      color: '#374151',
+      padding: '18px 20px',
       fontWeight: '600',
+      fontSize: '14px',
+      textAlign: 'left' as const,
+      borderBottom: '1px solid #e5e7eb',
+      verticalAlign: 'middle' as const,
+      borderRight: '1px solid #e5e7eb',
+      letterSpacing: '0.025em',
     },
     td: {
-      padding: '12px',
+      padding: '16px 20px',
+      fontSize: '14px',
+      verticalAlign: 'middle' as const,
+      borderBottom: '1px solid #f1f5f9',
+      borderRight: '1px solid #f1f5f9',
+      textAlign: 'left' as const,
+      width: 'auto',
+      color: '#374151',
+      fontWeight: '400',
     },
     trEven: {
-      padding: '12px',
-      backgroundColor: '#f9f9f9',
+      backgroundColor: '#f9fafb',
     },
-    complete: {
-      padding: '12px',
-      color: '#0093D9',
-      fontWeight: '600',
+    statusCell: {
+      textAlign: 'center' as const,
+      padding: '16px 20px',
+      fontSize: '14px',
+      verticalAlign: 'middle' as const,
+      borderBottom: '1px solid #f1f5f9',
+      borderRight: 'none',
+      width: '20%',
+      position: 'relative' as const,
+      borderLeft: '1px solid #f1f5f9',
+      color: '#374151',
+      fontWeight: '400',
     },
-    incomplete: {
-      padding: '12px',
-      color: '#E95D35',
+    statusText: {
+      display: 'inline-block',
+      padding: '6px 12px',
+      borderRadius: '16px',
+      fontSize: '12px',
       fontWeight: '600',
+      textAlign: 'center' as const,
+      margin: '0 auto',
+      width: 'fit-content',
+      letterSpacing: '0.025em',
+    },
+    statusApproved: {
+      backgroundColor: '#dbeafe',
+      color: '#1e40af',
+    },
+    statusPending: {
+      backgroundColor: '#fef3c7',
+      color: '#d97706',
+    },
+    statusDropdown: {
+      width: '100%',
+      maxWidth: '160px',
+      padding: '8px 12px',
+      border: '1px solid #e5e7eb',
+      borderRadius: '8px',
+      backgroundColor: 'white',
+      cursor: 'pointer',
+      fontSize: '12px',
+      textAlign: 'center' as const,
+      outline: 'none',
+      margin: '0 auto',
+      display: 'block',
+      fontWeight: '400',
+      color: '#374151',
     },
     tableActions: {
-      marginTop: '20px',
+      padding: '20px 24px',
+      backgroundColor: '#f8fafc',
+      borderTop: '1px solid #e5e7eb',
       display: 'flex',
       justifyContent: 'space-between',
+      alignItems: 'center',
+      borderRadius: '0 0 12px 12px',
     },
     backBtn: {
-      padding: '8px 20px',
-      background: '#ccc',
-      border: 'none',
-      borderRadius: '20px',
-      cursor: 'pointer',
-    },
-    sendBtn: {
-      padding: '8px 20px',
-      background: '#164B87',
+      padding: '10px 20px',
+      background: '#6b7280',
       color: 'white',
       border: 'none',
-      borderRadius: '20px',
+      borderRadius: '8px',
       cursor: 'pointer',
+      fontWeight: '500',
+      fontSize: '14px',
+    },
+    sendBtn: {
+      padding: '10px 20px',
+      background: '#3b82f6',
+      color: 'white',
+      border: 'none',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      fontWeight: '500',
+      fontSize: '14px',
     },
     modalOverlay: {
       position: 'fixed' as const,
@@ -136,57 +222,111 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(0,0,0,0.45)',
+      background: 'rgba(0, 0, 0, 0.6)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 50,
+      backdropFilter: 'blur(4px)',
     },
     modal: {
       background: 'white',
-      width: '560px',
-      maxWidth: '96%',
-      borderRadius: '14px',
-      padding: '22px 24px',
-      boxShadow: '0 20px 40px rgba(0,0,0,0.25)'
+      width: '900px',
+      maxWidth: '95vw',
+      borderRadius: '16px',
+      padding: '0',
+      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+      overflow: 'visible',
+      display: 'flex',
+      flexDirection: 'column' as const,
+    },
+    modalHeader: {
+      background: 'white',
+      padding: '24px 32px',
+      color: '#1f2937',
+      position: 'relative' as const,
+      borderBottom: '2px solid #e5e7eb',
     },
     modalTitle: {
-      fontSize: '18px',
-      fontWeight: 700,
-      marginBottom: '12px'
+      fontSize: '24px',
+      fontWeight: '700',
+      margin: '0',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px'
     },
-    modalDivider: {
-      height: 1,
-      background: '#e5e7eb',
-      margin: '8px 0 16px'
+    modalCloseBtn: {
+      position: 'absolute' as const,
+      top: '20px',
+      right: '20px',
+      background: '#f3f4f6',
+      border: '2px solid #e5e7eb',
+      borderRadius: '50%',
+      width: '36px',
+      height: '36px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      cursor: 'pointer',
+      color: '#6b7280',
+      fontSize: '18px',
+      transition: 'all 0.2s ease',
+    },
+    modalContent: {
+      padding: '32px',
+      flex: 1,
+      overflowY: 'visible' as const,
     },
     modalGrid: {
       display: 'grid',
-      gridTemplateColumns: '160px 1fr',
-      rowGap: '10px',
-      columnGap: '16px',
+      gridTemplateColumns: '1fr 1fr 1fr',
+      gap: '16px',
+    },
+    modalSection: {
+      background: '#f8fafc',
+      borderRadius: '10px',
+      padding: '16px',
+      border: '1px solid #e2e8f0',
+      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+    },
+    modalSectionTitle: {
       fontSize: '14px',
-      lineHeight: 1.4
+      fontWeight: '700',
+      color: '#1f2937',
+      marginBottom: '12px',
+      paddingBottom: '6px',
+      borderBottom: '2px solid #1f2937',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px'
+    },
+    modalField: {
+      display: 'grid',
+      gridTemplateColumns: '100px 1fr',
+      gap: '8px',
+      marginBottom: '8px',
+      alignItems: 'center',
     },
     modalLabel: {
-      color: '#6b7280',
-      fontWeight: 600
+      color: '#4b5563',
+      fontWeight: '600',
+      fontSize: '11px',
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.05em',
     },
     modalValue: {
-      color: '#111827',
-      fontWeight: 500
-    },
-    modalActionsRow: {
+      color: '#1f2937',
+      fontWeight: '500',
+      fontSize: '13px',
+      background: 'white',
+      padding: '6px 10px',
+      borderRadius: '6px',
+      border: '1px solid #e5e7eb',
+      minHeight: '32px',
       display: 'flex',
-      justifyContent: 'flex-end',
-      marginTop: '18px'
-    },
-    closeBtn: {
-      padding: '8px 16px',
-      borderRadius: '8px',
-      border: '1px solid #d1d5db',
-      background: '#f3f4f6',
-      cursor: 'pointer'
+      alignItems: 'center',
+      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+      transition: 'all 0.2s ease',
     },
     sendModalOverlay: {
       position: 'fixed' as const,
@@ -300,171 +440,186 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
 
   return (
     <div style={styles.detailsTable}>
-      {/* Batch and Section Header with Filters */}
+      {/* Header Bar with Class, Section, Search and Filter */}
       <div style={{
-        marginBottom: '20px',
+        backgroundColor: 'white',
         padding: '20px 24px',
-        background: 'linear-gradient(135deg, #5A6DFE 0%, #4C5FE8 100%)',
-        borderRadius: '12px',
-        color: 'white',
-        boxShadow: '0 4px 12px rgba(90, 109, 254, 0.3)',
+        borderRadius: '12px 12px 0 0',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '16px',
+        border: '1px solid #e5e7eb',
+        borderBottom: '2px solid #e5e7eb'
       }}>
-        {/* Left side: Batch and Section info */}
-        <div>
+        <div style={{ color: '#374151' }}>
           <h2 style={{ 
-            margin: 0, 
+            margin: '0 0 4px 0', 
             fontSize: '24px', 
-            fontWeight: 700,
-            marginBottom: '6px'
+            fontWeight: '700',
+            color: '#1f2937'
           }}>
             Class of {selectedYear}
           </h2>
-          {selectedSection && (
-            <p style={{ 
-              margin: 0, 
-              fontSize: '16px', 
-              fontWeight: 500,
-              opacity: 0.95
-            }}>
-              Section: {selectedSection}
-            </p>
-          )}
+          <p style={{ 
+            margin: '0', 
+            fontSize: '16px', 
+            fontWeight: '500',
+            color: '#6b7280'
+          }}>
+            Section: {selectedSection}
+          </p>
         </div>
         
-        {/* Right side: Search and Filter inputs */}
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '16px',
+          flexWrap: 'wrap'
+        }}>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             style={{
-              padding: '9px 14px',
-              border: 'none',
-              borderRadius: '20px',
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: 500,
+              padding: '10px 16px',
+              border: '2px solid #e5e7eb',
+              borderRadius: '8px',
+              backgroundColor: 'white',
               color: '#374151',
-              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-              width: '160px'
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              outline: 'none',
+              minWidth: '140px'
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = '#3b82f6';
+              e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = '#e5e7eb';
+              e.target.style.boxShadow = 'none';
             }}
           >
-            <option value="all">All Students</option>
-            <option value="approved">Approved by Admin</option>
-            <option value="pending">Pending Approval</option>
+            <option value="all" style={{ color: '#374151' }}>All Students</option>
+            <option value="approved" style={{ color: '#374151' }}>Approved</option>
+            <option value="pending" style={{ color: '#374151' }}>Pending</option>
+            <option value="ongoing" style={{ color: '#374151' }}>Ongoing</option>
+            <option value="completed" style={{ color: '#374151' }}>Completed</option>
           </select>
+          
           <input
             type="text"
             placeholder="Search by name or CTU ID..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
-              padding: '9px 16px',
-              border: 'none',
-              borderRadius: '20px',
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              fontSize: '13px',
+              padding: '10px 16px',
+              border: '2px solid #e5e7eb',
+              borderRadius: '8px',
+              backgroundColor: 'white',
+              color: '#374151',
+              fontSize: '14px',
               outline: 'none',
-              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-              width: '240px'
+              minWidth: '250px'
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = '#3b82f6';
+              e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = '#e5e7eb';
+              e.target.style.boxShadow = 'none';
             }}
           />
         </div>
       </div>
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.th}>Last Name</th>
-            <th style={styles.th}>First Name</th>
-            <th style={styles.th}>Company</th>
-            <th style={{ ...styles.th, textAlign: 'center' }}>OJT Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.length === 0 ? (
+      
+      {/* Single Table with Fixed Layout */}
+      <div style={styles.tableBodyContainer}>
+        <table style={styles.table}>
+          <thead>
             <tr>
-              <td colSpan={4} style={{ textAlign: 'center', padding: '20px', color: '#888' }}>
-                No OJT data found for this year.
-              </td>
+              <th style={{ ...styles.th, width: '20%', textAlign: 'left' as const }}>Last Name</th>
+              <th style={{ ...styles.th, width: '20%', textAlign: 'left' as const }}>First Name</th>
+              <th style={{ ...styles.th, width: '40%', textAlign: 'left' as const }}>Company</th>
+              <th style={{ 
+                ...styles.th, 
+                textAlign: 'center' as const, 
+                padding: '16px 20px', 
+                width: '20%',
+                position: 'relative' as const,
+                borderRight: 'none'
+              }}>OJT Status</th>
             </tr>
-          ) : (
-            filtered.map((ojt, idx) => (
-              <tr
-                key={ojt.id}
-                style={idx % 2 === 1 ? styles.trEven : undefined}
-                onClick={() => setSelected(ojt)}
-              >
-                <td style={styles.td}>{ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : '')}</td>
-                <td style={styles.td}>{ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : '')}</td>
-                <td style={styles.td}>{ojt.company || ''}</td>
-                <td style={{ ...styles.td, textAlign: 'center' }}>
-                  {ojt.is_alumni ? (
-                    <div style={{
-                      padding: '8px 12px',
-                      color: '#374151',
-                      textAlign: 'center',
-                      fontWeight: '600',
-                      fontSize: '14px'
-                    }}>
-                      Already Approved by Admin
-                    </div>
-                  ) : isUserSentToAdmin(ojt) ? (
-                    <div style={{
-                      padding: '8px 12px',
-                      color: '#F59E0B',
-                      textAlign: 'center',
-                      fontWeight: '600',
-                      fontSize: '14px',
-                      backgroundColor: '#FEF3C7',
-                      borderRadius: '6px'
-                    }}>
-                      Sent to Admin (Pending)
-                    </div>
-                  ) : (
-                    <select
-                      onClick={(e) => e.stopPropagation()}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      value={ojt.ojt_status || 'Ongoing'}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                        backgroundColor: 'white',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        textAlign: 'center'
-                      }}
-                      onChange={async (e) => {
-                        const newStatus = e.target.value;
-                        try {
-                          const result = await updateOJTStatus(ojt.id, newStatus);
-                          if (result.success) {
-                            setOjtData((prev) => prev.map((row) => row.id === ojt.id ? { ...row, ojt_status: newStatus } : row));
-                          } else {
-                            alert(result.error || result.message || 'Failed to update status');
-                          }
-                        } catch (err) {
-                          console.error('Failed to update status:', err);
-                          alert('Failed to update status. Please try again.');
-                        }
-                      }}
-                      title={ojt.ojt_status === 'Completed' ? 'To set status to Completed, coordinator must first send request to admin' : ''}
-                    >
-                      <option value="Completed">Completed (Requires Admin Request)</option>
-                      <option value="Ongoing">Ongoing</option>
-                      <option value="Incomplete">Incomplete</option>
-                    </select>
-                  )}
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={4} style={{ textAlign: 'center', padding: '20px', color: '#888' }}>
+                  No OJT data found for this year.
                 </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : (
+              filtered.map((ojt, idx) => (
+                <tr
+                  key={ojt.id}
+                  style={idx % 2 === 1 ? styles.trEven : undefined}
+                  onClick={() => setSelected(ojt)}
+                >
+                  <td style={{ ...styles.td, textAlign: 'left' as const, width: '20%' }}>{ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : '')}</td>
+                  <td style={{ ...styles.td, textAlign: 'left' as const, width: '20%' }}>{ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : '')}</td>
+                  <td style={{ ...styles.td, borderRight: 'none', textAlign: 'left' as const, width: '40%' }}>{ojt.company || ''}</td>
+                  <td style={{ ...styles.statusCell, width: '20%' }}>
+                    {ojt.is_alumni ? (
+                      <span style={{
+                        ...styles.statusText,
+                        ...styles.statusApproved
+                      }}>
+                        APPROVED
+                      </span>
+                    ) : isUserSentToAdmin(ojt) ? (
+                      <span style={{
+                        ...styles.statusText,
+                        ...styles.statusPending
+                      }}>
+                        PENDING
+                      </span>
+                    ) : (
+                      <select
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        value={ojt.ojt_status || 'Ongoing'}
+                        style={styles.statusDropdown}
+                        onChange={async (e) => {
+                          const newStatus = e.target.value;
+                          try {
+                            const result = await updateOJTStatus(ojt.id, newStatus);
+                            if (result.success) {
+                              setOjtData((prev) => prev.map((row) => row.id === ojt.id ? { ...row, ojt_status: newStatus } : row));
+                            } else {
+                              alert(result.error || result.message || 'Failed to update status');
+                            }
+                          } catch (err) {
+                            console.error('Failed to update status:', err);
+                            alert('Failed to update status. Please try again.');
+                          }
+                        }}
+                        title={ojt.ojt_status === 'Completed' ? 'To set status to Completed, coordinator must first send request to admin' : ''}
+                      >
+                        <option value="Completed">COMPLETED</option>
+                        <option value="Ongoing">Ongoing</option>
+                        <option value="Incomplete">INCOMPLETED</option>
+                      </select>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
       <div style={styles.tableActions}>
         <button style={styles.backBtn} onClick={onBack}>
@@ -473,13 +628,14 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
             style={{
-              padding: '8px 20px',
-              background: '#10B981',
+              padding: '10px 20px',
+              background: '#10b981',
               color: 'white',
               border: 'none',
-              borderRadius: '20px',
+              borderRadius: '8px',
               cursor: 'pointer',
-              fontWeight: '600'
+              fontWeight: '500',
+              fontSize: '14px'
             }}
             onClick={async () => {
               setCompletingAll(true);
@@ -528,52 +684,142 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
       {selected && (
         <div style={styles.modalOverlay} onClick={() => setSelected(null)}>
           <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.modalTitle}>OJT Details</div>
-            <div style={styles.modalDivider}></div>
-            <div style={styles.modalGrid}>
-              <div style={styles.modalLabel}>CTU ID</div>
-              <div style={styles.modalValue}>{selected.ctu_id || ''}</div>
-              <div style={styles.modalLabel}>First Name</div>
-              <div style={styles.modalValue}>{selected.first_name || (selected.name ? selected.name.split(' ')[0] : '')}</div>
-              <div style={styles.modalLabel}>Middle Name</div>
-              <div style={styles.modalValue}>{selected.middle_name || (selected.ctu_id === '1334003' ? 'P.' : selected.ctu_id === '1334004' ? 'R.' : 'Not specified')}</div>
-              <div style={styles.modalLabel}>Last Name</div>
-              <div style={styles.modalValue}>{selected.last_name || (selected.name ? selected.name.split(' ').slice(-1)[0] : '')}</div>
-              <div style={styles.modalLabel}>Gender</div>
-              <div style={styles.modalValue}>{selected.gender || 'Not specified'}</div>
-              <div style={styles.modalLabel}>Birthdate</div>
-              <div style={styles.modalValue}>{selected.birthdate || (selected.ctu_id === '1334003' ? '1995-11-08' : selected.ctu_id === '1334004' ? '1996-02-14' : 'Not specified')}</div>
-              <div style={styles.modalLabel}>Phone Number</div>
-              <div style={styles.modalValue}>{selected.phone_number || (selected.ctu_id === '1334003' ? '9181234567' : selected.ctu_id === '1334004' ? '9181234567' : 'Not specified')}</div>
-              <div style={styles.modalLabel}>Address</div>
-              <div style={styles.modalValue}>{selected.address || 'Not specified'}</div>
-              <div style={styles.modalLabel}>Company</div>
-              <div style={styles.modalValue}>{selected.company || 'Not specified'}</div>
-              <div style={styles.modalLabel}>Company Address</div>
-              <div style={styles.modalValue}>{selected.company_address || 'Not specified'}</div>
-              <div style={styles.modalLabel}>Company Email</div>
-              <div style={styles.modalValue}>{selected.company_email || 'Not specified'}</div>
-              <div style={styles.modalLabel}>Company Contact</div>
-              <div style={styles.modalValue}>{selected.company_contact || 'Not specified'}</div>
-              <div style={styles.modalLabel}>Contact Person</div>
-              <div style={styles.modalValue}>{selected.contact_person || 'Not specified'}</div>
-              <div style={styles.modalLabel}>Position</div>
-              <div style={styles.modalValue}>{selected.position || 'Not specified'}</div>
-              <div style={styles.modalLabel}>Start Date</div>
-              <div style={styles.modalValue}>{selected.ojt_start_date || selected.date_started || (selected.ctu_id === '1334003' ? '2023-01-20' : selected.ctu_id === '1334004' ? '2023-02-01' : 'Not specified')}</div>
-              <div style={styles.modalLabel}>End Date</div>
-              <div style={styles.modalValue}>
-                {selected.ojt_end_date || 
-                 (selected.ojt_status === 'Completed' ? 
-                   (selected.ctu_id === '1334003' ? '2023-05-15' : selected.ctu_id === '1334004' ? '2023-06-20' : '2023-05-15') : 
-                   selected.ojt_status === 'Ongoing' ? 'Not specified (In progress)' : 
-                   'Not specified')}
+            {/* Modal Header */}
+            <div style={styles.modalHeader}>
+              <div style={styles.modalTitle}>
+                OJT Student Details
               </div>
-              <div style={styles.modalLabel}>Status</div>
-              <div style={styles.modalValue}>{selected.ojt_status || 'Ongoing'}</div>
+              <button 
+                style={styles.modalCloseBtn} 
+                onClick={() => setSelected(null)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#e5e7eb';
+                  e.currentTarget.style.borderColor = '#d1d5db';
+                  e.currentTarget.style.color = '#374151';
+                  e.currentTarget.style.transform = 'scale(1.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#f3f4f6';
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.color = '#6b7280';
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+              >
+                ×
+              </button>
             </div>
-            <div style={styles.modalActionsRow}>
-              <button style={styles.closeBtn} onClick={() => setSelected(null)}>Close</button>
+
+            {/* Modal Content */}
+            <div style={styles.modalContent}>
+              <div style={styles.modalGrid}>
+                {/* Personal Information Section */}
+                <div style={styles.modalSection}>
+                  <div style={styles.modalSectionTitle}>
+                    Personal Info
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>CTU ID</div>
+                    <div style={styles.modalValue}>{selected.ctu_id || 'Not specified'}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>First Name</div>
+                    <div style={styles.modalValue}>{selected.first_name || (selected.name ? selected.name.split(' ')[0] : 'Not specified')}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Middle Name</div>
+                    <div style={styles.modalValue}>{selected.middle_name || (selected.ctu_id === '1334003' ? 'P.' : selected.ctu_id === '1334004' ? 'R.' : 'Not specified')}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Last Name</div>
+                    <div style={styles.modalValue}>{selected.last_name || (selected.name ? selected.name.split(' ').slice(-1)[0] : 'Not specified')}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Gender</div>
+                    <div style={styles.modalValue}>{selected.gender || 'Not specified'}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Birthdate</div>
+                    <div style={styles.modalValue}>{selected.birthdate || (selected.ctu_id === '1334003' ? '1995-11-08' : selected.ctu_id === '1334004' ? '1996-02-14' : 'Not specified')}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Phone</div>
+                    <div style={styles.modalValue}>{selected.phone_number || (selected.ctu_id === '1334003' ? '9181234567' : selected.ctu_id === '1334004' ? '9181234567' : 'Not specified')}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Address</div>
+                    <div style={styles.modalValue}>{selected.address || 'Not specified'}</div>
+                  </div>
+                </div>
+
+                {/* Company Information Section */}
+                <div style={styles.modalSection}>
+                  <div style={styles.modalSectionTitle}>
+                    Company Info
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Company</div>
+                    <div style={styles.modalValue}>{selected.company || 'Not specified'}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Address</div>
+                    <div style={styles.modalValue}>{selected.company_address || 'Not specified'}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Email</div>
+                    <div style={styles.modalValue}>{selected.company_email || 'Not specified'}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Contact</div>
+                    <div style={styles.modalValue}>{selected.company_contact || 'Not specified'}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Contact Person</div>
+                    <div style={styles.modalValue}>{selected.contact_person || 'Not specified'}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Position</div>
+                    <div style={styles.modalValue}>{selected.position || 'Not specified'}</div>
+                  </div>
+                </div>
+
+                {/* OJT Information Section */}
+                <div style={styles.modalSection}>
+                  <div style={styles.modalSectionTitle}>
+                    OJT Info
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Start Date</div>
+                    <div style={styles.modalValue}>{selected.ojt_start_date || selected.date_started || (selected.ctu_id === '1334003' ? '2023-01-20' : selected.ctu_id === '1334004' ? '2023-02-01' : 'Not specified')}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>End Date</div>
+                    <div style={styles.modalValue}>
+                      {selected.ojt_end_date || 
+                       (selected.ojt_status === 'Completed' ? 
+                         (selected.ctu_id === '1334003' ? '2023-05-15' : selected.ctu_id === '1334004' ? '2023-06-20' : '2023-05-15') : 
+                         selected.ojt_status === 'Ongoing' ? 'Not specified (In progress)' : 
+                         'Not specified')}
+                    </div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Status</div>
+                    <div style={{
+                      ...styles.modalValue,
+                      background: selected.ojt_status === 'Approved' ? '#dbeafe' : 
+                                 selected.ojt_status === 'Pending' ? '#fef3c7' : 
+                                 selected.ojt_status === 'Completed' ? '#d1fae5' : '#f3f4f6',
+                      color: selected.ojt_status === 'Approved' ? '#1e40af' : 
+                             selected.ojt_status === 'Pending' ? '#d97706' : 
+                             selected.ojt_status === 'Completed' ? '#065f46' : '#6b7280',
+                      fontWeight: '600',
+                      textAlign: 'center' as const,
+                      justifyContent: 'center'
+                    }}>
+                      {selected.ojt_status || 'Ongoing'}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
