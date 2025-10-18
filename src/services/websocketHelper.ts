@@ -28,6 +28,7 @@ export type WsEvent = {
 export class ConversationWebSocket {
   private ws: WebSocket | null = null;
   private url: string;
+  private token: string | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
@@ -35,8 +36,9 @@ export class ConversationWebSocket {
   private eventCallbacks: ((event: WsEvent) => void)[] = [];
   private messageCallbacks: ((event: WsEvent) => void)[] = [];
 
-  constructor(url: string | number) {
+  constructor(url: string | number, token?: string) {
     this.url = typeof url === 'string' ? url : url.toString();
+    this.token = token || null;
   }
 
   connect(): Promise<void> {

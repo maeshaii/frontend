@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import allJobs from '../../../all_jobs.json';
+import JobTitleAutocomplete from '../../../components/JobTitleAutocomplete';
 
 interface JobRaw {
   [key: string]: any;
@@ -89,6 +90,87 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   useEffect(() => {
     console.log('🔍 Categories state updated:', categories);
   }, [categories]);
+
+  // Load existing user data into formResponses when userId is available
+  useEffect(() => {
+    if (userId && userDetails && categories.length > 0) {
+      console.log('🔍 Loading user data into formResponses for user:', userId);
+      
+      const initialResponses: Record<string, any> = {};
+      
+      // Map user data to question IDs
+      for (const category of categories) {
+        for (const question of category.questions) {
+          const questionText = question.text.toLowerCase();
+          
+          // Map basic user info
+          if (questionText.includes('first name')) {
+            initialResponses[question.id] = userDetails.first_name || userDetails.f_name || '';
+          } else if (questionText.includes('last name')) {
+            initialResponses[question.id] = userDetails.last_name || userDetails.l_name || '';
+          } else if (questionText.includes('middle name')) {
+            initialResponses[question.id] = userDetails.middle_name || userDetails.m_name || '';
+          } else if (questionText.includes('email')) {
+            initialResponses[question.id] = userDetails.email || 'N/A';
+          } else if (questionText.includes('birthdate') || questionText.includes('birth date')) {
+            // Format birthdate properly for input field
+            if (userDetails.birthdate) {
+              const date = new Date(userDetails.birthdate);
+              const formattedDate = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+              initialResponses[question.id] = formattedDate;
+            } else {
+              initialResponses[question.id] = '';
+            }
+          } else if (questionText.includes('age')) {
+            // Calculate age from birthdate if not provided
+            if (userDetails.age) {
+              initialResponses[question.id] = userDetails.age;
+            } else if (userDetails.birthdate) {
+              const birthDate = new Date(userDetails.birthdate);
+              const today = new Date();
+              const age = today.getFullYear() - birthDate.getFullYear() - 
+                ((today.getMonth() < birthDate.getMonth()) ? 1 : 0) - 
+                ((today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate()) ? 1 : 0);
+              initialResponses[question.id] = age.toString();
+            } else {
+              initialResponses[question.id] = '';
+            }
+          } else if (questionText.includes('phone') || questionText.includes('mobile') || questionText.includes('landline')) {
+            initialResponses[question.id] = userDetails.phone || userDetails.phone_num || '';
+          } else if (questionText.includes('address') && !questionText.includes('company')) {
+            initialResponses[question.id] = userDetails.address || '';
+          } else if (questionText.includes('civil status')) {
+            initialResponses[question.id] = userDetails.civil_status || 'N/A';
+          } else if (questionText.includes('social media')) {
+            initialResponses[question.id] = userDetails.social_media || 'N/A';
+          } else if (questionText.includes('program graduated')) {
+            initialResponses[question.id] = userDetails.program || '';
+          } else if (questionText.includes('year graduated') || questionText.includes('graduated')) {
+            initialResponses[question.id] = userDetails.year_graduated || userDetails.batch || '';
+          } else if (questionText.includes('current position')) {
+            initialResponses[question.id] = userDetails.position_current || '';
+          } else if (questionText.includes('current company')) {
+            initialResponses[question.id] = userDetails.company_name_current || 'N/A';
+          } else if (questionText.includes('employment sector')) {
+            initialResponses[question.id] = userDetails.sector_current || 'N/A';
+          } else if (questionText.includes('scope') && questionText.includes('job')) {
+            initialResponses[question.id] = userDetails.scope_current || 'N/A';
+          } else if (questionText.includes('salary')) {
+            initialResponses[question.id] = userDetails.salary_current || 'N/A';
+          } else if (questionText.includes('presently employed')) {
+            // Determine employment status based on position
+            const isEmployed = userDetails.position_current && userDetails.position_current.trim() !== '';
+            initialResponses[question.id] = isEmployed ? 'Yes' : 'No';
+          } else if (questionText.includes('self employed')) {
+            initialResponses[question.id] = userDetails.self_employed ? 'Yes' : 'No';
+          }
+        }
+      }
+      
+      console.log('🔍 Initial responses loaded:', initialResponses);
+      setFormResponses(initialResponses);
+    }
+  }, [userId, userDetails, categories]);
 
   // Show privacy modal when component loads in preview mode
   useEffect(() => {
@@ -783,7 +865,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   }
   function isReadOnlyField(q: QuestionItem): boolean {
     const text = q.text.toLowerCase();
-    return text.includes('course') || text.includes('year graduated') || text.includes('batch');
+    return text.includes('program') || text.includes('year graduated') || text.includes('batch');
   }
 
   // New handler for job change
@@ -867,66 +949,22 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                   {cat.questions.map((q, qIdx) => {
                     if (shouldHideQuestionText(q.text)) return null;
                     if (q.text.toLowerCase().includes('current position')) {
-                      const currentInput = jobInputValues[q.id] || '';
-                      const filterJobs = (input: string) => {
-                        const term = String(input || '').trim().toLowerCase();
-                        if (!term) return jobList.slice(0, 25);
-                        return jobList
-                          .filter((j) => !!j.title && j.title.toLowerCase().includes(term))
-                          .slice(0, 20);
-                      };
                       return (
                         <div key={q.id} style={{ marginBottom: 16 }}>
                           <label style={{ fontWeight: 500 }}>
                             {getQuestionNumber(catIdx, qIdx)}. {q.text}
                             {q.required && <span style={{ color: 'red', marginLeft: 4 }}>*</span>}
                           </label>
-                          <Autocomplete
-                            options={filterJobs(currentInput)}
-                            getOptionLabel={(option) =>
-                              typeof option === 'string' ? option : option.title
-                            }
-                            ListboxProps={{ style: { maxHeight: 400 } }}
-                            freeSolo={true} // Allow free text entry
-                            inputValue={currentInput}
-                            onInputChange={(_, value) => {
-                              setJobInputValues((prev) => ({ ...prev, [q.id]: value }));
-                              handleResponseChange(cat.id, q.id, value || '');
-                              if (!value) handleResponseChange(cat.id, 'Job Code', '');
+                          <JobTitleAutocomplete
+                            userId={userId ? parseInt(userId) : 0}
+                            value={formResponses[q.id] || ''}
+                            onChange={(value) => {
+                              handleResponseChange(cat.id, q.id, value);
                             }}
-                            onChange={(_, value) => {
-                              if (typeof value === 'string') {
-                                handleResponseChange(cat.id, q.id, value);
-                                handleResponseChange(cat.id, 'Job Code', '');
-                              } else if (value) {
-                                handleResponseChange(cat.id, q.id, value.title);
-                                handleResponseChange(cat.id, 'Job Code', value.code);
-                              } else {
-                                handleResponseChange(cat.id, q.id, '');
-                                handleResponseChange(cat.id, 'Job Code', '');
-                              }
+                            onAlignmentComplete={(status) => {
+                              console.log(`Job alignment status: ${status}`);
                             }}
-                            renderInput={(params) => (
-                              <TextField
-                                {...params}
-                                label="Select or type Job Title"
-                                variant="outlined"
-                                fullWidth
-                              />
-                            )}
-                            renderOption={(props, option) => {
-                              const item = typeof option === 'string' ? { title: option, code: '' } : option;
-                              return (
-                                <li {...props}>
-                                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <span>{item.title}</span>
-                                    {item.code && (
-                                      <span style={{ fontSize: 12, color: '#6b7280' }}>Code: {item.code}</span>
-                                    )}
-                                  </div>
-                                </li>
-                              );
-                            }}
+                            placeholder="Select or type Job Title"
                           />
                         </div>
                       );
@@ -946,7 +984,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                               const isBirth = lower.includes('birth') || lower.includes('bday') || lower.includes('date of birth');
                               const isPhone = lower.includes('phone') || lower.includes('mobile') || lower.includes('contact');
                               const isSalary = lower.includes('salary') || lower.includes('salary range');
-                              const type = isAge ? 'number' : isBirth ? 'date' : inputProps.type;
+                              const type = isAge ? 'number' : isBirth ? 'date' : isPhone ? 'tel' : inputProps.type;
                               const placeholder = isBirth ? 'YYYY-MM-DD' : inputProps.placeholder;
                               
                               // Handle select dropdown for salary fields

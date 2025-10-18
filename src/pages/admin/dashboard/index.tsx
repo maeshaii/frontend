@@ -21,10 +21,14 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchUntrackedCount = async () => {
       try {
-        const data = await generateSpecificStats('ALL', 'ALL', 'QPRO');
-        setUntrackedCount(Number(data?.untracked_count) || 0);
+        // Use the working alumni statistics endpoint directly to avoid 500 errors
+        const data = await fetchAlumniEmploymentStats('ALL', 'ALL');
+        // Get the pending count which represents untracked alumni
+        const untracked = Number(data?.status_counts?.Pending) || 0;
+        setUntrackedCount(untracked);
       } catch (error) {
         console.error('Error fetching untracked count:', error);
+        setUntrackedCount(0);
       } finally {
         setLoading(false);
       }
@@ -258,7 +262,7 @@ const Dashboard = () => {
                 }}
               >
                 <div style={{ fontSize: 16, opacity: 0.9 }}>Untracked</div>
-                <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>{loading ? '…' : untrackedCount}</div>
+                <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>{loading ? '…' : `${untrackedCount}/${totalAlumni}`}</div>
               </div>
 
               <div

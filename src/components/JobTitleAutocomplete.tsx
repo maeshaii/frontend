@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { api } from '../services/api';
+import { api, publicApi } from '../services/api';
 import JobAlignmentConfirmation from './JobAlignmentConfirmation';
 import './JobTitleAutocomplete.css';
 
@@ -45,7 +45,7 @@ const JobTitleAutocomplete: React.FC<JobTitleAutocompleteProps> = ({
 
     setLoading(true);
     try {
-      const response = await api.get('/shared/job-autocomplete/', {
+      const response = await publicApi.get('/shared/job-autocomplete/', {
         params: { q: query, limit: 20 }
       });
 
@@ -104,7 +104,7 @@ const JobTitleAutocomplete: React.FC<JobTitleAutocompleteProps> = ({
   // Check job alignment
   const checkJobAlignment = async (position: string, fromAutocomplete: boolean) => {
     try {
-      const response = await api.post('/shared/check-job-alignment/', {
+      const response = await publicApi.post('/shared/check-job-alignment/', {
         position: position,
         user_id: userId,
         from_autocomplete: fromAutocomplete
@@ -122,25 +122,28 @@ const JobTitleAutocomplete: React.FC<JobTitleAutocompleteProps> = ({
 
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!showSuggestions || suggestions.length === 0) return;
-
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedIndex(prev => 
-          prev < suggestions.length - 1 ? prev + 1 : prev
-        );
+        if (showSuggestions && suggestions.length > 0) {
+          setSelectedIndex(prev => 
+            prev < suggestions.length - 1 ? prev + 1 : prev
+          );
+        }
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setSelectedIndex(prev => prev > 0 ? prev - 1 : -1);
+        if (showSuggestions && suggestions.length > 0) {
+          setSelectedIndex(prev => prev > 0 ? prev - 1 : -1);
+        }
         break;
       case 'Enter':
         e.preventDefault();
-        if (selectedIndex >= 0) {
+        if (showSuggestions && selectedIndex >= 0) {
           handleSuggestionSelect(suggestions[selectedIndex]);
         } else if (inputValue.trim()) {
-          handleInputBlur();
+          // Check alignment for manually typed job
+          checkJobAlignment(inputValue.trim(), false);
         }
         break;
       case 'Escape':
@@ -220,3 +223,5 @@ const JobTitleAutocomplete: React.FC<JobTitleAutocompleteProps> = ({
 };
 
 export default JobTitleAutocomplete;
+
+

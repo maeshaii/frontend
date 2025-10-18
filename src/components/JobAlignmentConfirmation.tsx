@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../services/api';
+import { api, publicApi } from '../services/api';
 
 interface JobAlignmentSuggestion {
   employment_id: number;
@@ -36,21 +36,22 @@ const JobAlignmentConfirmation: React.FC<JobAlignmentConfirmationProps> = ({
     
     setLoading(true);
     try {
-      const response = await api.post('/shared/check-job-alignment/', {
+      const response = await publicApi.post('/shared/check-job-alignment/', {
         position: position,
         user_id: userId
       });
 
         if (response.data.needs_confirmation) {
           // Create suggestion object for pending confirmation
+          const suggestionData = response.data.suggestion || {};
           setSuggestion({
-            employment_id: response.data.employment_id || 0,
+            employment_id: suggestionData.employment_id || 0,
             position_current: position,
             company_name_current: '',
             suggested_job_title: position,
-            suggested_program: '',
-            original_program: '',
-            question: `Is '${position}' aligned to your program?`
+            suggested_program: suggestionData.user_program || '',
+            original_program: suggestionData.user_program || '',
+            question: suggestionData.question || `Is '${position}' aligned to your program?`
           });
         } else {
           onAlignmentComplete?.(response.data.job_alignment_status);
@@ -69,9 +70,10 @@ const JobAlignmentConfirmation: React.FC<JobAlignmentConfirmationProps> = ({
     try {
       const confirmed = selectedAnswer === 'yes';
       
-      const response = await api.post('/shared/confirm-job-alignment/', {
+      const response = await publicApi.post('/shared/confirm-job-alignment/', {
         employment_id: suggestion.employment_id,
-        confirmed: confirmed
+        confirmed: confirmed,
+        user_id: userId
       });
 
       if (response.data.success) {
@@ -104,20 +106,9 @@ const JobAlignmentConfirmation: React.FC<JobAlignmentConfirmationProps> = ({
       <div className="confirmation-card">
         <div className="confirmation-header">
           <h3>🤔 Job Alignment Question</h3>
-          <p>We found a potential match in another program!</p>
         </div>
         
         <div className="confirmation-content">
-          <div className="position-info">
-            <p><strong>Your Position:</strong> {suggestion.position_current}</p>
-            <p><strong>Your Program:</strong> {suggestion.original_program.toUpperCase()}</p>
-          </div>
-          
-          <div className="suggestion-info">
-            <p><strong>Suggested Match:</strong> {suggestion.suggested_job_title}</p>
-            <p><strong>From Program:</strong> {suggestion.suggested_program.toUpperCase()}</p>
-          </div>
-          
           <div className="confirmation-question">
             <h4>{suggestion.question}</h4>
             

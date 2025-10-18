@@ -1,17 +1,104 @@
 .chart-container {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e5e7eb;
+  margin: 16px auto;
+  max-width: 1200px;
   width: 100%;
-  max-width: 1200px; /* optional: cap it if you don't want it too wide on big screens */
-  margin: 40px auto;
-  display: flex;
-  justify-content: center;
+  max-height: fit-content;
+}
+
+.chart-header {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.chart-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 8px 0;
+}
+
+.chart-subtitle {
+  font-size: 16px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.chart-wrapper {
+  height: 300px;
+  margin-bottom: 20px;
 }
 
 .recharts-wrapper {
   background: white;
 }
-.chart-wrapper {
-  width: 100%;
-  height: 100%;
-  margin: 0 auto;
-  padding: 40px; /* optional: adjust if you want */
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.summary-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.summary-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.summary-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-number {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+  line-height: 1;
+  word-break: break-all;
+}
+
+.summary-label {
+  font-size: 14px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+/* Dynamic animations */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.chart-container {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.summary-card:hover {
+  animation: pulse 0.3s ease-in-out;
 }

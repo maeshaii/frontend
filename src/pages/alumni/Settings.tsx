@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
-import { Box, Paper, Typography, TextField, Button, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
+import { Box, Paper, Typography, TextField, Button, Select, MenuItem, FormControl, InputLabel, Alert, InputAdornment, IconButton } from '@mui/material';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
 
 interface UserData {
   user_id: number;
@@ -39,6 +40,18 @@ const Settings: React.FC = () => {
     home_address: '',
     social_media: ''
   });
+
+  // Password change states
+  const [passwordData, setPasswordData] = useState({
+    old_password: '',
+    new_password: '',
+    confirm_password: ''
+  });
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [employmentData, setEmploymentData] = useState({
     organization_name: '',
@@ -258,6 +271,83 @@ const Settings: React.FC = () => {
       company_address: '',
       sector: ''
     });
+  };
+
+  const validatePassword = (password: string): string => {
+    if (password.length < 16) {
+      return 'Password must be at least 16 characters long.';
+    }
+    if (!/[A-Z]/.test(password)) {
+      return 'Password must contain at least one uppercase letter.';
+    }
+    if (!/[a-z]/.test(password)) {
+      return 'Password must contain at least one lowercase letter.';
+    }
+    if (!/\d/.test(password)) {
+      return 'Password must contain at least one number.';
+    }
+    if (!/[^A-Za-z0-9]/.test(password)) {
+      return 'Password must contain at least one special character.';
+    }
+    return '';
+  };
+
+  const handlePasswordChange = async () => {
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    // Validation
+    if (!passwordData.old_password || !passwordData.new_password || !passwordData.confirm_password) {
+      setPasswordError('All fields are required.');
+      return;
+    }
+
+    if (passwordData.new_password !== passwordData.confirm_password) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+
+    const validationError = validatePassword(passwordData.new_password);
+    if (validationError) {
+      setPasswordError(validationError);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const response = await fetch('http://127.0.0.1:8000/api/change-password/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          old_password: passwordData.old_password,
+          new_password: passwordData.new_password
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setPasswordSuccess('Password changed successfully!');
+        setPasswordData({
+          old_password: '',
+          new_password: '',
+          confirm_password: ''
+        });
+        // Auto-hide success message after 3 seconds
+        setTimeout(() => setPasswordSuccess(''), 3000);
+      } else {
+        setPasswordError(data.message || 'Failed to change password.');
+      }
+    } catch (error) {
+      console.error('Error changing password:', error);
+      setPasswordError('An error occurred while changing password.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleLogout = () => {
@@ -678,14 +768,125 @@ const Settings: React.FC = () => {
               )}
 
               {activeSection === 'password' && (
-                <Box sx={{ textAlign: 'center', py: 8 }}>
-                  <Typography variant="h5" sx={{ mb: 2, fontWeight: 'bold' }}>
+                <>
+                  <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold' }}>
                     Change Password
                   </Typography>
-                  <Typography variant="body1" color="text.secondary">
-                    Password change functionality coming soon...
-                  </Typography>
-                </Box>
+                  
+                  {passwordError && (
+                    <Alert severity="error" sx={{ mb: 3 }}>
+                      {passwordError}
+                    </Alert>
+                  )}
+                  
+                  {passwordSuccess && (
+                    <Alert severity="success" sx={{ mb: 3 }}>
+                      {passwordSuccess}
+                    </Alert>
+                  )}
+                  
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 600 }}>
+                    <TextField
+                      label="Current Password"
+                      type={showOldPassword ? 'text' : 'password'}
+                      value={passwordData.old_password}
+                      onChange={(e) => setPasswordData({ ...passwordData, old_password: e.target.value })}
+                      variant="outlined"
+                      fullWidth
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              onClick={() => setShowOldPassword(!showOldPassword)}
+                              edge="end"
+                            >
+                              {showOldPassword ? <VisibilityOff /> : <Visibility />}
+                            </IconButton>
+                          </InputAdornment>
+                        )
+                      }}
+                    />
+                    
+                    <TextField
+                      label="New Password"
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={passwordData.new_password}
+                      onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
+                      variant="outlined"
+                      fullWidth
+                      helperText="Password must be at least 16 characters long and contain uppercase, lowercase, number, and special character"
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              onClick={() => setShowNewPassword(!showNewPassword)}
+                              edge="end"
+                            >
+                              {showNewPassword ? <VisibilityOff /> : <Visibility />}
+                            </IconButton>
+                          </InputAdornment>
+                        )
+                      }}
+                    />
+                    
+                    <TextField
+                      label="Confirm New Password"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={passwordData.confirm_password}
+                      onChange={(e) => setPasswordData({ ...passwordData, confirm_password: e.target.value })}
+                      variant="outlined"
+                      fullWidth
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              edge="end"
+                            >
+                              {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                            </IconButton>
+                          </InputAdornment>
+                        )
+                      }}
+                    />
+                    
+                    <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+                      <Button
+                        variant="contained"
+                        onClick={handlePasswordChange}
+                        disabled={saving}
+                        sx={{
+                          backgroundColor: '#174f84',
+                          '&:hover': { backgroundColor: '#0d3a5f' },
+                          px: 4,
+                          py: 1.5
+                        }}
+                      >
+                        {saving ? 'Changing...' : 'Change Password'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        onClick={() => {
+                          setPasswordData({
+                            old_password: '',
+                            new_password: '',
+                            confirm_password: ''
+                          });
+                          setPasswordError('');
+                          setPasswordSuccess('');
+                        }}
+                        sx={{
+                          borderColor: '#174f84',
+                          color: '#174f84',
+                          px: 4,
+                          py: 1.5
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    </Box>
+                  </Box>
+                </>
               )}
             </Paper>
           </Box>
