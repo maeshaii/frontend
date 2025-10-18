@@ -41,10 +41,10 @@ const barColors: Record<string, string> = {
 
 export default function Statistics() {
   const [selectedYear, setSelectedYear] = useState('ALL');
-  const [selectedCourse, setSelectedCourse] = useState('ALL');
+  const [selectedProgram, setSelectedProgram] = useState('ALL');
   const [showModal, setShowModal] = useState(false);
   const [batchYear, setBatchYear] = useState('');
-  const [selectedCourseImport, setSelectedCourseImport] = useState('');
+  const [selectedProgramImport, setSelectedProgramImport] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -75,14 +75,14 @@ export default function Statistics() {
   useEffect(() => {
     const loadEmploymentStats = async () => {
       try {
-        const data = await fetchAlumniEmploymentStats(selectedYear, selectedCourse);
+        const data = await fetchAlumniEmploymentStats(selectedYear, selectedProgram);
         setEmploymentStats(data.status_counts || {});
       } catch (e) {
         setEmploymentStats({});
       }
     };
     loadEmploymentStats();
-  }, [selectedYear, selectedCourse]);
+  }, [selectedYear, selectedProgram]);
 
   // Helper: normalize arbitrary backend status keys to canonical buckets
   const normalizeStatusCounts = (raw: { [key: string]: number } = {}) => {
@@ -146,7 +146,7 @@ export default function Statistics() {
   };
 
   const handleImport = async () => {
-    if (!selectedFile || !batchYear || !selectedCourseImport) {
+    if (!selectedFile || !batchYear || !selectedProgramImport) {
       setMessage({ type: 'error', text: 'Please fill in all fields and select a file' });
       return;
     }
@@ -158,7 +158,7 @@ export default function Statistics() {
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('batch_year', batchYear);
-    formData.append('course', selectedCourseImport);
+    formData.append('program', selectedProgramImport);
 
     const token = localStorage.getItem('accessToken');
     try {
@@ -183,9 +183,12 @@ export default function Statistics() {
         a.remove();
         window.URL.revokeObjectURL(url);
         setMessage({ type: 'success', text: 'Import successful! Passwords downloaded.' });
+        // Refresh statistics lists and chart after successful import
+        await refreshStatisticsState();
+        broadcastStatsUpdate();
         setSelectedFile(null);
         setBatchYear('');
-        setSelectedCourseImport('');
+        setSelectedProgramImport('');
         setTimeout(() => {
           setShowModal(false);
           setMessage(null);
@@ -200,9 +203,12 @@ export default function Statistics() {
             type: 'success',
             text: `${result.message}. ${result.errors?.length > 0 ? `Errors: ${result.errors.length}` : ''}`,
           });
+          // Refresh statistics lists and chart after successful import
+          await refreshStatisticsState();
+          broadcastStatsUpdate();
           setSelectedFile(null);
           setBatchYear('');
-          setSelectedCourseImport('');
+          setSelectedProgramImport('');
           setTimeout(() => {
             setShowModal(false);
             setMessage(null);
@@ -219,11 +225,40 @@ export default function Statistics() {
     }
   };
 
+  // Refresh in-page statistics state (years list and bar chart)
+  const refreshStatisticsState = async () => {
+    try {
+      const data = await fetchAlumniStatistics();
+      setStats(data.years || []);
+      setYearOptions(['ALL', ...(data.years || []).map((y: any) => String(y.year))]);
+    } catch {
+      // ignore
+    }
+    try {
+      const employment = await fetchAlumniEmploymentStats(selectedYear, selectedProgram);
+      setEmploymentStats(employment.status_counts || {});
+    } catch {
+      // ignore
+    }
+  };
+
+  // Notify other tabs/pages (e.g., Dashboard) to refresh
+  const broadcastStatsUpdate = () => {
+    const ts = String(Date.now());
+    try {
+      localStorage.setItem('statsUpdatedAt', ts);
+    } catch {}
+    try {
+      const evt = new CustomEvent('stats-update', { detail: { ts } });
+      window.dispatchEvent(evt);
+    } catch {}
+  };
+
   const closeModal = () => {
     setShowModal(false);
     setSelectedFile(null);
     setBatchYear('');
-    setSelectedCourseImport('');
+    setSelectedProgramImport('');
     setMessage(null);
   };
 
@@ -252,11 +287,11 @@ export default function Statistics() {
           </div>
 
           <div className="filter-group">
-            <label className="filter-label">Course:</label>
+            <label className="filter-label">Program:</label>
             <select
               className="filter-select"
-              value={selectedCourse}
-              onChange={(e) => setSelectedCourse(e.target.value)}
+              value={selectedProgram}
+              onChange={(e) => setSelectedProgram(e.target.value)}
             >
               {courseOptions.map((course) => (
                 <option key={course} value={course}>
@@ -354,8 +389,8 @@ export default function Statistics() {
               <div className="modal-group">
                 <label>Course:</label>
                 <select
-                  value={selectedCourseImport}
-                  onChange={(e) => setSelectedCourseImport(e.target.value)}
+                  value={selectedProgramImport}
+                  onChange={(e) => setSelectedProgramImport(e.target.value)}
                   disabled={loading}
                 >
                   <option value="">Select course</option>

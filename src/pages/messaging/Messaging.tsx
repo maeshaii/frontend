@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ConversationSummary } from '../../services/api';
+import React, { useEffect, useState } from 'react';
+import { ConversationSummary, listConversations } from '../../services/api';
 import AlumniTopBar from '../alumni/AlumniTopBar';
 import ConversationList from './ConversationList';
 import ChatInterface from './ChatInterface';
@@ -11,13 +11,37 @@ const Messaging: React.FC = () => {
   const [showUserSearch, setShowUserSearch] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 768);
     };
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Auto-select conversation if conversation_id is provided in query params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const convoId = params.get('conversation_id');
+    if (convoId) {
+      // create a minimal placeholder selection so ChatInterface mounts immediately
+      setSelectedConversation({
+        conversation_id: Number(convoId),
+        updated_at: new Date().toISOString(),
+        unread_count: 0,
+        last_message: null,
+        other_participant: null,
+      } as ConversationSummary);
+
+      // Fetch full conversation details to replace placeholder (populate name/avatar)
+      listConversations()
+        .then((list) => {
+          const found = (list || []).find((c) => c.conversation_id === Number(convoId));
+          if (found) setSelectedConversation(found);
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const handleSelectConversation = (conversation: ConversationSummary) => {

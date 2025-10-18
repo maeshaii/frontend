@@ -166,14 +166,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     setShowSuggestions(false);
     setSearchValue('');
     if (!userId || Number.isNaN(Number(userId))) return;
-    // Navigate to profile based on current path prefix
-    if (location.pathname.startsWith('/peso')) {
-      navigate(`/peso/profile/${userId}`);
-    } else if (location.pathname.startsWith('/ccict')) {
-      navigate(`/ccict/profile/${userId}`);
-    } else {
-      navigate(`/alumni/profile/${userId}`);
-    }
+    // Always redirect to alumni profile
+    navigate(`/alumni/profile/${userId}`);
   };
 
   // Refactored admin URLs
@@ -376,7 +370,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               {searchResults.map((user) => (
                 <div
                   key={user.user_id ?? user.id}
-                  onClick={() => handleSearchSelect(user.user_id ?? user.id)}
+                  // Use onMouseDown instead of onClick to ensure navigation before blur
+                  onMouseDown={() => handleSearchSelect(user.user_id ?? user.id)}
                   style={{
                     padding: 12,
                     cursor: 'pointer',

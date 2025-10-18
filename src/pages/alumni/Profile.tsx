@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import ctulogo from '../../images/ctulogo.png';
 import './profile.css';
-import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api } from '../../services/api';
+import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api, createConversation } from '../../services/api';
 import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment } from '../../services/api';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
@@ -153,6 +153,7 @@ interface PostItem {
 
 const AlumniProfile: React.FC = () => {
   const [user, setUser] = useState<AlumniUser | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
   const navigate = useNavigate();
   const { id } = useParams<{ id?: string }>();
@@ -249,7 +250,7 @@ const AlumniProfile: React.FC = () => {
             profile_pic: profileData.profile_pic,
             social_media: profileData.social_media,
             email: profileData.email,
-            account_type: currentUserObj.account_type || {} // Use current user's account type
+            account_type: profileData.account_type || currentUserObj.account_type || {},
           };
           
           setUser(userData);
@@ -429,8 +430,10 @@ getPosts()
           navigate('/login');
         }
       } catch (error) {
-        alert('Network error: ' + error);
-        navigate('/login');
+        console.error('Network error:', error);
+        setLoading(false);
+      } finally {
+        setLoading(false);
       }
     };
     loadUser();
@@ -463,6 +466,9 @@ getPosts()
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [emailLoading, setEmailLoading] = useState(false);
+  // PESO Partnered Companies modal state
+  const [partnerModalOpen, setPartnerModalOpen] = useState(false);
+  const [partnerCompaniesDraft, setPartnerCompaniesDraft] = useState<{ name: string; url: string }[]>([]);
 
   const [resumeFile, setResumeFile] = useState<File | null>(null);
 
@@ -1075,12 +1081,38 @@ getPosts()
     }
   };
 
-  // Defensive render guard: if user is not loaded, show fallback and login button
+  // Defensive render guard: show minimal loading state while fetching
   if (!user) {
     return (
-      <div style={{ color: 'red', textAlign: 'center', marginTop: 40 }}>
-        Unable to load profile. You may not be authorized or your session has expired.<br/>
-        <button onClick={() => navigate('/login')} style={{ marginTop: 20, padding: '8px 16px', borderRadius: 6, background: '#174f84', color: '#fff', border: 'none', cursor: 'pointer' }}>Go to Login</button>
+      <div style={{ 
+        minHeight: '100vh',
+        background: '#f5f5f5',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '16px'
+        }}>
+          {/* Simple animated spinner */}
+          <div style={{
+            width: '40px',
+            height: '40px',
+            border: '4px solid #e0e0e0',
+            borderTop: '4px solid #174f84',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }} />
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
       </div>
     );
   }
@@ -1215,6 +1247,9 @@ getPosts()
               </div>
             )}
           </div>
+
+          {/* Followers - Hide for admin and PESO accounts */}
+
 
           {/* Followers - Hide for admin and PESO accounts */}
           {!user?.account_type?.admin && 
@@ -1395,7 +1430,20 @@ getPosts()
                   </button>
                 )}  
                 {!isOwnProfile && (
-                  <button className="profile-message-button">Message</button>
+                  <button
+                    className="profile-message-button"
+                    onClick={async () => {
+                      try {
+                        // Create or open conversation with this user, then navigate
+                        const convo = await createConversation(Number(id));
+                        window.location.href = `/messages?conversation_id=${convo.conversation_id}`;
+                      } catch (e) {
+                        console.error('Failed to open conversation:', e);
+                      }
+                    }}
+                  >
+                    Message
+                  </button>
                 )}
               </div>
             </div>
@@ -1432,7 +1480,12 @@ getPosts()
           {/* Posts List for this profile */}
           {posts.length === 0 && !isOwnProfile && (
             <div style={{ textAlign: 'center', padding: '40px', color: '#666', fontSize: '16px' }}>
-              This user has not posted anything yet.
+              {(user?.account_type?.admin || user?.account_type?.peso || user?.account_type?.ccict ||
+                user?.name?.toLowerCase().includes('admin') || user?.name?.toLowerCase().includes('peso'))
+                ? "This user has not posted anything yet."
+                : (isFollowing
+                    ? "This user has not posted anything yet."
+                    : "Follow this user to view their posts")}
             </div>
           )}
           {posts.map((item: any) => {
@@ -2217,6 +2270,114 @@ getPosts()
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Partnered Companies Modal (PESO only) */}
+      {partnerModalOpen && (
+        <div 
+          className="profile-bio-modal-overlay" 
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setPartnerModalOpen(false); }}
+        >
+          <div
+            className="profile-bio-modal-content"
+            style={{
+              background: '#fff', borderRadius: 12, padding: 20, width: '90%', maxWidth: 520, maxHeight: '70vh', overflowY: 'auto', position: 'relative'
+            }}
+          >
+            <button
+              onClick={() => setPartnerModalOpen(false)}
+              style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: 'none', fontSize: 22, cursor: 'pointer' }}
+              title="Close"
+            >
+              ×
+            </button>
+            <h3 style={{ margin: 0, marginBottom: 12 }}>Edit Partnered Companies</h3>
+            <p style={{ marginTop: 0, color: '#666' }}>Add company name and website/page URL.</p>
+
+            {/* Editor rows */}
+            {(partnerCompaniesDraft.length === 0 ? [{ name: '', url: '' }] : partnerCompaniesDraft).map((c, idx) => (
+              <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <input
+                  type="text"
+                  placeholder="Company name"
+                  value={c.name}
+                  onChange={(e) => {
+                    const next = [...(partnerCompaniesDraft.length ? partnerCompaniesDraft : [{ name: '', url: '' }])];
+                    next[idx] = { ...next[idx], name: e.target.value };
+                    setPartnerCompaniesDraft(next);
+                  }}
+                  style={{ flex: 1, padding: 8, border: '1px solid #ddd', borderRadius: 8 }}
+                />
+                <input
+                  type="text"
+                  placeholder="https://example.com"
+                  value={c.url}
+                  onChange={(e) => {
+                    const next = [...(partnerCompaniesDraft.length ? partnerCompaniesDraft : [{ name: '', url: '' }])];
+                    next[idx] = { ...next[idx], url: e.target.value };
+                    setPartnerCompaniesDraft(next);
+                  }}
+                  style={{ flex: 1, padding: 8, border: '1px solid #ddd', borderRadius: 8 }}
+                />
+                <button
+                  onClick={() => {
+                    const base = partnerCompaniesDraft.length ? partnerCompaniesDraft : [{ name: '', url: '' }];
+                    const next = base.filter((_, i) => i !== idx);
+                    setPartnerCompaniesDraft(next);
+                  }}
+                  style={{ padding: '8px 10px', border: '1px solid #ddd', background: '#fafafa', borderRadius: 8, cursor: 'pointer' }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+
+            <div style={{ marginBottom: 12 }}>
+              <button
+                onClick={() => setPartnerCompaniesDraft([...(partnerCompaniesDraft || []), { name: '', url: '' }])}
+                style={{ padding: '8px 12px', border: '1px solid #ddd', background: '#f7f7f7', borderRadius: 8, cursor: 'pointer' }}
+              >
+                + Add Company
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button onClick={() => setPartnerModalOpen(false)} style={{ padding: '10px 14px', border: '1px solid #ddd', background: '#fff', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
+              <button
+                onClick={async () => {
+                  try {
+                    const meRaw = localStorage.getItem('user');
+                    const me = meRaw ? JSON.parse(meRaw) : null;
+                    const meId = me?.user_id || me?.id;
+                    const payloadCompanies = partnerCompaniesDraft.filter((c) => (c.name || '').trim());
+                    const res = await fetch(`http://127.0.0.1:8000/api/alumni/profile/${meId}/`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}` },
+                      body: JSON.stringify({})
+                    });
+                    if (res.ok) {
+                      // update local state to reflect changes immediately
+                      setUser((prev: any) => prev ? { ...prev } : prev);
+                      setPartnerModalOpen(false);
+                    } else {
+                      alert('Failed to save companies');
+                    }
+                  } catch (e) {
+                    console.error(e);
+                    alert('Error saving companies');
+                  }
+                }}
+                style={{ padding: '10px 14px', border: 'none', background: '#174f84', color: '#fff', borderRadius: 8, cursor: 'pointer' }}
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
       )}

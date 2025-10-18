@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment } from '../services/api';
+import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest } from '../services/api';
 import { 
   commentOnForumPost, 
   deleteForumComment, 
@@ -116,6 +116,7 @@ interface PostCardProps {
   editCommentContent?: { [key: number]: string };
   setEditCommentContent?: (fn: (prev: { [key: number]: string }) => { [key: number]: string }) => void;
   isForum?: boolean; // New prop to indicate forum context
+  isDonation?: boolean; // New prop to indicate donation context
   isRepost?: boolean; // New prop to indicate if this is a repost
   repostData?: RepostItem; // Data about the repost
   onViewOriginalPost?: (originalPost: PostItem) => void; // Callback to view original post in modal
@@ -150,15 +151,33 @@ const PostCard: React.FC<PostCardProps> = ({
   editCommentContent = {},
   setEditCommentContent,
   isForum = false, // Default to false for backward compatibility
+  isDonation = false, // Default to false for backward compatibility
   isRepost = false, // Default to false for backward compatibility
   repostData, // Optional repost data
   onViewOriginalPost, // Optional callback to view original post
 }) => {
   console.log('PostCard currentUserId:', currentUserId);
-  const [showLikesModal, setShowLikesModal] = useState(false);
   const [showPhotoGallery, setShowPhotoGallery] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [showLikesModal, setShowLikesModal] = useState(false);
+  const [showRepostLikesModal, setShowRepostLikesModal] = useState(false);
+  const [showDonationRepostLikesModal, setShowDonationRepostLikesModal] = useState(false);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
+
+  // Debug useEffect for showLikesModal
+  useEffect(() => {
+    console.log('showLikesModal state changed:', showLikesModal);
+  }, [showLikesModal]);
+
+  // Debug useEffect for showRepostLikesModal
+  useEffect(() => {
+    console.log('showRepostLikesModal state changed:', showRepostLikesModal);
+  }, [showRepostLikesModal]);
+
+  // Debug useEffect for showDonationRepostLikesModal
+  useEffect(() => {
+    console.log('showDonationRepostLikesModal state changed:', showDonationRepostLikesModal);
+  }, [showDonationRepostLikesModal]);
   const commentOptionsRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   const [showCommentOptions, setShowCommentOptions] = useState<{ [key: number]: boolean }>({});
   const [editingRepostCaption, setEditingRepostCaption] = useState<{ [key: number]: boolean }>({});
@@ -173,11 +192,18 @@ const PostCard: React.FC<PostCardProps> = ({
   const getImagesFromPost = (post: PostItem): string[] => {
     const images: string[] = [];
     
-    // Add multiple images if available
+    // Add multiple images if available (for regular posts)
     if (post.post_images && post.post_images.length > 0) {
       // Sort by order and extract URLs
       const sortedImages = [...post.post_images].sort((a, b) => a.order - b.order);
       images.push(...sortedImages.map(img => img.image_url));
+    }
+    
+    // Add donation images if available (for donation posts)
+    if (images.length === 0 && (post as any).images && (post as any).images.length > 0) {
+      // Sort by order and extract URLs
+      const sortedImages = [...(post as any).images].sort((a: any, b: any) => a.order - b.order);
+      images.push(...sortedImages.map((img: any) => img.image_url));
     }
     
     // Add single image if no multiple images and single image exists
@@ -274,10 +300,22 @@ const PostCard: React.FC<PostCardProps> = ({
 
   const handleLike = async () => {
     if (!setLikedPosts) return;
+    console.log('handleLike called for post:', post.post_id, 'isForum:', isForum, 'isDonation:', isDonation);
     try {
-      if (isRepostPost) {
-        // Use unified like API with repost_id
+      if (isRepostPost && isDonation) {
+        // Use donation repost like API
         const repostId = repostData?.repost_id || post.post_id;
+        console.log('Liking donation repost:', repostId);
+        await api.post(`reposts/${repostId}/like/`);
+        setLikedPosts(prev => ({ ...prev, [repostId]: true }));
+        
+        // Immediately update local state for repost likes
+        post.likes_count = (post.likes_count || 0) + 1;
+        post.liked_by_user = true;
+      } else if (isRepostPost) {
+        // Use unified like API with repost_id for forum reposts
+        const repostId = repostData?.repost_id || post.post_id;
+        console.log('Liking forum repost:', repostId);
         await api.post(`reposts/${repostId}/like/`);
         setLikedPosts(prev => ({ ...prev, [repostId]: true }));
         
@@ -286,12 +324,21 @@ const PostCard: React.FC<PostCardProps> = ({
         post.liked_by_user = true;
       } else if (isForum) {
         // Use forum like API
+        console.log('Liking forum post:', post.post_id);
         await likeForumPost(post.post_id);
         setLikedPosts(prev => ({ ...prev, [post.post_id]: true }));
+        console.log('Forum post liked successfully');
+      } else if (isDonation) {
+        // Use donation like API
+        console.log('Liking donation post:', post.post_id);
+        await likeDonation(post.post_id);
+        setLikedPosts(prev => ({ ...prev, [post.post_id]: true }));
+        console.log('Donation post liked successfully');
       } else {
         // Use regular post like API
+        console.log('Liking regular post:', post.post_id);
         await likePost(post.post_id);
-      setLikedPosts(prev => ({ ...prev, [post.post_id]: true }));
+        setLikedPosts(prev => ({ ...prev, [post.post_id]: true }));
       }
       onPostUpdate?.();
     } catch (error) {
@@ -301,10 +348,22 @@ const PostCard: React.FC<PostCardProps> = ({
 
   const handleUnlike = async () => {
     if (!setLikedPosts) return;
+    console.log('handleUnlike called for post:', post.post_id, 'isForum:', isForum, 'isDonation:', isDonation);
     try {
-      if (isRepostPost) {
-        // Use unified unlike API with repost_id
+      if (isRepostPost && isDonation) {
+        // Use donation repost unlike API
         const repostId = repostData?.repost_id || post.post_id;
+        console.log('Unliking donation repost:', repostId);
+        await api.delete(`reposts/${repostId}/like/`);
+        setLikedPosts(prev => ({ ...prev, [repostId]: false }));
+        
+        // Immediately update local state for repost likes
+        post.likes_count = Math.max((post.likes_count || 0) - 1, 0);
+        post.liked_by_user = false;
+      } else if (isRepostPost) {
+        // Use unified unlike API with repost_id for forum reposts
+        const repostId = repostData?.repost_id || post.post_id;
+        console.log('Unliking forum repost:', repostId);
         await api.delete(`reposts/${repostId}/like/`);
         setLikedPosts(prev => ({ ...prev, [repostId]: false }));
         
@@ -313,12 +372,21 @@ const PostCard: React.FC<PostCardProps> = ({
         post.liked_by_user = false;
       } else if (isForum) {
         // Use forum unlike API
+        console.log('Unliking forum post:', post.post_id);
         await unlikeForumPost(post.post_id);
         setLikedPosts(prev => ({ ...prev, [post.post_id]: false }));
+        console.log('Forum post unliked successfully');
+      } else if (isDonation) {
+        // Use donation unlike API
+        console.log('Unliking donation post:', post.post_id);
+        await unlikeDonation(post.post_id);
+        setLikedPosts(prev => ({ ...prev, [post.post_id]: false }));
+        console.log('Donation post unliked successfully');
       } else {
         // Use regular post unlike API
+        console.log('Unliking regular post:', post.post_id);
         await unlikePost(post.post_id);
-      setLikedPosts(prev => ({ ...prev, [post.post_id]: false }));
+        setLikedPosts(prev => ({ ...prev, [post.post_id]: false }));
       }
       onPostUpdate?.();
     } catch (error) {
@@ -369,6 +437,29 @@ const PostCard: React.FC<PostCardProps> = ({
         result = await commentOnForumPost(post.post_id, commentContent);
         
         // Immediately update local state for forum comments
+        if (result && result.success && result.comment) {
+          // Add the new comment to the local post.comments array
+          const newComment = {
+            comment_id: result.comment.comment_id,
+            comment_content: commentContent,
+            date_created: new Date().toISOString(),
+            user: {
+              user_id: currentUserId || 0,
+              f_name: displayName.split(' ')[0] || '',
+              l_name: displayName.split(' ').slice(1).join(' ') || '',
+              profile_pic: displayAvatar
+            }
+          };
+          
+          // Update the post object with the new comment
+          post.comments = [...(post.comments || []), newComment as any];
+          post.comments_count = (post.comments_count || 0) + 1;
+        }
+      } else if (isDonation) {
+        // Use donation comment API
+        result = await commentOnDonation(post.post_id, commentContent);
+        
+        // Immediately update local state for donation comments
         if (result && result.success && result.comment) {
           // Add the new comment to the local post.comments array
           const newComment = {
@@ -445,6 +536,9 @@ const PostCard: React.FC<PostCardProps> = ({
         if (isForum) {
           // Use forum post API
           await deleteForumPost(post.post_id);
+        } else if (isDonation) {
+          // Use donation API
+          await deleteDonationRequest(post.post_id);
         } else {
           // Use regular post API
           await deletePost(post.post_id);
@@ -472,6 +566,9 @@ const PostCard: React.FC<PostCardProps> = ({
       if (isForum) {
         // Use forum post API
         await editForumPost(post.post_id, { content: editPostContent[post.post_id] });
+      } else if (isDonation) {
+        // Use donation API
+        await updateDonationRequest(post.post_id, { description: editPostContent[post.post_id] });
       } else {
         // Use regular post API
         await editPost(post.post_id, { post_content: editPostContent[post.post_id] });
@@ -525,6 +622,9 @@ const PostCard: React.FC<PostCardProps> = ({
         } else if (isForum) {
           // Use forum comment API
           await deleteForumComment(post.post_id, commentId);
+        } else if (isDonation) {
+          // Use donation comment API
+          await deleteDonationComment(post.post_id, commentId);
         } else {
           // Use regular post comment API
           await deleteComment(post.post_id, commentId);
@@ -557,6 +657,9 @@ const PostCard: React.FC<PostCardProps> = ({
       } else if (isForum) {
         // Use forum comment API
         await editForumComment(post.post_id, commentId, { comment_content: editCommentContent[commentId] });
+      } else if (isDonation) {
+        // Use donation comment API
+        await editDonationComment(post.post_id, commentId, { comment_content: editCommentContent[commentId] });
       } else {
         // Use regular post comment API
         await editComment(post.post_id, commentId, { comment_content: editCommentContent[commentId] });
@@ -678,22 +781,39 @@ const PostCard: React.FC<PostCardProps> = ({
                   }}
                 />
                 <div>
-                  <div 
-                    className="post-author-info"
-                    onClick={() => {
-                      if (displayUser?.user_id) {
-                        const currentPath = window.location.pathname;
-                        if (currentPath.startsWith('/peso')) {
-                          window.location.href = `/peso/profile/${displayUser.user_id}`;
-                        } else if (currentPath.startsWith('/ccict')) {
-                          window.location.href = `/ccict/profile/${displayUser.user_id}`;
-                        } else {
-                          window.location.href = `/alumni/profile/${displayUser.user_id}`;
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div 
+                      className="post-author-info"
+                      onClick={() => {
+                        if (displayUser?.user_id) {
+                          const currentPath = window.location.pathname;
+                          if (currentPath.startsWith('/peso')) {
+                            window.location.href = `/peso/profile/${displayUser.user_id}`;
+                          } else if (currentPath.startsWith('/ccict')) {
+                            window.location.href = `/ccict/profile/${displayUser.user_id}`;
+                          } else {
+                            window.location.href = `/alumni/profile/${displayUser.user_id}`;
+                          }
                         }
-                      }
-                    }}
-                  >
-                    {repostDisplayName || 'User'}
+                      }}
+                    >
+                      {repostDisplayName || 'User'}
+                    </div>
+                    {isDonation && (
+                      <span style={{
+                        background: 'linear-gradient(135deg, #174f84 0%, #2d5aa0 100%)',
+                        color: '#ffffff',
+                        fontSize: '10px',
+                        fontWeight: '600',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                      }}>
+                        💝 Donation
+                      </span>
+                    )}
                   </div>
                   <div className="profile-repost-author-details">
                     <span>{formatTime(repostData.repost_date)}</span>
@@ -979,12 +1099,41 @@ const PostCard: React.FC<PostCardProps> = ({
                             : originalImages[0]
                         }
                         alt="original post"
-                      className="profile-repost-original-image"
-                        style={{ cursor: 'pointer' }}
+                        className="profile-repost-original-image"
+                        style={{ 
+                          cursor: 'pointer',
+                          width: 'auto',
+                          height: 'auto',
+                          maxWidth: '100%',
+                          maxHeight: '40vh',
+                          borderRadius: '8px',
+                          objectFit: 'contain'
+                        }}
                         onClick={() => handleImageClick(0)}
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.style.display = 'none';
+                        onLoad={(e) => {
+                          const img = e.target as HTMLImageElement;
+                          const naturalWidth = img.naturalWidth;
+                          const naturalHeight = img.naturalHeight;
+                          
+                          // Portrait images (tall): More height, less width
+                          if (naturalHeight > naturalWidth * 1.5) {
+                            img.style.maxHeight = '50vh';
+                            img.style.maxWidth = '50vw';
+                          }
+                          // Landscape images (wide): More width, less height  
+                          else if (naturalWidth > naturalHeight * 1.5) {
+                            img.style.maxWidth = '70vw';
+                            img.style.maxHeight = '35vh';
+                          }
+                          // Square images: Balanced constraints
+                          else {
+                            img.style.maxWidth = '60vw';
+                            img.style.maxHeight = '45vh';
+                          }
+                        }}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
                           console.error('Failed to load original post image:', originalImages[0]);
                         }}
                       />
@@ -997,19 +1146,19 @@ const PostCard: React.FC<PostCardProps> = ({
                         overflow: 'hidden',
                         ...(originalImages.length === 2 ? {
                           gridTemplateColumns: '1fr 1fr',
-                          height: '120px'
+                          height: '300px'
                         } : originalImages.length === 3 ? {
                           gridTemplateColumns: '2fr 1fr',
                           gridTemplateRows: '1fr 1fr',
-                          height: '120px'
+                          height: '300px'
                         } : originalImages.length === 4 ? {
                           gridTemplateColumns: '1fr 1fr',
                           gridTemplateRows: '1fr 1fr',
-                          height: '120px'
+                          height: '300px'
                         } : {
                           gridTemplateColumns: '1fr 1fr 1fr',
                           gridTemplateRows: '1fr 1fr',
-                          height: '120px'
+                          height: '300px'
                         })
                       }}>
                         {originalImages.slice(0, originalImages.length <= 6 ? originalImages.length : 6).map((image, index) => {
@@ -1036,9 +1185,11 @@ const PostCard: React.FC<PostCardProps> = ({
                                 style={{
                                   width: '100%',
                                   height: '100%',
-                                  objectFit: 'cover',
+                                  minHeight: '120px',
+                                  objectFit: 'contain',
                                   cursor: 'pointer',
-                                  transition: 'transform 0.2s ease'
+                                  transition: 'transform 0.2s ease',
+                                  backgroundColor: '#f8f9fa'
                                 }}
                                 onClick={() => handleImageClick(index)}
                                 onMouseEnter={(e) => {
@@ -1085,47 +1236,61 @@ const PostCard: React.FC<PostCardProps> = ({
                   </div>
                 );
               })()}
+
             </div>
           )}
 
             {/* Facebook-style likes and comments display for repost */}
-            {((post.likes && post.likes.length > 0) || (post.comments && post.comments.length > 0)) && (
-              <div style={{ 
-                marginTop: 8, 
-                padding: '8px 12px', 
-                borderRadius: 8,
-                color: '#6c757d',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  {/* Likes text */}
-                  {post.likes && post.likes.length > 0 ? (
-                    <span
-                      onClick={() => setShowLikesModal(true)}
-                      style={{ 
-                        cursor: 'pointer', 
-                        fontSize: '12px',
-                        fontWeight: '500',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        transition: 'background-color 0.2s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f8f9fa';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                    >👍
-                      {post.likes.length === 1 
-                        ? `${post.likes[0].f_name} ${post.likes[0].m_name} ${post.likes[0].l_name} liked this`
-                        : post.likes.length === 2
-                        ? `${post.likes[0].f_name} ${post.likes[0].m_name} ${post.likes[0].l_name} and ${post.likes[1].f_name} ${post.likes[1].m_name} ${post.likes[1].l_name} liked this`
-                        : `${post.likes[0].f_name} ${post.likes[0].m_name} ${post.likes[0].l_name} and ${post.likes.length - 1} others liked this`
-                      }
-                    </span>
-                  ) : (
-                    <div></div>
-                  )}
+            <div style={{ 
+              marginTop: 8, 
+              padding: '8px 12px', 
+              borderRadius: 8,
+              color: '#6c757d',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {/* Likes text */}
+                {post.likes && post.likes.length > 0 ? (
+                  <span
+                    onClick={() => {
+                      console.log('Like summary clicked, setting showLikesModal to true');
+                      setShowLikesModal(true);
+                    }}
+                    style={{ 
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      color: '#6b7280',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f8f9fa';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                  >👍
+                    {post.likes.length === 1 
+                      ? `${(post.likes[0] as any).user?.f_name || post.likes[0].f_name || ''} ${(post.likes[0] as any).user?.m_name || (post.likes[0] as any).m_name || ''} ${(post.likes[0] as any).user?.l_name || post.likes[0].l_name || ''}`.trim() + ' liked this'
+                      : post.likes.length === 2
+                      ? `${(post.likes[0] as any).user?.f_name || post.likes[0].f_name || ''} ${(post.likes[0] as any).user?.m_name || (post.likes[0] as any).m_name || ''} ${(post.likes[0] as any).user?.l_name || post.likes[0].l_name || ''}`.trim() + ` and ${(post.likes[1] as any).user?.f_name || post.likes[1].f_name || ''} ${(post.likes[1] as any).user?.m_name || (post.likes[1] as any).m_name || ''} ${(post.likes[1] as any).user?.l_name || post.likes[1].l_name || ''}`.trim() + ' liked this'
+                      : `${(post.likes[0] as any).user?.f_name || post.likes[0].f_name || ''} ${(post.likes[0] as any).user?.m_name || (post.likes[0] as any).m_name || ''} ${(post.likes[0] as any).user?.l_name || post.likes[0].l_name || ''}`.trim() + ` and ${post.likes.length - 1} others liked this`
+                    }
+                  </span>
+                ) : (
+                  <span
+                    style={{ 
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      color: '#9ca3af'
+                    }}
+                  >
+                    No likes yet
+                  </span>
+                )}
                   
                   {/* Comments count */}
                   {post.comments && post.comments.length > 0 && (
@@ -1151,7 +1316,6 @@ const PostCard: React.FC<PostCardProps> = ({
                   )}
                 </div>
               </div>
-            )}
 
             {/* Interaction buttons for the repost */}
             <div className="profile-repost-actions">
@@ -1166,7 +1330,20 @@ const PostCard: React.FC<PostCardProps> = ({
                   });
                   likedPosts[repostId] ? handleUnlike() : handleLike();
                 }}
-                className={`profile-repost-action-item ${likedPosts[repostData?.repost_id || post.post_id] ? 'liked' : ''}`}
+                className="profile-repost-action-item"
+                style={{
+                  color: likedPosts[repostData?.repost_id || post.post_id] ? '#ef4444' : '#6c757d',
+                  fontWeight: likedPosts[repostData?.repost_id || post.post_id] ? '600' : '400',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = '#f8f9fa';
                 }}
@@ -1174,11 +1351,15 @@ const PostCard: React.FC<PostCardProps> = ({
                   e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
-                <span style={{ fontSize: '14px', marginRight: '4px' }}>
-                👍
+                <span style={{ 
+                  fontSize: '16px', 
+                  color: likedPosts[repostData?.repost_id || post.post_id] ? '#3b82f6' : '#6b7280',
+                  fontWeight: likedPosts[repostData?.repost_id || post.post_id] ? '900' : '400'
+                }}>
+                  👍
                 </span>
                 <span>
-                {post.likes_count === 1 ? '1 like' : (post.likes_count && post.likes_count > 1) ? `${post.likes_count} likes` : 'Like'}
+                  {post.likes_count === 1 ? '1 like' : (post.likes_count && post.likes_count > 1) ? `${post.likes_count} likes` : 'Like'}
                 </span>
               </button>
               <button
@@ -1215,6 +1396,8 @@ const PostCard: React.FC<PostCardProps> = ({
                 isReposted={repostedPosts[post.post_id] || false}
                 onRepost={onPostUpdate}
                 formatTime={formatTime}
+                isForum={isForum}
+                isDonation={isDonation}
                 className={`profile-repost-action-item ${repostedPosts[post.post_id] ? 'reposted' : ''}`}
               />
             </div>
@@ -1252,7 +1435,7 @@ const PostCard: React.FC<PostCardProps> = ({
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span>{comment.user.f_name} {comment.user.m_name} {comment.user.l_name}</span>
-                          {(Number(currentUserId) === Number(comment.user.user_id) || isOwn) && setEditingComment && setEditCommentContent && !editingComment[comment.comment_id] && (
+                          {((Number(currentUserId) === Number(comment.user.user_id) && setEditingComment && setEditCommentContent) || isOwn) && !editingComment[comment.comment_id] && (
                             <div style={{ position: 'relative' }} ref={(el) => { commentOptionsRefs.current[comment.comment_id] = el; }}>
                               <button
                                 onClick={() => setShowCommentOptions(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
@@ -1282,7 +1465,7 @@ const PostCard: React.FC<PostCardProps> = ({
                                     width: '120px',
                                   }}
                                 >
-                                  {String(currentUserId) === String(comment.user.user_id) && (
+                                  {(String(currentUserId) === String(comment.user.user_id) && setEditingComment) && (
                                     <button
                                       onClick={() => handleEditComment(comment.comment_id)}
                                       style={{
@@ -1502,24 +1685,41 @@ const PostCard: React.FC<PostCardProps> = ({
             }}
           />
           <div>
-            <div 
-              className="post-author-info"
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                if (displayUser?.user_id) {
-                  // Navigate to user profile based on current path
-                  const currentPath = window.location.pathname;
-                  if (currentPath.startsWith('/peso')) {
-                    window.location.href = `/peso/profile/${displayUser.user_id}`;
-                  } else if (currentPath.startsWith('/ccict')) {
-                    window.location.href = `/ccict/profile/${displayUser.user_id}`;
-                  } else {
-                    window.location.href = `/alumni/profile/${displayUser.user_id}`;
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div 
+                className="post-author-info"
+                style={{ cursor: 'pointer' }}
+                onClick={() => {
+                  if (displayUser?.user_id) {
+                    // Navigate to user profile based on current path
+                    const currentPath = window.location.pathname;
+                    if (currentPath.startsWith('/peso')) {
+                      window.location.href = `/peso/profile/${displayUser.user_id}`;
+                    } else if (currentPath.startsWith('/ccict')) {
+                      window.location.href = `/ccict/profile/${displayUser.user_id}`;
+                    } else {
+                      window.location.href = `/alumni/profile/${displayUser.user_id}`;
+                    }
                   }
-                }
-              }}
-            >
-              {repostDisplayName || 'User'}
+                }}
+              >
+                {repostDisplayName || 'User'}
+              </div>
+              {isDonation && (
+                <span style={{
+                  background: 'linear-gradient(135deg, #174f84 0%, #2d5aa0 100%)',
+                  color: '#ffffff',
+                  fontSize: '10px',
+                  fontWeight: '600',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                }}>
+                  💝 Donation
+                </span>
+              )}
             </div>
             <div className="post-author-details" style={{ color: '#666', fontSize: '12px' }}>
               <span>{formatTime(post.created_at) || 'Unknown time'}</span>
@@ -1748,18 +1948,41 @@ const PostCard: React.FC<PostCardProps> = ({
             }
             alt="post"
                 style={{ 
+                  width: 'auto',
+                  height: 'auto',
                   maxWidth: '100%', 
+                  maxHeight: '40vh',
                   borderRadius: 8, 
-                  maxHeight: '400px', 
-                  objectFit: 'cover',
+                  objectFit: 'contain',
                   cursor: 'pointer'
                 }}
                 onClick={() => handleImageClick(0)}
+                onLoad={(e) => {
+                  const img = e.target as HTMLImageElement;
+                  const naturalWidth = img.naturalWidth;
+                  const naturalHeight = img.naturalHeight;
+                  
+                  // Portrait images (tall): More height, less width
+                  if (naturalHeight > naturalWidth * 1.5) {
+                    img.style.maxHeight = '50vh';
+                    img.style.maxWidth = '50vw';
+                  }
+                  // Landscape images (wide): More width, less height  
+                  else if (naturalWidth > naturalHeight * 1.5) {
+                    img.style.maxWidth = '70vw';
+                    img.style.maxHeight = '35vh';
+                  }
+                  // Square images: Balanced constraints
+                  else {
+                    img.style.maxWidth = '60vw';
+                    img.style.maxHeight = '45vh';
+                  }
+                }}
             onError={(e) => {
               const target = e.target as HTMLImageElement;
               target.style.display = 'none';
                   console.error('Failed to load post image:', images[0]);
-                }}
+            }}
               />
             ) : (
               // Multiple images grid - Facebook style
@@ -1811,9 +2034,11 @@ const PostCard: React.FC<PostCardProps> = ({
                         style={{
                           width: '100%',
                           height: '100%',
-                          objectFit: 'cover',
+                          minHeight: '120px',
+                          objectFit: 'contain',
                           cursor: 'pointer',
-                          transition: 'transform 0.2s ease'
+                          transition: 'transform 0.2s ease',
+                          backgroundColor: '#f8f9fa'
                         }}
                         onClick={() => handleImageClick(index)}
                         onMouseEnter={(e) => {
@@ -1862,43 +2087,56 @@ const PostCard: React.FC<PostCardProps> = ({
       })()}
 
       {/* Facebook-style likes and comments display */}
-      {((post.likes && post.likes.length > 0) || (post.comments && post.comments.length > 0)) && (
-        <div style={{ 
-          marginTop: 8, 
-          padding: '8px 12px', 
-          borderRadius: 8,
-          color: '#6c757d',
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            {/* Likes text */}
-            {post.likes && post.likes.length > 0 ? (
-              <span
-                onClick={() => setShowLikesModal(true)}
-                style={{ 
-                  cursor: 'pointer', 
-                  fontSize: '12px',
-                  fontWeight: '500',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  transition: 'background-color 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f8f9fa';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >👍
-                {post.likes.length === 1 
-                  ? `${post.likes[0].f_name} ${post.likes[0].m_name} ${post.likes[0].l_name} liked this`
-                  : post.likes.length === 2
-                  ? `${post.likes[0].f_name} ${post.likes[0].m_name} ${post.likes[0].l_name} and ${post.likes[1].f_name} ${post.likes[1].m_name} ${post.likes[1].l_name} liked this`
-                  : `${post.likes[0].f_name} ${post.likes[0].m_name} ${post.likes[0].l_name} and ${post.likes.length - 1} others liked this`
-                }
-              </span>
-            ) : (
-              <div></div>
-            )}
+      <div style={{ 
+        marginTop: 8, 
+        padding: '8px 12px', 
+        borderRadius: 8,
+        color: '#6c757d',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {/* Likes text */}
+          {post.likes && post.likes.length > 0 ? (
+            <span
+              onClick={() => {
+                console.log('Like summary clicked (regular post), setting showLikesModal to true');
+                setShowLikesModal(true);
+              }}
+              style={{ 
+                fontSize: '12px',
+                fontWeight: '500',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                color: '#6b7280',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f8f9fa';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >👍
+              {post.likes.length === 1 
+                ? `${(post.likes[0] as any).user?.f_name || post.likes[0].f_name || ''} ${(post.likes[0] as any).user?.m_name || (post.likes[0] as any).m_name || ''} ${(post.likes[0] as any).user?.l_name || post.likes[0].l_name || ''}`.trim() + ' liked this'
+                : post.likes.length === 2
+                ? `${(post.likes[0] as any).user?.f_name || post.likes[0].f_name || ''} ${(post.likes[0] as any).user?.m_name || (post.likes[0] as any).m_name || ''} ${(post.likes[0] as any).user?.l_name || post.likes[0].l_name || ''}`.trim() + ` and ${(post.likes[1] as any).user?.f_name || post.likes[1].f_name || ''} ${(post.likes[1] as any).user?.m_name || (post.likes[1] as any).m_name || ''} ${(post.likes[1] as any).user?.l_name || post.likes[1].l_name || ''}`.trim() + ' liked this'
+                : `${(post.likes[0] as any).user?.f_name || post.likes[0].f_name || ''} ${(post.likes[0] as any).user?.m_name || (post.likes[0] as any).m_name || ''} ${(post.likes[0] as any).user?.l_name || post.likes[0].l_name || ''}`.trim() + ` and ${post.likes.length - 1} others liked this`
+              }
+            </span>
+          ) : (
+            <span
+              style={{ 
+                fontSize: '12px',
+                fontWeight: '500',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                color: '#9ca3af'
+              }}
+            >
+              No likes yet
+            </span>
+          )}
             
             {/* Comments count */}
             {post.comments && post.comments.length > 0 && (
@@ -1924,7 +2162,6 @@ const PostCard: React.FC<PostCardProps> = ({
             )}
           </div>
         </div>
-      )}
 
       <div className="post-actions" style={{ 
         display: 'flex', 
@@ -1933,11 +2170,9 @@ const PostCard: React.FC<PostCardProps> = ({
       }}>
         <button
           onClick={() => {
-            if (post.likes && post.likes.length > 0 && !likedPosts[post.post_id]) {
-              setShowLikesModal(true);
-            } else {
-              likedPosts[post.post_id] ? handleUnlike() : handleLike();
-            }
+            console.log('Like button clicked for post:', post.post_id, 'likedPosts:', likedPosts[post.post_id]);
+            console.log('Calling like/unlike handler');
+            likedPosts[post.post_id] ? handleUnlike() : handleLike();
           }}
           className="post-action-item"
           style={{
@@ -2018,6 +2253,7 @@ const PostCard: React.FC<PostCardProps> = ({
           onRepost={onPostUpdate}
           formatTime={formatTime}
           isForum={isForum}
+          isDonation={isDonation}
           style={{
             color: repostedPosts[post.post_id] ? '#007bff' : '#6c757d',
             fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
@@ -2061,7 +2297,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span>{comment.user.f_name} {comment.user.m_name} {comment.user.l_name}</span>
-                            {(Number(currentUserId) === Number(comment.user.user_id) || isOwn) && setEditingComment && setEditCommentContent && !editingComment[comment.comment_id] && (
+                            {((Number(currentUserId) === Number(comment.user.user_id) && setEditingComment && setEditCommentContent) || isOwn) && !editingComment[comment.comment_id] && (
                               <div style={{ position: 'relative' }} ref={(el) => { commentOptionsRefs.current[comment.comment_id] = el; }}>
                                 <button
                                   onClick={() => setShowCommentOptions(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
@@ -2091,7 +2327,7 @@ const PostCard: React.FC<PostCardProps> = ({
                                       width: '120px',
                                     }}
                                   >
-                                    {String(currentUserId) === String(comment.user.user_id) && (
+                                    {(String(currentUserId) === String(comment.user.user_id) && setEditingComment) && (
                                       <button
                                         onClick={() => handleEditComment(comment.comment_id)}
                                         style={{
@@ -2280,141 +2516,11 @@ const PostCard: React.FC<PostCardProps> = ({
         </div>
       )}
 
-      {/* Likes Modal */}
-      {showLikesModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 2000,
-          }}
-          onClick={() => setShowLikesModal(false)}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              borderRadius: 12,
-              maxWidth: '400px',
-              maxHeight: '80vh',
-              overflow: 'hidden',
-              width: '90%',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ padding: '16px', borderBottom: '1px solid #eee' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
-                  {getPluralForm(post.likes?.length || 0, 'Like', 'Likes')}
-                </h3>
-                <button
-                  onClick={() => setShowLikesModal(false)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '24px',
-                    cursor: 'pointer',
-                    color: '#666'
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {post.likes && post.likes.length > 0 ? (
-                post.likes.map((like) => (
-                  <div
-                    key={like.user_id}
-                    style={{
-                      padding: '12px 16px',
-                      borderBottom: '1px solid #f0f0f0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px'
-                    }}
-                  >
-                    <img
-                      src={like.profile_pic ? (String(like.profile_pic).startsWith('http') ? like.profile_pic : `http://127.0.0.1:8000${like.profile_pic}`) : ctulogo}
-                      alt="Profile"
-                      style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '50%',
-                        objectFit: 'cover',
-                        cursor: 'pointer'
-                      }}
-                      onClick={() => {
-                        // Navigate to user profile based on current path
-                        const currentPath = window.location.pathname;
-                        if (currentPath.startsWith('/peso')) {
-                          window.location.href = `/peso/profile/${like.user_id}`;
-                        } else if (currentPath.startsWith('/ccict')) {
-                          window.location.href = `/ccict/profile/${like.user_id}`;
-                        } else {
-                          window.location.href = `/alumni/profile/${like.user_id}`;
-                        }
-                      }}
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.onerror = null;
-                        target.src = ctulogo as unknown as string;
-                      }}
-                    />
-                    <div>
-                      <div 
-                        style={{ 
-                          fontWeight: 'bold', 
-                          fontSize: '14px',
-                          cursor: 'pointer',
-                          color: '#174f84'
-                        }}
-                        onClick={() => {
-                          // Navigate to user profile based on current path
-                          const currentPath = window.location.pathname;
-                          if (currentPath.startsWith('/peso')) {
-                            window.location.href = `/peso/profile/${like.user_id}`;
-                          } else if (currentPath.startsWith('/ccict')) {
-                            window.location.href = `/ccict/profile/${like.user_id}`;
-                          } else {
-                            window.location.href = `/alumni/profile/${like.user_id}`;
-                          }
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.textDecoration = 'underline';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.textDecoration = 'none';
-                        }}
-                      >
-                        {like.f_name} {like.m_name} {like.l_name}
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#666' }}>
-                        {/* Additional user info could go here */}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
-                  No likes yet
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
         </div>
       )}
 
-      {/* Reposts section - hidden for forum posts as they use individual repost cards */}
-      {!isForum && post.reposts && post.reposts.length > 0 && (
+      {/* Reposts section - hidden for forum and donation posts */}
+      {!isForum && !isDonation && post.reposts && post.reposts.length > 0 && (
         <div className="reposts-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
           <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '8px' }}>
             Reposts ({post.reposts.length})
@@ -2514,6 +2620,481 @@ const PostCard: React.FC<PostCardProps> = ({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+
+      {/* Likes Modal */}
+      {showLikesModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+          onClick={() => setShowLikesModal(false)}
+        >
+          <div
+            style={{
+              background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+              borderRadius: 14,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.15), 0 8px 16px rgba(0,0,0,0.1)',
+              maxWidth: 400,
+              width: '90%',
+              padding: 20,
+              position: 'relative',
+              border: '1px solid rgba(255,255,255,0.2)',
+              animation: 'slideUp 0.3s ease-out',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowLikesModal(false)}
+              style={{
+                position: 'absolute',
+                top: 12,
+                right: 12,
+                background: 'rgba(0,0,0,0.05)',
+                border: 'none',
+                borderRadius: '50%',
+                width: 28,
+                height: 28,
+                fontSize: 14,
+                cursor: 'pointer',
+                color: '#666',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.1)';
+                e.currentTarget.style.color = '#333';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.05)';
+                e.currentTarget.style.color = '#666';
+              }}
+            >
+              ×
+            </button>
+
+            <h2 style={{
+              margin: '0 0 16px 0',
+              fontSize: 18,
+              fontWeight: '700',
+              color: '#1e4c7a',
+              textAlign: 'center',
+              borderBottom: '1px solid #e0e0e0',
+              paddingBottom: 10,
+            }}>
+              👍 People who liked this
+            </h2>
+
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              {post.likes && post.likes.length > 0 ? (
+                post.likes.map((like: any, index: number) => {
+                  const likeUser = like.user || like;
+                  const userName = `${likeUser.f_name || ''} ${likeUser.m_name || ''} ${likeUser.l_name || ''}`.trim();
+                  const userProfilePic = likeUser.profile_pic ? 
+                    (String(likeUser.profile_pic).startsWith('http') ? 
+                      likeUser.profile_pic : 
+                      `http://127.0.0.1:8000${likeUser.profile_pic}`) : 
+                    ctulogo;
+
+                  return (
+                    <div
+                      key={index}
+                      onClick={() => {
+                        if (likeUser.user_id) {
+                          const currentPath = window.location.pathname;
+                          if (currentPath.startsWith('/peso')) {
+                            window.location.href = `/peso/profile/${likeUser.user_id}`;
+                          } else if (currentPath.startsWith('/ccict')) {
+                            window.location.href = `/ccict/profile/${likeUser.user_id}`;
+                          } else {
+                            window.location.href = `/alumni/profile/${likeUser.user_id}`;
+                          }
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '12px',
+                        borderBottom: index < (post.likes?.length || 0) - 1 ? '1px solid #f0f0f0' : 'none',
+                        cursor: 'pointer',
+                        borderRadius: '8px',
+                        transition: 'background-color 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f8f9fa';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <img
+                        src={userProfilePic}
+                        alt="Profile"
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          marginRight: 12,
+                          border: '2px solid #e5e7eb',
+                        }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = ctulogo;
+                        }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: '600', fontSize: 15, color: '#333' }}>
+                          {userName || 'Unknown User'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '20px',
+                  color: '#6c757d',
+                  fontSize: '14px',
+                }}>
+                  No likes yet
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Repost Likes Modal */}
+      {showRepostLikesModal && repostData && repostData.original_post && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+          onClick={() => setShowRepostLikesModal(false)}
+        >
+          <div
+            style={{
+              background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+              borderRadius: 14,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.15), 0 8px 16px rgba(0,0,0,0.1)',
+              maxWidth: 400,
+              width: '90%',
+              padding: 20,
+              position: 'relative',
+              border: '1px solid rgba(255,255,255,0.2)',
+              animation: 'slideUp 0.3s ease-out',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowRepostLikesModal(false)}
+              style={{
+                position: 'absolute',
+                top: 12,
+                right: 12,
+                background: 'rgba(0,0,0,0.05)',
+                border: 'none',
+                borderRadius: '50%',
+                width: 28,
+                height: 28,
+                fontSize: 14,
+                cursor: 'pointer',
+                color: '#666',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.1)';
+                e.currentTarget.style.color = '#333';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.05)';
+                e.currentTarget.style.color = '#666';
+              }}
+            >
+              ×
+            </button>
+
+            <h2 style={{
+              margin: '0 0 16px 0',
+              fontSize: 18,
+              fontWeight: '700',
+              color: '#1e4c7a',
+              textAlign: 'center',
+              borderBottom: '1px solid #e0e0e0',
+              paddingBottom: 10,
+            }}>
+              👍 People who liked the original post
+            </h2>
+
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              {repostData.original_post.likes && repostData.original_post.likes.length > 0 ? (
+                repostData.original_post.likes.map((like: any, index: number) => {
+                  const likeUser = like.user || like;
+                  const userName = `${likeUser.f_name || ''} ${likeUser.m_name || ''} ${likeUser.l_name || ''}`.trim();
+                  const userProfilePic = likeUser.profile_pic ? 
+                    (String(likeUser.profile_pic).startsWith('http') ? 
+                      likeUser.profile_pic : 
+                      `http://127.0.0.1:8000${likeUser.profile_pic}`) : 
+                    ctulogo;
+
+                  return (
+                    <div
+                      key={index}
+                      onClick={() => {
+                        if (likeUser.user_id) {
+                          const currentPath = window.location.pathname;
+                          if (currentPath.startsWith('/peso')) {
+                            window.location.href = `/peso/profile/${likeUser.user_id}`;
+                          } else if (currentPath.startsWith('/ccict')) {
+                            window.location.href = `/ccict/profile/${likeUser.user_id}`;
+                          } else {
+                            window.location.href = `/alumni/profile/${likeUser.user_id}`;
+                          }
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '12px',
+                        borderBottom: index < (repostData.original_post?.likes?.length || 0) - 1 ? '1px solid #f0f0f0' : 'none',
+                        cursor: 'pointer',
+                        borderRadius: '8px',
+                        transition: 'background-color 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f8f9fa';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <img
+                        src={userProfilePic}
+                        alt="Profile"
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          marginRight: 12,
+                          border: '2px solid #e5e7eb',
+                        }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = ctulogo;
+                        }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: '600', fontSize: 15, color: '#333' }}>
+                          {userName || 'Unknown User'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '20px',
+                  color: '#6c757d',
+                  fontSize: '14px',
+                }}>
+                  No likes yet
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Donation Repost Likes Modal */}
+      {showDonationRepostLikesModal && repostData && repostData.original_post && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+          onClick={() => setShowDonationRepostLikesModal(false)}
+        >
+          <div
+            style={{
+              background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+              borderRadius: 14,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.15), 0 8px 16px rgba(0,0,0,0.1)',
+              maxWidth: 400,
+              width: '90%',
+              padding: 20,
+              position: 'relative',
+              border: '1px solid rgba(255,255,255,0.2)',
+              animation: 'slideUp 0.3s ease-out',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowDonationRepostLikesModal(false)}
+              style={{
+                position: 'absolute',
+                top: 12,
+                right: 12,
+                background: 'rgba(0,0,0,0.05)',
+                border: 'none',
+                borderRadius: '50%',
+                width: 28,
+                height: 28,
+                fontSize: 14,
+                cursor: 'pointer',
+                color: '#666',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.1)';
+                e.currentTarget.style.color = '#333';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.05)';
+                e.currentTarget.style.color = '#666';
+              }}
+            >
+              ×
+            </button>
+
+            <h2 style={{
+              margin: '0 0 16px 0',
+              fontSize: 18,
+              fontWeight: '700',
+              color: '#1e4c7a',
+              textAlign: 'center',
+              borderBottom: '1px solid #e0e0e0',
+              paddingBottom: 10,
+            }}>
+              💝 People who liked the original donation
+            </h2>
+
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              {repostData.original_post.likes && repostData.original_post.likes.length > 0 ? (
+                repostData.original_post.likes.map((like: any, index: number) => {
+                  const likeUser = like.user || like;
+                  const userName = `${likeUser.f_name || ''} ${likeUser.m_name || ''} ${likeUser.l_name || ''}`.trim();
+                  const userProfilePic = likeUser.profile_pic ? 
+                    (String(likeUser.profile_pic).startsWith('http') ? 
+                      likeUser.profile_pic : 
+                      `http://127.0.0.1:8000${likeUser.profile_pic}`) : 
+                    ctulogo;
+
+                  return (
+                    <div
+                      key={index}
+                      onClick={() => {
+                        if (likeUser.user_id) {
+                          const currentPath = window.location.pathname;
+                          if (currentPath.startsWith('/peso')) {
+                            window.location.href = `/peso/profile/${likeUser.user_id}`;
+                          } else if (currentPath.startsWith('/ccict')) {
+                            window.location.href = `/ccict/profile/${likeUser.user_id}`;
+                          } else {
+                            window.location.href = `/alumni/profile/${likeUser.user_id}`;
+                          }
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '12px',
+                        borderBottom: index < (repostData.original_post?.likes?.length || 0) - 1 ? '1px solid #f0f0f0' : 'none',
+                        cursor: 'pointer',
+                        borderRadius: '8px',
+                        transition: 'background-color 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f8f9fa';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <img
+                        src={userProfilePic}
+                        alt="Profile"
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          marginRight: 12,
+                          border: '2px solid #e5e7eb',
+                        }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = ctulogo;
+                        }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: '600', fontSize: 15, color: '#333' }}>
+                          {userName || 'Unknown User'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '20px',
+                  color: '#6c757d',
+                  fontSize: '14px',
+                }}>
+                  No likes yet
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

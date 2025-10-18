@@ -1,0 +1,182 @@
+/* Job Alignment Confirmation Component Styles */
+
+.job-alignment-confirmation {
+  margin: 20px 0;
+  max-width: 600px;
+}
+
+.confirmation-card {
+  background: #f8f9fa;
+  border: 2px solid #007bff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+}
+
+.confirmation-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.confirmation-header h3 {
+  color: #007bff;
+  margin: 0 0 8px 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.confirmation-header p {
+  color: #6c757d;
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.confirmation-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.position-info,
+.suggestion-info {
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  border-left: 4px solid #28a745;
+}
+
+.suggestion-info {
+  border-left-color: #007bff;
+}
+
+.position-info p,
+.suggestion-info p {
+  margin: 4px 0;
+  font-size: 0.95rem;
+}
+
+.confirmation-question {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.confirmation-question h4 {
+  color: #495057;
+  margin: 0 0 16px 0;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: #f8f9fa;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.radio-option:hover {
+  background: #e9ecef;
+  border-color: #007bff;
+}
+
+.radio-option input[type="radio"] {
+  margin-right: 12px;
+  transform: scale(1.2);
+  accent-color: #007bff;
+}
+
+.radio-option input[type="radio"]:checked + .radio-label {
+  color: #007bff;
+  font-weight: 600;
+}
+
+.radio-label {
+  font-size: 0.95rem;
+  color: #495057;
+  transition: color 0.2s ease;
+}
+
+.confirmation-actions {
+  text-align: center;
+  margin-top: 8px;
+}
+
+.confirm-button {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 160px;
+}
+
+.confirm-button:hover:not(:disabled) {
+  background: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+}
+
+.confirm-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.job-alignment-loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6c757d;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .confirmation-card {
+    padding: 16px;
+    margin: 0 10px;
+  }
+  
+  .radio-option {
+    padding: 10px;
+  }
+  
+  .radio-label {
+    font-size: 0.9rem;
+  }
+  
+  .confirm-button {
+    width: 100%;
+    padding: 14px;
+  }
+}

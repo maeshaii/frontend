@@ -31,7 +31,7 @@ interface Props {
 
 const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   const [selectedYear, setSelectedYear] = useState('ALL');
-  const [selectedCourse, setSelectedCourse] = useState('ALL');
+  const [selectedProgram, setSelectedProgram] = useState('ALL');
   const [selectedType, setSelectedType] = useState<StatsType>('ALL');
   const [availableYears, setAvailableYears] = useState<{ year: number; count: number }[]>([]);
   const [loading, setLoading] = useState(false);
@@ -91,33 +91,33 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             queryKey: [
               'stats',
               'generate',
-              { year: selectedYear, course: selectedCourse, type: 'QPRO' },
+              { year: selectedYear, course: selectedProgram, type: 'QPRO' },
             ],
-            queryFn: async () => generateSpecificStats(selectedYear, selectedCourse, 'QPRO'),
+            queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, 'QPRO'),
           }) as Promise<AnyStats>,
           queryClient.fetchQuery({
             queryKey: [
               'stats',
               'generate',
-              { year: selectedYear, course: selectedCourse, type: 'CHED' },
+              { year: selectedYear, course: selectedProgram, type: 'CHED' },
             ],
-            queryFn: async () => generateSpecificStats(selectedYear, selectedCourse, 'CHED'),
+            queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, 'CHED'),
           }) as Promise<AnyStats>,
           queryClient.fetchQuery({
             queryKey: [
               'stats',
               'generate',
-              { year: selectedYear, course: selectedCourse, type: 'SUC' },
+              { year: selectedYear, course: selectedProgram, type: 'SUC' },
             ],
-            queryFn: async () => generateSpecificStats(selectedYear, selectedCourse, 'SUC'),
+            queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, 'SUC'),
           }) as Promise<AnyStats>,
           queryClient.fetchQuery({
             queryKey: [
               'stats',
               'generate',
-              { year: selectedYear, course: selectedCourse, type: 'AACUP' },
+              { year: selectedYear, course: selectedProgram, type: 'AACUP' },
             ],
-            queryFn: async () => generateSpecificStats(selectedYear, selectedCourse, 'AACUP'),
+            queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, 'AACUP'),
           }) as Promise<AnyStats>,
         ]);
         setAllStats({ QPRO: qpro, CHED: ched, SUC: suc, AACUP: aacup });
@@ -128,8 +128,8 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           setDetailedLoading((prev) => ({ ...prev, [type]: true }));
           try {
             const res = await queryClient.fetchQuery({
-              queryKey: ['stats', 'detailed', { year: selectedYear, course: selectedCourse, type }],
-              queryFn: async () => exportDetailedAlumniData(selectedYear, selectedCourse, type),
+              queryKey: ['stats', 'detailed', { year: selectedYear, course: selectedProgram, type }],
+              queryFn: async () => exportDetailedAlumniData(selectedYear, selectedProgram, type),
             });
             setDetailedData((prev) => ({
               ...(prev || {}),
@@ -144,9 +144,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           queryKey: [
             'stats',
             'generate',
-            { year: selectedYear, course: selectedCourse, type: selectedType },
+            { year: selectedYear, course: selectedProgram, type: selectedType },
           ],
-          queryFn: async () => generateSpecificStats(selectedYear, selectedCourse, selectedType),
+          queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, selectedType),
         })) as AnyStats;
         setGeneratedStats(stats);
         setAllStats(null);
@@ -162,10 +162,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             queryKey: [
               'stats',
               'detailed',
-              { year: selectedYear, course: selectedCourse, type: selectedType },
+              { year: selectedYear, course: selectedProgram, type: selectedType },
             ],
             queryFn: async () =>
-              exportDetailedAlumniData(selectedYear, selectedCourse, selectedType),
+              exportDetailedAlumniData(selectedYear, selectedProgram, selectedType),
           });
           setDetailedData({ [selectedType]: (res as any)?.detailed_data || [] });
         } finally {
@@ -380,6 +380,102 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     }
   };
 
+  // Ensure columns auto-size and wrap text so long headers/values are fully visible
+  const autoSizeAndWrapSheet = (sheet: ExcelJS.Worksheet) => {
+    try {
+      if (!sheet || !sheet.columns || !Array.isArray(sheet.columns)) return;
+      // Determine max content length per column by scanning all rows
+      const numCols = (sheet as any).columnCount || ((sheet as any).columns?.length ?? 0);
+      for (let c = 1; c <= numCols; c++) {
+        let maxLen = 10;
+        (sheet as any).eachRow?.({ includeEmpty: true }, (row: any) => {
+          const cell = row.getCell(c);
+          const v = cell?.value as any;
+          const text =
+            v === null || v === undefined
+              ? ''
+              : typeof v === 'object' && 'text' in (v as any)
+              ? String((v as any).text)
+              : String(v);
+          if (text.length > maxLen) maxLen = text.length;
+          cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: 'middle' };
+        });
+        // Generous padding so long labels fully show in Calibri 11
+        const width = Math.min(maxLen + 6, 100);
+        const col = (sheet as any).getColumn?.(c);
+        if (col) col.width = Math.max(col.width || 0, width, 14);
+      }
+
+      // Make likely header rows taller and wrapped so long labels are visible
+      const maybeHeaderMatches = (row: any) => {
+        try {
+          const c1 = String(row.getCell(1)?.value || '');
+          const c2 = String(row.getCell(2)?.value || '');
+          const c3 = String(row.getCell(3)?.value || '');
+          // Match QPRO/Detail headers
+          const isQproHeader = c1 === 'Course' && c2 === 'First_Name' && c3 === 'Middle_Name';
+          const isMetricHeader = c1 === 'Metric' && c2 === 'Value';
+          return isQproHeader || isMetricHeader;
+        } catch (_) {
+          return false;
+        }
+      };
+
+      (sheet as any).eachRow?.({ includeEmpty: false }, (row: any) => {
+        if (maybeHeaderMatches(row)) {
+          row.height = Math.max(28, row.height || 0);
+          row.eachCell?.({ includeEmpty: true }, (cell: any) => {
+            cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: 'middle' };
+          });
+        }
+      });
+
+      // If we find the QPRO detailed header, enforce user-friendly widths per column
+      const explicitHeaderWidths: Record<string, number> = {
+        Course: 14,
+        First_Name: 18,
+        Middle_Name: 22,
+        Last_Name: 18,
+        Status: 16,
+        'Current Company Name': 42,
+        Position_Current: 42,
+        'Current Salary Range': 32,
+        Sector_Current: 26,
+        'Please specify post graduate/degree': 60,
+      };
+
+      let headerRowIndex: number | null = null;
+      (sheet as any).eachRow?.({ includeEmpty: false }, (row: any, rowNumber: number) => {
+        try {
+          const c1 = String(row.getCell(1)?.value || '');
+          const c2 = String(row.getCell(2)?.value || '');
+          const c3 = String(row.getCell(3)?.value || '');
+          if (c1 === 'Course' && c2 === 'First_Name' && c3 === 'Middle_Name') {
+            headerRowIndex = rowNumber;
+            throw 'found';
+          }
+        } catch (e) {
+          // break using throw/try pattern
+        }
+      });
+
+      if (headerRowIndex) {
+        const headerRow: any = (sheet as any).getRow(headerRowIndex);
+        if (headerRow && Array.isArray((sheet as any).columns)) {
+          (sheet as any).columns.forEach((col: any, idx: number) => {
+            const headerText = String(headerRow.getCell(idx + 1)?.value || '');
+            const desired = explicitHeaderWidths[headerText];
+            if (desired) {
+              col.width = Math.max(col.width || 0, desired);
+            }
+          });
+        }
+      }
+    } catch (_) {
+      // ignore sizing errors; exporting should still succeed
+    }
+  };
+
   // High Position helpers for ALL export reuse
   const headersHighPosition = ['Course','First_Name','Middle_Name','Last_Name','Company_Name_Current','Position_Current'];
   const mapHighPositionRow = (alumnusOrRow: any) => {
@@ -546,7 +642,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       if (allStats) {
         // For ALL, fetch for each type
         for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
-          const res = await exportDetailedAlumniData(selectedYear, selectedCourse, type);
+          const res = await exportDetailedAlumniData(selectedYear, selectedProgram, type);
           detailedDataByType[type] = res.detailed_data || [];
           
           // Use stats from allStats if available, otherwise use stats from the API response
@@ -577,7 +673,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       } else {
         const res = await exportDetailedAlumniData(
           selectedYear,
-          selectedCourse,
+          selectedProgram,
           generatedStats.type
         );
         detailedDataByType[generatedStats.type] = res.detailed_data || [];
@@ -594,7 +690,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'QPRO Complete Statistics Report'; r++;
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
         sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
-        sheet.getCell(`A${r}`).value = 'Course Filter'; sheet.getCell(`B${r}`).value = selectedCourse || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
         // Employed
@@ -627,11 +723,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
 
+        // Auto size and wrap
+        autoSizeAndWrapSheet(sheet);
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `QPRO_Complete_Report_${selectedYear}_${selectedCourse}.xlsx`;
+        link.download = `QPRO_Complete_Report_${selectedYear}_${selectedProgram}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -646,7 +744,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'CHED Complete Statistics Report'; r++;
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
         sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
-        sheet.getCell(`A${r}`).value = 'Course Filter'; sheet.getCell(`B${r}`).value = selectedCourse || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
         // Pursuing Further Study
@@ -684,11 +782,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
 
+        // Auto size and wrap
+        autoSizeAndWrapSheet(sheet);
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `CHED_Complete_Report_${selectedYear}_${selectedCourse}.xlsx`;
+        link.download = `CHED_Complete_Report_${selectedYear}_${selectedProgram}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -703,7 +803,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'AACUP Complete Statistics Report'; r++;
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
         sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
-        sheet.getCell(`A${r}`).value = 'Course Filter'; sheet.getCell(`B${r}`).value = selectedCourse || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
         // Employed
@@ -740,11 +840,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
         mapped2.forEach((vals) => { sheet.addRow(vals); r++; });
 
+        // Auto size and wrap
+        autoSizeAndWrapSheet(sheet);
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `AACUP_Complete_Report_${selectedYear}_${selectedCourse}.xlsx`;
+        link.download = `AACUP_Complete_Report_${selectedYear}_${selectedProgram}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -759,7 +861,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'HIGH POSITION Complete Statistics Report'; r++;
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
         sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
-        sheet.getCell(`A${r}`).value = 'Course Filter'; sheet.getCell(`B${r}`).value = selectedCourse || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
         // High Position metrics
@@ -819,11 +921,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         });
         rows.forEach((vals) => { sheet.addRow(vals); r++; });
 
+        // Auto size and wrap
+        autoSizeAndWrapSheet(sheet);
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `HIGH_POSITION_Complete_Report_${selectedYear}_${selectedCourse}.xlsx`;
+        link.download = `HIGH_POSITION_Complete_Report_${selectedYear}_${selectedProgram}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -838,7 +942,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'SUC Complete Statistics Report'; r++;
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString(); r++;
         sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL'; r++;
-        sheet.getCell(`A${r}`).value = 'Course Filter'; sheet.getCell(`B${r}`).value = selectedCourse || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage'; r++;
         // High Position
@@ -854,12 +958,12 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         // Leadership Rate (percent only)
         sheet.getCell(`A${r}`).value = 'Leadership Rate';
         sheet.getCell(`C${r}`).value = `${pct(highPos, generatedStats.total_alumni)}`; r++;
-        // Public/Private/Local/International
+        // Government/Private/Local/International
         const publicCnt = Number(generatedStats.public_count) || 0;
         const privateCnt = Number(generatedStats.private_count) || 0;
         const localCnt = Number(generatedStats.local_count) || 0;
         const intlCnt = Number(generatedStats.international_count) || 0;
-        sheet.getCell(`A${r}`).value = 'Public'; sheet.getCell(`B${r}`).value = publicCnt; sheet.getCell(`C${r}`).value = `${pct(publicCnt, generatedStats.total_alumni)}`; r++;
+        sheet.getCell(`A${r}`).value = 'Government'; sheet.getCell(`B${r}`).value = publicCnt; sheet.getCell(`C${r}`).value = `${pct(publicCnt, generatedStats.total_alumni)}`; r++;
         sheet.getCell(`A${r}`).value = 'Private'; sheet.getCell(`B${r}`).value = privateCnt; sheet.getCell(`C${r}`).value = `${pct(privateCnt, generatedStats.total_alumni)}`; r++;
         sheet.getCell(`A${r}`).value = 'Local'; sheet.getCell(`B${r}`).value = localCnt; sheet.getCell(`C${r}`).value = `${pct(localCnt, generatedStats.total_alumni)}`; r++;
         sheet.getCell(`A${r}`).value = 'International'; sheet.getCell(`B${r}`).value = intlCnt; sheet.getCell(`C${r}`).value = `${pct(intlCnt, generatedStats.total_alumni)}`; r++;
@@ -875,11 +979,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
 
+        // Auto size and wrap
+        autoSizeAndWrapSheet(sheet);
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `SUC_Complete_Report_${selectedYear}_${selectedCourse}.xlsx`;
+        link.download = `SUC_Complete_Report_${selectedYear}_${selectedProgram}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -899,8 +1005,8 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         worksheet.getCell(`A${rowIdx}`).value = `Year Filter`;
         worksheet.getCell(`B${rowIdx}`).value = selectedYear || 'All';
         rowIdx++;
-        worksheet.getCell(`A${rowIdx}`).value = `Course Filter`;
-        worksheet.getCell(`B${rowIdx}`).value = selectedCourse || 'All';
+        worksheet.getCell(`A${rowIdx}`).value = `Program Filter`;
+        worksheet.getCell(`B${rowIdx}`).value = selectedProgram || 'All';
         rowIdx += 2;
         for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
           const stats = statsByType[type];
@@ -994,7 +1100,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.getCell(`B${rowIdx}`).value =
               `${pct(stats.high_position_count, stats.total_alumni)}`;
             rowIdx++;
-            worksheet.getCell(`A${rowIdx}`).value = 'Public Count';
+            worksheet.getCell(`A${rowIdx}`).value = 'Government Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.public_count;
             worksheet.getCell(`C${rowIdx}`).value =
               `${pct(stats.public_count, stats.total_alumni)}`;
@@ -1141,6 +1247,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               const detailSheet = workbook.addWorksheet('High Position Details');
               detailSheet.addRow(headersHighPosition);
               mappedHP.forEach((vals: (string | number)[]) => detailSheet.addRow(vals));
+              autoSizeAndWrapSheet(detailSheet);
             } else {
               const mapped = rows.map(mapQPRORow)
                 .sort((a, b) => ((a[4] !== 'Not Tracked') === (b[4] !== 'Not Tracked') ? 0 : a[4] !== 'Not Tracked' ? -1 : 1));
@@ -1149,6 +1256,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               const detailSheet = workbook.addWorksheet(`${type} Detailed Alumni Data`);
               detailSheet.addRow(qproHeaders);
               mapped.forEach((vals) => detailSheet.addRow(vals));
+              autoSizeAndWrapSheet(detailSheet);
             }
           }
         }
@@ -1162,7 +1270,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         worksheet.getCell(`A${rowIdx}`).value = `Year Filter`;
         worksheet.getCell(`B${rowIdx}`).value = generatedStats?.year || 'All';
         rowIdx++;
-        worksheet.getCell(`A${rowIdx}`).value = `Course Filter`;
+        worksheet.getCell(`A${rowIdx}`).value = `Program Filter`;
         worksheet.getCell(`B${rowIdx}`).value = generatedStats?.course || 'All';
         rowIdx += 2;
         worksheet.getCell(`A${rowIdx}`).value = '=== SUMMARY STATISTICS ===';
@@ -1331,8 +1439,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           rowIdx += 18;
         }
         // Add extra buffer rows to prevent overlap
-        rowIdx += 3;
-        rowIdx = worksheet.lastRow ? Math.max(worksheet.lastRow.number + 2, rowIdx) : rowIdx + 2;
+        rowIdx += 5; // fixed buffer to avoid relying on lastRow
         // Add detailed data for this section (same as ALL export)
         let lastHeader: string[] | null = null;
         const rows = detailedDataByType[generatedStats.type] as any[];
@@ -1377,7 +1484,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               seenDetailRows.add(rowString);
             }
           });
+          autoSizeAndWrapSheet(detailSheet);
         }
+      }
+
+      // Auto size and wrap on all sheets
+      if (Array.isArray((workbook as any).worksheets)) {
+        (workbook as any).worksheets.forEach((s: ExcelJS.Worksheet) => autoSizeAndWrapSheet(s));
       }
 
       // Download the Excel file
@@ -1387,7 +1500,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `${allStats ? 'All' : generatedStats?.type || 'All'}_Complete_Report_${selectedYear}_${selectedCourse}.xlsx`;
+      link.download = `${allStats ? 'All' : generatedStats?.type || 'All'}_Complete_Report_${selectedYear}_${selectedProgram}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1442,6 +1555,17 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
   // Helper to render a section (summary only for modal)
   const renderSummarySection = (type: string, stats: any) => {
+    // Parse stats if it's a JSON string
+    let parsedStats = stats;
+    if (typeof stats === 'string') {
+      try {
+        parsedStats = JSON.parse(stats);
+      } catch (e) {
+        console.error(`Failed to parse stats for ${type}:`, e);
+        parsedStats = stats;
+      }
+    }
+    console.log(`Rendering ${type} with stats:`, parsedStats);
     return (
       <div
         style={{
@@ -1468,28 +1592,28 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               <>
                 <tr>
                   <td style={td}>Employed</td>
-                  <td style={td}>{stats.employed_count}</td>
-                  <td style={td}>{pct(stats.employed_count, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.employed_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.employed_count) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>Unemployed</td>
-                  <td style={td}>{stats.unemployed_count}</td>
-                  <td style={td}>{pct(stats.unemployed_count, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.unemployed_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.unemployed_count) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>Employment Rate</td>
                   <td style={td}></td>
-                  <td style={td}>{stats.employment_rate}%</td>
+                  <td style={td}>{(Number(stats.employment_rate) || 0).toFixed(2)}%</td>
                 </tr>
                 <tr>
                   <td style={td}>Untracked</td>
-                  <td style={td}>{stats.untracked_count}</td>
-                  <td style={td}>{pct(stats.untracked_count, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.untracked_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.untracked_count) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>Total Alumni</td>
-                  <td style={td}>{stats.total_alumni}</td>
-                  <td style={td}>{pct(stats.total_alumni, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.total_alumni) || 0}</td>
+                  <td style={td}>100%</td>
                 </tr>
               </>
             )}
@@ -1497,32 +1621,32 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               <>
                 <tr>
                   <td style={td}>Pursuing Further Study</td>
-                  <td style={td}>{stats.pursuing_further_study}</td>
-                  <td style={td}>{pct(stats.pursuing_further_study, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.pursuing_further_study) || 0}</td>
+                  <td style={td}>{pct(Number(stats.pursuing_further_study) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr key="ched-job-alignment">
                   <td style={td}>Job Alignment</td>
-                  <td style={td}>{Number(stats.job_aligned_count) || 0}</td>
+                  <td style={td}>{Number(parsedStats.job_aligned_count) || 0}</td>
                   <td style={td}>
-                    {pct(Number(stats.job_aligned_count) || 0, stats.total_alumni)}
+                    {pct(Number(parsedStats.job_aligned_count) || 0, stats.total_alumni)}
                   </td>
                 </tr>
                 <tr key="ched-self-employed">
                   <td style={td}>Self-Employed</td>
-                  <td style={td}>{Number(stats.self_employed_count) || 0}</td>
+                  <td style={td}>{Number(parsedStats.self_employed_count) || 0}</td>
                   <td style={td}>
-                    {pct(Number(stats.self_employed_count) || 0, stats.total_alumni)}
+                    {pct(Number(parsedStats.self_employed_count) || 0, stats.total_alumni)}
                   </td>
                 </tr>
                 <tr>
                   <td style={td}>Further Study Rate</td>
                   <td style={td}></td>
-                  <td style={td}>{stats.further_study_rate}%</td>
+                  <td style={td}>{(Number(stats.further_study_rate) || 0).toFixed(2)}%</td>
                 </tr>
                 <tr>
                   <td style={td}>Total Alumni</td>
-                  <td style={td}>{stats.total_alumni}</td>
-                  <td style={td}>{pct(stats.total_alumni, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.total_alumni) || 0}</td>
+                  <td style={td}>100%</td>
                 </tr>
               </>
             )}
@@ -1530,45 +1654,43 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               <>
                 <tr>
                   <td style={td}>High Position</td>
-                  <td style={td}>{stats.high_position_count}</td>
-                  <td style={td}>{pct(stats.high_position_count, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.high_position_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.high_position_count) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>Other Positions</td>
-                  <td style={td}>{stats.total_alumni - stats.high_position_count}</td>
-                  <td style={td}>
-                    {pct(stats.total_alumni - stats.high_position_count, stats.total_alumni)}
-                  </td>
+                  <td style={td}>{(Number(stats.total_alumni) || 0) - (Number(stats.high_position_count) || 0)}</td>
+                  <td style={td}>{pct(((Number(stats.total_alumni) || 0) - (Number(stats.high_position_count) || 0)), Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>High Position Rate</td>
                   <td style={td}></td>
-                  <td style={td}>{stats.high_position_rate}%</td>
+                  <td style={td}>{(Number(stats.high_position_rate) || 0).toFixed(2)}%</td>
                 </tr>
                 <tr>
-                  <td style={td}>Public</td>
-                  <td style={td}>{stats.public_count}</td>
-                  <td style={td}>{pct(stats.public_count, stats.total_alumni)}</td>
+                  <td style={td}>Government</td>
+                  <td style={td}>{Number(stats.public_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.public_count) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>Private</td>
-                  <td style={td}>{stats.private_count}</td>
-                  <td style={td}>{pct(stats.private_count, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.private_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.private_count) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>Local</td>
-                  <td style={td}>{stats.local_count}</td>
-                  <td style={td}>{pct(stats.local_count, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.local_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.local_count) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>International</td>
-                  <td style={td}>{stats.international_count}</td>
-                  <td style={td}>{pct(stats.international_count, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.international_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.international_count) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>Total Alumni</td>
-                  <td style={td}>{stats.total_alumni}</td>
-                  <td style={td}>{pct(stats.total_alumni, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.total_alumni) || 0}</td>
+                  <td style={td}>100%</td>
                 </tr>
               </>
             )}
@@ -1576,38 +1698,38 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               <>
                 <tr>
                   <td style={td}>Employed</td>
-                  <td style={td}>{stats.employed_count}</td>
-                  <td style={td}>{pct(stats.employed_count, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.employed_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.employed_count) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>Absorbed</td>
-                  <td style={td}>{stats.absorbed_count}</td>
-                  <td style={td}>{pct(stats.absorbed_count, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.absorbed_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.absorbed_count) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>High Position</td>
-                  <td style={td}>{stats.high_position_count}</td>
-                  <td style={td}>{pct(stats.high_position_count, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.high_position_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.high_position_count) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>Employment Rate</td>
                   <td style={td}></td>
-                  <td style={td}>{stats.employment_rate}%</td>
+                  <td style={td}>{(Number(stats.employment_rate) || 0).toFixed(2)}%</td>
                 </tr>
                 <tr>
                   <td style={td}>Absorption Rate</td>
                   <td style={td}></td>
-                  <td style={td}>{stats.absorption_rate}%</td>
+                  <td style={td}>{(Number(stats.absorption_rate) || 0).toFixed(2)}%</td>
                 </tr>
                 <tr>
                   <td style={td}>High Position Rate</td>
                   <td style={td}></td>
-                  <td style={td}>{stats.high_position_rate}%</td>
+                  <td style={td}>{(Number(stats.high_position_rate) || 0).toFixed(2)}%</td>
                 </tr>
                 <tr>
                   <td style={td}>Total Alumni</td>
-                  <td style={td}>{stats.total_alumni}</td>
-                  <td style={td}>{pct(stats.total_alumni, stats.total_alumni)}</td>
+                  <td style={td}>{Number(stats.total_alumni) || 0}</td>
+                  <td style={td}>100%</td>
                 </tr>
               </>
             )}
@@ -1663,8 +1785,8 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           <div style={{ flex: 1 }}>
             <label style={label}>Course:</label>
             <select
-              value={selectedCourse}
-              onChange={(e) => setSelectedCourse(e.target.value)}
+              value={selectedProgram}
+              onChange={(e) => setSelectedProgram(e.target.value)}
               style={dropdown}
             >
               {courseOptions.map((course) => (

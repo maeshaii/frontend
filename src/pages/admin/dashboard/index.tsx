@@ -31,6 +31,38 @@ const Dashboard = () => {
     };
 
     fetchUntrackedCount();
+    // Listen for cross-page statistics updates (after imports)
+    const refreshAll = async () => {
+      try {
+        const data = await fetchAlumniEmploymentStats('ALL', 'ALL');
+        const counts = data?.status_counts || data?.statusCounts || {};
+        const employed = Number(counts.Employed) || 0;
+        const unemployed = Number(counts.Unemployed) || 0;
+        const absorb = Number(counts.Absorb) || 0;
+        const pending = Number(counts.Pending) || 0;
+        const total = employed + unemployed + absorb + pending;
+        setEmployedCount(employed);
+        setUnemployedCount(unemployed);
+        setAbsorbedCount(absorb);
+        setTotalAlumni(total);
+        const denom = total > 0 ? total : 1;
+        setEmployedPct((employed / denom) * 100);
+        setUnemployedPct((unemployed / denom) * 100);
+        setAbsorbedPct((absorb / denom) * 100);
+      } catch (e) {
+        console.error('Dashboard refresh after stats update failed:', e);
+      }
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'statsUpdatedAt') refreshAll();
+    };
+    const onCustom = () => refreshAll();
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('stats-update' as any, onCustom as any);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('stats-update' as any, onCustom as any);
+    };
   }, []);
 
   // Fetch coordinator requests count (Completed sent by coordinators)

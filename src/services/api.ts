@@ -793,6 +793,7 @@ export const uploadAttachment = async (file: File): Promise<{
   attachment_id: number;
   file_name: string;
   file_type: string;
+  file_category: string;
   file_size: number;
   file_url: string;
   uploaded_at: string;
@@ -912,6 +913,16 @@ export const commentOnDonation = async (donationId: number, commentContent: stri
   const response = await api.post(`donations/${donationId}/comments/`, {
     comment_content: commentContent
   });
+  return response.data;
+};
+
+export const deleteDonationComment = async (donationId: number, commentId: number) => {
+  const response = await api.delete(`donations/${donationId}/comments/${commentId}/`);
+  return response.data;
+};
+
+export const editDonationComment = async (donationId: number, commentId: number, commentData: { comment_content: string }) => {
+  const response = await api.put(`donations/${donationId}/comments/${commentId}/`, commentData);
   return response.data;
 };
 
