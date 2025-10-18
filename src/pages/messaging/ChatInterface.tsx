@@ -77,8 +77,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
         is_read: m.is_read,
         message_type: (m as any).message_type,
         attachment_url: (() => {
-          const url = ((m as any).attachments && (m as any).attachments[0]?.file_url) || null;
+          const attachment = ((m as any).attachments && (m as any).attachments[0]);
+          if (!attachment) return null;
+          
+          // Try file_url first, then fallback to file field
+          const url = attachment.file_url || attachment.file || null;
           if (!url) return null;
+          
+          // Ensure absolute URL
           return url.startsWith('http') ? url : `${window.location.origin}${url}`;
         })(),
         attachment_info: (() => {
@@ -183,8 +189,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
             created_at: event.created_at || new Date().toISOString(),
             is_read: false,
             message_type: event.message_type,
-            attachment_url: event.attachment_url,
-            attachment_info: event.attachment_info,
+            attachment_url: event.attachment_url || (event.attachments && event.attachments[0]?.file_url),
+            attachment_info: event.attachment_info || (event.attachments && event.attachments[0] ? {
+              file_name: event.attachments[0].file_name,
+              file_type: event.attachments[0].file_type,
+              file_category: event.attachments[0].file_category,
+              file_size: event.attachments[0].file_size,
+            } : undefined),
           };
           
           setMessages(prev => {
@@ -619,7 +630,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
                     const fromSaved = (saved as any).attachments && (saved as any).attachments[0]?.file_url;
                     const url = fromSaved || (uploaded as any).file_url || null;
                     if (!url) return null;
-                    return url.startsWith('http') ? url : `${window.location.origin}${url}`;
+                    
+                    // Validate URL is safe and properly formatted
+                    try {
+                      const urlObj = new URL(url);
+                      // Only allow http/https protocols
+                      if (urlObj.protocol === 'http:' || urlObj.protocol === 'https:') {
+                        return url;
+                      }
+                    } catch {
+                      // If URL parsing fails, check if it's a relative path
+                      if (!url.startsWith('http')) {
+                        return `${window.location.origin}${url}`;
+                      }
+                    }
+                    return null;
                   })(),
                   attachment_info: {
                     file_name: uploaded.file_name,

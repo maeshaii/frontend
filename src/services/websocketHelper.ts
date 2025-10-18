@@ -22,6 +22,13 @@ export type WsEvent = {
     file_category?: FileCategory;
     file_size?: number;
   };
+  attachments?: Array<{
+    file_url?: string;
+    file_name?: string;
+    file_type?: string;
+    file_category?: FileCategory;
+    file_size?: number;
+  }>;
   is_typing?: boolean;
 };
 

@@ -182,28 +182,53 @@ class FrontendMonitor {
   private setupGlobalErrorHandlers(): void {
     // Handle unhandled promise rejections
     window.addEventListener('unhandledrejection', (event) => {
+      let errorMessage = 'Unhandled Promise Rejection';
+      let reason = 'Unknown reason';
+      
+      try {
+        if (event.reason instanceof Error) {
+          errorMessage = event.reason.message;
+          reason = event.reason.toString();
+        } else if (typeof event.reason === 'string') {
+          errorMessage = event.reason;
+          reason = event.reason;
+        } else if (event.reason && typeof event.reason === 'object') {
+          errorMessage = event.reason.message || JSON.stringify(event.reason);
+          reason = JSON.stringify(event.reason);
+        } else {
+          reason = String(event.reason);
+        }
+      } catch (e) {
+        console.warn('Failed to parse rejection reason:', e);
+        reason = 'Failed to parse rejection reason';
+      }
+      
       this.trackError(
-        new Error(event.reason?.message || 'Unhandled Promise Rejection'),
+        new Error(errorMessage),
         {
           component: 'global',
           action: 'unhandledrejection',
-          reason: event.reason?.toString(),
+          reason: reason,
         }
       );
     });
 
     // Handle global errors
     window.addEventListener('error', (event) => {
-      this.trackError(
-        new Error(event.message),
-        {
-          component: 'global',
-          action: 'global_error',
-          filename: event.filename,
-          lineno: event.lineno,
-          colno: event.colno,
-        }
-      );
+      try {
+        this.trackError(
+          new Error(event.message || 'Unknown error'),
+          {
+            component: 'global',
+            action: 'global_error',
+            filename: event.filename,
+            lineno: event.lineno,
+            colno: event.colno,
+          }
+        );
+      } catch (e) {
+        console.warn('Failed to track global error:', e);
+      }
     });
   }
 

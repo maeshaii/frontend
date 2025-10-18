@@ -176,21 +176,44 @@ export class ErrorBoundary extends Component<Props, State> {
 
 // Hook version for functional components
 export function useErrorHandler() {
-  return (error: Error, errorInfo?: ErrorInfo) => {
-    console.error('Error caught by useErrorHandler:', error, errorInfo);
-    
-    // In a real application, you would send this to an error reporting service
-    if (process.env.NODE_ENV === 'production') {
-      const errorData = {
-        message: error.message,
-        stack: error.stack,
-        componentStack: errorInfo?.componentStack,
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-        url: window.location.href,
-      };
+  return (error: Error | Event | any, errorInfo?: ErrorInfo) => {
+    try {
+      let errorMessage = 'Unknown error';
+      let errorStack = '';
       
-      console.error('Error logged to service:', errorData);
+      // Handle different types of error objects
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        errorStack = error.stack || '';
+      } else if (error && typeof error === 'object' && error.message) {
+        errorMessage = error.message;
+        errorStack = error.stack || '';
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error instanceof Event) {
+        errorMessage = `Event error: ${error.type}`;
+        errorStack = `Event type: ${error.type}, target: ${error.target}`;
+      } else {
+        errorMessage = String(error);
+      }
+      
+      console.error('Error caught by useErrorHandler:', errorMessage, errorInfo);
+      
+      // In a real application, you would send this to an error reporting service
+      if (process.env.NODE_ENV === 'production') {
+        const errorData = {
+          message: errorMessage,
+          stack: errorStack,
+          componentStack: errorInfo?.componentStack,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent,
+          url: window.location.href,
+        };
+        
+        console.error('Error logged to service:', errorData);
+      }
+    } catch (e) {
+      console.warn('Failed to handle error in useErrorHandler:', e);
     }
   };
 }

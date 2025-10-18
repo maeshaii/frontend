@@ -30,29 +30,52 @@ export function withWebSocketErrorBoundary<P extends object>(
 
 // Hook for handling WebSocket errors in functional components
 export function useWebSocketErrorHandler() {
-  const handleError = (error: Error, context?: string) => {
-    console.error(`WebSocket Error${context ? ` in ${context}` : ''}:`, error);
-    
-    // In production, you would send this to an error tracking service
-    if (process.env.NODE_ENV === 'production') {
-      const errorData = {
-        type: 'websocket_error',
-        message: error.message,
-        stack: error.stack,
-        context,
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-        url: window.location.href,
-      };
+  const handleError = (error: Error | Event | any, context?: string) => {
+    try {
+      let errorMessage = 'Unknown WebSocket error';
+      let errorStack = '';
       
-      // Example: Send to error tracking service
-      // fetch('/api/errors/websocket', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(errorData),
-      // }).catch(console.error);
+      // Handle different types of error objects
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        errorStack = error.stack || '';
+      } else if (error && typeof error === 'object' && error.message) {
+        errorMessage = error.message;
+        errorStack = error.stack || '';
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error instanceof Event) {
+        errorMessage = `WebSocket Event error: ${error.type}`;
+        errorStack = `Event type: ${error.type}, target: ${error.target}`;
+      } else {
+        errorMessage = String(error);
+      }
       
-      console.error('WebSocket error logged:', errorData);
+      console.error(`WebSocket Error${context ? ` in ${context}` : ''}:`, errorMessage);
+      
+      // In production, you would send this to an error tracking service
+      if (process.env.NODE_ENV === 'production') {
+        const errorData = {
+          type: 'websocket_error',
+          message: errorMessage,
+          stack: errorStack,
+          context,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent,
+          url: window.location.href,
+        };
+        
+        // Example: Send to error tracking service
+        // fetch('/api/errors/websocket', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify(errorData),
+        // }).catch(console.error);
+        
+        console.error('WebSocket error logged:', errorData);
+      }
+    } catch (e) {
+      console.warn('Failed to handle WebSocket error:', e);
     }
   };
 
@@ -97,9 +120,9 @@ export function useWebSocketConnection() {
   const [lastError, setLastError] = React.useState<Error | null>(null);
   const { handleError } = useWebSocketErrorHandler();
 
-  const handleConnectionError = React.useCallback((error: Error) => {
+  const handleConnectionError = React.useCallback((error: Error | Event | any) => {
     setConnectionState('error');
-    setLastError(error);
+    setLastError(error instanceof Error ? error : new Error(String(error)));
     handleError(error, 'WebSocket Connection');
   }, [handleError]);
 

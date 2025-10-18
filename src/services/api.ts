@@ -66,7 +66,18 @@ api.interceptors.response.use(
         refreshing = (async () => {
           try {
             const refreshToken = localStorage.getItem('refreshToken');
-            if (!refreshToken) throw new Error('No refresh token available');
+            if (!refreshToken) {
+              // No refresh token available - redirect to login immediately
+              console.log('No refresh token available, redirecting to login');
+              localStorage.removeItem('accessToken');
+              localStorage.removeItem('refreshToken');
+              localStorage.removeItem('user');
+              if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+              }
+              throw new Error('No refresh token available');
+            }
+            
             const response = await axios.post(`${API_BASE}token/refresh/`, { refresh: refreshToken });
             const newAccess = response.data?.access;
             if (!newAccess) throw new Error('No access token in refresh response');
@@ -100,6 +111,31 @@ export const getUserInfo = () => {
     const user = localStorage.getItem('user');
     return user ? JSON.parse(user) : null;
   } catch {
+    return null;
+  }
+};
+
+// Helper: check if user is authenticated
+export const isAuthenticated = () => {
+  try {
+    const token = localStorage.getItem('accessToken');
+    const refreshToken = localStorage.getItem('refreshToken');
+    return !!(token && refreshToken);
+  } catch {
+    return false;
+  }
+};
+
+// Helper: safe API call that checks authentication first
+export const safeApiCall = async (apiCall: () => Promise<any>) => {
+  if (!isAuthenticated()) {
+    console.log('User not authenticated, skipping API call');
+    return null;
+  }
+  try {
+    return await apiCall();
+  } catch (error) {
+    console.error('API call failed:', error);
     return null;
   }
 };
@@ -175,9 +211,13 @@ export const checkFollowStatus = async (userId: number) => {
 
 // --- SECURITY NOTE: Login is now strictly username + password. No birthdate login allowed. ---
 export const loginUser = async (acc_username: string, acc_password: string) => {
-  console.log('Sending login request:', { acc_username, acc_password });
+  // Trim credentials to prevent whitespace issues
+  const trimmedUsername = acc_username.trim();
+  const trimmedPassword = acc_password.trim();
+  
+  console.log('Sending login request:', { acc_username: trimmedUsername, acc_password: trimmedPassword });
   try {
-    const response = await api.post('token/', { acc_username, acc_password });
+    const response = await api.post('token/', { acc_username: trimmedUsername, acc_password: trimmedPassword });
     console.log('Login response received:', response.data);
     
     // Save tokens and user info to localStorage
@@ -252,8 +292,10 @@ export { api };
 
 // Fetch alumni statistics (counts per year)
 export const fetchAlumniStatistics = async () => {
-  const response = await api.get('alumni/statistics/');
-  return response.data;
+  return await safeApiCall(async () => {
+    const response = await api.get('alumni/statistics/');
+    return response.data;
+  });
 };
 
 // Fetch graduation years for dropdowns
@@ -468,8 +510,10 @@ export const fetchNotifications = async (userId: number) => {
 
 // Fetch notification count for a user
 export const fetchNotificationCount = async (userId: number) => {
-  const response = await api.get(`notifications/count/?user_id=${userId}`);
-  return response.data;
+  return await safeApiCall(async () => {
+    const response = await api.get(`notifications/count/?user_id=${userId}`);
+    return response.data;
+  });
 };
 
 // Mark notification as read
@@ -801,8 +845,10 @@ export const updateUserPassword = async (userId: number, newPassword: string): P
 
 // Get admin and PESO user IDs dynamically
 export const getAdminPesoUsers = async () => {
-  const response = await api.get('admin-peso-users/');
-  return response.data;
+  return await safeApiCall(async () => {
+    const response = await api.get('admin-peso-users/');
+    return response.data;
+  });
 };
 
 // Donation API functions
