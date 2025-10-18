@@ -277,7 +277,7 @@ const Dashboard = () => {
                   e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
                 }}
               >
-                <div style={{ fontSize: 16, opacity: 0.9 }}>Coordinator Request</div>
+                <div style={{ fontSize: 16, opacity: 0.9 }}>OJT Submissions</div>
                 <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>{coordinatorReqCount}</div>
               </div>
 

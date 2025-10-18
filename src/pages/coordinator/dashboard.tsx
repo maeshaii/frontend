@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
-import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaFileImport } from 'react-icons/fa';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
-import { fetchOJTStatistics, importOJT, fetchCoordinatorSections } from '../../services/api';
+import { fetchOJTStatistics, importOJT, fetchCoordinatorSections, setSendDate } from '../../services/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -14,7 +13,7 @@ export default function Dashboard() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [batchYear, setBatchYear] = useState('');
   const [section, setSection] = useState('');
-  const [course, setCourse] = useState('BSIT');
+  const [program, setProgram] = useState('BSIT');
   const [availableSections, setAvailableSections] = useState<string[]>([]);
   const [ojtYears, setOjtYears] = useState<{ year: number; section?: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,7 +23,7 @@ export default function Dashboard() {
   const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('ALL');
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
   const [showDateModal, setShowDateModal] = useState(false);
-  const [sendDate, setSendDate] = useState('');
+  const [sendDate, setSendDateState] = useState('');
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -86,7 +85,7 @@ export default function Dashboard() {
 
     setImportLoading(true);
     try {
-      const result = await importOJT(selectedFile, batchYear, course, coordinatorUsername, section);
+      const result = await importOJT(selectedFile, batchYear, program, coordinatorUsername, section);
       if (result.success) {
         alert(`OJT import successful for section ${section}!`);
         setShowModal(false);
@@ -387,8 +386,8 @@ export default function Dashboard() {
   };
 
   const links = [
-    { to: `/coordinator/dashboard/${coordinatorUsername}`, label: 'Dashboard', icon: <FaTh style={styles.icon} /> },
-    { to: '/coordinator/imports', label: 'Imports', icon: <FaFileImport style={styles.icon} /> },
+    { to: `/coordinator/dashboard/${coordinatorUsername}`, label: 'Dashboard' },
+    { to: '/coordinator/imports', label: 'Imports' },
   ];
 
   return (
@@ -424,7 +423,7 @@ export default function Dashboard() {
                     }
                   }}
                 >
-                  {link.icon} {link.label}
+                  {link.label}
                 </div>
               </li>
             ))}
@@ -432,84 +431,69 @@ export default function Dashboard() {
         </div>
 
         <div style={styles.logout} onClick={handleLogout}>
-          <FaPowerOff style={styles.icon} /> Logout
+          <span style={styles.icon}>🚪</span> Logout
         </div>
       </div>
 
-      {/* ===================== Main Content ===================== */}
-      <main style={styles.main}>
-        <div style={styles.header}>
-          <h1>OJT Imports</h1>
-          <div style={styles.actions}>
-            {activePage === 'imports' && !selectedCard && (
-              <>
-                <button style={styles.importBtn} onClick={() => setShowModal(true)}>
-                  Import OJT
-                </button>
-                <button
-                  style={{ ...styles.importBtn, marginLeft: '10px' }}
-                  onClick={downloadOJTTemplate}
-                >
-                  Download Template
-                </button>
-                <button
-                  style={{ 
-                    ...styles.importBtn, 
-                    marginLeft: '10px',
-                    backgroundColor: '#10B981',
-                    borderColor: '#10B981'
-                  }}
-                  onClick={() => setShowDateModal(true)}
-                >
-                  Set Send Date
-                </button>
-              </>
-            )}
-            {/* Header search removed */}
-          </div>
-        </div>
+      {/* ===================== Modern Main Content ===================== */}
+      <main style={{
+        flex: 1,
+        padding: '32px',
+        backgroundColor: '#f8fafc',
+        minHeight: '100vh',
+        overflowY: 'auto' as const
+      }}>
 
-        {/* Filters */}
+        {/* Modern Filters */}
         {!showStats && !selectedCard && (
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '24px',
+            marginBottom: '32px',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+            border: '1px solid #e2e8f0'
+          }}>
           <div style={{ 
             display: 'flex', 
+            alignItems: 'flex-start',
             gap: '24px', 
-            marginBottom: '24px', 
-            alignItems: 'center',
-            padding: '16px 0'
+              flexWrap: 'wrap'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div>
               <label style={{ 
-                fontWeight: 600, 
-                color: '#1e3a8a', 
-                fontSize: '15px',
-                minWidth: '120px'
-              }}>
-                Filter by Batch:
+                    fontWeight: '600',
+                    color: '#374151',
+                    fontSize: '14px',
+                    display: 'block',
+                    marginBottom: '4px'
+                  }}>
+                    Filter by Batch
               </label>
               <select
                 value={selectedBatchFilter}
                 onChange={(e) => setSelectedBatchFilter(e.target.value)}
                 style={{ 
-                  padding: '10px 16px',
+                      padding: '12px 16px',
                   border: '2px solid #e5e7eb',
-                  borderRadius: 12,
-                  minWidth: 150,
+                      borderRadius: '12px',
+                      minWidth: '180px',
                   fontSize: '14px',
                   backgroundColor: 'white',
                   color: '#374151',
                   cursor: 'pointer',
                   outline: 'none',
                   transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                      fontWeight: '500'
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = '#5A6DFE';
-                  e.target.style.boxShadow = '0 4px 12px rgba(90, 109, 254, 0.2)';
+                      e.target.style.borderColor = '#3b82f6';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
                 }}
                 onBlur={(e) => {
                   e.target.style.borderColor = '#e5e7eb';
-                  e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                      e.target.style.boxShadow = 'none';
                 }}
               >
                 <option value="ALL">All Batches</option>
@@ -517,40 +501,43 @@ export default function Dashboard() {
                   <option key={year} value={year.toString()}>{year}</option>
                 ))}
               </select>
+                </div>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div>
               <label style={{ 
-                fontWeight: 600, 
-                color: '#1e3a8a', 
-                fontSize: '15px',
-                minWidth: '120px'
-              }}>
-                Filter by Section:
+                    fontWeight: '600',
+                    color: '#374151',
+                    fontSize: '14px',
+                    display: 'block',
+                    marginBottom: '4px'
+                  }}>
+                    Filter by Section
               </label>
               <select
                 value={selectedSectionFilter}
                 onChange={(e) => setSelectedSectionFilter(e.target.value)}
                 style={{ 
-                  padding: '10px 16px',
+                      padding: '12px 16px',
                   border: '2px solid #e5e7eb',
-                  borderRadius: 12,
-                  minWidth: 150,
+                      borderRadius: '12px',
+                      minWidth: '180px',
                   fontSize: '14px',
                   backgroundColor: 'white',
                   color: '#374151',
                   cursor: 'pointer',
                   outline: 'none',
                   transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                      fontWeight: '500'
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = '#5A6DFE';
-                  e.target.style.boxShadow = '0 4px 12px rgba(90, 109, 254, 0.2)';
+                      e.target.style.borderColor = '#3b82f6';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
                 }}
                 onBlur={(e) => {
                   e.target.style.borderColor = '#e5e7eb';
-                  e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                      e.target.style.boxShadow = 'none';
                 }}
               >
                 <option value="ALL">All Sections</option>
@@ -558,21 +545,136 @@ export default function Dashboard() {
                   <option key={section} value={section}>{section}</option>
                 ))}
               </select>
+                </div>
             </div>
             
-            <button style={{
-              ...styles.filter,
-              padding: '10px 24px',
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div>
+                  <label style={{
+                    fontWeight: '600',
+                    color: '#374151',
               fontSize: '14px',
-              fontWeight: 600,
-              borderRadius: 12
+                    display: 'block',
+                    marginBottom: '4px'
+                  }}>
+                    Program
+                  </label>
+                  <div style={{
+                    padding: '12px 20px',
+                    backgroundColor: '#f0f9ff',
+                    border: '2px solid #0ea5e9',
+                    borderRadius: '12px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#0369a1',
+                    minWidth: '100px',
+                    textAlign: 'center'
             }}>
               BSIT
+                  </div>
+                </div>
+              </div>
+              
+              {/* Action Buttons */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '12px',
+                marginLeft: 'auto'
+              }}>
+                <button 
+                  style={{
+                    padding: '12px 24px',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '12px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)'
+                  }}
+                  onClick={() => setShowModal(true)}
+                  onMouseEnter={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.backgroundColor = '#2563eb';
+                    target.style.transform = 'translateY(-1px)';
+                    target.style.boxShadow = '0 6px 8px -1px rgba(59, 130, 246, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.backgroundColor = '#3b82f6';
+                    target.style.transform = 'translateY(0)';
+                    target.style.boxShadow = '0 4px 6px -1px rgba(59, 130, 246, 0.3)';
+                  }}
+                >
+                  Import OJT
+                </button>
+                <button
+                  style={{
+                    padding: '12px 24px',
+                    backgroundColor: '#6366f1',
+                    color: 'white',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '12px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.3)'
+                  }}
+                  onClick={downloadOJTTemplate}
+                  onMouseEnter={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.backgroundColor = '#4f46e5';
+                    target.style.transform = 'translateY(-1px)';
+                    target.style.boxShadow = '0 6px 8px -1px rgba(99, 102, 241, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.backgroundColor = '#6366f1';
+                    target.style.transform = 'translateY(0)';
+                    target.style.boxShadow = '0 4px 6px -1px rgba(99, 102, 241, 0.3)';
+                  }}
+                >
+                  Download Template
+                </button>
+                <button
+                  style={{ 
+                    padding: '12px 24px',
+                    backgroundColor: '#10b981',
+                    color: 'white',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '12px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)'
+                  }}
+                  onClick={() => setShowDateModal(true)}
+                  onMouseEnter={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.backgroundColor = '#059669';
+                    target.style.transform = 'translateY(-1px)';
+                    target.style.boxShadow = '0 6px 8px -1px rgba(16, 185, 129, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.backgroundColor = '#10b981';
+                    target.style.transform = 'translateY(0)';
+                    target.style.boxShadow = '0 4px 6px -1px rgba(16, 185, 129, 0.3)';
+                  }}
+                >
+                  Set Send Date
             </button>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* ============== Cards OR Details Table OR Statistics ============== */}
+        {/* Modern Cards Grid */}
         {!showStats ? (
           selectedCard ? (
             <DetailsTable 
@@ -581,18 +683,74 @@ export default function Dashboard() {
               selectedSection={selectedCard.section}
             />
           ) : (
-            <div style={styles.cards}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+              gap: '24px',
+              marginBottom: '32px'
+            }}>
               {loading ? (
-                <div style={{ width: '100%', textAlign: 'center', padding: '20px' }}>
+                <div style={{
+                  gridColumn: '1 / -1',
+                  textAlign: 'center',
+                  padding: '60px 20px',
+                  backgroundColor: 'white',
+                  borderRadius: '16px',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                }}>
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    backgroundColor: '#dbeafe',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 16px'
+                  }}>
+                  </div>
+                  <p style={{
+                    fontSize: '16px',
+                    color: '#64748b',
+                    margin: '0',
+                    fontWeight: '500'
+                  }}>
                   Loading OJT data...
+                  </p>
                 </div>
               ) : ojtYears.filter(yearData => {
                 const batchMatch = selectedBatchFilter === 'ALL' || yearData.year.toString() === selectedBatchFilter;
                 const sectionMatch = selectedSectionFilter === 'ALL' || yearData.section === selectedSectionFilter;
                 return batchMatch && sectionMatch;
               }).length === 0 ? (
-                <div style={{ width: '100%', textAlign: 'center', padding: '20px' }}>
+                <div style={{
+                  gridColumn: '1 / -1',
+                  textAlign: 'center',
+                  padding: '60px 20px',
+                  backgroundColor: 'white',
+                  borderRadius: '16px',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                }}>
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    backgroundColor: '#fef3c7',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 16px'
+                  }}>
+                    <span style={{ fontSize: '24px' }}>🔍</span>
+                  </div>
+                  <p style={{
+                    fontSize: '16px',
+                    color: '#64748b',
+                    margin: '0',
+                    fontWeight: '500'
+                  }}>
                   No OJT data found for the selected filters.
+                  </p>
                 </div>
               ) : (
                 ojtYears.filter(yearData => {
@@ -602,13 +760,118 @@ export default function Dashboard() {
                 }).map((yearData) => (
                   <div
                     key={`${yearData.year}-${yearData.section || 'default'}`}
-                    style={styles.card}
+                    style={{
+                      backgroundColor: 'white',
+                      borderRadius: '20px',
+                      padding: '24px',
+                      boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.1)',
+                      border: '1px solid #e2e8f0',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
                     onClick={() => setSelectedCard({ year: yearData.year, section: yearData.section })}
+                    onMouseEnter={(e) => {
+                      const target = e.currentTarget as HTMLDivElement;
+                      target.style.transform = 'translateY(-4px)';
+                      target.style.boxShadow = '0 16px 32px -8px rgba(0, 0, 0, 0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      const target = e.currentTarget as HTMLDivElement;
+                      target.style.transform = 'translateY(0)';
+                      target.style.boxShadow = '0 8px 16px -4px rgba(0, 0, 0, 0.1)';
+                    }}
                   >
-                    <div style={styles.cardImage}></div>
-                    <p style={styles.cardText}>CLASS OF {yearData.year}</p>
-                    {yearData.section && <p style={styles.cardText}>Section: {yearData.section}</p>}
-                    <p style={styles.cardText}>OJT: {yearData.count}</p>
+                    {/* Decorative gradient circle */}
+                    <div style={{
+                      position: 'absolute',
+                      top: '-20px',
+                      right: '-20px',
+                      width: '80px',
+                      height: '80px',
+                      background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                      borderRadius: '50%',
+                      opacity: '0.1'
+                    }}></div>
+                    
+                    {/* Card content */}
+                    <div style={{ position: 'relative', zIndex: 1 }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        marginBottom: '20px'
+                      }}>
+                        <div>
+                          <h3 style={{
+                            fontSize: '20px',
+                            fontWeight: '700',
+                            color: '#1e293b',
+                            margin: '0 0 4px 0',
+                            letterSpacing: '-0.025em'
+                          }}>
+                            CLASS OF {yearData.year}
+                          </h3>
+                          {yearData.section && (
+                            <p style={{
+                              fontSize: '14px',
+                              color: '#64748b',
+                              margin: '0',
+                              fontWeight: '500'
+                            }}>
+                              Section: {yearData.section}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div style={{
+                        backgroundColor: '#f8fafc',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        border: '1px solid #e2e8f0'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        }}>
+                          <span style={{
+                            fontSize: '14px',
+                            color: '#64748b',
+                            fontWeight: '500'
+                          }}>
+                            OJT Students
+                          </span>
+                          <span style={{
+                            fontSize: '24px',
+                            fontWeight: '800',
+                            color: '#3b82f6'
+                          }}>
+                            {yearData.count}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div style={{
+                        marginTop: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '8px',
+                        backgroundColor: '#f0f9ff',
+                        borderRadius: '8px',
+                        border: '1px solid #bae6fd'
+                      }}>
+                        <span style={{
+                          fontSize: '12px',
+                          color: '#0369a1',
+                          fontWeight: '600'
+                        }}>
+                          Click to view details →
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 ))
               )}
@@ -636,31 +899,195 @@ export default function Dashboard() {
         onCancel={() => setShowLogoutConfirm(false)}
       />
 
-      {/* ===================== Modal ===================== */}
+      {/* Modern Import Modal */}
       {showModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
-            <h2 style={styles.modalH2}>Import OJT Training Data</h2>
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(8px)',
+          animation: 'fadeIn 0.3s ease-out'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '24px',
+            padding: '0',
+            boxShadow: '0 32px 64px -12px rgba(0, 0, 0, 0.35)',
+            width: '420px',
+            maxWidth: '85vw',
+            border: '1px solid rgba(226, 232, 240, 0.8)',
+            position: 'relative',
+            animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+            overflow: 'hidden'
+          }}>
+            {/* Gradient Header */}
+            <div style={{
+              background: 'white',
+              padding: '32px 32px 24px 32px',
+              color: '#1f2937',
+              position: 'relative',
+              borderBottom: '2px solid #e5e7eb'
+            }}>
+              {/* Close button */}
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  setSelectedFile(null);
+                  setBatchYear('');
+                  setSection('');
+                }}
+                style={{
+                  position: 'absolute',
+                  top: '20px',
+                  right: '20px',
+                  background: '#f3f4f6',
+                  border: '2px solid #e5e7eb',
+                  fontSize: '20px',
+                  color: '#6b7280',
+                  cursor: 'pointer',
+                  padding: '8px',
+                  borderRadius: '12px',
+                  transition: 'all 0.2s ease',
+                  backdropFilter: 'blur(10px)'
+                }}
+                onMouseEnter={(e) => {
+                  const target = e.currentTarget as HTMLButtonElement;
+                  target.style.backgroundColor = '#e5e7eb';
+                  target.style.borderColor = '#d1d5db';
+                    target.style.color = 'white';
+                  target.style.transform = 'scale(1.1)';
+                }}
+                onMouseLeave={(e) => {
+                  const target = e.currentTarget as HTMLButtonElement;
+                  target.style.backgroundColor = '#f3f4f6';
+                  target.style.borderColor = '#e5e7eb';
+                  target.style.color = '#6b7280';
+                  target.style.transform = 'scale(1)';
+                }}
+              >
+                ✕
+              </button>
 
-            <label style={styles.modalLabel}>Batch Graduated</label>
+              {/* Header Content */}
+              <div style={{ 
+                marginBottom: '16px'
+              }}>
+                <h3 style={{ 
+                  margin: '0 0 8px 0', 
+                  fontSize: '24px',
+                  fontWeight: '800',
+                  lineHeight: '1.2',
+                  letterSpacing: '-0.025em',
+                  color: '#000000'
+                }}>
+                  Import OJT Data
+                </h3>
+                <p style={{ 
+                  margin: '0', 
+                  fontSize: '16px',
+                  fontWeight: '500',
+                  opacity: '0.9'
+                }}>
+                  Upload and process training data for students
+                </p>
+              </div>
+            </div>
+
+            {/* Content Area */}
+            <div style={{ padding: '32px 40px 32px 28px' }}>
+              {/* Form Fields */}
+              <div style={{ marginBottom: '32px' }}>
+                {/* Batch Year Field */}
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{ 
+                    display: 'block', 
+                    marginBottom: '8px', 
+                    fontWeight: '700', 
+                    color: '#1e293b',
+                    fontSize: '14px'
+                  }}>
+                    Batch Year
+                  </label>
             <input
               type="number"
-              placeholder="Enter batch year..."
-              style={styles.modalInput}
+                    placeholder="Enter batch year (e.g., 2025)"
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: '2px solid #e2e8f0',
+                      borderRadius: '10px',
+                      fontSize: '15px',
+                      color: '#1e293b',
+                      backgroundColor: 'white',
+                      transition: 'all 0.3s ease',
+                      outline: 'none',
+                      fontWeight: '500',
+                      height: '48px'
+                    }}
               value={batchYear}
               onChange={(e) => setBatchYear(e.target.value)}
               min="2000"
               max="2030"
-            />
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#3b82f6';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                      e.target.style.transform = 'translateY(-1px)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#e2e8f0';
+                      e.target.style.boxShadow = 'none';
+                      e.target.style.transform = 'translateY(0)';
+                    }}
+                  />
+                </div>
 
-            <label style={styles.modalLabel}>Section to Import</label>
+                {/* Section Field */}
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{ 
+                    display: 'block', 
+                    marginBottom: '8px', 
+                    fontWeight: '700', 
+                    color: '#1e293b',
+                    fontSize: '14px'
+                  }}>
+                    Section to Import
+                  </label>
             <input
               type="text"
-              placeholder="Enter section (e.g., 4-A, 4-B, 4-1, etc.)..."
-              style={styles.modalInput}
+                    placeholder="Enter section (e.g., 4-A, 4-B, 4-1, etc.)"
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: '2px solid #e2e8f0',
+                      borderRadius: '10px',
+                      fontSize: '15px',
+                      color: '#1e293b',
+                      backgroundColor: 'white',
+                      transition: 'all 0.3s ease',
+                      outline: 'none',
+                      fontWeight: '500',
+                      height: '48px'
+                    }}
               value={section}
               onChange={(e) => setSection(e.target.value)}
               list="section-options"
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#3b82f6';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                      e.target.style.transform = 'translateY(-1px)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#e2e8f0';
+                      e.target.style.boxShadow = 'none';
+                      e.target.style.transform = 'translateY(0)';
+                    }}
             />
             <datalist id="section-options">
               {availableSections.map((sectionOption) => (
@@ -670,47 +1097,198 @@ export default function Dashboard() {
               ))}
             </datalist>
             {availableSections.length === 0 && (
-              <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+                    <p style={{ 
+                      margin: '8px 0 0 0', 
+                      fontSize: '12px', 
+                      color: '#64748b',
+                      fontStyle: 'italic'
+                    }}>
                 No previous sections found. You can type any section name.
-              </div>
-            )}
+                    </p>
+                  )}
+                </div>
 
-            {/* Course selection removed; default course state will be used */}
-
-            <label style={styles.modalLabel}>Upload File</label>
-            <label style={styles.fileLabel}>
-              {selectedFile ? selectedFile.name : 'Choose File'}
+                {/* File Upload Field */}
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{ 
+                    display: 'block', 
+                    marginBottom: '8px', 
+                    fontWeight: '700', 
+                    color: '#1e293b',
+                    fontSize: '14px'
+                  }}>
+                    Upload Excel File
+                  </label>
+                  <div style={{
+                    border: '2px dashed #cbd5e1',
+                    borderRadius: '12px',
+                    padding: '24px',
+                    textAlign: 'center',
+                    backgroundColor: '#f8fafc',
+                    transition: 'all 0.3s ease',
+                    cursor: 'pointer',
+                    position: 'relative'
+                  }}
+                  onMouseEnter={(e) => {
+                    const target = e.currentTarget as HTMLDivElement;
+                    target.style.borderColor = '#3b82f6';
+                    target.style.backgroundColor = '#f0f9ff';
+                  }}
+                  onMouseLeave={(e) => {
+                    const target = e.currentTarget as HTMLDivElement;
+                    target.style.borderColor = '#cbd5e1';
+                    target.style.backgroundColor = '#f8fafc';
+                  }}
+                  >
               <input
                 type="file"
                 onChange={handleFileChange}
-                style={styles.fileInput}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        opacity: 0,
+                        cursor: 'pointer'
+                      }}
                 accept=".xlsx,.xls"
               />
-            </label>
+                    <div style={{
+                      width: '48px',
+                      height: '48px',
+                      backgroundColor: '#dbeafe',
+                      borderRadius: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 12px'
+                    }}>
+                      <span style={{ fontSize: '24px', color: '#3b82f6' }}>📄</span>
+                    </div>
+                    <p style={{
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      color: '#374151',
+                      margin: '0 0 4px 0'
+                    }}>
+                      {selectedFile ? selectedFile.name : 'Choose Excel File'}
+                    </p>
+                    <p style={{
+                      fontSize: '14px',
+                      color: '#64748b',
+                      margin: '0'
+                    }}>
+                      Click to browse or drag and drop
+                    </p>
+                    <p style={{
+                      fontSize: '12px',
+                      color: '#9ca3af',
+                      margin: '8px 0 0 0'
+                    }}>
+                      Supports .xlsx and .xls files
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-            <div style={styles.modalActions}>
-              <button style={styles.addBtn} onClick={handleImport} disabled={importLoading}>
-                {importLoading ? 'Importing...' : 'Import'}
-              </button>
+              {/* Action Buttons */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '16px', 
+                justifyContent: 'flex-end' 
+              }}>
               <button
-                style={styles.cancelBtn}
                 onClick={() => {
                   setShowModal(false);
-                  // Reset form state
                   setSelectedFile(null);
                   setBatchYear('');
                   setSection('');
                 }}
                 disabled={importLoading}
+                  style={{
+                    padding: '14px 28px',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '12px',
+                    backgroundColor: 'white',
+                    color: '#64748b',
+                    cursor: importLoading ? 'not-allowed' : 'pointer',
+                    fontWeight: '600',
+                    fontSize: '15px',
+                    transition: 'all 0.3s ease',
+                    opacity: importLoading ? 0.6 : 1
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!importLoading) {
+                      const target = e.currentTarget as HTMLButtonElement;
+                      target.style.borderColor = '#cbd5e1';
+                      target.style.backgroundColor = '#f1f5f9';
+                      target.style.transform = 'translateY(-2px)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!importLoading) {
+                      const target = e.currentTarget as HTMLButtonElement;
+                      target.style.borderColor = '#e2e8f0';
+                      target.style.backgroundColor = 'white';
+                      target.style.transform = 'translateY(0)';
+                    }
+                  }}
               >
                 Cancel
               </button>
+                <button
+                  onClick={handleImport}
+                  disabled={importLoading || !selectedFile || !batchYear || !section}
+                  style={{
+                    padding: '14px 28px',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '12px',
+                    background: importLoading || !selectedFile || !batchYear || !section 
+                      ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)'
+                      : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    color: 'white',
+                    cursor: importLoading || !selectedFile || !batchYear || !section ? 'not-allowed' : 'pointer',
+                    fontWeight: '700',
+                    fontSize: '15px',
+                    transition: 'all 0.3s ease',
+                    boxShadow: '0 4px 6px -1px rgba(245, 158, 11, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!importLoading && selectedFile && batchYear && section) {
+                      const target = e.currentTarget as HTMLButtonElement;
+                      target.style.transform = 'translateY(-2px)';
+                      target.style.boxShadow = '0 8px 16px -4px rgba(245, 158, 11, 0.4)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!importLoading && selectedFile && batchYear && section) {
+                      const target = e.currentTarget as HTMLButtonElement;
+                      target.style.transform = 'translateY(0)';
+                      target.style.boxShadow = '0 4px 6px -1px rgba(245, 158, 11, 0.3)';
+                    }
+                  }}
+                >
+                  {importLoading ? (
+                    <>
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      Import Data
+                    </>
+                  )}
+              </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Date Modal for Setting Send Date */}
+      {/* Modern Redesigned Modal */}
       {showDateModal && (
         <div style={{
           position: 'fixed',
@@ -718,90 +1296,312 @@ export default function Dashboard() {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          backgroundColor: 'rgba(15, 23, 42, 0.8)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000
+          zIndex: 1000,
+          backdropFilter: 'blur(8px)',
+          animation: 'fadeIn 0.3s ease-out'
         }}>
           <div style={{
             backgroundColor: 'white',
-            padding: '30px',
-            borderRadius: '12px',
-            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
-            width: '400px',
-            maxWidth: '90vw'
+            borderRadius: '24px',
+            padding: '0',
+            boxShadow: '0 32px 64px -12px rgba(0, 0, 0, 0.35)',
+            width: '520px',
+            maxWidth: '95vw',
+            border: '1px solid rgba(226, 232, 240, 0.8)',
+            position: 'relative',
+            animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+            overflow: 'hidden'
           }}>
-            <h3 style={{ margin: '0 0 20px 0', color: '#1e3a8a' }}>
-              Set Date to Send Completed OJT to Admin
+            {/* Gradient Header */}
+            <div style={{
+              background: 'white',
+              padding: '32px 32px 24px 32px',
+              color: '#1f2937',
+              position: 'relative',
+              borderBottom: '2px solid #e5e7eb'
+            }}>
+              {/* Close button */}
+              <button
+                onClick={() => {
+                  setShowDateModal(false);
+                  setSendDateState('');
+                }}
+                style={{
+                  position: 'absolute',
+                  top: '20px',
+                  right: '20px',
+                  background: '#f3f4f6',
+                  border: '2px solid #e5e7eb',
+                  fontSize: '20px',
+                  color: '#6b7280',
+                  cursor: 'pointer',
+                  padding: '8px',
+            borderRadius: '12px',
+                  transition: 'all 0.2s ease',
+                  backdropFilter: 'blur(10px)'
+                }}
+                onMouseEnter={(e) => {
+                  const target = e.currentTarget as HTMLButtonElement;
+                  target.style.backgroundColor = '#e5e7eb';
+                  target.style.borderColor = '#d1d5db';
+                    target.style.color = 'white';
+                  target.style.transform = 'scale(1.1)';
+                }}
+                onMouseLeave={(e) => {
+                  const target = e.currentTarget as HTMLButtonElement;
+                  target.style.backgroundColor = '#f3f4f6';
+                  target.style.borderColor = '#e5e7eb';
+                  target.style.color = '#6b7280';
+                  target.style.transform = 'scale(1)';
+                }}
+              >
+                ✕
+              </button>
+
+              {/* Header Content */}
+              <div style={{ 
+                marginBottom: '16px'
+              }}>
+                <h3 style={{ 
+                  margin: '0 0 8px 0', 
+                  fontSize: '24px',
+                  fontWeight: '800',
+                  lineHeight: '1.2',
+                  letterSpacing: '-0.025em',
+                  color: 'white'
+                }}>
+                  Auto-Process Batch
             </h3>
-            <p style={{ margin: '0 0 15px 0', color: '#6b7280', fontSize: '14px' }}>
-              Choose a date when:
-            </p>
-            <ul style={{ margin: '0 0 15px 0', color: '#6b7280', fontSize: '14px', paddingLeft: '20px' }}>
-              <li>All students with "Completed" status will be sent to admin for approval</li>
-              <li>All students with "Ongoing" status will be changed to "Incomplete"</li>
-            </ul>
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#374151' }}>
-                Send Date:
+                <p style={{ 
+                  margin: '0', 
+                  fontSize: '16px',
+                  fontWeight: '500',
+                  opacity: '0.9'
+                }}>
+                  Schedule automatic processing for batch {selectedBatchFilter}
+                </p>
+              </div>
+            </div>
+
+            {/* Content Area */}
+            <div style={{ padding: '32px' }}>
+              {/* Process Overview Card */}
+              <div style={{
+                backgroundColor: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '16px',
+                padding: '24px',
+                marginBottom: '28px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                
+                <div style={{ 
+                  marginBottom: '16px' 
+                }}>
+                  <span style={{ 
+                    fontWeight: '700', 
+                    color: '#1e293b',
+                    fontSize: '16px'
+                  }}>
+                    Processing Actions
+                  </span>
+                </div>
+                
+                <div style={{ paddingLeft: '52px' }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    marginBottom: '12px',
+                    fontSize: '15px',
+                    color: '#475569'
+                  }}>
+                    <div style={{
+                      width: '8px',
+                      height: '8px',
+                      backgroundColor: '#10b981',
+                      borderRadius: '50%',
+                      marginRight: '16px',
+                      boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)'
+                    }}></div>
+                    <span><strong style={{ color: '#059669' }}>Completed</strong> students → Sent to admin</span>
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    marginBottom: '12px',
+                    fontSize: '15px',
+                    color: '#475569'
+                  }}>
+                    <div style={{
+                      width: '8px',
+                      height: '8px',
+                      backgroundColor: '#f59e0b',
+                      borderRadius: '50%',
+                      marginRight: '16px',
+                      boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.2)'
+                    }}></div>
+                    <span><strong style={{ color: '#d97706' }}>Ongoing</strong> students → Marked incomplete</span>
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center',
+                    fontSize: '15px',
+                    color: '#475569'
+                  }}>
+                    <div style={{
+                      width: '8px',
+                      height: '8px',
+                      backgroundColor: '#8b5cf6',
+                      borderRadius: '50%',
+                      marginRight: '16px',
+                      boxShadow: '0 0 0 3px rgba(139, 92, 246, 0.2)'
+                    }}></div>
+                    <span>Processes <strong style={{ color: '#7c3aed' }}>ALL sections</strong> in batch {selectedBatchFilter}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Date Selection */}
+              <div style={{ marginBottom: '32px' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '12px', 
+                  fontWeight: '700', 
+                  color: '#1e293b',
+                  fontSize: '16px'
+                }}>
+                  Select Processing Date
               </label>
+                <div style={{ position: 'relative' }}>
               <input
                 type="date"
                 value={sendDate}
-                onChange={(e) => setSendDate(e.target.value)}
+                    onChange={(e) => setSendDateState(e.target.value)}
                 style={{
                   width: '100%',
-                  padding: '10px 12px',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  outline: 'none'
+                      padding: '16px 20px',
+                      border: '2px solid #e2e8f0',
+                      borderRadius: '16px',
+                      fontSize: '16px',
+                      color: '#1e293b',
+                      backgroundColor: 'white',
+                      transition: 'all 0.3s ease',
+                      outline: 'none',
+                      fontWeight: '500'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#3b82f6';
+                      e.target.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.1)';
+                      e.target.style.transform = 'translateY(-2px)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#e2e8f0';
+                      e.target.style.boxShadow = 'none';
+                      e.target.style.transform = 'translateY(0)';
                 }}
                 min={new Date().toISOString().split('T')[0]}
               />
             </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '16px', 
+                justifyContent: 'flex-end' 
+              }}>
               <button
                 onClick={() => {
                   setShowDateModal(false);
-                  setSendDate('');
+                    setSendDateState('');
                 }}
                 style={{
-                  padding: '10px 20px',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '8px',
+                    padding: '14px 28px',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '16px',
                   backgroundColor: 'white',
-                  color: '#6b7280',
+                    color: '#64748b',
                   cursor: 'pointer',
-                  fontWeight: 600
+                    fontWeight: '600',
+                    fontSize: '15px',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.borderColor = '#cbd5e1';
+                    target.style.backgroundColor = '#f1f5f9';
+                    target.style.transform = 'translateY(-2px)';
+                    target.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.borderColor = '#e2e8f0';
+                    target.style.backgroundColor = 'white';
+                    target.style.transform = 'translateY(0)';
+                    target.style.boxShadow = 'none';
                 }}
               >
                 Cancel
               </button>
               <button
-                onClick={() => {
+                  onClick={async () => {
                   if (sendDate) {
-                    // TODO: Implement the actual functionality to set the send date
-                    alert(`Send date set to: ${sendDate}\n\nOn this date:\n• All completed OJT students will be sent to admin\n• All ongoing students will be marked as incomplete`);
+                      try {
+                        const result = await setSendDate(
+                          coordinatorUsername,
+                          parseInt(selectedBatchFilter),
+                          null, // Always process entire batch
+                          sendDate
+                        );
+                        
+                        if (result.success) {
+                          alert(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatch: ${selectedBatchFilter} (ENTIRE BATCH)\n\nOn this date:\n• ALL completed OJT students will be automatically sent to admin\n• ALL ongoing students will be marked as incomplete\n\nThe entire batch will be processed automatically!`);
                     setShowDateModal(false);
-                    setSendDate('');
+                          setSendDateState('');
                   } else {
-                    alert('Please select a date');
+                          alert(`Error: ${result.message}`);
+                        }
+                      } catch (error) {
+                        console.error('Error setting send date:', error);
+                        alert('Failed to set schedule. Please try again.');
+                      }
+                    } else {
+                      alert('Please select a date first');
                   }
                 }}
                 style={{
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '8px',
-                  backgroundColor: '#10B981',
-                  color: 'white',
+                    padding: '14px 28px',
+                  border: '2px solid #e5e7eb',
+                    borderRadius: '16px',
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                  color: '#000000',
                   cursor: 'pointer',
-                  fontWeight: 600
-                }}
-              >
-                Set Date
+                    fontWeight: '700',
+                    fontSize: '15px',
+                    transition: 'all 0.3s ease',
+                    boxShadow: '0 8px 16px rgba(59, 130, 246, 0.3)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseEnter={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.transform = 'translateY(-3px)';
+                    target.style.boxShadow = '0 12px 24px rgba(59, 130, 246, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.transform = 'translateY(0)';
+                    target.style.boxShadow = '0 8px 16px rgba(59, 130, 246, 0.3)';
+                  }}
+                >
+                  Schedule Processing
               </button>
+              </div>
             </div>
           </div>
         </div>
