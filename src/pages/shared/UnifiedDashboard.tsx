@@ -1227,6 +1227,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 // PESO and admin items are always visible regardless of follow status
                 const shouldShow = isOwn || isFollowed || isCcict || isPeso;
                 
+                
                 // Debug filtering
                 if (item.feed_type === 'donation_repost' || item.item_type === 'repost') {
                   console.log('🔍 DEBUG: Item filter result:', {

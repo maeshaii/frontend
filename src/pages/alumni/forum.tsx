@@ -278,6 +278,7 @@ const ForumPage: React.FC = () => {
         reposts: forum.reposts || [] // Use actual reposts data from backend
       }));
       
+      
       // Create a mixed feed of posts and reposts, sorted by date
       const mixedFeed: any[] = [];
       
@@ -337,11 +338,7 @@ const ForumPage: React.FC = () => {
         return dateBObj.getTime() - dateAObj.getTime();
       });
       
-      console.log('🔍 FORUM MIXED FEED:', sortedFeed.slice(0, 5).map(item => ({
-        type: item.item_type,
-        date: item.sort_date,
-        user: item.user?.f_name || 'unknown'
-      })));
+      
       
       setPosts(sortedFeed);
       
@@ -372,7 +369,7 @@ const ForumPage: React.FC = () => {
       
       setLikedPosts(liked);
       setRepostedPosts(reposted);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching forum posts:', error);
     } finally {
       setLoading(false);
