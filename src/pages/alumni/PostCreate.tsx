@@ -78,12 +78,17 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
           images_count: postImages.length
         });
         
-        const result = await createDonationRequest({
-          description: postContent,
-          images: postImages
-        });
-        
-        console.log('Donation request creation result:', result);
+        try {
+          const result = await createDonationRequest({
+            description: postContent,
+            images: postImages
+          });
+          
+          console.log('Donation request creation result:', result);
+        } catch (donationError) {
+          console.error('Donation creation failed:', donationError);
+          throw donationError; // Re-throw to be caught by outer catch
+        }
       } else {
         // Determine post type based on logged-in account role
         const raw = localStorage.getItem('user');

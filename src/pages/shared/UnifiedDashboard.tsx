@@ -440,13 +440,16 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     
     // Fetch posts from backend (backend already includes followed + PESO + admin)
     getPosts().then((fetchedPosts) => {
-      console.log('🔍 DEBUG: Posts response:', fetchedPosts);
-      console.log('🔍 DEBUG: Posts type:', typeof fetchedPosts);
-      console.log('🔍 DEBUG: Posts length:', fetchedPosts?.length);
-      console.log('🔍 DEBUG: First few posts:', fetchedPosts?.slice(0, 3));
+      console.log('🔍 OJT DEBUG: Posts response:', fetchedPosts);
+      console.log('🔍 OJT DEBUG: Posts type:', typeof fetchedPosts);
+      console.log('🔍 OJT DEBUG: Posts length:', fetchedPosts?.length);
+      console.log('🔍 OJT DEBUG: First few posts:', fetchedPosts?.slice(0, 3));
+      console.log('🔍 OJT DEBUG: Current user object:', userObj);
+      console.log('🔍 OJT DEBUG: User ID:', userObj?.user_id || userObj?.id);
       
       if (!fetchedPosts || fetchedPosts.length === 0) {
-        console.log('🚨 DEBUG: No posts returned from API!');
+        console.log('🚨 OJT DEBUG: No posts returned from API!');
+        console.log('🚨 OJT DEBUG: This might be normal for OJT users if they have no followed users or admin/PESO posts');
         setPosts([]);
         return;
       }
@@ -514,10 +517,26 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
       });
       setRepostedPosts(reposted);
     }).catch((error) => {
-      console.error('🚨 DEBUG: Error fetching posts:', error);
-      console.error('🚨 DEBUG: Error response:', error.response?.data);
-      console.error('🚨 DEBUG: Error status:', error.response?.status);
-      setPosts([]);
+      console.error('🚨 OJT DEBUG: Error fetching posts:', error);
+      console.error('🚨 OJT DEBUG: Error response:', error.response?.data);
+      console.error('🚨 OJT DEBUG: Error status:', error.response?.status);
+      console.error('🚨 OJT DEBUG: Error message:', error.message);
+      console.error('🚨 OJT DEBUG: Current user:', userObj);
+      
+      // Show user-friendly error message
+      if (error.response?.status === 401) {
+        console.log('🚨 OJT DEBUG: Authentication error - redirecting to login');
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      } else if (error.response?.status === 403) {
+        console.log('🚨 OJT DEBUG: Permission denied for posts');
+        alert('You do not have permission to view posts. Please contact an administrator.');
+      } else {
+        console.log('🚨 OJT DEBUG: Other error - setting empty posts');
+        setPosts([]);
+      }
     });
 
     // Fetch donation requests
@@ -616,11 +635,11 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         
         sortedFeed.forEach((item: any) => {
           if (item.item_type === 'repost') {
-            // For donation reposts, likes have nested user structure
-            liked[item.post_id] = item.likes?.some((like: any) => 
+            // For reposts, use repost_id as the key for likes
+            liked[item.repostData?.repost_id] = item.repostData?.likes?.some((like: any) => 
               (like.user?.user_id === currentUserId) || (like.user_id === currentUserId)
             ) || false;
-            reposted[item.post_id] = false;
+            reposted[item.repostData?.repost_id] = false;
             
             // IMPORTANT: Also initialize the like state for the ORIGINAL donation post inside the repost
             if (item.repostData && item.repostData.original_post && item.repostData.original_post.donation_id) {
@@ -744,20 +763,47 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   };
 
   const handleViewPost = async (postId: string) => {
-    console.log('handleViewPost called with postId:', postId);
+    console.log('🔍 OJT DEBUG: handleViewPost called with postId:', postId);
+    console.log('🔍 OJT DEBUG: Current user:', user);
+    console.log('🔍 OJT DEBUG: User ID:', user?.user_id || user?.id);
     setPostLoading(true);
     try {
-      console.log('Fetching post from API...');
+      console.log('🔍 OJT DEBUG: Fetching post from API...');
       const response = await api.get(`posts/${postId}/detail/`);
-      console.log('API response:', response.data);
+      console.log('🔍 OJT DEBUG: API response:', response.data);
       if (response.data) {
         setModalPost(response.data);
         setShowPostModal(true);
-        console.log('Post modal should now be visible');
+        console.log('🔍 OJT DEBUG: Post modal should now be visible');
       }
-    } catch (error) {
-      console.error('Error fetching post:', error);
-      alert('Failed to load post.');
+    } catch (error: any) {
+      console.error('🚨 OJT DEBUG: Error fetching post:', error);
+      console.error('🚨 OJT DEBUG: Error response:', error.response);
+      console.error('🚨 OJT DEBUG: Error status:', error.response?.status);
+      console.error('🚨 OJT DEBUG: Error data:', error.response?.data);
+      
+      // Better error handling with specific messages
+      if (error.response?.status === 404) {
+        console.log('🚨 OJT DEBUG: Post not found (404)');
+        alert('This post has been deleted or is no longer available.');
+      } else if (error.response?.status === 403) {
+        console.log('🚨 OJT DEBUG: Permission denied (403)');
+        alert('You do not have permission to view this post.');
+      } else if (error.response?.status === 401) {
+        console.log('🚨 OJT DEBUG: Unauthorized (401)');
+        alert('Please log in again to continue.');
+        // Optionally redirect to login
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      } else if (error.code === 'ERR_NETWORK') {
+        console.log('🚨 OJT DEBUG: Network error');
+        alert('Network error. Please check your connection and try again.');
+      } else {
+        console.error('🚨 OJT DEBUG: Unexpected error details:', error);
+        alert('Failed to load post. Please try again later.');
+      }
     } finally {
       setPostLoading(false);
     }
@@ -773,9 +819,26 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         setModalPost(response.data);
         setShowPostModal(true);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching forum post:', error);
-      alert('Failed to load forum post.');
+      
+      // Better error handling with specific messages
+      if (error.response?.status === 404) {
+        alert('This forum post has been deleted or is no longer available.');
+      } else if (error.response?.status === 403) {
+        alert('You do not have permission to view this forum post.');
+      } else if (error.response?.status === 401) {
+        alert('Please log in again to continue.');
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      } else if (error.code === 'ERR_NETWORK') {
+        alert('Network error. Please check your connection and try again.');
+      } else {
+        console.error('Unexpected error details:', error);
+        alert('Failed to load forum post. Please try again later.');
+      }
     } finally {
       setPostLoading(false);
     }
@@ -798,9 +861,26 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         setModalPost(donationPost);
         setShowPostModal(true);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching donation post:', error);
-      alert('Failed to load donation post.');
+      
+      // Better error handling with specific messages
+      if (error.response?.status === 404) {
+        alert('This donation request has been deleted or is no longer available.');
+      } else if (error.response?.status === 403) {
+        alert('You do not have permission to view this donation request.');
+      } else if (error.response?.status === 401) {
+        alert('Please log in again to continue.');
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      } else if (error.code === 'ERR_NETWORK') {
+        alert('Network error. Please check your connection and try again.');
+      } else {
+        console.error('Unexpected error details:', error);
+        alert('Failed to load donation request. Please try again later.');
+      }
     } finally {
       setPostLoading(false);
     }
@@ -1546,7 +1626,17 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         displayAvatar={repostItem.user.profile_pic ? (String(repostItem.user.profile_pic).startsWith('http') ? repostItem.user.profile_pic : `http://127.0.0.1:8000${repostItem.user.profile_pic}`) : ctulogo}
                         formatTime={formatHybrid}
                         isRepost={true}
-                        repostData={repostItem as any}
+                        repostData={{
+                          repost_id: repostItem.repost_id,
+                          repost_date: repostItem.repost_date,
+                          repost_caption: repostItem.repost_caption,
+                          user: repostItem.user,
+                          likes: repostItem.likes || [],
+                          likes_count: repostItem.likes_count || 0,
+                          comments: repostItem.comments || [],
+                          comments_count: repostItem.comments_count || 0,
+                          original_post: repostItem.original_post
+                        }}
                         onViewOriginalPost={handleViewOriginalPost}
                         likedPosts={likedPosts}
                         setLikedPosts={setLikedPosts}
@@ -1711,7 +1801,17 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                       displayAvatar={repostItem.user.profile_pic ? (String(repostItem.user.profile_pic).startsWith('http') ? repostItem.user.profile_pic : `http://127.0.0.1:8000${repostItem.user.profile_pic}`) : ctulogo}
                       formatTime={formatHybrid}
                       isRepost={true}
-                      repostData={repostItem as any}
+                      repostData={{
+                        repost_id: repostItem.repost_id,
+                        repost_date: repostItem.repost_date,
+                        repost_caption: repostItem.repost_caption,
+                        user: repostItem.user,
+                        likes: repostItem.likes || [],
+                        likes_count: repostItem.likes_count || 0,
+                        comments: repostItem.comments || [],
+                        comments_count: repostItem.comments_count || 0,
+                        original_post: repostItem.original_post
+                      }}
                       onViewOriginalPost={handleViewOriginalPost}
                       onPostUpdate={() => {
                         getPosts().then(updatedPosts => {

@@ -35,35 +35,38 @@ const TrackerReminderModal: React.FC<TrackerReminderModalProps> = ({ isOpen, onC
         
         <div className="tracker-modal-body">
           <div className="tracker-modal-icon">
-            🎓
+            📋
           </div>
           <h3>Complete Your Graduate Tracer Survey</h3>
           <p>
-            Help us improve our programs by sharing your post-graduation journey. 
-            Your responses will help future students and enhance our curriculum.
+            Help us track your career success and improve our programs for future students. Your input shapes the future of education.
           </p>
           <div className="tracker-modal-benefits">
             <div className="benefit-item">
-              <span className="benefit-icon">📊</span>
-              <span>Contribute to program improvement</span>
+              <span className="benefit-icon">💼</span>
+              <span>Share your career journey and current employment status</span>
             </div>
             <div className="benefit-item">
-              <span className="benefit-icon">🎯</span>
-              <span>Help future students make informed decisions</span>
+              <span className="benefit-icon">🏅</span>
+              <span>Highlight your achievements and professional milestones</span>
             </div>
             <div className="benefit-item">
-              <span className="benefit-icon">⏱️</span>
-              <span>Takes only 5-10 minutes to complete</span>
+              <span className="benefit-icon">⏰</span>
+              <span>Quick 5-minute survey - your time makes a difference</span>
+            </div>
+            <div className="benefit-item special-incentive">
+              <span className="benefit-icon">🎁</span>
+              <span>Maybe you're one of the lucky ones who will receive an award for completing the survey!</span>
             </div>
           </div>
         </div>
         
         <div className="tracker-modal-footer">
           <button className="tracker-modal-button secondary" onClick={handleRemindLater}>
-            Remind Me Later
+            Maybe Later
           </button>
           <button className="tracker-modal-button primary" onClick={handleTakeSurvey}>
-            Take Survey Now
+            Start Survey
           </button>
         </div>
       </div>

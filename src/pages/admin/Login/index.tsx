@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { loginUser, fetchAlumniDetails } from '../../../services/api';
 import './Login.css';
 const background = require('../../../images/ctu.jpg');
-const logo = require('../../../images/ctulogo.png');
 const alumniLogo = require('../../../images/ctu alumni logo.jpg');
 const ccictLogo = require('../../../images/ccict.png');
 
@@ -39,6 +38,8 @@ const Login = () => {
             navigate(`/alumni/dashboard/${userId}`);
           } else if (data.user.account_type.coordinator) {
             navigate(`/coordinator/dashboard/${userId}`);
+          } else if (data.user.account_type.ojt) {
+            navigate(`/ojt/dashboard/${userId}`);
           } else {
             navigate('/dashboard');
           }
@@ -62,7 +63,6 @@ const Login = () => {
         <img src={background} alt="CTU Administration Building" style={styles.backgroundImage} className="login-background-image" />
         <div style={styles.leftContent}>
           <div style={{ marginTop: '-10rem' }}>
-            <img src={logo} alt="CTU Logo" style={styles.logo} className="login-logo" />
             <h2 style={styles.brandTitle} className="login-brand-title">WHERENAYOU : Connecting OJT's & Alumni Journeys</h2>
             <p style={styles.brandSubtitle}>Excellence in Technology Education</p>
           </div>
@@ -214,12 +214,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'white',
     padding: '2rem',
     paddingTop: '3rem',
-  },
-  logo: {
-    width: '120px',
-    height: '120px',
-    marginBottom: '1.5rem',
-    filter: 'drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3))',
   },
   brandTitle: {
     fontSize: '2.5rem',

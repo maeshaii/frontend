@@ -300,6 +300,8 @@ const RepostModal: React.FC<RepostModalProps> = ({
             <img
               src={typeof originalPost.post_image === 'string' && originalPost.post_image.startsWith('/media/')
                 ? `http://127.0.0.1:8000${originalPost.post_image}`
+                : typeof originalPost.post_image === 'string' && !originalPost.post_image.startsWith('http')
+                ? `http://127.0.0.1:8000${originalPost.post_image}`
                 : (originalPost.post_image as string)}
               alt="post"
               style={{ maxWidth: '100%', borderRadius: 8, maxHeight: 200, objectFit: 'cover' }}

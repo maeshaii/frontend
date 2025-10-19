@@ -814,53 +814,6 @@ const RepostCard: React.FC<RepostCardProps> = ({
           </div>
         )}
 
-        {/* Repost Actions */}
-        <div style={{ 
-          padding: '12px 16px 0',
-          borderTop: repostData.likes && repostData.likes.length > 0 ? '1px solid #f0f0f0' : 'none',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px'
-        }}>
-          <button
-            onClick={handleLike}
-            style={{
-              background: 'none',
-              border: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-              color: isLiked ? '#e74c3c' : '#666',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}
-          >
-            <span style={{ fontSize: '16px' }}>{isLiked ?  '👍' : '👍'}</span>
-            <span>{repostData.likes_count === 1 ? '1 like' : (repostData.likes_count && repostData.likes_count > 1) ? `${repostData.likes_count} likes` : 'Like'}</span>
-          </button>
-
-          <button
-            onClick={() => setShowCommentInput?.((prev: { [key: number]: boolean }) => ({
-              ...prev,
-              [repostData.repost_id]: !prev[repostData.repost_id]
-            }))}
-            style={{
-              background: 'none',
-              border: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-              color: '#666',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}
-          >
-            <span style={{ fontSize: '16px' }}>💬</span>
-            <span>{repostData.comments_count && repostData.comments_count > 0 ? repostData.comments_count : ''}</span>
-          </button>
-        </div>
 
         {/* Comment Input */}
         {showCommentInput[repostData.repost_id] && (

@@ -5,6 +5,7 @@ import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaFileImport } from
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
 import { fetchOJTStatistics, importOJT, fetchCoordinatorSections } from '../../services/api';
+import logoLogin from '../../images/logo_login.png';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -193,7 +194,10 @@ export default function Dashboard() {
     logoImage: {
       width: '80px',
       height: '80px',
-      borderRadius: '50%',
+      borderRadius: '8px',
+      background: 'white',
+      padding: '8px',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
     },
     logoText: {
       fontSize: '14px',
@@ -397,7 +401,7 @@ export default function Dashboard() {
       <div style={styles.sidebar}>
         <div style={styles.topSection}>
           <div style={styles.logo}>
-            <img src="/logo192.png" alt="Logo" style={styles.logoImage} />
+            <img src={logoLogin} alt="Logo" style={styles.logoImage} />
             <h1 style={styles.logoText}>WhereNa You</h1>
           </div>
 

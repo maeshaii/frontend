@@ -20,7 +20,9 @@ interface UserData {
 
 const Settings: React.FC = () => {
   const navigate = useNavigate();
-  const [activeSection, setActiveSection] = useState<string>('personal');
+  const [activeSection, setActiveSection] = useState<string>(() => {
+    return localStorage.getItem('settingsActiveSection') || 'personal';
+  });
   const [userData, setUserData] = useState<UserData | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -59,8 +61,31 @@ const Settings: React.FC = () => {
     position: '',
     employment_status: '',
     company_address: '',
-    sector: ''
+    sector: '',
+    employment_duration_current: '',
+    salary_current: '',
+    scope_current: '',
+    company_email: '',
+    company_contact: '',
+    contact_person: '',
+    position_alt: '',
+    job_alignment_status: '',
+    job_alignment_category: '',
+    job_alignment_title: '',
+    job_alignment_suggested_program: '',
+    job_alignment_original_program: '',
+    self_employed: false,
+    high_position: false,
+    absorbed: false,
+    awards_recognition_current: '',
+    supporting_document_current: '',
+    supporting_document_awards_recognition: '',
+    unemployment_reason: '',
+    created_at: '',
+    updated_at: ''
   });
+
+  const [isEmployed, setIsEmployed] = useState<boolean | null>(null);
 
   useEffect(() => {
     fetchUserData();
@@ -133,6 +158,9 @@ const Settings: React.FC = () => {
           home_address: data.home_address || '',
           social_media: data.social_media || ''
         });
+        
+        // Fetch employment data
+        await fetchEmploymentData(userId);
       } else {
         console.error('Failed to fetch user data:', data.error || 'Unknown error');
         console.error('Response not ok:', response.status, response.statusText);
@@ -141,6 +169,77 @@ const Settings: React.FC = () => {
       console.error('Error fetching user data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchEmploymentData = async (userId: number) => {
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const response = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${userId}/`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setEmploymentData({
+          organization_name: data.organization_name || '',
+          date_hired: data.date_hired || '',
+          position: data.position || '',
+          employment_status: data.employment_status || '',
+          company_address: data.company_address || '',
+          sector: data.sector || '',
+          employment_duration_current: data.employment_duration_current || '',
+          salary_current: data.salary_current || '',
+          scope_current: data.scope_current || '',
+          company_email: data.company_email || '',
+          company_contact: data.company_contact || '',
+          contact_person: data.contact_person || '',
+          position_alt: data.position_alt || '',
+          job_alignment_status: data.job_alignment_status || '',
+          job_alignment_category: data.job_alignment_category || '',
+          job_alignment_title: data.job_alignment_title || '',
+          job_alignment_suggested_program: data.job_alignment_suggested_program || '',
+          job_alignment_original_program: data.job_alignment_original_program || '',
+          self_employed: data.self_employed || false,
+          high_position: data.high_position || false,
+          absorbed: data.absorbed || false,
+          awards_recognition_current: data.awards_recognition_current || '',
+          supporting_document_current: data.supporting_document_current || '',
+          supporting_document_awards_recognition: data.supporting_document_awards_recognition || '',
+          unemployment_reason: data.unemployment_reason || '',
+          created_at: data.created_at || '',
+          updated_at: data.updated_at || ''
+        });
+        
+        // Determine if user is employed based on data
+        const hasEmploymentData = data.organization_name && data.organization_name.trim() !== '';
+        const isUnemployed = data.sector === 'Unemployed' || data.employment_status === 'Unemployed';
+        
+        if (hasEmploymentData && !isUnemployed) {
+          setIsEmployed(true);
+        } else if (isUnemployed) {
+          setIsEmployed(false);
+        } else {
+          // No employment data and not explicitly unemployed - show question
+          setIsEmployed(null);
+        }
+        
+        console.log('hasEmploymentData:', hasEmploymentData);
+        console.log('isUnemployed:', isUnemployed);
+        console.log('Final isEmployed:', isEmployed);
+        
+        console.log('Employment data loaded:', data);
+        console.log('Is employed:', isEmployed);
+      } else {
+        console.error('Failed to fetch employment data');
+        setIsEmployed(null);
+      }
+    } catch (error) {
+      console.error('Error fetching employment data:', error);
+      setIsEmployed(null);
     }
   };
 
@@ -241,18 +340,42 @@ const Settings: React.FC = () => {
       
       const user = JSON.parse(userStr);
       const userId = user.user_id || user.id;
+      const accessToken = localStorage.getItem('accessToken');
+      
+      let dataToSend;
+      
+      if (isEmployed === false) {
+        // If unemployed, clear employment details and set status to unemployed
+        dataToSend = {
+          organization_name: '',
+          date_hired: '',
+          position: '',
+          employment_status: 'Unemployed',
+          company_address: '',
+          sector: 'Unemployed'
+        };
+      } else {
+        // If employed, send the employment data
+        dataToSend = employmentData;
+      }
+      
       const response = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${userId}/`, {
         method: 'PUT',
         headers: {
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(employmentData)
+        body: JSON.stringify(dataToSend)
       });
 
       if (response.ok) {
         alert('Employment details updated successfully!');
+        setIsEditingEmployment(false);
+        // Refresh employment data
+        await fetchEmploymentData(userId);
       } else {
-        alert('Failed to update employment details');
+        const errorData = await response.json();
+        alert(`Failed to update employment details: ${errorData.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error updating employment details:', error);
@@ -269,8 +392,30 @@ const Settings: React.FC = () => {
       position: '',
       employment_status: '',
       company_address: '',
-      sector: ''
+      sector: '',
+      employment_duration_current: '',
+      salary_current: '',
+      scope_current: '',
+      company_email: '',
+      company_contact: '',
+      contact_person: '',
+      position_alt: '',
+      job_alignment_status: '',
+      job_alignment_category: '',
+      job_alignment_title: '',
+      job_alignment_suggested_program: '',
+      job_alignment_original_program: '',
+      self_employed: false,
+      high_position: false,
+      absorbed: false,
+      awards_recognition_current: '',
+      supporting_document_current: '',
+      supporting_document_awards_recognition: '',
+      unemployment_reason: '',
+      created_at: '',
+      updated_at: ''
     });
+    setIsEditingEmployment(false);
   };
 
   const validatePassword = (password: string): string => {
@@ -366,27 +511,15 @@ const Settings: React.FC = () => {
   ];
 
   const employmentStatusOptions = [
-    'Full-time',
-    'Part-time',
-    'Contract',
-    'Freelance',
-    'Intern',
-    'Unemployed',
-    'Self-employed'
+    'Full Time',
+    'Part Time',
+    'Unemployed'
   ];
 
   const sectorOptions = [
-    'Technology',
-    'Healthcare',
-    'Education',
-    'Finance',
-    'Manufacturing',
-    'Retail',
+    'Private',
     'Government',
-    'Non-profit',
-    'Construction',
-    'Transportation',
-    'Other'
+    'Unemployed'
   ];
 
   if (loading) {
@@ -427,7 +560,10 @@ const Settings: React.FC = () => {
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <Button
                   variant={activeSection === 'personal' ? 'contained' : 'text'}
-                  onClick={() => setActiveSection('personal')}
+                  onClick={() => {
+                    setActiveSection('personal');
+                    localStorage.setItem('settingsActiveSection', 'personal');
+                  }}
                   sx={{
                     justifyContent: 'flex-start',
                     textTransform: 'none',
@@ -444,7 +580,10 @@ const Settings: React.FC = () => {
                 
                 <Button
                   variant={activeSection === 'employment' ? 'contained' : 'text'}
-                  onClick={() => setActiveSection('employment')}
+                  onClick={() => {
+                    setActiveSection('employment');
+                    localStorage.setItem('settingsActiveSection', 'employment');
+                  }}
                   sx={{
                     justifyContent: 'flex-start',
                     textTransform: 'none',
@@ -461,7 +600,10 @@ const Settings: React.FC = () => {
                 
                 <Button
                   variant={activeSection === 'password' ? 'contained' : 'text'}
-                  onClick={() => setActiveSection('password')}
+                  onClick={() => {
+                    setActiveSection('password');
+                    localStorage.setItem('settingsActiveSection', 'password');
+                  }}
                   sx={{
                     justifyContent: 'flex-start',
                     textTransform: 'none',
@@ -638,7 +780,7 @@ const Settings: React.FC = () => {
                     <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
                       Employment Details
                     </Typography>
-                    {!isEditingEmployment && (
+                    {!isEditingEmployment && isEmployed !== null && (
                       <Button
                         variant="contained"
                         onClick={() => setIsEditingEmployment(true)}
@@ -655,14 +797,54 @@ const Settings: React.FC = () => {
                   </Box>
                   
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <TextField
-                      label="Name of Organization"
-                      value={employmentData.organization_name}
-                      onChange={(e) => handleEmploymentChange('organization_name', e.target.value)}
-                      variant="outlined"
-                      fullWidth
-                      disabled={!isEditingEmployment}
-                    />
+                    {/* Employment Status Check */}
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
+                        Are you still employed?
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 2 }}>
+                        <Button
+                          variant={isEmployed === true ? "contained" : "outlined"}
+                          onClick={() => setIsEmployed(true)}
+                          sx={{
+                            backgroundColor: isEmployed === true ? '#174f84' : 'transparent',
+                            borderColor: '#174f84',
+                            color: isEmployed === true ? 'white' : '#174f84',
+                            '&:hover': {
+                              backgroundColor: isEmployed === true ? '#0d3a5f' : '#f5f5f5'
+                            }
+                          }}
+                        >
+                          Yes, I am employed
+                        </Button>
+                        <Button
+                          variant={isEmployed === false ? "contained" : "outlined"}
+                          onClick={() => setIsEmployed(false)}
+                          sx={{
+                            backgroundColor: isEmployed === false ? '#174f84' : 'transparent',
+                            borderColor: '#174f84',
+                            color: isEmployed === false ? 'white' : '#174f84',
+                            '&:hover': {
+                              backgroundColor: isEmployed === false ? '#0d3a5f' : '#f5f5f5'
+                            }
+                          }}
+                        >
+                          No, I am unemployed
+                        </Button>
+                      </Box>
+                    </Box>
+
+                    {/* Employment Details Form - Only show after user answers the question */}
+                    {isEmployed !== null && (
+                      <>
+                        <TextField
+                          label="Name of Organization"
+                          value={employmentData.organization_name}
+                          onChange={(e) => handleEmploymentChange('organization_name', e.target.value)}
+                          variant="outlined"
+                          fullWidth
+                          disabled={!isEditingEmployment}
+                        />
                     
                     <Box sx={{ display: 'flex', gap: 2 }}>
                       <TextField
@@ -718,18 +900,39 @@ const Settings: React.FC = () => {
                       </FormControl>
                     </Box>
                     
-                    <TextField
-                      label="Company Address"
-                      value={employmentData.company_address}
-                      onChange={(e) => handleEmploymentChange('company_address', e.target.value)}
-                      variant="outlined"
-                      multiline
-                      rows={3}
-                      disabled={!isEditingEmployment}
-                    />
+                        <TextField
+                          label="Company Address"
+                          value={employmentData.company_address}
+                          onChange={(e) => handleEmploymentChange('company_address', e.target.value)}
+                          variant="outlined"
+                          multiline
+                          rows={3}
+                          disabled={!isEditingEmployment}
+                        />
+                      </>
+                    )}
+
+
+                    {/* Unemployed Status Display */}
+                    {isEmployed === false && (
+                      <Box sx={{ 
+                        p: 3, 
+                        backgroundColor: '#f5f5f5', 
+                        borderRadius: 2, 
+                        textAlign: 'center',
+                        border: '1px solid #e0e0e0'
+                      }}>
+                        <Typography variant="h6" sx={{ color: '#666', mb: 1 }}>
+                          Employment Status: Unemployed
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#888' }}>
+                          Your employment details have been cleared. You can update your status anytime.
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
                   
-                  {isEditingEmployment && (
+                  {isEmployed !== null && isEditingEmployment && (
                     <Box sx={{ display: 'flex', gap: 2, mt: 4, justifyContent: 'center' }}>
                       <Button
                         variant="contained"

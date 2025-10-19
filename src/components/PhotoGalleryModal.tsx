@@ -178,6 +178,8 @@ const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({
           src={
             typeof currentImage === 'string' && currentImage.startsWith('/media/')
               ? `http://127.0.0.1:8000${currentImage}`
+              : typeof currentImage === 'string' && !currentImage.startsWith('http')
+              ? `http://127.0.0.1:8000${currentImage}`
               : currentImage
           }
           alt={`${currentIndex + 1} of ${images.length}`}
@@ -255,6 +257,8 @@ const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({
               key={index}
               src={
                 typeof image === 'string' && image.startsWith('/media/')
+                  ? `http://127.0.0.1:8000${image}`
+                  : typeof image === 'string' && !image.startsWith('http')
                   ? `http://127.0.0.1:8000${image}`
                   : image
               }

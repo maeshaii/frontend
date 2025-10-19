@@ -312,6 +312,10 @@ const ForumPage: React.FC = () => {
                 repost_date: repost.repost_date,
                 repost_caption: repost.repost_caption,
                 user: repost.user,
+                likes: repost.likes || [],
+                likes_count: repost.likes_count || 0,
+                comments: repost.comments || [],
+                comments_count: repost.comments_count || 0,
                 original_post: {
                   post_id: post.post_id,
                   post_content: post.post_content,
@@ -349,8 +353,8 @@ const ForumPage: React.FC = () => {
       sortedFeed.forEach((item: any) => {
         if (item.item_type === 'repost') {
           // Handle repost items
-          liked[item.post_id] = item.likes?.some((like: any) => like.user_id === currentUserId) || false;
-          reposted[item.post_id] = false; // Reposts themselves can't be reposted
+          liked[item.repostData?.repost_id] = item.repostData?.likes?.some((like: any) => like.user_id === currentUserId) || false;
+          reposted[item.repostData?.repost_id] = false; // Reposts themselves can't be reposted
         } else {
           // Handle original post items
           const forum = forumsData.find((f: any) => f.post_id === item.post_id);
@@ -655,6 +659,10 @@ const ForumPage: React.FC = () => {
                                       repost_date: repost.repost_date,
                                       repost_caption: repost.repost_caption,
                                       user: repost.user,
+                                      likes: repost.likes || [],
+                                      likes_count: repost.likes_count || 0,
+                                      comments: repost.comments || [],
+                                      comments_count: repost.comments_count || 0,
                                       original_post: {
                                         post_id: post.post_id,
                                         post_content: post.post_content,
@@ -795,6 +803,10 @@ const ForumPage: React.FC = () => {
                                     repost_date: repost.repost_date,
                                     repost_caption: repost.repost_caption,
                                     user: repost.user,
+                                    likes: repost.likes || [],
+                                    likes_count: repost.likes_count || 0,
+                                    comments: repost.comments || [],
+                                    comments_count: repost.comments_count || 0,
                                     original_post: {
                                       post_id: post.post_id,
                                       post_content: post.post_content,

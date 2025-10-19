@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { fetchNotifications, deleteNotifications, markNotificationAsRead, api, getPostFromComment } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
+import { getProfilePicUrl, handleProfilePicError } from '../../utils/profilePicUtils';
+import ctulogo from '../../images/ctulogo.png';
 
 function formatHybrid(iso?: string | null): string {
   if (!iso) return 'Unknown time';
@@ -37,7 +39,132 @@ const NotificationPage: React.FC = () => {
   const [openNotif, setOpenNotif] = useState<any | null>(null);
   const [postLoading, setPostLoading] = useState(false);
   const [userProfilePics, setUserProfilePics] = useState<{[key: string]: string}>({});
+  const [profilePicUpdateTrigger, setProfilePicUpdateTrigger] = useState(0);
+  const [loadingProfilePics, setLoadingProfilePics] = useState<Set<string>>(new Set());
+  const [lastApiCall, setLastApiCall] = useState<number>(0);
+  const loadedProfilePics = React.useRef<Set<string>>(new Set());
   const navigate = useNavigate();
+
+  // Debug profile picture updates
+  React.useEffect(() => {
+    console.log('Profile pictures updated:', userProfilePics);
+  }, [userProfilePics]);
+
+  // Load profile pictures for notifications
+  React.useEffect(() => {
+    const loadProfilePics = async () => {
+      console.log('🔍 Loading profile pics for notifications:', notifications.length);
+      
+      for (const notif of notifications) {
+        // Extract user info from ALL notification types
+        let userId = null;
+        let userName = null;
+        
+        console.log('🔍 Processing notification for profile pic loading:', notif.type, notif.content);
+        
+        // Method 1: Look for ACTOR_ID in the notification content (most reliable)
+        const actorIdMatch = notif.content.match(/<!--ACTOR_ID:(\d+)-->/);
+        if (actorIdMatch) {
+          userId = actorIdMatch[1];
+          console.log('🔍 Found ACTOR_ID for profile pic loading:', userId);
+        }
+        
+        // Method 2: For follow notifications: "Name|user_id started following you."
+        if (!userId && notif.type?.toLowerCase() === 'follow') {
+          const match = notif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
+          if (match) {
+            userName = match[1];
+            userId = match[2];
+            console.log('🔍 Follow notification for profile pic loading:', { userName, userId });
+          }
+        }
+        
+        // Method 3: Extract user name from the beginning of the content for all types
+        if (!userName) {
+          const patterns = [
+            /^([^<]+?)\s+(commented|mentioned|liked|reposted|started following)/i,
+            /^([^<]+?)\s+(commented on|mentioned you in|liked your|reposted your)/i,
+            /^([^<]+?)\s+(donation|post)/i
+          ];
+          
+          for (const pattern of patterns) {
+            const nameMatch = notif.content.match(pattern);
+            if (nameMatch) {
+              userName = nameMatch[1].trim();
+              console.log('🔍 Extracted user name for profile pic loading:', userName);
+              break;
+            }
+          }
+        }
+        
+        // Method 4: If we have userName but no userId, try to find userId from the content
+        if (userName && !userId) {
+          const idMatch = notif.content.match(/(\d+)/);
+          if (idMatch) {
+            userId = idMatch[1];
+            console.log('🔍 Found potential userId for profile pic loading:', userId);
+          }
+        }
+        
+        console.log('🔍 Processing notification for profile pic:', { userId, userName, type: notif.type });
+        
+        if (userId && !loadedProfilePics.current.has(userId)) {
+          console.log('🔍 Loading profile pic for userId:', userId);
+          loadedProfilePics.current.add(userId);
+          await fetchUserProfilePic(userId);
+        } else if (userName && !userId && !loadedProfilePics.current.has(userName)) {
+          console.log('🔍 Loading profile pic for userName:', userName);
+          loadedProfilePics.current.add(userName);
+          const userData = await searchUserByName(userName);
+          if (userData && userData.profile_pic) {
+            const profilePicUrl = getProfilePicUrl(userData.profile_pic, ctulogo);
+            setUserProfilePics(prev => ({ ...prev, [userData.user_id]: profilePicUrl }));
+          }
+        }
+      }
+    };
+
+    if (notifications.length > 0) {
+      loadProfilePics();
+    }
+  }, [notifications]);
+
+  // Cleanup old cache entries on component mount
+  React.useEffect(() => {
+    const cleanupCache = () => {
+      const now = Date.now();
+      const keysToRemove: string[] = [];
+      
+      // Clean up old cache entries
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && (key.startsWith('profile_pic_') || key.startsWith('search_') || key.startsWith('searching_'))) {
+          try {
+            const value = sessionStorage.getItem(key);
+            if (value) {
+              const data = JSON.parse(value);
+              // If it's a timestamp-based cache, check if expired
+              if (data && data.timestamp && now - data.timestamp > 300000) { // 5 minutes
+                keysToRemove.push(key);
+              }
+            }
+          } catch (e) {
+            // Remove corrupted entries
+            keysToRemove.push(key);
+          }
+        }
+      }
+      
+      keysToRemove.forEach(key => sessionStorage.removeItem(key));
+    };
+
+    cleanupCache();
+    
+    // Set up periodic cleanup every 5 minutes
+    const cleanupInterval = setInterval(cleanupCache, 300000);
+    
+    return () => clearInterval(cleanupInterval);
+  }, []);
 
   // Add CSS for animations and styling
   React.useEffect(() => {
@@ -295,22 +422,47 @@ const NotificationPage: React.FC = () => {
           // If we have a REPOST_ID, store it for repost modal and use the original post ID for URL
           if (repostId) {
             console.log('Found REPOST_ID, storing for repost modal:', repostId);
+            // Clear any existing pending views
+            localStorage.removeItem('pendingPostView');
             localStorage.setItem('pendingRepostView', repostId);
             
             // Use original post ID for URL if available, otherwise use repost ID
             const urlPostId = originalPostId || repostId;
             console.log('Using post ID for URL:', urlPostId);
             
-            // Redirect to dashboard with the correct post ID in URL
-            const currentPath = window.location.pathname;
-            if (currentPath.startsWith('/peso')) {
-              window.location.href = `/peso/dashboard/${urlPostId}`;
-            } else if (currentPath.startsWith('/ccict')) {
-              window.location.href = `/ccict/dashboard/${urlPostId}`;
+            // Validate post ID before redirecting
+            if (urlPostId && !isNaN(parseInt(urlPostId))) {
+              // Add a small delay to ensure proper navigation
+              setTimeout(() => {
+                // Redirect to dashboard with the correct post ID in URL
+                const currentPath = window.location.pathname;
+                if (currentPath.startsWith('/peso')) {
+                  navigate(`/peso/dashboard/${urlPostId}`);
+                } else if (currentPath.startsWith('/ccict')) {
+                  navigate(`/ccict/dashboard/${urlPostId}`);
+                } else {
+                  navigate(`/alumni/dashboard/${urlPostId}`);
+                }
+              }, 100);
+              return;
             } else {
-              window.location.href = `/alumni/dashboard/${urlPostId}`;
+              console.log('Invalid post ID, redirecting to main dashboard');
+              // Fallback to main dashboard
+              const userStr = localStorage.getItem('user');
+              const user = userStr ? JSON.parse(userStr) : null;
+              const userId = user?.user_id || user?.id;
+              if (userId) {
+                const currentPath = window.location.pathname;
+                if (currentPath.startsWith('/peso')) {
+                  window.location.href = `/peso/dashboard/${userId}`;
+                } else if (currentPath.startsWith('/ccict')) {
+                  window.location.href = `/ccict/dashboard/${userId}`;
+                } else {
+                  window.location.href = `/alumni/dashboard/${userId}`;
+                }
+                return;
+              }
             }
-            return;
           }
           
           // For mention notifications, prioritize original post IDs over comment/reply IDs
@@ -371,30 +523,57 @@ const NotificationPage: React.FC = () => {
           let postId = originalPostId || commentId || replyId;
           console.log(`${notificationType} notification - redirecting to dashboard for post:`, postId);
           
-          // Store the appropriate pending view based on notification type
-          if (notificationType.includes('repost')) {
-            localStorage.setItem('pendingRepostView', postId);
-          } else if (commentIdMatch && !originalPostId) {
-            // For comment notifications without original post ID, use comment ID
-            localStorage.setItem('pendingPostView', `comment:${postId}`);
-          } else if (forumIdMatch) {
-            localStorage.setItem('pendingPostView', `forum:${postId}`);
-          } else if (donationIdMatch) {
-            localStorage.setItem('pendingPostView', `donation:${postId}`);
+          // Validate post ID before redirecting
+          if (postId && !isNaN(parseInt(postId))) {
+            // Clear any existing pending views first
+            localStorage.removeItem('pendingPostView');
+            localStorage.removeItem('pendingRepostView');
+            
+            // Store the appropriate pending view based on notification type
+            if (notificationType.includes('repost')) {
+              localStorage.setItem('pendingRepostView', postId);
+            } else if (commentIdMatch && !originalPostId) {
+              // For comment notifications without original post ID, use comment ID
+              localStorage.setItem('pendingPostView', `comment:${postId}`);
+            } else if (forumIdMatch) {
+              localStorage.setItem('pendingPostView', `forum:${postId}`);
+            } else if (donationIdMatch) {
+              localStorage.setItem('pendingPostView', `donation:${postId}`);
+            } else {
+              localStorage.setItem('pendingPostView', postId);
+            }
+            
+            // Add a small delay to ensure proper navigation
+            setTimeout(() => {
+              // Redirect to dashboard with post ID in URL
+              const currentPath = window.location.pathname;
+              if (currentPath.startsWith('/peso')) {
+                navigate(`/peso/dashboard/${postId}`);
+              } else if (currentPath.startsWith('/ccict')) {
+                navigate(`/ccict/dashboard/${postId}`);
+              } else {
+                navigate(`/alumni/dashboard/${postId}`);
+              }
+            }, 100);
+            return;
           } else {
-            localStorage.setItem('pendingPostView', postId);
+            console.log('Invalid post ID, redirecting to main dashboard');
+            // Fallback to main dashboard
+            const userStr = localStorage.getItem('user');
+            const user = userStr ? JSON.parse(userStr) : null;
+            const userId = user?.user_id || user?.id;
+            if (userId) {
+              const currentPath = window.location.pathname;
+              if (currentPath.startsWith('/peso')) {
+                window.location.href = `/peso/dashboard/${userId}`;
+              } else if (currentPath.startsWith('/ccict')) {
+                window.location.href = `/ccict/dashboard/${userId}`;
+              } else {
+                window.location.href = `/alumni/dashboard/${userId}`;
+              }
+              return;
+            }
           }
-          
-          // Redirect to dashboard with post ID in URL
-          const currentPath = window.location.pathname;
-          if (currentPath.startsWith('/peso')) {
-            window.location.href = `/peso/dashboard/${postId}`;
-          } else if (currentPath.startsWith('/ccict')) {
-            window.location.href = `/ccict/dashboard/${postId}`;
-          } else {
-            window.location.href = `/alumni/dashboard/${postId}`;
-          }
-          return;
         }
       }
       
@@ -447,42 +626,175 @@ const NotificationPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Error handling notification redirect:', error);
-      alert('Unable to redirect to the post. Please try again.');
+      // Instead of showing an alert, redirect to the main dashboard
+      const userStr = localStorage.getItem('user');
+      const user = userStr ? JSON.parse(userStr) : null;
+      const userId = user?.user_id || user?.id;
+      
+      if (userId) {
+        const isAdmin = !!(user && user.account_type && user.account_type.admin);
+        const isPeso = !!(user && user.account_type && user.account_type.peso);
+        const userRole = user?.role || user?.user_type;
+        let dashboardPath = '';
+        
+        if (isAdmin) {
+          dashboardPath = `/ccict/dashboard/${userId}`;
+        } else if (isPeso) {
+          dashboardPath = `/peso/dashboard/${userId}`;
+        } else if (userRole === 'ojt' || userRole === 'coordinator') {
+          dashboardPath = `/ojt/dashboard/${userId}`;
+        } else {
+          dashboardPath = `/alumni/dashboard/${userId}`;
+        }
+        
+        console.log('Redirecting to main dashboard due to error:', dashboardPath);
+        navigate(dashboardPath);
+      } else {
+        alert('Unable to redirect. Please try refreshing the page.');
+      }
     }
   };
 
   const fetchUserProfilePic = async (userId: string) => {
+    // Check if we already have this profile pic cached
+    if (userProfilePics[userId]) {
+      return userProfilePics[userId];
+    }
+
+    // Check if we're already loading this profile pic
+    if (loadingProfilePics.has(userId)) {
+      console.log('Profile pic already loading for user', userId);
+      return null;
+    }
+
+    // Check session storage cache
+    const cacheKey = `profile_pic_${userId}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const cachedData = JSON.parse(cached);
+        console.log('Using cached profile pic for user', userId);
+        setUserProfilePics(prev => ({ ...prev, [userId]: cachedData }));
+        return cachedData;
+      } catch (e) {
+        // If cache is corrupted, remove it
+        sessionStorage.removeItem(cacheKey);
+      }
+    }
+
+    // Rate limiting: prevent too many API calls in a short period
+    const now = Date.now();
+    if (now - lastApiCall < 1000) { // Wait at least 1 second between API calls
+      console.log('Rate limiting: waiting before API call for user', userId);
+      return null; // Don't make the call, just return null
+    }
+    setLastApiCall(now);
+
+    // Mark as loading
+    setLoadingProfilePics(prev => new Set(prev).add(userId));
+
     try {
-      const response = await api.get(`users/${userId}/`);
+      const response = await api.get(`alumni/profile/${userId}/`);
+      console.log('🔍 Profile API response for user', userId, ':', response.data);
       if (response.data && response.data.profile_pic) {
         const profilePic = response.data.profile_pic;
         const profilePicUrl = profilePic.startsWith('http') ? profilePic : `http://127.0.0.1:8000${profilePic}`;
-        setUserProfilePics(prev => ({ ...prev, [userId]: profilePicUrl }));
+        console.log('🔍 Setting profile pic URL:', profilePicUrl);
+        setUserProfilePics(prev => {
+          const newPics = { ...prev, [userId]: profilePicUrl };
+          console.log('🔍 Updated userProfilePics:', newPics);
+          return newPics;
+        });
+        setProfilePicUpdateTrigger(prev => prev + 1);
+        
+        // Cache the result for 10 minutes
+        sessionStorage.setItem(cacheKey, JSON.stringify(profilePicUrl));
         return profilePicUrl;
+      } else {
+        console.log('🔍 No profile picture found in API response for user', userId);
+        // Cache null result for 5 minutes to prevent repeated failed requests
+        sessionStorage.setItem(cacheKey, JSON.stringify(null));
+        setTimeout(() => sessionStorage.removeItem(cacheKey), 300000);
       }
     } catch (error) {
-      console.error('Error fetching user profile pic:', error);
+      console.error('🔍 Error fetching user profile pic:', error);
+      // Cache null result for 2 minutes to prevent repeated failed requests
+      sessionStorage.setItem(cacheKey, JSON.stringify(null));
+      setTimeout(() => sessionStorage.removeItem(cacheKey), 120000);
+    } finally {
+      // Remove from loading set
+      setLoadingProfilePics(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(userId);
+        return newSet;
+      });
     }
     return null;
   };
 
   const searchUserByName = async (userName: string) => {
+    // Add caching to prevent repeated API calls
+    const cacheKey = `search_${userName}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const cachedData = JSON.parse(cached);
+        console.log('Using cached search result for', userName);
+        return cachedData;
+      } catch (e) {
+        // If cache is corrupted, remove it
+        sessionStorage.removeItem(cacheKey);
+      }
+    }
+
+    // Check if we're already searching for this user
+    const searchKey = `searching_${userName}`;
+    if (sessionStorage.getItem(searchKey)) {
+      console.log('Search already in progress for', userName);
+      return null;
+    }
+
+    // Rate limiting: prevent too many API calls in a short period
+    const now = Date.now();
+    if (now - lastApiCall < 1000) { // Wait at least 1 second between API calls
+      console.log('Rate limiting: waiting before search for', userName);
+      return null; // Don't make the call, just return null
+    }
+    setLastApiCall(now);
+
+    // Mark as searching
+    sessionStorage.setItem(searchKey, 'true');
+
     try {
-      const response = await api.get(`alumni/search/?query=${encodeURIComponent(userName)}`);
-      if (response.data && response.data.alumni && response.data.alumni.length > 0) {
+      const response = await api.get(`alumni/search/?q=${encodeURIComponent(userName)}`);
+      console.log('Search response for', userName, ':', response.data);
+      
+      if (response.data && response.data.results && response.data.results.length > 0) {
         // Find exact match or first close match
-        const exactMatch = response.data.alumni.find((user: any) => 
-          user.full_name === userName || 
-          `${user.f_name} ${user.m_name || ''} ${user.l_name}`.trim() === userName
+        const exactMatch = response.data.results.find((user: any) => 
+          user.name === userName || 
+          user.full_name === userName ||
+          `${user.f_name || ''} ${user.m_name || ''} ${user.l_name || ''}`.trim() === userName
         );
-        const user = exactMatch || response.data.alumni[0];
-        return {
-          user_id: user.user_id,
+        const user = exactMatch || response.data.results[0];
+        console.log('Found user:', user);
+        const result = {
+          user_id: user.user_id || user.id,
           profile_pic: user.profile_pic
         };
+        
+        // Cache the result for 5 minutes
+        sessionStorage.setItem(cacheKey, JSON.stringify(result));
+        return result;
       }
     } catch (error) {
       console.error('Error searching user by name:', error);
+      // Cache null result for 1 minute to prevent repeated failed requests
+      sessionStorage.setItem(cacheKey, JSON.stringify(null));
+      setTimeout(() => sessionStorage.removeItem(cacheKey), 60000);
+    } finally {
+      // Remove searching flag
+      sessionStorage.removeItem(searchKey);
     }
     return null;
   };
@@ -1001,7 +1313,7 @@ const NotificationPage: React.FC = () => {
               
               return (
                 <div
-                    key={notif.id}
+                    key={`${notif.id}-${profilePicUpdateTrigger}`}
                     style={{
                     background: 'white',
                     borderRadius: '8px',
@@ -1095,134 +1407,119 @@ const NotificationPage: React.FC = () => {
                       // Try to extract user info from notification content
                       let userId = '';
                       let userName = '';
+                      let userProfilePic = '';
                       
                       console.log('Processing notification:', notif.type, notif.content);
                       
-                      // For follow notifications: "Name|user_id started following you."
-                      if (notif.type.toLowerCase() === 'follow') {
+                      // Extract user info from ALL notification types
+                      console.log('🔍 Processing notification type:', notif.type, 'content:', notif.content);
+                      
+                      // Method 1: Look for ACTOR_ID in the notification content (most reliable)
+                      const actorIdMatch = notif.content.match(/<!--ACTOR_ID:(\d+)-->/);
+                      if (actorIdMatch) {
+                        userId = actorIdMatch[1];
+                        console.log('🔍 Found ACTOR_ID in notification:', userId);
+                      }
+                      
+                      // Method 2: For follow notifications: "Name|user_id started following you."
+                      if (!userId && notif.type?.toLowerCase() === 'follow') {
                         const match = notif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
                         if (match) {
                           userName = match[1];
                           userId = match[2];
-                          console.log('Follow notification - extracted:', { userName, userId });
+                          console.log('🔍 Follow notification - extracted:', { userName, userId });
                         }
                       }
-                      // For other notifications, try to extract from content
-                      else {
-                        // Look for patterns like "User Name commented on..." or "User Name mentioned you..."
-                        const nameMatch = notif.content.match(/^([^<]+?)\s+(commented|mentioned|liked|reposted)/i);
-                        if (nameMatch) {
-                          userName = nameMatch[1].trim();
-                          console.log('Other notification - extracted user name:', userName);
+                      
+                      // Method 3: Extract user name from the beginning of the content for all types
+                      if (!userName) {
+                        // Try different patterns for different notification types
+                        const patterns = [
+                          /^([^<]+?)\s+(commented|mentioned|liked|reposted|started following)/i,
+                          /^([^<]+?)\s+(commented on|mentioned you in|liked your|reposted your)/i,
+                          /^([^<]+?)\s+(donation|post)/i
+                        ];
+                        
+                        for (const pattern of patterns) {
+                          const nameMatch = notif.content.match(pattern);
+                          if (nameMatch) {
+                            userName = nameMatch[1].trim();
+                            console.log('🔍 Extracted user name with pattern:', userName);
+                            break;
+                          }
+                        }
+                      }
+                      
+                      // Method 4: If we have userName but no userId, try to find userId from the content
+                      if (userName && !userId) {
+                        // Look for any numeric ID in the content
+                        const idMatch = notif.content.match(/(\d+)/);
+                        if (idMatch) {
+                          userId = idMatch[1];
+                          console.log('🔍 Found potential userId from content:', userId);
                         }
                       }
                       
                       console.log('Final extracted data:', { userId, userName });
                       
-                      // Show profile picture or fallback
-                      if (userId && userName) {
-                        // For users with ID, try to get profile pic from cache or show initial
-                        const cachedPic = userProfilePics[userId];
-                        if (cachedPic) {
-                          return (
-                            <img
-                              src={cachedPic}
-                              alt={userName}
-                              style={{
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'cover',
-                                borderRadius: '50%'
-                              }}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = 'none';
-                                const parent = target.parentElement;
-                                if (parent) {
-                                  parent.innerHTML = `
-                                    <div style="
-                                      width: 100%;
-                                      height: 100%;
-                                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                      display: flex;
-                                      align-items: center;
-                                      justify-content: center;
-                                      color: white;
-                                      font-size: 18px;
-                                      font-weight: 600;
-                                      border-radius: 50%;
-                                    ">
-                                      ${userName.charAt(0).toUpperCase()}
-                                    </div>
-                                  `;
-                                }
-                              }}
-                            />
-                          );
-                        } else {
-                          // Fetch profile pic in background
-                          fetchUserProfilePic(userId);
-                          return (
-                            <div style={{
+                      // Check if we have cached profile pic for this user
+                      const cachedPic = userProfilePics[userId];
+                      console.log('🔍 Checking cached profile pic for userId:', userId, 'cached:', !!cachedPic);
+                      
+                      if (cachedPic) {
+                        console.log('🔍 Using cached profile pic for userId:', userId);
+                        return (
+                          <img
+                            src={cachedPic}
+                            alt={userName || 'User'}
+                            style={{
                               width: '100%',
                               height: '100%',
-                              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: 'white',
-                              fontSize: '16px',
-                              fontWeight: '600'
-                            }}>
-                              {userName.charAt(0).toUpperCase()}
-                            </div>
-                          );
-                        }
-                      } else if (userName) {
-                        // For users without ID, search by name and show initial
-                        // Trigger background search for profile picture
-                        searchUserByName(userName).then(userData => {
-                          if (userData && userData.profile_pic) {
-                            const profilePicUrl = userData.profile_pic.startsWith('http') 
-                              ? userData.profile_pic 
-                              : `http://127.0.0.1:8000${userData.profile_pic}`;
-                            // Store in cache for future use
-                            setUserProfilePics(prev => ({ ...prev, [userData.user_id]: profilePicUrl }));
-                          }
-                        }).catch(error => {
-                          console.error('Error searching user by name:', error);
-                        });
-                        
-                        return (
-                          <div style={{
-                            width: '100%',
-                            height: '100%',
-                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'white',
-                            fontSize: '16px',
-                            fontWeight: '600'
-                          }}>
-                            {userName.charAt(0).toUpperCase()}
-                          </div>
-                        );
-                      } else {
-                        // Fallback to emoji based on notification type
-                        return (
-                          <div style={{
-                            fontSize: '20px',
-                            color: '#6c757d'
-                          }}>
-                            {notif.type.toLowerCase().includes('comment') ? '💬' : 
-                             notif.type.toLowerCase().includes('like') ? '❤️' : 
-                             notif.type.toLowerCase().includes('repost') ? '🔄' : 
-                             notif.type.toLowerCase().includes('mention') ? '✨' : 
-                             notif.type.toLowerCase().includes('follow') ? '👥' : '📢'}
-                          </div>
+                              objectFit: 'cover',
+                              borderRadius: '50%'
+                            }}
+                            onError={(e) => {
+                              console.log('🔍 Profile pic failed to load, using fallback');
+                              handleProfilePicError(e, ctulogo);
+                            }}
+                          />
                         );
                       }
+                      
+                      // If we have userId but no cached pic, trigger loading
+                      if (userId && !loadedProfilePics.current.has(userId)) {
+                        console.log('🔍 Triggering profile pic load for userId:', userId);
+                        loadedProfilePics.current.add(userId);
+                        fetchUserProfilePic(userId);
+                      }
+                      
+                      // If we have userName but no userId, try to search for the user
+                      if (userName && !userId && !loadedProfilePics.current.has(userName)) {
+                        console.log('🔍 Searching for user by name:', userName);
+                        loadedProfilePics.current.add(userName);
+                        searchUserByName(userName).then(userData => {
+                          if (userData && userData.profile_pic) {
+                            const profilePicUrl = getProfilePicUrl(userData.profile_pic, ctulogo);
+                            setUserProfilePics(prev => ({ ...prev, [userData.user_id]: profilePicUrl }));
+                          }
+                        });
+                      }
+                      
+                      // Show CTU logo as fallback while loading
+                      console.log('🔍 Showing fallback CTU logo for userId:', userId, 'userName:', userName);
+                      return (
+                        <img
+                          src={ctulogo}
+                          alt={userName || 'User'}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            borderRadius: '50%'
+                          }}
+                          onError={(e) => handleProfilePicError(e, ctulogo)}
+                        />
+                      );
                     })()}
                   </div>
                   
@@ -1652,3 +1949,4 @@ const NotificationPage: React.FC = () => {
 };
 
 export default NotificationPage;
+

@@ -833,7 +833,13 @@ export const createDonationRequest = async (donationData: {
 }) => {
   console.log('Creating donation request with data:', donationData);
   console.log('API base URL:', API_BASE);
+  console.log('Access token present:', !!localStorage.getItem('accessToken'));
+  
   try {
+    // Use absolute URL to avoid any parameter issues
+    const fullUrl = `${API_BASE}donations/`;
+    console.log('Full URL being used:', fullUrl);
+    
     const response = await api.post('donations/', donationData);
     console.log('Donation request response:', response);
     console.log('Response data:', response.data);
@@ -843,6 +849,10 @@ export const createDonationRequest = async (donationData: {
     console.error('Donation request API error:', error);
     console.error('Error response:', error.response);
     console.error('Error response data:', error.response?.data);
+    console.error('Error response status:', error.response?.status);
+    console.error('Error response headers:', error.response?.headers);
+    console.error('Request URL:', error.config?.url);
+    console.error('Request base URL:', error.config?.baseURL);
     throw error;
   }
 };

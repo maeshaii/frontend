@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions } from '../services/api';
+import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost } from '../services/api';
 import { 
   commentOnForumPost, 
   deleteForumComment, 
@@ -484,7 +484,7 @@ const PostCard: React.FC<PostCardProps> = ({
 
   const handleLike = async () => {
     if (!setLikedPosts) return;
-    console.log('handleLike called for post:', post.post_id, 'isForum:', isForum, 'isDonation:', isDonation);
+    console.log('handleLike called for post:', post.post_id, 'isForum:', isForum, 'isDonation:', isDonation, 'isRepostPost:', isRepostPost);
     try {
       if (isRepostPost) {
         // Use unified like API with repost_id for ALL reposts (donation, forum, and regular post reposts)
@@ -495,7 +495,8 @@ const PostCard: React.FC<PostCardProps> = ({
           currentLikedPosts: likedPosts,
           willSetTo: true
         });
-        await api.post(`reposts/${repostId}/like/`);
+        
+        // Optimistic update first (like mobile behavior)
         setLikedPosts(prev => {
           const newState = { ...prev, [repostId]: true };
           console.log('🔍 DEBUG: Updated likedPosts state:', newState);
@@ -505,6 +506,9 @@ const PostCard: React.FC<PostCardProps> = ({
         // Immediately update local state for repost likes
         post.likes_count = (post.likes_count || 0) + 1;
         post.liked_by_user = true;
+        
+        // Then make API call
+        await likeRepost(repostId);
       } else if (isForum) {
         // Use forum like API
         console.log('Liking forum post:', post.post_id);
@@ -526,6 +530,20 @@ const PostCard: React.FC<PostCardProps> = ({
       onPostUpdate?.();
     } catch (error) {
       console.error('Error liking post:', error);
+      
+      // Rollback optimistic update for reposts (like mobile behavior)
+      if (isRepostPost) {
+        const repostId = repostData?.repost_id;
+        setLikedPosts(prev => {
+          const newState = { ...prev, [repostId]: false };
+          console.log('🔍 DEBUG: Rolled back likedPosts state:', newState);
+          return newState;
+        });
+        
+        // Rollback local state
+        post.likes_count = Math.max((post.likes_count || 0) - 1, 0);
+        post.liked_by_user = false;
+      }
     }
   };
 
@@ -537,12 +555,16 @@ const PostCard: React.FC<PostCardProps> = ({
         // Use unified unlike API with repost_id for ALL reposts (donation, forum, and regular post reposts)
         const repostId = repostData?.repost_id;
         console.log('Unliking repost:', repostId, 'isDonation:', isDonation);
-        await api.delete(`reposts/${repostId}/like/`);
+        
+        // Optimistic update first (like mobile behavior)
         setLikedPosts(prev => ({ ...prev, [repostId]: false }));
         
         // Immediately update local state for repost likes
         post.likes_count = Math.max((post.likes_count || 0) - 1, 0);
         post.liked_by_user = false;
+        
+        // Then make API call
+        await unlikeRepost(repostId);
       } else if (isForum) {
         // Use forum unlike API
         console.log('Unliking forum post:', post.post_id);
@@ -564,6 +586,20 @@ const PostCard: React.FC<PostCardProps> = ({
       onPostUpdate?.();
     } catch (error) {
       console.error('Error unliking post:', error);
+      
+      // Rollback optimistic update for reposts (like mobile behavior)
+      if (isRepostPost) {
+        const repostId = repostData?.repost_id;
+        setLikedPosts(prev => {
+          const newState = { ...prev, [repostId]: true };
+          console.log('🔍 DEBUG: Rolled back unlikedPosts state:', newState);
+          return newState;
+        });
+        
+        // Rollback local state
+        post.likes_count = (post.likes_count || 0) + 1;
+        post.liked_by_user = true;
+      }
     }
   };
 
@@ -1375,6 +1411,8 @@ const PostCard: React.FC<PostCardProps> = ({
                         src={
                           typeof originalImages[0] === 'string' && originalImages[0].startsWith('/media/')
                             ? `http://127.0.0.1:8000${originalImages[0]}`
+                            : typeof originalImages[0] === 'string' && !originalImages[0].startsWith('http')
+                            ? `http://127.0.0.1:8000${originalImages[0]}`
                             : originalImages[0]
                         }
                         alt="original post"
@@ -1528,11 +1566,11 @@ const PostCard: React.FC<PostCardProps> = ({
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 {/* Likes text */}
-                {post.likes && post.likes.length > 0 ? (
+                {repostData.likes && repostData.likes.length > 0 ? (
                   <span
                     onClick={() => {
-                      console.log('Like summary clicked, setting showLikesModal to true');
-                      setShowLikesModal(true);
+                      console.log('Repost like summary clicked, setting showRepostLikesModal to true');
+                      setShowRepostLikesModal(true);
                     }}
                     style={{ 
                       fontSize: '12px',
@@ -1550,11 +1588,11 @@ const PostCard: React.FC<PostCardProps> = ({
                       e.currentTarget.style.backgroundColor = 'transparent';
                     }}
                   >👍
-                    {post.likes.length === 1 
-                      ? `${(post.likes[0] as any).user?.f_name || post.likes[0].f_name || ''} ${(post.likes[0] as any).user?.m_name || (post.likes[0] as any).m_name || ''} ${(post.likes[0] as any).user?.l_name || post.likes[0].l_name || ''}`.trim() + ' liked this'
-                      : post.likes.length === 2
-                      ? `${(post.likes[0] as any).user?.f_name || post.likes[0].f_name || ''} ${(post.likes[0] as any).user?.m_name || (post.likes[0] as any).m_name || ''} ${(post.likes[0] as any).user?.l_name || post.likes[0].l_name || ''}`.trim() + ` and ${(post.likes[1] as any).user?.f_name || post.likes[1].f_name || ''} ${(post.likes[1] as any).user?.m_name || (post.likes[1] as any).m_name || ''} ${(post.likes[1] as any).user?.l_name || post.likes[1].l_name || ''}`.trim() + ' liked this'
-                      : `${(post.likes[0] as any).user?.f_name || post.likes[0].f_name || ''} ${(post.likes[0] as any).user?.m_name || (post.likes[0] as any).m_name || ''} ${(post.likes[0] as any).user?.l_name || post.likes[0].l_name || ''}`.trim() + ` and ${post.likes.length - 1} others liked this`
+                    {repostData.likes.length === 1 
+                      ? `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ' liked this'
+                      : repostData.likes.length === 2
+                      ? `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ` and ${repostData.likes[1].f_name || ''} ${repostData.likes[1].l_name || ''}`.trim() + ' liked this'
+                      : `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ` and ${repostData.likes.length - 1} others liked this`
                     }
                   </span>
                 ) : (
@@ -1609,7 +1647,11 @@ const PostCard: React.FC<PostCardProps> = ({
                     buttonColor: likedPosts[repostId] ? '#ef4444' : '#6c757d',
                     textColor: likedPosts[repostId] ? '#ef4444' : '#6c757d'
                   });
-                  likedPosts[repostId] ? handleUnlike() : handleLike();
+                  if (likedPosts[repostId]) {
+                    handleUnlike();
+                  } else {
+                    handleLike();
+                  }
                 }}
                 className="post-action-item"
                 style={{
@@ -1640,10 +1682,14 @@ const PostCard: React.FC<PostCardProps> = ({
                 }}>
                   {likedPosts[repostData?.repost_id] ? '👍' : '👍'}
                 </span>
-                <span style={{
-                  color: likedPosts[repostData?.repost_id] ? '#ef4444' : '#6c757d',
-                  fontWeight: likedPosts[repostData?.repost_id] ? '600' : '400'
-                }}>
+                <span 
+                  onClick={() => setShowRepostLikesModal(true)}
+                  style={{
+                    color: likedPosts[repostData?.repost_id] ? '#ef4444' : '#6c757d',
+                    fontWeight: likedPosts[repostData?.repost_id] ? '600' : '400',
+                    cursor: 'pointer'
+                  }}
+                >
                   {post.likes_count === 1 ? '1 like' : (post.likes_count && post.likes_count > 1) ? `${post.likes_count} likes` : 'Like'}
                 </span>
               </button>
@@ -1673,31 +1719,32 @@ const PostCard: React.FC<PostCardProps> = ({
                 <span style={{ fontSize: '14px' }}>💬</span>
                 Comment
               </button>
+              {/* Show RepostButton for all posts including reposts */}
               <RepostButton
-                originalPost={{
-                  post_id: post.post_id,
-                  post_content: post.post_content,
-                  post_image: post.post_image,
-                  post_images: post.post_images,
-                  user: {
-                    user_id: post.user?.user_id || 0,
-                    f_name: post.user?.f_name || '',
-                    l_name: post.user?.l_name || '',
-                    profile_pic: post.user?.profile_pic
-                  },
-                  created_at: post.created_at || ''
-                }}
-                currentUser={{
-                  name: `${displayName}`,
-                  profile_pic: displayAvatar
-                }}
-                isReposted={repostedPosts[post.post_id] || false}
-                onRepost={onPostUpdate}
-                formatTime={formatTime}
-                isForum={isForum}
-                isDonation={isDonation}
-                className={`profile-repost-action-item ${repostedPosts[post.post_id] ? 'reposted' : ''}`}
-              />
+                  originalPost={{
+                    post_id: post.post_id,
+                    post_content: post.post_content,
+                    post_image: post.post_image,
+                    post_images: post.post_images,
+                    user: {
+                      user_id: post.user?.user_id || 0,
+                      f_name: post.user?.f_name || '',
+                      l_name: post.user?.l_name || '',
+                      profile_pic: post.user?.profile_pic
+                    },
+                    created_at: post.created_at || ''
+                  }}
+                  currentUser={{
+                    name: `${displayName}`,
+                    profile_pic: displayAvatar
+                  }}
+                  isReposted={repostedPosts[post.post_id] || false}
+                  onRepost={onPostUpdate}
+                  formatTime={formatTime}
+                  isForum={isForum}
+                  isDonation={isDonation}
+                  className={`profile-repost-action-item ${repostedPosts[post.post_id] ? 'reposted' : ''}`}
+                />
             </div>
 
             {/* Comment input for repost */}
@@ -1783,10 +1830,10 @@ const PostCard: React.FC<PostCardProps> = ({
               </div>
             )}
 
-            {/* Comments section for repost */}
-            {post.comments && post.comments.length > 0 && (
+            {/* Repost Comments Section */}
+            {repostData?.comments && repostData.comments.length > 0 && (
               <div className="comments-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
-                {(showAllComments[repostData?.repost_id || post.post_id] ? post.comments : post.comments.slice(0, 2)).map((comment) => {
+                {(showAllComments[repostData?.repost_id || post.post_id] ? repostData.comments : repostData.comments.slice(0, 2)).map((comment) => {
                   return (
                     <div key={comment.comment_id} className="comment-item" style={{ 
                       display: 'flex', 
@@ -1831,281 +1878,27 @@ const PostCard: React.FC<PostCardProps> = ({
                           >
                             {comment.user.f_name} {comment.user.m_name} {comment.user.l_name}
                           </button>
-                          {((Number(currentUserId) === Number(comment.user.user_id) && setEditingComment && setEditCommentContent) || isOwn) && !editingComment[comment.comment_id] && (
-                            <div style={{ position: 'relative' }} ref={(el) => { commentOptionsRefs.current[comment.comment_id] = el; }}>
-                              <button
-                                onClick={() => setShowCommentOptions(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  fontSize: '16px',
-                                  color: '#666',
-                                  padding: 0,
-                                  marginLeft: '8px',
-                                }}
-                              >
-                                ⋯
-                              </button>
-                              {showCommentOptions[comment.comment_id] && (
-                                <div
-                                  style={{
-                                    position: 'absolute',
-                                    right: 0,
-                                    top: '100%',
-                                    background: '#fff',
-                                    border: '1px solid #ddd',
-                                    borderRadius: '8px',
-                                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                                    zIndex: 1000,
-                                    width: '120px',
-                                  }}
-                                >
-                                  {(String(currentUserId) === String(comment.user.user_id) && setEditingComment) && (
-                                    <button
-                                      onClick={() => handleEditComment(comment.comment_id)}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        width: '100%',
-                                        padding: '8px 12px',
-                                        background: 'none',
-                                        border: 'none',
-                                        textAlign: 'left',
-                                        cursor: 'pointer',
-                                        fontSize: '14px',
-                                        gap: '8px',
-                                        borderRadius: '4px',
-                                        transition: 'all 0.2s ease',
-                                        color: '#374151'
-                                      }}
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.backgroundColor = '#f3f4f6';
-                                        e.currentTarget.style.color = '#1f2937';
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                        e.currentTarget.style.color = '#374151';
-                                      }}
-                                    >
-                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                                      </svg>
-                                      Edit
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={() => handleDeleteComment(comment.comment_id)}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      width: '100%',
-                                      padding: '8px 12px',
-                                      background: 'none',
-                                      border: 'none',
-                                      textAlign: 'left',
-                                      cursor: 'pointer',
-                                      fontSize: '14px',
-                                      color: '#dc2626',
-                                      gap: '8px',
-                                      borderRadius: '4px',
-                                      transition: 'all 0.2s ease'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.backgroundColor = '#fef2f2';
-                                      e.currentTarget.style.color = '#b91c1c';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.backgroundColor = 'transparent';
-                                      e.currentTarget.style.color = '#dc2626';
-                                    }}
-                                  >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <polyline points="3,6 5,6 21,6"/>
-                                      <path d="M19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
-                                      <line x1="10" y1="11" x2="10" y2="17"/>
-                                      <line x1="14" y1="11" x2="14" y2="17"/>
-                                    </svg>
-                                    Delete
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
+                          <div style={{ fontSize: '10px', color: '#666' }}>
+                            {formatTime(comment.date_created)}
+                          </div>
                         </div>
-                        {editingComment[comment.comment_id] ? (
-                          <div style={{ marginTop: 4 }}>
-                            <textarea
-                              value={editCommentContent[comment.comment_id] || ''}
-                              onChange={(e) => setEditCommentContent?.(prev => ({ ...prev, [comment.comment_id]: e.target.value }))}
-                              style={{
-                                width: '100%',
-                                minHeight: '60px',
-                                padding: '6px',
-                                border: '1px solid #ddd',
-                                borderRadius: '8px',
-                                fontSize: '14px',
-                                resize: 'vertical',
-                              }}
-                            />
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                              <button
-                                onClick={() => handleSaveEditComment(comment.comment_id)}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                                  color: '#fff',
-                                  border: 'none',
-                                  borderRadius: '6px',
-                                  padding: '8px 16px',
-                                  cursor: 'pointer',
-                                  fontSize: '12px',
-                                  gap: '6px',
-                                  fontWeight: '500',
-                                  transition: 'all 0.2s ease',
-                                  boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(-1px)';
-                                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(0)';
-                                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
-                                }}
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                                  <polyline points="17,21 17,13 7,13 7,21"/>
-                                  <polyline points="7,3 7,8 15,8"/>
-                                </svg>
-                                Save
-                              </button>
-                              <button
-                                onClick={() => handleCancelEditComment(comment.comment_id)}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
-                                  color: '#fff',
-                                  border: 'none',
-                                  borderRadius: '6px',
-                                  padding: '8px 16px',
-                                  cursor: 'pointer',
-                                  fontSize: '12px',
-                                  gap: '6px',
-                                  fontWeight: '500',
-                                  transition: 'all 0.2s ease',
-                                  boxShadow: '0 2px 4px rgba(107, 114, 128, 0.3)'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(-1px)';
-                                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(107, 114, 128, 0.4)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(0)';
-                                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(107, 114, 128, 0.3)';
-                                }}
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <line x1="18" y1="6" x2="6" y2="18"/>
-                                  <line x1="6" y1="6" x2="18" y2="18"/>
-                                </svg>
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: '14px', color: '#555' }}>
-                            {renderTextWithLinks(comment.comment_content)}
-                          </div>
-                        )}
-                        <div style={{ fontSize: '11px', color: '#888', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <span>{formatTime(comment.date_created)}</span>
-                          <button
-                            onClick={() => setShowReplyInput(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#007bff',
-                              cursor: 'pointer',
-                              fontSize: '11px',
-                              padding: '2px 4px',
-                              borderRadius: '4px',
-                              transition: 'background-color 0.2s ease'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = '#f0f8ff';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = 'transparent';
-                            }}
-                          >
-                            Reply
-                          </button>
+                        <div style={{ fontSize: '14px', color: '#1c1e21', marginTop: '4px' }}>
+                          {comment.comment_content}
                         </div>
-                        
-                        {/* Reply Input */}
-                        {showReplyInput[comment.comment_id] && (
-                          <ReplyInput
-                            commentId={comment.comment_id}
-                            currentUserId={currentUserId || undefined}
-                            displayName={displayName}
-                            displayAvatar={displayAvatar}
-                            onReplyAdded={() => handleReplyAdded(comment.comment_id)}
-                            commentAuthor={{
-                              user_id: comment.user.user_id,
-                              f_name: comment.user.f_name,
-                              m_name: comment.user.m_name,
-                              l_name: comment.user.l_name,
-                              name: `${comment.user.f_name} ${comment.user.m_name || ''} ${comment.user.l_name}`.trim()
-                            }}
-                          />
-                        )}
-                        
-                        {/* Facebook-style Replies - Always show if available */}
-                        {(() => {
-                          const replies = commentReplies[comment.comment_id];
-                          console.log(`PostCard: Facebook-style rendering replies for comment ${comment.comment_id}:`, {
-                            hasReplies: !!replies,
-                            repliesLength: replies?.length || 0,
-                            repliesData: replies
-                          });
-                          return replies && replies.length > 0;
-                        })() && (
-                          <div style={{ marginTop: '8px' }}>
-                            {/* Facebook-style: Show ALL replies by default */}
-                            {commentReplies[comment.comment_id].map((reply) => (
-                              <Reply
-                                key={reply.reply_id}
-                                reply={reply}
-                                commentId={comment.comment_id}
-                                currentUserId={currentUserId || undefined}
-                                formatTime={formatTime}
-                                onReplyUpdate={() => loadReplies(comment.comment_id)}
-                                displayName={displayName}
-                                displayAvatar={displayAvatar}
-                              />
-                            ))}
-                          </div>
-                        )}
-                        
                       </div>
                     </div>
                   );
                 })}
-                {post.comments.length > 2 && !showAllComments[repostData?.repost_id || post.post_id] && (
+                {repostData?.comments && repostData.comments.length > 2 && !showAllComments[repostData?.repost_id || post.post_id] && (
                   <button
                     className="view-all-comments-btn"
                     style={{ fontSize: '12px', color: '#1C4E80', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
                     onClick={() => setShowAllComments?.(prev => ({ ...prev, [repostData?.repost_id || post.post_id]: true }))}
                   >
-                    View all comments ({post.comments.length})
+                    View all comments ({repostData.comments.length})
                   </button>
                 )}
-                {post.comments.length > 2 && showAllComments[repostData?.repost_id || post.post_id] && (
+                {repostData?.comments && repostData.comments.length > 2 && showAllComments[repostData?.repost_id || post.post_id] && (
                   <button
                     className="hide-comments-btn"
                     style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
@@ -2403,6 +2196,8 @@ const PostCard: React.FC<PostCardProps> = ({
             src={
                   typeof images[0] === 'string' && images[0].startsWith('/media/')
                     ? `http://127.0.0.1:8000${images[0]}`
+                    : typeof images[0] === 'string' && !images[0].startsWith('http')
+                    ? `http://127.0.0.1:8000${images[0]}`
                     : images[0]
             }
             alt="post"
@@ -2487,6 +2282,8 @@ const PostCard: React.FC<PostCardProps> = ({
                             ? `http://127.0.0.1:8000${image}`
                             : typeof image === 'string' && image.startsWith('data:')
                             ? image
+                            : typeof image === 'string' && !image.startsWith('http')
+                            ? `http://127.0.0.1:8000${image}`
                             : image
                         }
                         alt={`post ${index + 1}`}
@@ -2662,10 +2459,14 @@ const PostCard: React.FC<PostCardProps> = ({
           }}>
             {likedPosts[post.post_id] ? '👍' : '👍'}
           </span>
-          <span style={{
-            color: likedPosts[post.post_id] ? '#ef4444' : '#6c757d',
-            fontWeight: likedPosts[post.post_id] ? '600' : '400'
-          }}>
+          <span 
+            onClick={() => setShowLikesModal(true)}
+            style={{
+              color: likedPosts[post.post_id] ? '#ef4444' : '#6c757d',
+              fontWeight: likedPosts[post.post_id] ? '600' : '400',
+              cursor: 'pointer'
+            }}
+          >
             {post.likes_count === 1 ? '1 like' : (post.likes_count && post.likes_count > 1) ? `${post.likes_count} likes` : 'Like'}
           </span>
         </button>
@@ -3379,12 +3180,12 @@ const PostCard: React.FC<PostCardProps> = ({
               borderBottom: '1px solid #e0e0e0',
               paddingBottom: 10,
             }}>
-              👍 People who liked the original post
+              👍 People who liked this repost
             </h2>
 
             <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {repostData.original_post.likes && repostData.original_post.likes.length > 0 ? (
-                repostData.original_post.likes.map((like: any, index: number) => {
+              {repostData.likes && repostData.likes.length > 0 ? (
+                repostData.likes.map((like: any, index: number) => {
                   const likeUser = like.user || like;
                   const userName = `${likeUser.f_name || ''} ${likeUser.m_name || ''} ${likeUser.l_name || ''}`.trim();
                   const userProfilePic = likeUser.profile_pic ? 
@@ -3412,7 +3213,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         display: 'flex',
                         alignItems: 'center',
                         padding: '12px',
-                        borderBottom: index < (repostData.original_post?.likes?.length || 0) - 1 ? '1px solid #f0f0f0' : 'none',
+                        borderBottom: index < (repostData?.likes?.length || 0) - 1 ? '1px solid #f0f0f0' : 'none',
                         cursor: 'pointer',
                         borderRadius: '8px',
                         transition: 'background-color 0.2s ease',
@@ -3537,12 +3338,12 @@ const PostCard: React.FC<PostCardProps> = ({
               borderBottom: '1px solid #e0e0e0',
               paddingBottom: 10,
             }}>
-              💝 People who liked the original donation
+              💝 People who liked this repost
             </h2>
 
             <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {repostData.original_post.likes && repostData.original_post.likes.length > 0 ? (
-                repostData.original_post.likes.map((like: any, index: number) => {
+              {repostData.likes && repostData.likes.length > 0 ? (
+                repostData.likes.map((like: any, index: number) => {
                   const likeUser = like.user || like;
                   const userName = `${likeUser.f_name || ''} ${likeUser.m_name || ''} ${likeUser.l_name || ''}`.trim();
                   const userProfilePic = likeUser.profile_pic ? 
@@ -3570,7 +3371,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         display: 'flex',
                         alignItems: 'center',
                         padding: '12px',
-                        borderBottom: index < (repostData.original_post?.likes?.length || 0) - 1 ? '1px solid #f0f0f0' : 'none',
+                        borderBottom: index < (repostData?.likes?.length || 0) - 1 ? '1px solid #f0f0f0' : 'none',
                         cursor: 'pointer',
                         borderRadius: '8px',
                         transition: 'background-color 0.2s ease',

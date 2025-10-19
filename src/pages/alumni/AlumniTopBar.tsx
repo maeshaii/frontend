@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
+import wherenayouLogo from '../../images/logo_login.png';
 import { api, getAdminPesoUsers, getUserInfo, fetchNotificationCount, saveRecentSearch, getRecentSearches, deleteRecentSearch } from '../../services/api';
 import 'primeicons/primeicons.css';
 
@@ -331,25 +332,26 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div
             style={{
-              width: 44,
               height: 44,
-              background: 'linear-gradient(135deg, #ffffff 0%, #f0f8ff 100%)',
-              borderRadius: '50%',
+              background: 'white',
+              borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 14,
-              fontWeight: '700',
-              color: '#003366',
-              boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)',
-              transition: 'transform 0.3s ease',
-              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+              overflow: 'hidden',
+              padding: '4px 8px',
             }}
-            onClick={handleHomeClick}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
-            WNY
+            <img 
+              src={wherenayouLogo} 
+              alt="WhereNaYou Logo" 
+              style={{
+                height: '100%',
+                width: 'auto',
+                objectFit: 'contain',
+              }}
+            />
           </div>
         </div>
         <div style={{ position: 'relative' }}>

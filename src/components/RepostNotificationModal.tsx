@@ -555,6 +555,8 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
                               src={
                                 typeof originalImages[0] === 'string' && originalImages[0].startsWith('/media/')
                                   ? `http://127.0.0.1:8000${originalImages[0]}`
+                                  : typeof originalImages[0] === 'string' && !originalImages[0].startsWith('http')
+                                  ? `http://127.0.0.1:8000${originalImages[0]}`
                                   : originalImages[0]
                               }
                               alt="original post"
@@ -603,6 +605,8 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
                                   key={index}
                                   src={
                                     typeof img === 'string' && img.startsWith('/media/')
+                                      ? `http://127.0.0.1:8000${img}`
+                                      : typeof img === 'string' && !img.startsWith('http')
                                       ? `http://127.0.0.1:8000${img}`
                                       : img
                                   }

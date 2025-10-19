@@ -34,6 +34,7 @@ import Messaging from './pages/messaging/Messaging';
 // import other pages like Statistics, Users, etc.
 import { PrivateRoute } from './components/PrivateRoute';
 import AlumniProfile from './pages/alumni/Profile';
+import UnifiedDashboard from './pages/shared/UnifiedDashboard';
 
 const App: React.FC = () => {
   return (
@@ -142,6 +143,14 @@ const App: React.FC = () => {
             element={
               <PrivateRoute roles={['peso']}>
                 <PesoDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/ojt/dashboard/:id"
+            element={
+              <PrivateRoute roles={['ojt']}>
+                <UnifiedDashboard userType="ojt" />
               </PrivateRoute>
             }
           />
