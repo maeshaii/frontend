@@ -17,9 +17,9 @@ import { fetchAlumniEmploymentStats } from '../../services/api';
 export default function Statistics() {
   const [data, setData] = useState([
     { name: 'Pending', value: 0, fill: '#DEC0F1' },
-    { name: 'Employed', value: 0, fill: '#B79CED' },
+    { name: 'Employed', value: 0, fill: '#B79CED', absorbedCount: 0 },
     { name: 'Unemployed', value: 0, fill: '#957FEF' },
-    { name: 'Absorb', value: 0, fill: '#7161EF' },
+    // Removed 'Absorb' as separate category - now combined with 'Employed'
   ]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
@@ -33,10 +33,12 @@ export default function Statistics() {
       if (response.success && response.status_counts) {
         const chartData = [
           { name: 'Pending', value: response.status_counts.Pending || 0, fill: '#DEC0F1' },
-          { name: 'Employed', value: response.status_counts.Employed || 0, fill: '#B79CED' },
+          { name: 'Employed', value: response.status_counts.Employed || 0, fill: '#B79CED', absorbedCount: response.status_counts.Absorbed_Count || 0 },
           { name: 'Unemployed', value: response.status_counts.Unemployed || 0, fill: '#957FEF' },
-          { name: 'Absorb', value: response.status_counts.Absorb || 0, fill: '#7161EF' },
+          // Removed 'Absorb' as separate category - now combined with 'Employed'
         ];
+        console.log('🔍 DEBUG Coordinator: Raw response:', response);
+        console.log('🔍 DEBUG Coordinator: Absorbed_Count:', response.status_counts.Absorbed_Count);
         setData(chartData);
         setLastUpdated(new Date());
       }
@@ -133,19 +135,40 @@ export default function Statistics() {
               maxBarSize={60}
               onClick={handleBarClick}
             >
-              {data.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
-                  fill={entry.fill}
-                  stroke={selectedBar === entry.name ? '#374151' : 'none'}
-                  strokeWidth={selectedBar === entry.name ? 2 : 0}
-                  style={{ 
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    transform: selectedBar === entry.name ? 'scale(1.05)' : 'scale(1)',
-                  }}
-                />
-              ))}
+              {data.map((entry, index) => {
+                // Special handling for Employed bar with absorbed indicator
+                if (entry.name === 'Employed' && (entry.absorbedCount || 0) > 0) {
+                  return (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={entry.fill}
+                      stroke={selectedBar === entry.name ? '#374151' : 'none'}
+                      strokeWidth={selectedBar === entry.name ? 2 : 0}
+                      style={{ 
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        transform: selectedBar === entry.name ? 'scale(1.05)' : 'scale(1)',
+                        background: `linear-gradient(to right, ${entry.fill} 0%, ${entry.fill} 70%, #7161EF 70%, #7161EF 100%)`,
+                      }}
+                    />
+                  );
+                }
+                
+                // Regular bars
+                return (
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={entry.fill}
+                    stroke={selectedBar === entry.name ? '#374151' : 'none'}
+                    strokeWidth={selectedBar === entry.name ? 2 : 0}
+                    style={{ 
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      transform: selectedBar === entry.name ? 'scale(1.05)' : 'scale(1)',
+                    }}
+                  />
+                );
+              })}
             </Bar>
           </BarChart>
         </ResponsiveContainer>

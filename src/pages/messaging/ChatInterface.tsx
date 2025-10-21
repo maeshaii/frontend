@@ -157,7 +157,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
         logger.warn('Could not get JWT token for WebSocket, using session auth', error);
       }
       
-      const wsUrl = getConversationWsUrl(conversation.conversation_id, token || undefined);
+      const wsUrl = getConversationWsUrl(conversation.conversation_id);
       const ws = new ConversationWebSocket(wsUrl);
       wsRef.current = ws;
     

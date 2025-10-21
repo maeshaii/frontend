@@ -13,7 +13,7 @@ const API_BASE = ensureApiSuffix(process.env.REACT_APP_API_URL);
 
 const api = axios.create({
   baseURL: API_BASE,
-  withCredentials: true, // Enable for session-based WebSocket auth
+  withCredentials: false, 
 });
 
 // Public API instance for endpoints that don't require authentication
@@ -29,8 +29,9 @@ api.interceptors.request.use(
     if (token) {
       config.headers = config.headers || {};
       config.headers['Authorization'] = `Bearer ${token}`;
+    } else {
+      console.warn('No access token found in localStorage');
     }
-    // Don't warn about missing token - user might be using session auth
     if (process.env.NODE_ENV === 'development') {
       console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, {
         headers: config.headers,
@@ -66,18 +67,7 @@ api.interceptors.response.use(
         refreshing = (async () => {
           try {
             const refreshToken = localStorage.getItem('refreshToken');
-            if (!refreshToken) {
-              // No refresh token available - redirect to login immediately
-              console.log('No refresh token available, redirecting to login');
-              localStorage.removeItem('accessToken');
-              localStorage.removeItem('refreshToken');
-              localStorage.removeItem('user');
-              if (window.location.pathname !== '/login') {
-                window.location.href = '/login';
-              }
-              throw new Error('No refresh token available');
-            }
-            
+            if (!refreshToken) throw new Error('No refresh token available');
             const response = await axios.post(`${API_BASE}token/refresh/`, { refresh: refreshToken });
             const newAccess = response.data?.access;
             if (!newAccess) throw new Error('No access token in refresh response');
@@ -111,31 +101,6 @@ export const getUserInfo = () => {
     const user = localStorage.getItem('user');
     return user ? JSON.parse(user) : null;
   } catch {
-    return null;
-  }
-};
-
-// Helper: check if user is authenticated
-export const isAuthenticated = () => {
-  try {
-    const token = localStorage.getItem('accessToken');
-    const refreshToken = localStorage.getItem('refreshToken');
-    return !!(token && refreshToken);
-  } catch {
-    return false;
-  }
-};
-
-// Helper: safe API call that checks authentication first
-export const safeApiCall = async (apiCall: () => Promise<any>) => {
-  if (!isAuthenticated()) {
-    console.log('User not authenticated, skipping API call');
-    return null;
-  }
-  try {
-    return await apiCall();
-  } catch (error) {
-    console.error('API call failed:', error);
     return null;
   }
 };
@@ -211,13 +176,9 @@ export const checkFollowStatus = async (userId: number) => {
 
 // --- SECURITY NOTE: Login is now strictly username + password. No birthdate login allowed. ---
 export const loginUser = async (acc_username: string, acc_password: string) => {
-  // Trim credentials to prevent whitespace issues
-  const trimmedUsername = acc_username.trim();
-  const trimmedPassword = acc_password.trim();
-  
-  console.log('Sending login request:', { acc_username: trimmedUsername, acc_password: trimmedPassword });
+  console.log('Sending login request:', { acc_username, acc_password });
   try {
-    const response = await api.post('token/', { acc_username: trimmedUsername, acc_password: trimmedPassword });
+    const response = await api.post('token/', { acc_username, acc_password });
     console.log('Login response received:', response.data);
     
     // Save tokens and user info to localStorage
@@ -292,10 +253,8 @@ export { api };
 
 // Fetch alumni statistics (counts per year)
 export const fetchAlumniStatistics = async () => {
-  return await safeApiCall(async () => {
-    const response = await api.get('alumni/statistics/');
-    return response.data;
-  });
+  const response = await api.get('alumni/statistics/');
+  return response.data;
 };
 
 // Fetch graduation years for dropdowns
@@ -354,8 +313,7 @@ export const importOJT = async (
   file: File,
   batchYear: string,
   course: string,
-  coordinatorUsername: string,
-  section: string
+  coordinatorUsername: string
 ) => {
   try {
     const formData = new FormData();
@@ -363,7 +321,6 @@ export const importOJT = async (
     formData.append('batch_year', batchYear);
     formData.append('program', course);
     formData.append('coordinator_username', coordinatorUsername);
-    formData.append('section', section);
 
     const response = await api.post('ojt/import/', formData, {
       headers: {
@@ -403,10 +360,14 @@ export const fetchOJTStatistics = async (coordinatorUsername?: string) => {
 };
 
 // Fetch OJT data by year for coordinators
-export const fetchOJTByYear = async (year: string, coordinatorUsername?: string) => {
-  const path = coordinatorUsername
-    ? `ojt/by-year/?year=${year}&coordinator=${coordinatorUsername}`
-    : `ojt/by-year/?year=${year}`;
+export const fetchOJTByYear = async (year: string, coordinatorUsername?: string, section?: string) => {
+  let path = `ojt/by-year/?year=${year}`;
+  if (coordinatorUsername) {
+    path += `&coordinator=${coordinatorUsername}`;
+  }
+  if (section) {
+    path += `&section=${section}`;
+  }
   const response = await api.get(path);
   return response.data;
 };
@@ -429,6 +390,17 @@ export const updateOJTStatus = async (userId: number, status: string) => {
 // Send completed OJT list to admin (returns count)
 export const sendCompletedOJTToAdmin = async (year?: number | string, userIds?: number[]) => {
   const response = await api.post('ojt/send-to-admin/', { year, user_ids: userIds || [] });
+  return response.data;
+};
+
+// Set send date for OJT batch
+export const setSendDate = async (coordinatorUsername: string, batchYear: number, section: string | null, sendDate: string) => {
+  const response = await api.post('ojt/set-send-date/', {
+    coordinator_username: coordinatorUsername,
+    batch_year: batchYear,
+    section: section,
+    send_date: sendDate
+  });
   return response.data;
 };
 
@@ -510,10 +482,8 @@ export const fetchNotifications = async (userId: number) => {
 
 // Fetch notification count for a user
 export const fetchNotificationCount = async (userId: number) => {
-  return await safeApiCall(async () => {
-    const response = await api.get(`notifications/count/?user_id=${userId}`);
-    return response.data;
-  });
+  const response = await api.get(`notifications/count/?user_id=${userId}`);
+  return response.data;
 };
 
 // Mark notification as read
@@ -820,14 +790,11 @@ export const getWebSocketBase = (): string => {
   return `ws://${http}`;
 };
 
-export const getConversationWsUrl = (conversationId: number, token?: string): string => {
+export const getConversationWsUrl = (conversationId: number): string => {
+  const token = localStorage.getItem('accessToken');
   const base = getWebSocketBase();
-  // Use token in URL as fallback for WebSocket authentication
-  // WebSocket connections cannot send cookies/headers in browsers
-  if (token) {
-    return `${base}/ws/chat/${conversationId}/?token=${token}`;
-  }
-  return `${base}/ws/chat/${conversationId}/`;
+  const url = `${base}/ws/chat/${conversationId}/`;
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
 };
 
 // User Management API functions
@@ -845,10 +812,8 @@ export const updateUserPassword = async (userId: number, newPassword: string): P
 
 // Get admin and PESO user IDs dynamically
 export const getAdminPesoUsers = async () => {
-  return await safeApiCall(async () => {
-    const response = await api.get('admin-peso-users/');
-    return response.data;
-  });
+  const response = await api.get('admin-peso-users/');
+  return response.data;
 };
 
 // Donation API functions

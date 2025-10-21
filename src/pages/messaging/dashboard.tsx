@@ -11,10 +11,11 @@ export default function Dashboard() {
   const [showStats, setShowStats] = useState(false);
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [batchYear, setBatchYear] = useState('');
-  const [section, setSection] = useState('');
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [course, setCourse] = useState('BSIT');
-  const [ojtYears, setOjtYears] = useState<{ year: number; count: number }[]>([]);
+  // Generate years from 2000 to 2025 (descending order)
+  const availableYears = Array.from({ length: 26 }, (_, i) => 2025 - i);
+  const [ojtYears, setOjtYears] = useState<{ year: number; section?: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [importLoading, setImportLoading] = useState(false);
   const [coordinatorUsername, setCoordinatorUsername] = useState('');
@@ -31,7 +32,7 @@ export default function Dashboard() {
     const loadOJTData = async () => {
       try {
         console.log('Loading OJT data for coordinator:', coordinatorUsername);
-        const data = await fetchOJTStatistics();
+        const data = await fetchOJTStatistics(coordinatorUsername);
         console.log('OJT data received:', data);
         setOjtYears(data.years || []);
       } catch (error) {
@@ -42,8 +43,14 @@ export default function Dashboard() {
       }
     };
 
+    const loadAvailableYears = async () => {
+      // Years are now generated locally, no API call needed
+      console.log('Using fixed year range: 2000-2025');
+    };
+
     if (coordinatorUsername) {
       loadOJTData();
+      loadAvailableYears();
     }
   }, [coordinatorUsername]);
 
@@ -56,16 +63,16 @@ export default function Dashboard() {
   };
 
   const handleImport = async () => {
-    if (!selectedFile || !batchYear || !section) {
-      alert('Please select a file, enter the batch year, and section');
+    if (!selectedFile || !selectedYear) {
+      alert('Please select a file and choose a graduation year');
       return;
     }
 
     setImportLoading(true);
     try {
-      const result = await importOJT(selectedFile, batchYear, course, coordinatorUsername, section);
+      const result = await importOJT(selectedFile, selectedYear.toString(), course, coordinatorUsername);
       if (result.success) {
-        alert('OJT import successful!');
+        alert(`OJT import successful! Found ${result.sections?.length || 0} sections.`);
         setShowModal(false);
         // Reload OJT data
         await refreshOJTData();
@@ -118,9 +125,12 @@ export default function Dashboard() {
     setLoading(true);
     try {
       console.log('Refreshing OJT data for coordinator:', coordinatorUsername);
-      const data = await fetchOJTStatistics();
+      const data = await fetchOJTStatistics(coordinatorUsername);
       console.log('Refreshed OJT data:', data);
       setOjtYears(data.years || []);
+      
+      // Also refresh available years
+      console.log('Using fixed year range: 2000-2025');
     } catch (error) {
       console.error('Error refreshing OJT data:', error);
       setOjtYears([]);
@@ -476,25 +486,61 @@ export default function Dashboard() {
           <div style={styles.modal}>
             <h2 style={styles.modalH2}>Import OJT Training Data</h2>
 
-            <label style={styles.modalLabel}>Batch Graduated</label>
-            <input
-              type="number"
-              placeholder="Enter batch year..."
-              style={styles.modalInput}
-              value={batchYear}
-              onChange={(e) => setBatchYear(e.target.value)}
-              min="2000"
-              max="2030"
-            />
-
-            <label style={styles.modalLabel}>Section</label>
-            <input
-              type="text"
-              placeholder="Enter section (e.g., 4-1, 4-A)..."
-              style={styles.modalInput}
-              value={section}
-              onChange={(e) => setSection(e.target.value)}
-            />
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '8px', 
+              fontWeight: '600', 
+              color: '#374151',
+              fontSize: '14px'
+            }}>
+              Select Graduation Year:
+            </label>
+            <select
+              value={selectedYear || ''}
+              onChange={(e) => setSelectedYear(e.target.value ? parseInt(e.target.value) : null)}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                border: '2px solid #d1d5db',
+                borderRadius: '8px',
+                fontSize: '15px',
+                color: '#374151',
+                backgroundColor: 'white',
+                transition: 'all 0.2s ease',
+                outline: 'none',
+                fontWeight: '500',
+                cursor: 'pointer',
+                appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 12px center',
+                backgroundSize: '16px',
+                paddingRight: '40px'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#3b82f6';
+                e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '#d1d5db';
+                e.target.style.boxShadow = 'none';
+              }}
+            >
+              <option value="" style={{ color: '#9ca3af' }}>Select graduation year</option>
+              {availableYears.map((year) => (
+                <option key={year} value={year} style={{ color: '#374151' }}>
+                  {year}
+                </option>
+              ))}
+            </select>
+            <p style={{ 
+              margin: '8px 0 0 0', 
+              fontSize: '12px', 
+              color: '#64748b',
+              fontStyle: 'italic'
+            }}>
+              Sections will be automatically detected from the Excel file
+            </p>
 
             {/* Course selection removed; default course state will be used */}
 
@@ -510,7 +556,11 @@ export default function Dashboard() {
             </label>
 
             <div style={styles.modalActions}>
-              <button style={styles.addBtn} onClick={handleImport} disabled={importLoading}>
+              <button 
+                style={styles.addBtn} 
+                onClick={handleImport} 
+                disabled={importLoading || !selectedFile || !selectedYear}
+              >
                 {importLoading ? 'Importing...' : 'Import'}
               </button>
               <button

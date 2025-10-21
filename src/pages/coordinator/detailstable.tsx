@@ -640,11 +640,14 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
             onClick={async () => {
               setCompletingAll(true);
               try {
-                // Get all students who are not already alumni
-                const nonAlumniStudents = ojtData.filter(student => !student.is_alumni);
+                // Get only the students currently displayed in this section who are not already alumni
+                const currentSectionStudents = ojtData.filter(student => 
+                  !student.is_alumni && 
+                  student.ojt_status !== 'Completed' // Only update students who aren't already completed
+                );
                 
-                // Update all non-alumni students to Completed status
-                for (const student of nonAlumniStudents) {
+                // Update only the current section students to Completed status
+                for (const student of currentSectionStudents) {
                   try {
                     await updateOJTStatus(student.id, 'Completed');
                   } catch (err) {
@@ -654,10 +657,12 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
                 
                 // Update local state
                 setOjtData(prev => prev.map(student => 
-                  student.is_alumni ? student : { ...student, ojt_status: 'Completed' }
+                  currentSectionStudents.some(s => s.id === student.id) 
+                    ? { ...student, ojt_status: 'Completed' }
+                    : student
                 ));
                 
-                alert(`Updated ${nonAlumniStudents.length} students to Completed status`);
+                alert(`Updated ${currentSectionStudents.length} students to Completed status`);
               } catch (err) {
                 console.error('Complete all failed:', err);
                 alert('Failed to complete all students');
@@ -748,6 +753,10 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
                   <div style={styles.modalField}>
                     <div style={styles.modalLabel}>Address</div>
                     <div style={styles.modalValue}>{selected.address || 'Not specified'}</div>
+                  </div>
+                  <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Password</div>
+                    <div style={styles.modalValue}>{selected.password || 'Not specified'}</div>
                   </div>
                 </div>
 

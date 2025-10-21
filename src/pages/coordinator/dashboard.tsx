@@ -3,7 +3,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
-import { fetchOJTStatistics, importOJT, fetchCoordinatorSections, setSendDate } from '../../services/api';
+import { fetchOJTStatistics, importOJT, setSendDate } from '../../services/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -11,10 +11,10 @@ export default function Dashboard() {
   const [showStats, setShowStats] = useState(false);
   const [selectedCard, setSelectedCard] = useState<{ year: number; section?: string } | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [batchYear, setBatchYear] = useState('');
-  const [section, setSection] = useState('');
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [program, setProgram] = useState('BSIT');
-  const [availableSections, setAvailableSections] = useState<string[]>([]);
+  // Generate years from 2000 to 2025 (descending order)
+  const availableYears = Array.from({ length: 26 }, (_, i) => 2025 - i);
   const [ojtYears, setOjtYears] = useState<{ year: number; section?: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [importLoading, setImportLoading] = useState(false);
@@ -49,23 +49,14 @@ export default function Dashboard() {
       }
     };
 
-    const loadCoordinatorSections = async () => {
-      try {
-        console.log('Loading sections for coordinator:', coordinatorUsername);
-        const data = await fetchCoordinatorSections(coordinatorUsername);
-        if (data.success) {
-          setAvailableSections(data.sections || []);
-          console.log('Coordinator sections loaded:', data.sections);
-        }
-      } catch (error) {
-        console.error('Error loading coordinator sections:', error);
-        setAvailableSections([]);
-      }
+    const loadAvailableYears = async () => {
+      // Years are now generated locally, no API call needed
+      console.log('Using fixed year range: 2000-2025');
     };
 
     if (coordinatorUsername) {
       loadOJTData();
-      loadCoordinatorSections();
+      loadAvailableYears();
     }
   }, [coordinatorUsername]);
 
@@ -78,16 +69,22 @@ export default function Dashboard() {
   };
 
   const handleImport = async () => {
-    if (!selectedFile || !batchYear || !section) {
-      alert('Please select a file, enter the batch year, and choose a section');
+    if (!selectedFile || !selectedYear) {
+      alert('Please select a file and choose a graduation year');
       return;
     }
 
     setImportLoading(true);
     try {
-      const result = await importOJT(selectedFile, batchYear, program, coordinatorUsername, section);
+      const result = await importOJT(selectedFile, selectedYear.toString(), program, coordinatorUsername);
       if (result.success) {
-        alert(`OJT import successful for section ${section}!`);
+        alert(`OJT import successful! Found ${result.sections?.length || 0} sections.`);
+        
+        // Handle password download if passwords were generated
+        if (result.passwords && result.passwords.length > 0) {
+          downloadPasswords(result.passwords);
+        }
+        
         setShowModal(false);
         await refreshOJTData();
       } else {
@@ -101,20 +98,36 @@ export default function Dashboard() {
     }
   };
 
+  const downloadPasswords = (passwords: any[]) => {
+    // Create CSV content
+    const csvContent = [
+      'CTU_ID,First_Name,Last_Name,Password',
+      ...passwords.map(p => `${p.CTU_ID},"${p.First_Name}","${p.Last_Name}","${p.Password}"`)
+    ].join('\n');
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `ojt_passwords_${selectedYear}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const refreshOJTData = async () => {
     setLoading(true);
     try {
       console.log('Refreshing OJT data for coordinator:', coordinatorUsername);
-      const data = await fetchOJTStatistics();
+      const data = await fetchOJTStatistics(coordinatorUsername);
       console.log('Refreshed OJT data:', data);
       setOjtYears(data.years || []);
       
-      // Also refresh coordinator sections
-      const sectionsData = await fetchCoordinatorSections(coordinatorUsername);
-      if (sectionsData.success) {
-        setAvailableSections(sectionsData.sections || []);
-        console.log('Refreshed coordinator sections:', sectionsData.sections);
-      }
+      // Also refresh available years
+      console.log('Using fixed year range: 2000-2025');
     } catch (error) {
       console.error('Error refreshing OJT data:', error);
       setOjtYears([]);
@@ -940,8 +953,7 @@ export default function Dashboard() {
                 onClick={() => {
                   setShowModal(false);
                   setSelectedFile(null);
-                  setBatchYear('');
-                  setSection('');
+                  setSelectedYear(null);
                 }}
                 style={{
                   position: 'absolute',
@@ -1004,108 +1016,63 @@ export default function Dashboard() {
             <div style={{ padding: '32px 40px 32px 28px' }}>
               {/* Form Fields */}
               <div style={{ marginBottom: '32px' }}>
-                {/* Batch Year Field */}
+                {/* Graduation Year Dropdown */}
                 <div style={{ marginBottom: '24px' }}>
                   <label style={{ 
                     display: 'block', 
                     marginBottom: '8px', 
-                    fontWeight: '700', 
-                    color: '#1e293b',
+                    fontWeight: '600', 
+                    color: '#374151',
                     fontSize: '14px'
                   }}>
-                    Batch Year
+                    Select Graduation Year:
                   </label>
-            <input
-              type="number"
-                    placeholder="Enter batch year (e.g., 2025)"
+                  <select
+                    value={selectedYear || ''}
+                    onChange={(e) => setSelectedYear(e.target.value ? parseInt(e.target.value) : null)}
                     style={{
                       width: '100%',
                       padding: '12px 16px',
-                      border: '2px solid #e2e8f0',
-                      borderRadius: '10px',
+                      border: '2px solid #d1d5db',
+                      borderRadius: '8px',
                       fontSize: '15px',
-                      color: '#1e293b',
+                      color: '#374151',
                       backgroundColor: 'white',
-                      transition: 'all 0.3s ease',
+                      transition: 'all 0.2s ease',
                       outline: 'none',
                       fontWeight: '500',
-                      height: '48px'
+                      cursor: 'pointer',
+                      appearance: 'none',
+                      backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 12px center',
+                      backgroundSize: '16px',
+                      paddingRight: '40px'
                     }}
-              value={batchYear}
-              onChange={(e) => setBatchYear(e.target.value)}
-              min="2000"
-              max="2030"
                     onFocus={(e) => {
                       e.target.style.borderColor = '#3b82f6';
                       e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                      e.target.style.transform = 'translateY(-1px)';
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = '#e2e8f0';
+                      e.target.style.borderColor = '#d1d5db';
                       e.target.style.boxShadow = 'none';
-                      e.target.style.transform = 'translateY(0)';
                     }}
-                  />
-                </div>
-
-                {/* Section Field */}
-                <div style={{ marginBottom: '24px' }}>
-                  <label style={{ 
-                    display: 'block', 
-                    marginBottom: '8px', 
-                    fontWeight: '700', 
-                    color: '#1e293b',
-                    fontSize: '14px'
+                  >
+                    <option value="" style={{ color: '#9ca3af' }}>Select graduation year</option>
+                    {availableYears.map((year) => (
+                      <option key={year} value={year} style={{ color: '#374151' }}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ 
+                    margin: '8px 0 0 0', 
+                    fontSize: '12px', 
+                    color: '#64748b',
+                    fontStyle: 'italic'
                   }}>
-                    Section to Import
-                  </label>
-            <input
-              type="text"
-                    placeholder="Enter section (e.g., 4-A, 4-B, 4-1, etc.)"
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      border: '2px solid #e2e8f0',
-                      borderRadius: '10px',
-                      fontSize: '15px',
-                      color: '#1e293b',
-                      backgroundColor: 'white',
-                      transition: 'all 0.3s ease',
-                      outline: 'none',
-                      fontWeight: '500',
-                      height: '48px'
-                    }}
-              value={section}
-              onChange={(e) => setSection(e.target.value)}
-              list="section-options"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#3b82f6';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                      e.target.style.transform = 'translateY(-1px)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#e2e8f0';
-                      e.target.style.boxShadow = 'none';
-                      e.target.style.transform = 'translateY(0)';
-                    }}
-            />
-            <datalist id="section-options">
-              {availableSections.map((sectionOption) => (
-                <option key={sectionOption} value={sectionOption}>
-                  {sectionOption}
-                </option>
-              ))}
-            </datalist>
-            {availableSections.length === 0 && (
-                    <p style={{ 
-                      margin: '8px 0 0 0', 
-                      fontSize: '12px', 
-                      color: '#64748b',
-                      fontStyle: 'italic'
-                    }}>
-                No previous sections found. You can type any section name.
-                    </p>
-                  )}
+                    Sections will be automatically detected from the Excel file
+                  </p>
                 </div>
 
                 {/* File Upload Field */}
@@ -1202,8 +1169,7 @@ export default function Dashboard() {
                 onClick={() => {
                   setShowModal(false);
                   setSelectedFile(null);
-                  setBatchYear('');
-                  setSection('');
+                  setSelectedYear(null);
                 }}
                 disabled={importLoading}
                   style={{
@@ -1239,16 +1205,16 @@ export default function Dashboard() {
               </button>
                 <button
                   onClick={handleImport}
-                  disabled={importLoading || !selectedFile || !batchYear || !section}
+                  disabled={importLoading || !selectedFile || !selectedYear}
                   style={{
                     padding: '14px 28px',
                     border: '2px solid #e5e7eb',
                     borderRadius: '12px',
-                    background: importLoading || !selectedFile || !batchYear || !section 
+                    background: importLoading || !selectedFile || !selectedYear 
                       ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)'
                       : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                     color: 'white',
-                    cursor: importLoading || !selectedFile || !batchYear || !section ? 'not-allowed' : 'pointer',
+                    cursor: importLoading || !selectedFile || !selectedYear ? 'not-allowed' : 'pointer',
                     fontWeight: '700',
                     fontSize: '15px',
                     transition: 'all 0.3s ease',
@@ -1258,14 +1224,14 @@ export default function Dashboard() {
                     gap: '8px'
                   }}
                   onMouseEnter={(e) => {
-                    if (!importLoading && selectedFile && batchYear && section) {
+                    if (!importLoading && selectedFile && selectedYear) {
                       const target = e.currentTarget as HTMLButtonElement;
                       target.style.transform = 'translateY(-2px)';
                       target.style.boxShadow = '0 8px 16px -4px rgba(245, 158, 11, 0.4)';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!importLoading && selectedFile && batchYear && section) {
+                    if (!importLoading && selectedFile && selectedYear) {
                       const target = e.currentTarget as HTMLButtonElement;
                       target.style.transform = 'translateY(0)';
                       target.style.boxShadow = '0 4px 6px -1px rgba(245, 158, 11, 0.3)';

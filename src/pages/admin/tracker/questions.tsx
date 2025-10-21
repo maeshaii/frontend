@@ -148,9 +148,13 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
           } else if (questionText.includes('year graduated') || questionText.includes('graduated')) {
             initialResponses[question.id] = userDetails.year_graduated || userDetails.batch || '';
           } else if (questionText.includes('current position')) {
-            initialResponses[question.id] = userDetails.position_current || '';
+            // Don't pre-fill position - let user answer
+            // This prevents OJT data from affecting current employment
+            initialResponses[question.id] = '';
           } else if (questionText.includes('current company')) {
-            initialResponses[question.id] = userDetails.company_name_current || 'N/A';
+            // Don't pre-fill company name - let user answer
+            // This prevents OJT data from affecting current employment
+            initialResponses[question.id] = '';
           } else if (questionText.includes('employment sector')) {
             initialResponses[question.id] = userDetails.sector_current || 'N/A';
           } else if (questionText.includes('scope') && questionText.includes('job')) {
@@ -158,9 +162,9 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
           } else if (questionText.includes('salary')) {
             initialResponses[question.id] = userDetails.salary_current || 'N/A';
           } else if (questionText.includes('presently employed')) {
-            // Determine employment status based on position
-            const isEmployed = userDetails.position_current && userDetails.position_current.trim() !== '';
-            initialResponses[question.id] = isEmployed ? 'Yes' : 'No';
+            // Don't pre-fill employment status - let user answer
+            // This prevents OJT data from affecting employment status
+            initialResponses[question.id] = '';
           } else if (questionText.includes('self employed')) {
             initialResponses[question.id] = userDetails.self_employed ? 'Yes' : 'No';
           }

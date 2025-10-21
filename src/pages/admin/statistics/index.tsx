@@ -35,9 +35,9 @@ const initialData: EmploymentData[] = [
 
 const barColors: Record<string, string> = {
   Pending: '#DEC0F1',
-  Employed: '#B79CED',
+  Employed: '#B79CED',  // Light purple for employed
   Unemployed: '#957FEF',
-  Absorb: '#7161EF',
+  // Removed 'Absorb' - now shown as indicator on 'Employed'
 };
 
 export default function Statistics() {
@@ -107,6 +107,7 @@ export default function Statistics() {
       Unemployed: 0,
       Absorb: 0,
       Pending: 0,
+      Absorbed_Count: 0,  // Add this for the absorbed indicator
     };
 
     Object.entries(raw || {}).forEach(([key, value]) => {
@@ -117,6 +118,9 @@ export default function Statistics() {
       } else if (k.includes('employ')) {
         // Count only non-unemployed employ terms
         result.Employed += n;
+      } else if (k.includes('absorbed_count')) {
+        // Keep Absorbed_Count separate for the indicator
+        result.Absorbed_Count += n;
       } else if (k.includes('absorb')) {
         result.Absorb += n;
       } else if (k.includes('pending')) {
@@ -136,11 +140,15 @@ export default function Statistics() {
   // Build chart data from normalized buckets in a stable order
   const chartData = (() => {
     const counts = normalizeStatusCounts(employmentStats);
+    console.log('🔍 DEBUG: Raw employmentStats:', employmentStats);
+    console.log('🔍 DEBUG: Normalized counts:', counts);
+    console.log('🔍 DEBUG: Absorbed_Count:', counts.Absorbed_Count);
+    
     return [
       { category: 'Pending', count: counts.Pending },
-      { category: 'Employed', count: counts.Employed },
+      { category: 'Employed', count: counts.Employed, absorbedCount: counts.Absorbed_Count || 0 },
       { category: 'Unemployed', count: counts.Unemployed },
-      { category: 'Absorb', count: counts.Absorb },
+      // Removed 'Absorb' as separate category - now combined with 'Employed'
     ];
   })();
 
@@ -423,10 +431,24 @@ export default function Statistics() {
                 <Tooltip 
                   contentStyle={styles.tooltip}
                   labelStyle={styles.tooltipLabel}
-                  formatter={(value: any, name: any) => [
-                    <span style={styles.tooltipValue}>{value.toLocaleString()} alumni</span>,
-                    name
-                  ]}
+                  formatter={(value: any, name: any, props: any) => {
+                    const entry = props.payload;
+                    if (entry && entry.category === 'Employed' && (entry.absorbedCount || 0) > 0) {
+                      return [
+                        <div key="employed-tooltip">
+                          <div style={styles.tooltipValue}>{value.toLocaleString()} alumni</div>
+                          <div style={{...styles.tooltipValue, fontSize: '12px', color: '#7161EF', marginTop: '4px'}}>
+                            📌 {entry.absorbedCount || 0} absorbed
+                          </div>
+                        </div>,
+                        name
+                      ];
+                    }
+                    return [
+                      <span style={styles.tooltipValue}>{value.toLocaleString()} alumni</span>,
+                      name
+                    ];
+                  }}
                   cursor={{ fill: '#F3F4F6', fillOpacity: 0.8 }}
                 />
                 <Bar 
@@ -436,20 +458,44 @@ export default function Statistics() {
                   maxBarSize={80}
                   onClick={handleBarClick}
                 >
-                  {chartData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={barColors[entry.category]}
-                      stroke={selectedBar === entry.category ? '#1F2937' : 'none'}
-                      strokeWidth={selectedBar === entry.category ? 3 : 0}
-                      style={{ 
-                        cursor: 'pointer',
-                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                        filter: selectedBar === entry.category ? 'brightness(1.1)' : 'brightness(1)',
-                        transform: selectedBar === entry.category ? 'scaleY(1.05)' : 'scaleY(1)',
-                      }}
-                    />
-                  ))}
+                  {chartData.map((entry, index) => {
+                    // Special handling for Employed bar with absorbed indicator
+                    console.log(`🔍 DEBUG: Processing bar ${entry.category}, absorbedCount: ${entry.absorbedCount}`);
+                    if (entry.category === 'Employed' && (entry.absorbedCount || 0) > 0) {
+                      console.log('🔍 DEBUG: Rendering Employed bar with absorbed indicator');
+                      return (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={barColors[entry.category]}
+                          stroke={selectedBar === entry.category ? '#1F2937' : 'none'}
+                          strokeWidth={selectedBar === entry.category ? 3 : 0}
+                          style={{ 
+                            cursor: 'pointer',
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            filter: selectedBar === entry.category ? 'brightness(1.1)' : 'brightness(1)',
+                            transform: selectedBar === entry.category ? 'scaleY(1.05)' : 'scaleY(1)',
+                            background: `linear-gradient(to right, ${barColors[entry.category]} 0%, ${barColors[entry.category]} 70%, #7161EF 70%, #7161EF 100%)`,
+                          }}
+                        />
+                      );
+                    }
+                    
+                    // Regular bars
+                    return (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={barColors[entry.category]}
+                        stroke={selectedBar === entry.category ? '#1F2937' : 'none'}
+                        strokeWidth={selectedBar === entry.category ? 3 : 0}
+                        style={{ 
+                          cursor: 'pointer',
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          filter: selectedBar === entry.category ? 'brightness(1.1)' : 'brightness(1)',
+                          transform: selectedBar === entry.category ? 'scaleY(1.05)' : 'scaleY(1)',
+                        }}
+                      />
+                    );
+                  })}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -559,16 +605,50 @@ export default function Statistics() {
               )}
 
               <div className="modal-group">
-                <label>Batch Graduated:</label>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '8px', 
+                  fontWeight: '600', 
+                  color: '#374151',
+                  fontSize: '14px'
+                }}>
+                  Batch Graduated:
+                </label>
                 <select
                   value={batchYear}
                   onChange={(e) => setBatchYear(e.target.value)}
                   disabled={loading}
-                  style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '14px' }}
+                  style={{ 
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '2px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    color: '#374151',
+                    backgroundColor: 'white',
+                    transition: 'all 0.2s ease',
+                    outline: 'none',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    appearance: 'none',
+                    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    backgroundSize: '16px',
+                    paddingRight: '40px'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#3b82f6';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#d1d5db';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 >
-                  <option value="">Select graduation year</option>
+                  <option value="" style={{ color: '#9ca3af' }}>Select graduation year</option>
                   {batchYearOptions.map((year) => (
-                    <option key={year} value={year}>
+                    <option key={year} value={year} style={{ color: '#374151' }}>
                       {year}
                     </option>
                   ))}
@@ -576,17 +656,52 @@ export default function Statistics() {
               </div>
 
               <div className="modal-group">
-                <label>Program:</label>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '8px', 
+                  fontWeight: '600', 
+                  color: '#374151',
+                  fontSize: '14px'
+                }}>
+                  Program:
+                </label>
                 <select
                   value={selectedProgramImport}
                   onChange={(e) => setSelectedProgramImport(e.target.value)}
                   disabled={loading}
+                  style={{ 
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '2px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    color: '#374151',
+                    backgroundColor: 'white',
+                    transition: 'all 0.2s ease',
+                    outline: 'none',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    appearance: 'none',
+                    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    backgroundSize: '16px',
+                    paddingRight: '40px'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#3b82f6';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#d1d5db';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 >
-                  <option value="">Select course</option>
+                  <option value="" style={{ color: '#9ca3af' }}>Select course</option>
                   {courseOptions
                     .filter((c) => c !== 'ALL')
                     .map((course) => (
-                      <option key={course} value={course}>
+                      <option key={course} value={course} style={{ color: '#374151' }}>
                         {course}
                       </option>
                     ))}
@@ -594,19 +709,69 @@ export default function Statistics() {
               </div>
 
               <div className="modal-group">
-                <label>Upload Excel File:</label>
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handleFileChange}
-                  disabled={loading}
-                />
-                <small style={{ color: '#666', marginTop: '4px', display: 'block' }}>
-                  Required columns: CTU_ID, First_Name, Last_Name, Gender, Birthdate
-                  <br />
-                  Optional: Middle_Name, Phone_Number, Address
-                  <br />
-                  Date format: MM/DD/YYYY or YYYY-MM-DD
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '8px', 
+                  fontWeight: '600', 
+                  color: '#374151',
+                  fontSize: '14px'
+                }}>
+                  Upload Excel File:
+                </label>
+                <div style={{
+                  border: '2px dashed #d1d5db',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  textAlign: 'center',
+                  backgroundColor: '#f9fafb',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer',
+                  position: 'relative'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#3b82f6';
+                  e.currentTarget.style.backgroundColor = '#f0f9ff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#d1d5db';
+                  e.currentTarget.style.backgroundColor = '#f9fafb';
+                }}>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleFileChange}
+                    disabled={loading}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      opacity: 0,
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <div style={{ fontSize: '48px', color: '#6b7280', marginBottom: '12px' }}>📄</div>
+                  <div style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                    Choose Excel File
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                    Click to browse or drag and drop
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '8px' }}>
+                    Supports .xlsx and .xls files
+                  </div>
+                </div>
+                <small style={{ 
+                  color: '#6b7280', 
+                  marginTop: '8px', 
+                  display: 'block',
+                  fontSize: '12px',
+                  lineHeight: '1.4'
+                }}>
+                  <strong>Required columns:</strong> CTU_ID, First_Name, Last_Name, Gender, Birthdate<br />
+                  <strong>Optional:</strong> Middle_Name, Phone_Number, Address<br />
+                  <strong>Date format:</strong> MM/DD/YYYY or YYYY-MM-DD
                 </small>
                 <button
                   type="button"
