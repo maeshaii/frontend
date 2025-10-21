@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchNotifications, deleteNotifications, markNotificationAsRead, api, getPostFromComment } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
-import { getProfilePicUrl, handleProfilePicError } from '../../utils/profilePicUtils';
-import ctulogo from '../../images/ctulogo.png';
+import { getProfilePicUrl } from '../../utils/profilePicUtils';
 
 function formatHybrid(iso?: string | null): string {
   if (!iso) return 'Unknown time';
@@ -117,7 +116,7 @@ const NotificationPage: React.FC = () => {
           loadedProfilePics.current.add(userName);
           const userData = await searchUserByName(userName);
           if (userData && userData.profile_pic) {
-            const profilePicUrl = getProfilePicUrl(userData.profile_pic, ctulogo);
+            const profilePicUrl = getProfilePicUrl(userData.profile_pic);
             setUserProfilePics(prev => ({ ...prev, [userData.user_id]: profilePicUrl }));
           }
         }
@@ -1401,157 +1400,118 @@ const NotificationPage: React.FC = () => {
                     border: '2px solid #e9ecef',
                     flexShrink: 0,
                     marginLeft: '20px',
-                    overflow: 'hidden'
+                    overflow: 'visible',
+                    position: 'relative'
                   }}>
                     {(() => {
-                      // Try to extract user info from notification content
+                      // Extract basic actor identity from content to resolve avatar
                       let userId = '';
                       let userName = '';
-                      let userProfilePic = '';
-                      
-                      console.log('Processing notification:', notif.type, notif.content);
-                      
-                      // Extract user info from ALL notification types
-                      console.log('🔍 Processing notification type:', notif.type, 'content:', notif.content);
-                      
-                      // Method 1: Look for ACTOR_ID in the notification content (most reliable)
+
                       const actorIdMatch = notif.content.match(/<!--ACTOR_ID:(\d+)-->/);
                       if (actorIdMatch) {
                         userId = actorIdMatch[1];
-                        console.log('🔍 Found ACTOR_ID in notification:', userId);
                       }
-                      
-                      // Method 2: For follow notifications: "Name|user_id started following you."
+
                       if (!userId && notif.type?.toLowerCase() === 'follow') {
                         const match = notif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
                         if (match) {
                           userName = match[1];
                           userId = match[2];
-                          console.log('🔍 Follow notification - extracted:', { userName, userId });
                         }
                       }
-                      
-                      // Method 3: Extract user name from the beginning of the content for all types
+
                       if (!userName) {
-                        // Try different patterns for different notification types
-                        const patterns = [
-                          /^([^<]+?)\s+(commented|mentioned|liked|reposted|started following)/i,
-                          /^([^<]+?)\s+(commented on|mentioned you in|liked your|reposted your)/i,
-                          /^([^<]+?)\s+(donation|post)/i
-                        ];
-                        
-                        for (const pattern of patterns) {
-                          const nameMatch = notif.content.match(pattern);
-                          if (nameMatch) {
-                            userName = nameMatch[1].trim();
-                            console.log('🔍 Extracted user name with pattern:', userName);
-                            break;
-                          }
+                        const nameMatch = notif.content.match(/^([^<]+?)\s+(commented|mentioned|liked|reposted|started following|donation|post)/i);
+                        if (nameMatch) {
+                          userName = nameMatch[1].trim();
                         }
                       }
-                      
-                      // Method 4: If we have userName but no userId, try to find userId from the content
-                      if (userName && !userId) {
-                        // Look for any numeric ID in the content
-                        const idMatch = notif.content.match(/(\d+)/);
-                        if (idMatch) {
-                          userId = idMatch[1];
-                          console.log('🔍 Found potential userId from content:', userId);
-                        }
-                      }
-                      
-                      console.log('Final extracted data:', { userId, userName });
-                      
-                      // Check if we have cached profile pic for this user
-                      const cachedPic = userProfilePics[userId];
-                      console.log('🔍 Checking cached profile pic for userId:', userId, 'cached:', !!cachedPic);
-                      
-                      if (cachedPic) {
-                        console.log('🔍 Using cached profile pic for userId:', userId);
-                        return (
-                          <img
-                            src={cachedPic}
-                            alt={userName || 'User'}
-                            style={{
-                              width: '100%',
-                              height: '100%',
-                              objectFit: 'cover',
-                              borderRadius: '50%'
-                            }}
-                            onError={(e) => {
-                              console.log('🔍 Profile pic failed to load, using fallback');
-                              handleProfilePicError(e, ctulogo);
-                            }}
-                          />
-                        );
-                      }
-                      
-                      // If we have userId but no cached pic, trigger loading
-                      if (userId && !loadedProfilePics.current.has(userId)) {
-                        console.log('🔍 Triggering profile pic load for userId:', userId);
-                        loadedProfilePics.current.add(userId);
-                        fetchUserProfilePic(userId);
-                      }
-                      
-                      // If we have userName but no userId, try to search for the user
-                      if (userName && !userId && !loadedProfilePics.current.has(userName)) {
-                        console.log('🔍 Searching for user by name:', userName);
-                        loadedProfilePics.current.add(userName);
-                        searchUserByName(userName).then(userData => {
-                          if (userData && userData.profile_pic) {
-                            const profilePicUrl = getProfilePicUrl(userData.profile_pic, ctulogo);
-                            setUserProfilePics(prev => ({ ...prev, [userData.user_id]: profilePicUrl }));
-                          }
-                        });
-                      }
-                      
-                      // Show CTU logo as fallback while loading
-                      console.log('🔍 Showing fallback CTU logo for userId:', userId, 'userName:', userName);
+
                       return (
-                        <img
-                          src={ctulogo}
-                          alt={userName || 'User'}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            borderRadius: '50%'
-                          }}
-                          onError={(e) => handleProfilePicError(e, ctulogo)}
+                        <ProfilePicComponent
+                          userId={userId || undefined}
+                          userName={userName || 'User'}
+                          size="48px"
                         />
                       );
                     })()}
+
+                    {/* Minimalist type icon badge */}
+                    <div style={{
+                      position: 'absolute',
+                      right: '-6px',
+                      bottom: '-6px',
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      background: '#ffffff',
+                      border: '2px solid #ffffff',
+                      outline: '1px solid #e5e7eb',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.12)'
+                    }}>
+                      {(() => {
+                        const t = (notif.type || '').toLowerCase();
+                        const svgProps = { width: 10, height: 10, viewBox: '0 0 24 24', fill: 'none', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+                        if (t.includes('like')) {
+                          return (
+                            <svg {...svgProps} stroke="#ef4444">
+                              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" />
+                            </svg>
+                          );
+                        }
+                        if (t.includes('comment')) {
+                          return (
+                            <svg {...svgProps} stroke="#3b82f6">
+                              <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+                            </svg>
+                          );
+                        }
+                        if (t.includes('repost') || t.includes('re-share') || t.includes('share')) {
+                          return (
+                            <svg {...svgProps} stroke="#10b981">
+                              <polyline points="17 1 21 5 17 9" />
+                              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                              <polyline points="7 23 3 19 7 15" />
+                              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                            </svg>
+                          );
+                        }
+                        if (t.includes('follow')) {
+                          return (
+                            <svg {...svgProps} stroke="#f59e0b">
+                              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                              <circle cx="9" cy="7" r="4" />
+                              <path d="M20 8v6" />
+                              <path d="M23 11h-6" />
+                            </svg>
+                          );
+                        }
+                        if (t.includes('mention')) {
+                          return (
+                            <svg {...svgProps} stroke="#8b5cf6">
+                              <path d="M16 8a6 6 0 1 0 2 4.9V8" />
+                              <path d="M12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
+                            </svg>
+                          );
+                        }
+                        // default: notification bell
+                        return (
+                          <svg {...svgProps} stroke="#6b7280">
+                            <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                            <path d="M13.73 21a2 2 0 01-3.46 0" />
+                          </svg>
+                        );
+                      })()}
+                    </div>
                   </div>
                   
-                  {/* Notification Icon Overlay */}
-                  <div style={{
-                    position: 'absolute',
-                    top: '44px',
-                    left: '68px',
-                    width: '16px',
-                    height: '16px',
-                    borderRadius: '50%',
-                    background: notif.type.toLowerCase().includes('comment') ? '#28a745' :
-                               notif.type.toLowerCase().includes('like') ? '#dc3545' :
-                               notif.type.toLowerCase().includes('repost') ? '#17a2b8' :
-                               notif.type.toLowerCase().includes('mention') ? '#6f42c1' :
-                               notif.type.toLowerCase().includes('follow') ? '#ffc107' : '#6c757d',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '8px',
-                    color: 'white',
-                    border: '2px solid white',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
-                  }}>
-                    {notif.type.toLowerCase().includes('comment') ? '💬' : 
-                     notif.type.toLowerCase().includes('like') ? '❤️' : 
-                     notif.type.toLowerCase().includes('repost') ? '🔄' : 
-                     notif.type.toLowerCase().includes('mention') ? '✨' : 
-                     notif.type.toLowerCase().includes('follow') ? '👥' : '📢'}
-                  </div>
+                  {/* Notification Icon Overlay removed */}
                   
-                  {/* Content */}
+                  
                   <div style={{ flex: 1, marginRight: '20px' }}>
                     <div style={{ 
                       color: '#333', 
@@ -1611,18 +1571,7 @@ const NotificationPage: React.FC = () => {
                     </div>
                   </div>
                   
-                  {/* Unread indicator */}
-                  {!notif.is_read && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '12px',
-                      right: '12px',
-                      width: '6px',
-                      height: '6px',
-                      background: '#0066cc',
-                      borderRadius: '50%'
-                    }} />
-                  )}
+                  {/* Unread indicator removed */}
           </div>
               );
             })
@@ -1693,7 +1642,7 @@ const NotificationPage: React.FC = () => {
               ×
             </button>
             
-            {/* Header */}
+            {/* Header with avatar */}
             <div style={{
               background: '#f8f9fa',
               padding: '20px',
@@ -1716,7 +1665,8 @@ const NotificationPage: React.FC = () => {
                       const match = openNotif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
                       return match ? match[2] : undefined;
                     }
-                    return undefined;
+                    const actorIdMatch = openNotif.content?.match(/<!--ACTOR_ID:(\d+)-->/);
+                    return actorIdMatch ? actorIdMatch[1] : undefined;
                   })()}
                   userName={(() => {
                     if (openNotif.type && openNotif.type.toLowerCase() === 'follow') {
@@ -1730,7 +1680,7 @@ const NotificationPage: React.FC = () => {
                   size="40px"
                 />
               </div>
-              
+
               {/* Notification Info */}
               <div style={{ flex: 1 }}>
                 <div style={{ 
@@ -1750,7 +1700,7 @@ const NotificationPage: React.FC = () => {
               </div>
             </div>
             
-            {/* Content */}
+            
             <div style={{ padding: '20px' }}>
               <div style={{ 
                 fontSize: 14, 

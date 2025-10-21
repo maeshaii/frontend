@@ -604,8 +604,7 @@ const ForumPage: React.FC = () => {
                         displayName={displayName}
                         displayAvatar={displayAvatar}
                         formatTime={formatTime}
-                        isRepost={true}
-                        repostData={item.repostData}
+                        
                         onPostUpdate={() => {
                           // Immediate update without page refresh - similar to UnifiedDashboard
                           getForums().then((forumsData) => {

@@ -432,8 +432,7 @@ const DonationPage: React.FC = () => {
                       displayName={displayName}
                       displayAvatar={displayAvatar}
                       formatTime={formatTime}
-                      isRepost={true}
-                      repostData={item.repostData}
+                      
                       onPostUpdate={() => {
                         fetchDonationPosts(false); // No loading indicator for updates
                       }}

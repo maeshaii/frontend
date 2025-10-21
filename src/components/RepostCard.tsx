@@ -1,776 +1,692 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  likeRepost, 
-  unlikeRepost, 
-  commentOnRepost, 
-  deleteRepostComment, 
-  editRepostComment,
-  editRepost,
-  deleteRepost,
-  createReply,
-  getCommentReplies,
-  editReply,
-  deleteReply,
-  searchAlumni,
-  getFollowingForMentions
-} from '../services/api';
-import ctulogo from '../images/ctulogo.png';
+import React, { useEffect, useState, useRef } from 'react';
+import { likeRepost, unlikeRepost, commentOnRepost, getRepostLikes, editRepost, deleteRepost, editPost, deletePost } from '../services/api';
 import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
-import Reply from './Reply';
-import ReplyInput from './ReplyInput';
-import MentionInput from './MentionInput';
+import RepostButton from './RepostButton';
 
-interface RepostItem {
+// Minimal, reusable types for the repost card
+interface UserLite {
+  user_id: number;
+  f_name?: string;
+  m_name?: string;
+  l_name?: string;
+  profile_pic?: string;
+}
+
+interface PostItemLite {
+  post_id?: number; // original post id
+  created_at?: string | null;
+  post_content?: string;
+  post_images?: Array<{ image_id: number; image_url: string; order: number }>;
+  user?: UserLite;
+}
+
+interface CommentLite {
+  comment_id: number;
+  comment_content: string;
+  date_created?: string;
+  user: UserLite;
+}
+
+interface RepostLite {
   repost_id: number;
   repost_date: string;
   repost_caption?: string;
-  user: {
-    m_name?: string;
-    user_id: number;
-    f_name: string;
-    l_name: string;
-    profile_pic?: string;
-  };
-  likes?: LikeItem[];
-  comments?: CommentItem[];
+  user: UserLite;
+  likes?: Array<{ user_id: number }>;
   likes_count?: number;
+  comments?: CommentLite[];
   comments_count?: number;
-  original_post?: PostItem;
+  original_post?: PostItemLite;
 }
 
-interface CommentItem {
-  comment_id: number;
-  comment_content: string;
-  date_created: string;
-  replies_count?: number;
-  user: {
-    user_id: number;
-    f_name: string;
-    l_name: string;
-    profile_pic?: string;
-  };
-}
-
-interface LikeItem {
-  user_id: number;
-  f_name: string;
-  l_name: string;
-  profile_pic?: string;
-  initials?: string;
-}
-
-interface PostItem {
-  post_id: number;
-  post_title?: string;
-  post_content: string;
-  post_image?: string | null;
-  post_images?: Array<{
-    image_id: number;
-    image_url: string;
-    order: number;
-  }>;
-  created_at?: string | null;
-  likes_count?: number;
-  comments_count?: number;
-  user?: {
-    user_id?: number;
-    f_name?: string;
-    l_name?: string;
-    profile_pic?: string;
-    name?: string;
-  };
-  comments?: CommentItem[];
-  reposts?: RepostItem[];
-  likes?: LikeItem[];
-  liked_by_user?: boolean;
-}
+type RepostContext = 'post' | 'forum' | 'donation';
 
 interface RepostCardProps {
-  repostData: RepostItem;
-  originalPost: PostItem;
+  repost: RepostLite;
   currentUserId: number | null;
   formatTime: (iso?: string | null) => string;
-  onPostUpdate?: () => void;
+  onRefresh?: () => void;
+  context?: RepostContext;
   showOptions?: { [key: string | number]: boolean };
   setShowOptions?: (fn: (prev: { [key: string | number]: boolean }) => { [key: string | number]: boolean }) => void;
-  likedPosts?: { [key: number]: boolean };
-  setLikedPosts?: (fn: (prev: { [key: number]: boolean }) => { [key: number]: boolean }) => void;
-  showCommentInput?: { [key: number]: boolean };
-  setShowCommentInput?: (fn: (prev: { [key: number]: boolean }) => { [key: number]: boolean }) => void;
-  commentInput?: { [key: number]: string };
-  setCommentInput?: (fn: (prev: { [key: number]: string }) => { [key: number]: string }) => void;
+  editingRepost?: { [key: string | number]: boolean };
+  setEditingRepost?: (fn: (prev: { [key: string | number]: boolean }) => { [key: string | number]: boolean }) => void;
+  editRepostContent?: { [key: string | number]: string };
+  setEditRepostContent?: (fn: (prev: { [key: string | number]: string }) => { [key: string | number]: string }) => void;
 }
 
-const RepostCard: React.FC<RepostCardProps> = ({
-  repostData,
-  originalPost,
-  currentUserId,
-  formatTime,
-  onPostUpdate,
+const getSortedImages = (post?: PostItemLite) => {
+  if (!post?.post_images || !Array.isArray(post.post_images)) return [] as Array<{ image_id: number; image_url: string; order: number }>;
+  return [...post.post_images].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+};
+
+const RepostCard: React.FC<RepostCardProps> = ({ 
+  repost, 
+  currentUserId, 
+  formatTime, 
+  onRefresh, 
+  context = 'post',
   showOptions = {},
   setShowOptions,
-  likedPosts = {},
-  setLikedPosts,
-  showCommentInput = {},
-  setShowCommentInput,
-  commentInput = {},
-  setCommentInput,
+  editingRepost = {},
+  setEditingRepost,
+  editRepostContent = {},
+  setEditRepostContent
 }) => {
-  const [editingCaption, setEditingCaption] = useState(false);
-  const [editCaptionContent, setEditCaptionContent] = useState(repostData.repost_caption || '');
-  const [editingComment, setEditingComment] = useState<{ [key: number]: boolean }>({});
-  const [editCommentContent, setEditCommentContent] = useState<{ [key: number]: string }>({});
-  const [showCommentOptions, setShowCommentOptions] = useState<{ [key: number]: boolean }>({});
-  
-  // Reply state management
-  const [showReplyInput, setShowReplyInput] = useState<{ [key: number]: boolean }>({});
-  const [showReplies, setShowReplies] = useState<{ [key: number]: boolean }>({});
-  const [commentReplies, setCommentReplies] = useState<{ [key: number]: any[] }>({});
+  const reposterName = `${repost.user.f_name || ''} ${repost.user.m_name || ''} ${repost.user.l_name || ''}`.trim();
+  const reposterAvatar = getProfilePicUrl(repost.user.profile_pic);
 
-  // @mention functionality for comments
-  const [followingUsers, setFollowingUsers] = useState<any[]>([]);
-  const [showMentionSuggestions, setShowMentionSuggestions] = useState<{ [key: number]: boolean }>({});
-  const [mentionSuggestions, setMentionSuggestions] = useState<{ [key: number]: any[] }>({});
-  const [mentionStart, setMentionStart] = useState<{ [key: number]: number }>({});
-  const [selectedMentionIndex, setSelectedMentionIndex] = useState<{ [key: number]: number }>({});
+  const original = repost.original_post || {};
+  const originalPosterName = `${original.user?.f_name || ''} ${original.user?.l_name || ''}`.trim();
+  const originalPosterAvatar = getProfilePicUrl(original.user?.profile_pic);
 
-  // Helper function to get the correct profile path
-  const getProfilePath = (userId: number) => {
-    const currentPath = window.location.pathname;
-    if (currentPath.startsWith('/peso')) {
-      return `/peso/profile/${userId}`;
-    } else if (currentPath.startsWith('/ccict')) {
-      return `/ccict/profile/${userId}`;
-    } else {
-      return `/alumni/profile/${userId}`;
-    }
-  };
+  const [liked, setLiked] = useState<boolean>(!!repost.likes?.some(l => l.user_id === currentUserId));
+  const [likesCount, setLikesCount] = useState<number>(repost.likes_count || repost.likes?.length || 0);
 
-  const handleUserSearch = async (searchTerm: string) => {
-    try {
-      const response = await searchAlumni(searchTerm);
-      if (response.results && response.results.length > 0) {
-        // Take the first result (most relevant match)
-        const user = response.results[0];
-        const currentPath = window.location.pathname;
-        if (currentPath.startsWith('/peso')) {
-          window.location.href = `/peso/profile/${user.id}`;
-        } else if (currentPath.startsWith('/ccict')) {
-          window.location.href = `/ccict/profile/${user.id}`;
-        } else {
-          window.location.href = `/alumni/profile/${user.id}`;
-        }
-      } else {
-        alert(`No user found with name "${searchTerm}"`);
-      }
-    } catch (error) {
-      console.error('Error searching for user:', error);
-      alert('Error searching for user. Please try again.');
-    }
-  };
-
-  // Helper function to detect and make URLs and names clickable
-  const renderTextWithLinks = (text: string | undefined | null) => {
-    if (!text) return null;
-    
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const mentionRegex = /@(\w+)/g;
-    
-    // Enhanced regex to detect names (First Last format)
-    const nameRegex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
-    
-    const parts = text.split(urlRegex);
-    
-    return parts.map((part, index) => {
-      if (urlRegex.test(part)) {
-        return (
-          <a
-            key={index}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              color: '#174f84',
-              textDecoration: 'underline',
-              cursor: 'pointer'
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              window.open(part, '_blank', 'noopener,noreferrer');
-            }}
-          >
-            {part}
-          </a>
-        );
-      }
-      
-      // Handle mentions (@username)
-      const mentionParts = part.split(mentionRegex);
-      const processedMentionParts = mentionParts.map((mentionPart, mentionIndex) => {
-        if (mentionRegex.test(mentionPart)) {
-          // Extract username from @username
-          const username = mentionPart.substring(1); // Remove @
-          
-          return (
-            <button
-              key={`${index}-${mentionIndex}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                // Search for the user and redirect to their profile
-                handleUserSearch(username);
-              }}
-              style={{ 
-                color: '#007bff', 
-                fontWeight: '600',
-                background: 'none',
-                border: 'none',
-                padding: '0',
-                cursor: 'pointer',
-                textDecoration: 'none'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.textDecoration = 'underline';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.textDecoration = 'none';
-              }}
-            >
-              {mentionPart}
-            </button>
-          );
-        }
-        
-        // Handle names (First Last format)
-        const nameParts = mentionPart.split(nameRegex);
-        return nameParts.map((namePart, nameIndex) => {
-          if (nameRegex.test(namePart)) {
-            return (
-              <button
-                key={`${index}-${mentionIndex}-${nameIndex}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Search for the user and redirect to their profile
-                  handleUserSearch(namePart);
-                }}
-                style={{ 
-                  color: '#007bff', 
-                  fontWeight: '600',
-                  background: 'none',
-                  border: 'none',
-                  padding: '0',
-                  cursor: 'pointer',
-                  textDecoration: 'none'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.textDecoration = 'underline';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.textDecoration = 'none';
-                }}
-              >
-                {namePart}
-              </button>
-            );
-          }
-          return namePart;
-        });
-      });
-      
-      return processedMentionParts;
-    });
-  };
-
-  // Reply helper functions
-  const loadReplies = useCallback(async (commentId: number) => {
-    try {
-      console.log(`RepostCard: Loading replies for comment ${commentId}`);
-      const response = await getCommentReplies(commentId);
-      console.log(`RepostCard: Replies response for comment ${commentId}:`, response);
-      setCommentReplies(prev => ({ ...prev, [commentId]: response.replies || [] }));
-    } catch (error) {
-      console.error('RepostCard: Error loading replies:', error);
-    }
-  }, []);
-
-  const handleReplyAdded = (commentId: number) => {
-    loadReplies(commentId);
-    setShowReplyInput(prev => ({ ...prev, [commentId]: false }));
-    // Automatically show replies after creating one
-    setShowReplies(prev => ({ ...prev, [commentId]: true }));
-    // Update the post to refresh replies_count
-    onPostUpdate?.();
-  };
-
-  const toggleReplies = (commentId: number) => {
-    if (!showReplies[commentId]) {
-      loadReplies(commentId);
-    }
-    setShowReplies(prev => ({ ...prev, [commentId]: !prev[commentId] }));
-  };
-
-  // Facebook-style: Load ALL replies for ALL comments immediately
+  // Sync like state when repost data changes (e.g., after refresh)
   useEffect(() => {
-    if (repostData.comments && repostData.comments.length > 0) {
-      console.log('RepostCard: Facebook-style loading ALL replies for ALL comments');
-      repostData.comments.forEach((comment: any) => {
-        // Load replies for every comment (Facebook approach)
-        loadReplies(comment.comment_id);
-        // Always show replies (Facebook shows them by default)
-        setShowReplies(prev => ({ ...prev, [comment.comment_id]: true }));
-      });
-    }
-  }, [repostData.comments, loadReplies]);
+    const isLikedByCurrentUser = !!repost.likes?.some(l => l.user_id === currentUserId);
+    setLiked(isLikedByCurrentUser);
+    setLikesCount(repost.likes_count || repost.likes?.length || 0);
+  }, [repost.likes, repost.likes_count, currentUserId]);
+  const [showLikesModal, setShowLikesModal] = useState(false);
+  const [likesLoading, setLikesLoading] = useState(false);
+  const [fetchedLikes, setFetchedLikes] = useState<any[]>([]);
+  const [showCommentInput, setShowCommentInput] = useState(false);
+  const [commentValue, setCommentValue] = useState('');
+  const optionsMenuRef = useRef<HTMLDivElement>(null);
 
-  const isOwn = currentUserId === repostData.user.user_id;
-  const reposterName = `${repostData.user.f_name} ${repostData.user.m_name || ''} ${repostData.user.l_name}`.trim();
-  const reposterAvatar = getProfilePicUrl(repostData.user.profile_pic);
+  // Check if current user owns this repost
+  const isOwn = repost.user.user_id === currentUserId;
 
-  const originalPosterName = `${originalPost.user?.f_name || ''} ${originalPost.user?.l_name || ''}`.trim();
-  const originalPosterAvatar = getProfilePicUrl(originalPost.user?.profile_pic);
-
-  const isLiked = likedPosts[repostData.repost_id] || false;
-
-  const handleLike = async () => {
-    if (!currentUserId) return;
-    
+  const handleLikeToggle = async () => {
     try {
-      if (isLiked) {
-        await unlikeRepost(repostData.repost_id);
-        setLikedPosts?.((prev: { [key: number]: boolean }) => ({
-          ...prev,
-          [repostData.repost_id]: false
-        }));
+      if (!currentUserId) return;
+      if (liked) {
+        setLiked(false);
+        setLikesCount(c => Math.max(0, c - 1));
+        await unlikeRepost(repost.repost_id);
       } else {
-        await likeRepost(repostData.repost_id);
-        setLikedPosts?.((prev: { [key: number]: boolean }) => ({
-          ...prev,
-          [repostData.repost_id]: true
-        }));
+        setLiked(true);
+        setLikesCount(c => c + 1);
+        await likeRepost(repost.repost_id);
       }
-      onPostUpdate?.();
-    } catch (error) {
-      console.error('Error toggling like:', error);
+      onRefresh?.();
+    } catch (e) {
+      // swallow
     }
   };
 
   const handleCommentSubmit = async () => {
-    if (!currentUserId || !commentInput[repostData.repost_id]?.trim()) return;
-    
+    if (!commentValue.trim()) return;
     try {
-      await commentOnRepost(repostData.repost_id, commentInput[repostData.repost_id]);
-      setCommentInput?.((prev: { [key: number]: string }) => ({
-        ...prev,
-        [repostData.repost_id]: ''
-      }));
-      setShowCommentInput?.((prev: { [key: number]: boolean }) => ({
-        ...prev,
-        [repostData.repost_id]: false
-      }));
-      onPostUpdate?.();
-    } catch (error) {
-      console.error('Error submitting comment:', error);
+      await commentOnRepost(repost.repost_id, commentValue.trim());
+      setCommentValue('');
+      setShowCommentInput(false);
+      onRefresh?.();
+    } catch (e) {
+      // swallow
     }
   };
 
-  // Load following users for @mentions
-  useEffect(() => {
-    const loadFollowing = async () => {
-      try {
-        const response = await getFollowingForMentions();
-        if (response.success) {
-          setFollowingUsers(response.following);
-        }
-      } catch (error) {
-        console.error('Error loading following users:', error);
-      }
-    };
-    loadFollowing();
-  }, []);
-
-  // @mention functionality for comments
-  const handleCommentInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>, itemId: number) => {
-    const newValue = e.target.value;
-    setCommentInput?.((prev: { [key: number]: string }) => ({
-      ...prev,
-      [itemId]: newValue
-    }));
-
-    const cursorPosition = e.target.selectionStart || 0;
-    const textBeforeCursor = newValue.substring(0, cursorPosition);
-    
-    // Find the last @ symbol before cursor
-    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-    
-    if (lastAtIndex !== -1) {
-      const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
-      
-      // Check if there's no space after @ (meaning we're typing a mention)
-      if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
-        setMentionStart(prev => ({ ...prev, [itemId]: lastAtIndex }));
-        setShowMentionSuggestions(prev => ({ ...prev, [itemId]: true }));
-        
-        // Filter suggestions based on what's typed after @
-        const filteredSuggestions = followingUsers.filter(user =>
-          user.name.toLowerCase().includes(textAfterAt.toLowerCase()) ||
-          user.f_name.toLowerCase().includes(textAfterAt.toLowerCase()) ||
-          user.l_name.toLowerCase().includes(textAfterAt.toLowerCase())
-        );
-        setMentionSuggestions(prev => ({ ...prev, [itemId]: filteredSuggestions }));
-        setSelectedMentionIndex(prev => ({ ...prev, [itemId]: 0 }));
-      } else {
-        setShowMentionSuggestions(prev => ({ ...prev, [itemId]: false }));
-      }
-    } else {
-      setShowMentionSuggestions(prev => ({ ...prev, [itemId]: false }));
+  const handleEditRepost = () => {
+    if (!setEditRepostContent || !setEditingRepost) return;
+    if (!isOwn) {
+      alert('You can only edit your own reposts');
+      return;
     }
-  };
-
-  const selectMention = (user: any, itemId: number) => {
-    const mentionStartPos = mentionStart[itemId];
-    if (mentionStartPos === undefined) return;
-
-    const currentValue = commentInput[itemId] || '';
-    const beforeMention = currentValue.substring(0, mentionStartPos);
-    const afterMention = currentValue.substring(currentValue.length);
-    
-    const newValue = beforeMention + `@${user.name} ` + afterMention;
-    setCommentInput?.((prev: { [key: number]: string }) => ({
-      ...prev,
-      [itemId]: newValue
-    }));
-    
-    setShowMentionSuggestions(prev => ({ ...prev, [itemId]: false }));
-    setMentionStart(prev => ({ ...prev, [itemId]: -1 }));
-  };
-
-  const handleCommentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>, itemId: number) => {
-    if (!showMentionSuggestions[itemId]) {
-      return; // Let default behavior handle Enter for textarea
-    }
-
-    const suggestions = mentionSuggestions[itemId] || [];
-    const selectedIndex = selectedMentionIndex[itemId] || 0;
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setSelectedMentionIndex(prev => ({ 
-          ...prev, 
-          [itemId]: selectedIndex < suggestions.length - 1 ? selectedIndex + 1 : 0 
-        }));
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setSelectedMentionIndex(prev => ({ 
-          ...prev, 
-          [itemId]: selectedIndex > 0 ? selectedIndex - 1 : suggestions.length - 1 
-        }));
-        break;
-      case 'Enter':
-      case 'Tab':
-        e.preventDefault();
-        if (suggestions[selectedIndex]) {
-          selectMention(suggestions[selectedIndex], itemId);
-        }
-        break;
-      case 'Escape':
-        setShowMentionSuggestions(prev => ({ ...prev, [itemId]: false }));
-        break;
-    }
-  };
-
-  const handleSaveCaption = async () => {
-    try {
-      await editRepost(repostData.repost_id, { caption: editCaptionContent });
-      setEditingCaption(false);
-      onPostUpdate?.();
-    } catch (error) {
-      console.error('Error saving caption:', error);
-    }
+    setEditRepostContent(prev => ({ ...prev, [repost.repost_id]: repost.repost_caption || '' }));
+    setEditingRepost(prev => ({ ...prev, [repost.repost_id]: true }));
+    setShowOptions?.(prev => ({ ...prev, [repost.repost_id]: false }));
   };
 
   const handleDeleteRepost = async () => {
-    if (!window.confirm('Are you sure you want to delete this repost?')) return;
+    if (!isOwn) {
+      alert('You can only delete your own reposts');
+      return;
+    }
     
+    if (window.confirm('Are you sure you want to delete this repost?')) {
+      try {
+        await deleteRepost(repost.repost_id);
+        onRefresh?.();
+        alert('Repost deleted successfully');
+      } catch (error) {
+        console.error('Error deleting repost:', error);
+        alert('Failed to delete repost');
+      }
+    }
+    setShowOptions?.(prev => ({ ...prev, [repost.repost_id]: false }));
+  };
+
+  const handleSaveEditRepost = async () => {
+    if (!setEditRepostContent || !setEditingRepost) return;
+    const newContent = editRepostContent[repost.repost_id];
+    
+    if (!newContent?.trim()) {
+      alert('Repost content cannot be empty');
+      return;
+    }
+
     try {
-      await deleteRepost(repostData.repost_id);
-      onPostUpdate?.();
+      await editRepost(repost.repost_id, { caption: newContent.trim() });
+      setEditingRepost(prev => ({ ...prev, [repost.repost_id]: false }));
+      setEditRepostContent(prev => ({ ...prev, [repost.repost_id]: '' }));
+      onRefresh?.();
     } catch (error) {
-      console.error('Error deleting repost:', error);
+      console.error('Error editing repost:', error);
+      alert('Failed to edit repost');
     }
   };
 
-  const handleEditComment = async (commentId: number) => {
+  const handleCancelEditRepost = () => {
+    if (!setEditRepostContent || !setEditingRepost) return;
+    setEditingRepost(prev => ({ ...prev, [repost.repost_id]: false }));
+    setEditRepostContent(prev => ({ ...prev, [repost.repost_id]: '' }));
+  };
+
+  const handleEditOriginalPost = () => {
+    if (!setEditRepostContent || !setEditingRepost) return;
+    if (original.user?.user_id !== currentUserId) {
+      alert('You can only edit your own posts');
+      return;
+    }
+    setEditRepostContent(prev => ({ ...prev, [`original_${original.post_id}`]: original.post_content || '' }));
+    setEditingRepost(prev => ({ ...prev, [`original_${original.post_id}`]: true }));
+    setShowOptions?.(prev => ({ ...prev, [`original_${original.post_id}`]: false }));
+  };
+
+  const handleDeleteOriginalPost = async () => {
+    if (original.user?.user_id !== currentUserId) {
+      alert('You can only delete your own posts');
+      return;
+    }
+    
+    if (window.confirm('Are you sure you want to delete this original post?')) {
+      try {
+        await deletePost(original.post_id!);
+        onRefresh?.();
+        alert('Original post deleted successfully');
+      } catch (error) {
+        console.error('Error deleting original post:', error);
+        alert('Failed to delete original post');
+      }
+    }
+    setShowOptions?.(prev => ({ ...prev, [`original_${original.post_id}`]: false }));
+  };
+
+  const handleSaveEditOriginalPost = async () => {
+    if (!setEditRepostContent || !setEditingRepost) return;
+    const newContent = editRepostContent[`original_${original.post_id}`];
+    
+    if (!newContent?.trim()) {
+      alert('Post content cannot be empty');
+      return;
+    }
+
     try {
-      await editRepostComment(repostData.repost_id, commentId, { comment_content: editCommentContent[commentId] });
-      setEditingComment((prev) => ({ ...prev, [commentId]: false }));
-      setEditCommentContent((prev) => ({ ...prev, [commentId]: '' }));
-      onPostUpdate?.();
+      await editPost(original.post_id!, { post_content: newContent.trim() });
+      setEditingRepost(prev => ({ ...prev, [`original_${original.post_id}`]: false }));
+      setEditRepostContent(prev => ({ ...prev, [`original_${original.post_id}`]: '' }));
+      onRefresh?.();
     } catch (error) {
-      console.error('Error editing comment:', error);
+      console.error('Error editing original post:', error);
+      alert('Failed to edit original post');
     }
   };
 
-  const handleDeleteComment = async (commentId: number) => {
-    if (!window.confirm('Are you sure you want to delete this comment?')) return;
-    
-    try {
-      await deleteRepostComment(repostData.repost_id, commentId);
-      onPostUpdate?.();
-    } catch (error) {
-      console.error('Error deleting comment:', error);
+  // Load likes data when component mounts to display usernames in summary
+  useEffect(() => {
+    if (likesCount > 0) {
+      let mounted = true;
+      (async () => {
+        try {
+          const data = await getRepostLikes(repost.repost_id);
+          if (mounted) {
+            setFetchedLikes(data?.likes || []);
+            // Update like state based on fetched data
+            const isLikedByCurrentUser = data?.likes?.some((like: any) => {
+              const likeUser = like.user || like;
+              return likeUser.user_id === currentUserId;
+            });
+            if (isLikedByCurrentUser !== undefined) {
+              setLiked(isLikedByCurrentUser);
+            }
+          }
+        } catch {
+          if (mounted) setFetchedLikes([]);
+        }
+      })();
+      return () => {
+        mounted = false;
+      };
     }
-  };
+  }, [repost.repost_id, likesCount, currentUserId]);
 
-  const getImagesFromPost = (post: PostItem) => {
-    const images = [];
+  // Handle clicking outside the options menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (optionsMenuRef.current && !optionsMenuRef.current.contains(event.target as Node)) {
+        if (showOptions[repost.repost_id] && setShowOptions) {
+          setShowOptions(prev => ({ ...prev, [repost.repost_id]: false }));
+        }
+        if (showOptions[`original_${original.post_id}`] && setShowOptions) {
+          setShowOptions(prev => ({ ...prev, [`original_${original.post_id}`]: false }));
+        }
+      }
+    };
+
+    const hasOpenMenu = showOptions[repost.repost_id] || showOptions[`original_${original.post_id}`];
     
-    // Add main post image if exists
-    if (post.post_image) {
-      images.push({
-        image_id: 0,
-        image_url: post.post_image,
-        order: 0
-      });
+    if (hasOpenMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
     }
-    
-    // Add post_images array if exists
-    if (post.post_images && Array.isArray(post.post_images)) {
-      images.push(...post.post_images);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showOptions, repost.repost_id, original.post_id, setShowOptions]);
+
+  useEffect(() => {
+    if (!showLikesModal) return;
+    let mounted = true;
+    (async () => {
+      setLikesLoading(true);
+      try {
+        const data = await getRepostLikes(repost.repost_id);
+        if (mounted) setFetchedLikes(data?.likes || []);
+      } catch {
+        if (mounted) setFetchedLikes([]);
+      } finally {
+        if (mounted) setLikesLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [showLikesModal, repost.repost_id]);
+
+  const goToOriginal = () => {
+    const id = original.post_id;
+    if (!id) return;
+    localStorage.setItem('pendingPostView', String(id));
+    const path = window.location.pathname;
+    if (path.startsWith('/peso')) {
+      window.location.href = `/peso/dashboard/${id}`;
+    } else if (path.startsWith('/ccict')) {
+      window.location.href = `/ccict/dashboard/${id}`;
+    } else {
+      window.location.href = `/alumni/dashboard/${id}`;
     }
-    
-    return images.sort((a, b) => a.order - b.order);
   };
 
   return (
-    <div style={{
-      marginBottom: '16px',
-      border: '1px solid #e1e5e9',
-      borderRadius: '12px',
-      overflow: 'hidden',
-      backgroundColor: '#fafbfc'
-    }}>
-      {/* Repost Header */}
-      <div style={{
-        padding: '12px 16px',
-        backgroundColor: '#f8f9fa',
-        borderBottom: '1px solid #e1e5e9'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <img 
-            src={reposterAvatar} 
+    <div className="post-feed-card" style={{ marginBottom: '16px', overflow: 'hidden' }}>
+      {/* Repost header */}
+      <div className="post-header" style={{ padding: '12px 16px', borderBottom: '1px solid #e1e5e9', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="post-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <img
+            src={reposterAvatar}
             alt={reposterName}
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              objectFit: 'cover'
-            }}
+            style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+            onError={handleProfilePicError}
           />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: '600', fontSize: '14px', color: '#1a1a1a' }}>
-              {reposterName}
-            </div>
-            <div style={{ fontSize: '12px', color: '#666', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14, color: '#1a1a1a' }}>{reposterName || 'User'}</div>
+            <div style={{ fontSize: 12, color: '#666', display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>🔄</span>
               <span>Reposted</span>
               <span>•</span>
-              <span>{formatTime(repostData.repost_date)}</span>
+              <span>{formatTime(repost.repost_date)}</span>
             </div>
           </div>
-          {isOwn && (
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowOptions?.(prev => ({ 
-                  ...prev, 
-                  [`repost-${repostData.repost_id}`]: !prev[`repost-${repostData.repost_id}`] 
-                }))}
+        </div>
+        
+        {/* Three dots menu */}
+        {setShowOptions && (
+          <div style={{ position: 'relative', marginLeft: 'auto' }} ref={optionsMenuRef}>
+            <button
+              onClick={() => setShowOptions(prev => ({ ...prev, [repost.repost_id]: !prev[repost.repost_id] }))}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '18px',
+                color: '#666',
+                padding: '8px',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: '32px',
+                minHeight: '32px'
+              }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f0f0f0')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent')}
+            >
+              ⋯
+            </button>
+            
+            {showOptions[repost.repost_id] && (
+              <div
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '18px',
-                  cursor: 'pointer',
-                  color: '#666',
-                  padding: '4px'
-                }}
-              >
-                ⋯
-              </button>
-              {showOptions[`repost-${repostData.repost_id}`] && (
-                <div style={{
                   position: 'absolute',
                   right: 0,
                   top: '100%',
-                  backgroundColor: 'white',
+                  background: '#fff',
                   border: '1px solid #ddd',
                   borderRadius: '8px',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                   zIndex: 1000,
-                  minWidth: '120px'
-                }}>
+                  minWidth: '120px',
+                  overflow: 'hidden'
+                }}
+              >
+                {isOwn && (
+                  <>
+                    <button
+                      onClick={handleEditRepost}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: 'none',
+                        background: 'transparent',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        color: '#333'
+                      }}
+                      onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f8f9fa')}
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent')}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={handleDeleteRepost}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: 'none',
+                        background: 'transparent',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        color: '#dc3545'
+                      }}
+                      onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f8f9fa')}
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent')}
+                    >
+                      Delete
+                    </button>
+                  </>
+                )}
+                {!isOwn && (
+                  <div style={{
+                    padding: '8px 12px',
+                    fontSize: '14px',
+                    color: '#666',
+                    textAlign: 'center'
+                  }}>
+                    No options available
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Edit repost caption */}
+      {editingRepost[repost.repost_id] && (
+        <div style={{ padding: '16px', background: '#fff', borderBottom: '1px solid #e1e5e9' }}>
+          <textarea
+            value={editRepostContent[repost.repost_id] || ''}
+            onChange={(e) => setEditRepostContent?.(prev => ({ ...prev, [repost.repost_id]: e.target.value }))}
+            placeholder="Edit your repost caption..."
+            style={{
+              width: '100%',
+              minHeight: '80px',
+              padding: '12px',
+              border: '1px solid #ddd',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontFamily: 'inherit',
+              resize: 'vertical',
+              outline: 'none',
+              boxSizing: 'border-box'
+            }}
+            autoFocus
+          />
+          <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
+            <button
+              onClick={handleCancelEditRepost}
+              style={{
+                padding: '6px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '6px',
+                background: '#fff',
+                color: '#666',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveEditRepost}
+              style={{
+                padding: '6px 12px',
+                border: 'none',
+                borderRadius: '6px',
+                background: '#007bff',
+                color: '#fff',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Repost caption (if not editing) */}
+      {!editingRepost[repost.repost_id] && repost.repost_caption && (
+        <div style={{ padding: '16px', background: '#fff', borderBottom: '1px solid #e1e5e9' }}>
+          <div style={{ fontSize: '14px', color: '#1a1a1a', lineHeight: '1.5' }}>
+            {repost.repost_caption}
+          </div>
+        </div>
+      )}
+
+      {/* Nested original preview */}
+      <div className="post-content" style={{ padding: '16px', background: '#fff' }}>
+        <div
+          role="button"
+          onClick={goToOriginal}
+          style={{
+            border: '1px solid #e1e5e9',
+            borderRadius: 10,
+            overflow: 'hidden',
+            backgroundColor: '#fff',
+            cursor: original.post_id ? 'pointer' : 'default',
+            transition: 'box-shadow 0.15s ease'
+          }}
+          onMouseEnter={(e) => ((e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 10px rgba(0,0,0,0.06)')}
+          onMouseLeave={(e) => ((e.currentTarget as HTMLDivElement).style.boxShadow = 'none')}
+        >
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <img
+                src={originalPosterAvatar}
+                alt={originalPosterName}
+                style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                onError={handleProfilePicError}
+              />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, color: '#1a1a1a' }}>{originalPosterName || 'Original Post'}</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{formatTime(original.created_at)}</div>
+              </div>
+            </div>
+            
+            {/* Three dots menu for original post owner */}
+            {original.user?.user_id === currentUserId && setShowOptions && (
+              <div style={{ position: 'relative' }} ref={optionsMenuRef}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent triggering the goToOriginal function
+                    setShowOptions(prev => ({ ...prev, [`original_${original.post_id}`]: !prev[`original_${original.post_id}`] }));
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '18px',
+                    color: '#666',
+                    padding: '4px',
+                    borderRadius: '4px'
+                  }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f0f0f0')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent')}
+                >
+                  ⋯
+                </button>
+                
+                {showOptions[`original_${original.post_id}`] && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: '100%',
+                      background: '#fff',
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                      zIndex: 1000,
+                      minWidth: '120px',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditOriginalPost();
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: 'none',
+                        background: 'transparent',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        color: '#333'
+                      }}
+                      onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f8f9fa')}
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent')}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteOriginalPost();
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: 'none',
+                        background: 'transparent',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        color: '#dc3545'
+                      }}
+                      onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f8f9fa')}
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent')}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div style={{ padding: '12px 16px' }}>
+            {/* Edit original post content */}
+            {editingRepost[`original_${original.post_id}`] ? (
+              <div>
+                <textarea
+                  value={editRepostContent[`original_${original.post_id}`] || ''}
+                  onChange={(e) => setEditRepostContent?.(prev => ({ ...prev, [`original_${original.post_id}`]: e.target.value }))}
+                  placeholder="Edit your post content..."
+                  style={{
+                    width: '100%',
+                    minHeight: '80px',
+                    padding: '12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontFamily: 'inherit',
+                    resize: 'vertical',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    marginBottom: '12px'
+                  }}
+                  autoFocus
+                />
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                   <button
-                    onClick={() => {
-                      setEditingCaption(true);
-                      setShowOptions?.(prev => ({ ...prev, [`repost-${repostData.repost_id}`]: false }));
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingRepost?.(prev => ({ ...prev, [`original_${original.post_id}`]: false }));
+                      setEditRepostContent?.(prev => ({ ...prev, [`original_${original.post_id}`]: '' }));
                     }}
                     style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      border: 'none',
-                      background: 'none',
-                      textAlign: 'left',
+                      padding: '6px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      background: '#fff',
+                      color: '#666',
                       cursor: 'pointer',
                       fontSize: '14px'
                     }}
                   >
-                    Edit
+                    Cancel
                   </button>
                   <button
-                    onClick={handleDeleteRepost}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSaveEditOriginalPost();
+                    }}
                     style={{
-                      width: '100%',
-                      padding: '8px 12px',
+                      padding: '6px 12px',
                       border: 'none',
-                      background: 'none',
-                      textAlign: 'left',
+                      borderRadius: '6px',
+                      background: '#007bff',
+                      color: '#fff',
                       cursor: 'pointer',
-                      fontSize: '14px',
-                      color: '#dc3545'
+                      fontSize: '14px'
                     }}
                   >
-                    Delete
+                    Save
                   </button>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-        
-        {/* Repost Caption */}
-        {editingCaption ? (
-          <div style={{ marginTop: '8px' }}>
-            <textarea
-              value={editCaptionContent}
-              onChange={(e) => setEditCaptionContent(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                fontSize: '14px',
-                resize: 'vertical',
-                minHeight: '60px'
-              }}
-              placeholder="Add a caption..."
-            />
-            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-              <button
-                onClick={handleSaveCaption}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                Save
-              </button>
-              <button
-                onClick={() => {
-                  setEditingCaption(false);
-                  setEditCaptionContent(repostData.repost_caption || '');
-                }}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: '#6c757d',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          repostData.repost_caption && (
-            <div style={{ 
-              marginTop: '8px', 
-              fontSize: '14px', 
-              color: '#1a1a1a',
-              lineHeight: '1.4'
-            }}>
-              {repostData.repost_caption}
-            </div>
-          )
-        )}
-      </div>
-
-      {/* Original Post Content */}
-      <div style={{ padding: '16px' }}>
-        <div style={{
-          border: '1px solid #e1e5e9',
-          borderRadius: '8px',
-          overflow: 'hidden',
-          backgroundColor: 'white'
-        }}>
-          {/* Original Post Header */}
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <img 
-                src={originalPosterAvatar} 
-                alt={originalPosterName}
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  objectFit: 'cover'
-                }}
-              />
-              <div>
-                <div style={{ fontWeight: '600', fontSize: '14px', color: '#1a1a1a' }}>
-                  {originalPosterName}
-                </div>
-                <div style={{ fontSize: '12px', color: '#666' }}>
-                  {formatTime(originalPost.created_at)}
-                </div>
               </div>
-            </div>
-          </div>
-
-          {/* Original Post Content */}
-          <div style={{ padding: '12px 16px' }}>
-            {originalPost.post_content && (
-              <div style={{ 
-                fontSize: '14px', 
-                color: '#1a1a1a', 
-                lineHeight: '1.5',
-                marginBottom: '12px'
-              }}>
-                {originalPost.post_content}
-              </div>
+            ) : (
+              original.post_content && (
+                <div style={{ fontSize: 14, color: '#1a1a1a', lineHeight: 1.5, marginBottom: 12 }}>{original.post_content}</div>
+              )
             )}
-
-            {/* Original Post Images */}
-            {getImagesFromPost(originalPost).length > 0 && (
-              <div style={{ marginTop: '12px' }}>
-                {getImagesFromPost(originalPost).map((image, index) => (
+            {getSortedImages(original).length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                {getSortedImages(original).map((img, idx) => (
                   <img
-                    key={image.image_id}
-                    src={image.image_url}
-                    alt={`Post image ${index + 1}`}
-                    style={{
-                      width: '100%',
-                      maxHeight: '400px',
-                      objectFit: 'cover',
-                      borderRadius: '6px',
-                      marginBottom: index < getImagesFromPost(originalPost).length - 1 ? '8px' : '0'
-                    }}
+                    key={img.image_id}
+                    src={img.image_url}
+                    alt={`Post image ${idx + 1}`}
+                    style={{ width: '100%', maxHeight: 400, objectFit: 'cover', borderRadius: 6, marginBottom: idx < getSortedImages(original).length - 1 ? 8 : 0 }}
+                    onError={handleProfilePicError}
                   />
                 ))}
               </div>
@@ -778,491 +694,148 @@ const RepostCard: React.FC<RepostCardProps> = ({
           </div>
         </div>
 
-        {/* Like Display Section */}
-        {repostData.likes && repostData.likes.length > 0 && (
-          <div style={{ 
-            padding: '8px 16px',
-            borderTop: '1px solid #f0f0f0',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <span
-              style={{ 
-                cursor: 'pointer', 
-                fontSize: '12px',
-                fontWeight: '500',
-                padding: '4px 8px',
-                borderRadius: '4px',
-                transition: 'background-color 0.2s ease',
-                color: '#6b7280'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f8f9fa';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-              }}
-            >👍
-              {repostData.likes.length === 1 
-                ? `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ' liked this'
-                : repostData.likes.length === 2
-                ? `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ` and ${repostData.likes[1].f_name || ''} ${repostData.likes[1].l_name || ''}`.trim() + ' liked this'
-                : `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ` and ${repostData.likes.length - 1} others liked this`
-              }
-            </span>
-          </div>
-        )}
-
-
-        {/* Comment Input */}
-        {showCommentInput[repostData.repost_id] && (
-          <div style={{ padding: '12px 16px' }}>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', position: 'relative' }}>
-              <textarea
-                value={commentInput[repostData.repost_id] || ''}
-                onChange={(e) => handleCommentInputChange(e, repostData.repost_id)}
-                onKeyDown={(e) => handleCommentKeyDown(e, repostData.repost_id)}
-                placeholder="Write a comment..."
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  border: '1px solid #ddd',
-                  borderRadius: '20px',
-                  fontSize: '14px',
-                  resize: 'none',
-                  minHeight: '36px',
-                  maxHeight: '100px'
-                }}
-              />
-              <button
-                onClick={handleCommentSubmit}
-                disabled={!commentInput[repostData.repost_id]?.trim()}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: commentInput[repostData.repost_id]?.trim() ? '#007bff' : '#ccc',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '20px',
-                  cursor: commentInput[repostData.repost_id]?.trim() ? 'pointer' : 'not-allowed',
-                  fontSize: '14px',
-                  fontWeight: '500'
-                }}
-              >
-                Post
-              </button>
-              
-              {/* @mention suggestions dropdown */}
-              {showMentionSuggestions[repostData.repost_id] && mentionSuggestions[repostData.repost_id]?.length > 0 && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  right: '80px', // Leave space for the Post button
-                  backgroundColor: 'white',
-                  border: '1px solid #e4e6ea',
-                  borderRadius: '8px',
-                  boxShadow: '0 2px 12px rgba(0, 0, 0, 0.15)',
-                  zIndex: 1000,
-                  maxHeight: '200px',
-                  overflowY: 'auto',
-                  marginTop: '4px'
-                }}>
-                  <div style={{
-                    padding: '8px 12px',
-                    borderBottom: '1px solid #e4e6ea',
-                    backgroundColor: '#f8f9fa',
+        {/* Summary */}
+        {likesCount > 0 && (
+          <div style={{ padding: '8px 16px', borderTop: '1px solid #f0f0f0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {/* Likes text */}
+              {fetchedLikes.length > 0 ? (
+                <span
+                  onClick={() => setShowLikesModal(true)}
+                  style={{ 
                     fontSize: '12px',
-                    fontWeight: '600',
-                    color: '#65676b'
-                  }}>
-                    Mention someone
-                  </div>
-                  {mentionSuggestions[repostData.repost_id]?.map((user, index) => (
-                    <div
-                      key={user.user_id}
-                      onClick={() => selectMention(user, repostData.repost_id)}
-                      style={{
-                        padding: '8px 12px',
-                        cursor: 'pointer',
-                        backgroundColor: index === selectedMentionIndex[repostData.repost_id] ? '#e3f2fd' : 'transparent',
-                        borderBottom: index < (mentionSuggestions[repostData.repost_id]?.length - 1) ? '1px solid #f0f0f0' : 'none',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        transition: 'background-color 0.1s ease'
-                      }}
-                      onMouseEnter={() => setSelectedMentionIndex(prev => ({ ...prev, [repostData.repost_id]: index }))}
-                    >
-                      <img
-                        src={getProfilePicUrl(user.profile_pic)}
-                        alt={user.name}
-                        style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '50%',
-                          objectFit: 'cover',
-                          border: '1px solid #e4e6ea'
-                        }}
-                        onError={(e) => handleProfilePicError(e)}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ 
-                          fontSize: '14px', 
-                          fontWeight: '600',
-                          color: '#1c1e21',
-                          marginBottom: '2px'
-                        }}>
-                          {user.f_name} {user.m_name || ''} {user.l_name}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    fontWeight: '500',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    color: '#6b7280',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f8f9fa';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                >👍
+                  {fetchedLikes.length === 1 
+                    ? `${(fetchedLikes[0] as any).user?.f_name || fetchedLikes[0].f_name || ''} ${(fetchedLikes[0] as any).user?.l_name || fetchedLikes[0].l_name || ''}`.trim() + ' liked this'
+                    : fetchedLikes.length === 2
+                    ? `${(fetchedLikes[0] as any).user?.f_name || fetchedLikes[0].f_name || ''} ${(fetchedLikes[0] as any).user?.l_name || fetchedLikes[0].l_name || ''}`.trim() + ` and ${(fetchedLikes[1] as any).user?.f_name || fetchedLikes[1].f_name || ''} ${(fetchedLikes[1] as any).user?.l_name || fetchedLikes[1].l_name || ''}`.trim() + ' liked this'
+                    : `${(fetchedLikes[0] as any).user?.f_name || fetchedLikes[0].f_name || ''} ${(fetchedLikes[0] as any).user?.l_name || fetchedLikes[0].l_name || ''}`.trim() + ` and ${fetchedLikes.length - 1} others liked this`
+                  }
+                </span>
+              ) : (
+                <span
+                  style={{ 
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    color: '#6b7280'
+                  }}
+                >👍
+                  {likesCount} {likesCount === 1 ? 'like' : 'likes'}
+                </span>
               )}
+              <span style={{ fontSize: 12, color: '#9ca3af' }}>{repost.comments_count ? `${repost.comments_count} comments` : ''}</span>
             </div>
           </div>
         )}
 
-        {/* Comments */}
-        {repostData.comments && repostData.comments.length > 0 && (
-          <div style={{ padding: '0 16px 12px' }}>
-            {repostData.comments.map((comment) => (
-              <div key={comment.comment_id} style={{ 
-                marginBottom: '8px',
-                padding: '8px 0',
-                borderBottom: '1px solid #f0f0f0'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                  <img 
-                    src={comment.user.profile_pic ? 
-                      (String(comment.user.profile_pic).startsWith('http') ? 
-                        comment.user.profile_pic : 
-                        `http://127.0.0.1:8000${comment.user.profile_pic}`) : 
-                      ctulogo
-                    }
-                    alt={`${comment.user.f_name} ${comment.user.l_name}`}
-                    style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      objectFit: 'cover'
-                    }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button
-                          onClick={() => window.location.href = getProfilePath(comment.user.user_id)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            padding: '0',
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                            fontSize: '13px',
-                            color: '#1a1a1a',
-                            textDecoration: 'none'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.color = '#007bff';
-                            e.currentTarget.style.textDecoration = 'underline';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.color = '#1a1a1a';
-                            e.currentTarget.style.textDecoration = 'none';
-                          }}
-                        >
-                          {`${comment.user.f_name} ${comment.user.l_name}`}
-                        </button>
-                        <span style={{ fontSize: '12px', color: '#666' }}>
-                          {formatTime(comment.date_created)}
-                        </span>
-                      </div>
-                      {currentUserId === comment.user.user_id && !editingComment[comment.comment_id] && (
-                        <div style={{ position: 'relative' }}>
-                          <button
-                            onClick={() => setShowCommentOptions(prev => ({ 
-                              ...prev, 
-                              [comment.comment_id]: !prev[comment.comment_id] 
-                            }))}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              cursor: 'pointer',
-                              fontSize: '16px',
-                              color: '#666',
-                              padding: '4px',
-                            }}
-                          >
-                            ⋯
-                          </button>
-                          {showCommentOptions[comment.comment_id] && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                right: 0,
-                                top: '100%',
-                                background: '#fff',
-                                border: '1px solid #ddd',
-                                borderRadius: '8px',
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                                zIndex: 1000,
-                                width: '120px',
-                              }}
-                            >
-                              <button
-                                onClick={() => {
-                                  setEditingComment(prev => ({ ...prev, [comment.comment_id]: true }));
-                                  setEditCommentContent(prev => ({ 
-                                    ...prev, 
-                                    [comment.comment_id]: comment.comment_content 
-                                  }));
-                                  setShowCommentOptions(prev => ({ ...prev, [comment.comment_id]: false }));
-                                }}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  background: 'none',
-                                  border: 'none',
-                                  textAlign: 'left',
-                                  cursor: 'pointer',
-                                  fontSize: '14px',
-                                  gap: '8px',
-                                  borderRadius: '4px',
-                                  transition: 'all 0.2s ease',
-                                  color: '#374151'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = '#f3f4f6';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = 'transparent';
-                                }}
-                              >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                </svg>
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (window.confirm('Are you sure you want to delete this comment?')) {
-                                    handleDeleteComment(comment.comment_id);
-                                  }
-                                  setShowCommentOptions(prev => ({ ...prev, [comment.comment_id]: false }));
-                                }}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  background: 'none',
-                                  border: 'none',
-                                  textAlign: 'left',
-                                  cursor: 'pointer',
-                                  fontSize: '14px',
-                                  gap: '8px',
-                                  borderRadius: '4px',
-                                  transition: 'all 0.2s ease',
-                                  color: '#dc2626'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = '#fef2f2';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = 'transparent';
-                                }}
-                              >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <polyline points="3,6 5,6 21,6"></polyline>
-                                  <path d="M19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
-                                </svg>
-                                Delete
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {editingComment[comment.comment_id] ? (
-                      <div style={{ marginTop: 4 }}>
-                        <textarea
-                          value={editCommentContent[comment.comment_id] || comment.comment_content}
-                          onChange={(e) => setEditCommentContent(prev => ({ 
-                            ...prev, 
-                            [comment.comment_id]: e.target.value 
-                          }))}
-                          style={{
-                            width: '100%',
-                            minHeight: '60px',
-                            padding: '6px',
-                            border: '1px solid #ddd',
-                            borderRadius: '8px',
-                            fontSize: '14px',
-                            resize: 'vertical',
-                          }}
-                          placeholder="Edit your comment..."
-                        />
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                          <button
-                            onClick={() => handleEditComment(comment.comment_id)}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              padding: '8px 16px',
-                              cursor: 'pointer',
-                              fontSize: '12px',
-                              gap: '6px',
-                              fontWeight: '500',
-                              transition: 'all 0.2s ease',
-                              boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.transform = 'translateY(-1px)';
-                              e.currentTarget.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.transform = 'translateY(0)';
-                              e.currentTarget.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
-                            }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                              <polyline points="17,21 17,13 7,13 7,21"/>
-                              <polyline points="7,3 7,8 15,8"/>
-                            </svg>
-                            Save
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEditingComment(prev => ({ ...prev, [comment.comment_id]: false }));
-                              setEditCommentContent(prev => ({ ...prev, [comment.comment_id]: '' }));
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              padding: '8px 16px',
-                              cursor: 'pointer',
-                              fontSize: '12px',
-                              gap: '6px',
-                              fontWeight: '500',
-                              transition: 'all 0.2s ease',
-                              boxShadow: '0 2px 4px rgba(107, 114, 128, 0.3)'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.transform = 'translateY(-1px)';
-                              e.currentTarget.style.boxShadow = '0 4px 8px rgba(107, 114, 128, 0.4)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.transform = 'translateY(0)';
-                              e.currentTarget.style.boxShadow = '0 2px 4px rgba(107, 114, 128, 0.3)';
-                            }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="18" y1="6" x2="6" y2="18"/>
-                              <line x1="6" y1="6" x2="18" y2="18"/>
-                            </svg>
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: '14px', color: '#555', marginTop: '2px' }}>
-                        {renderTextWithLinks(comment.comment_content)}
-                      </div>
-                    )}
-                    
-                    {/* Reply button */}
-                    <div style={{ fontSize: '11px', color: '#888', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <button
-                        onClick={() => setShowReplyInput(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#007bff',
-                          cursor: 'pointer',
-                          fontSize: '11px',
-                          padding: '2px 4px',
-                          borderRadius: '4px',
-                          transition: 'background-color 0.2s ease'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#f0f8ff';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'transparent';
-                        }}
-                      >
-                        Reply
-                      </button>
-                    </div>
-                    
-                    {/* Reply Input */}
-                    {showReplyInput[comment.comment_id] && (
-                      <ReplyInput
-                        commentId={comment.comment_id}
-                        currentUserId={currentUserId || undefined}
-                        displayName={`${repostData.user.f_name} ${repostData.user.l_name}`}
-                        displayAvatar={reposterAvatar}
-                        onReplyAdded={() => handleReplyAdded(comment.comment_id)}
-                        commentAuthor={{
-                          user_id: comment.user.user_id,
-                          f_name: comment.user.f_name,
-                          m_name: '',
-                          l_name: comment.user.l_name,
-                          name: `${comment.user.f_name} ${comment.user.l_name}`.trim()
-                        }}
-                      />
-                    )}
-                    
-                    {/* Facebook-style Replies - Always show if available */}
-                    {(() => {
-                      const replies = commentReplies[comment.comment_id];
-                      console.log(`RepostCard: Facebook-style rendering replies for comment ${comment.comment_id}:`, {
-                        hasReplies: !!replies,
-                        repliesLength: replies?.length || 0,
-                        repliesData: replies
-                      });
-                      return replies && replies.length > 0;
-                    })() && (
-                      <div style={{ marginTop: '8px' }}>
-                        {/* Facebook-style: Show ALL replies by default */}
-                        {commentReplies[comment.comment_id].map((reply) => (
-                          <Reply
-                            key={reply.reply_id}
-                            reply={reply}
-                            commentId={comment.comment_id}
-                            currentUserId={currentUserId || undefined}
-                            formatTime={formatTime}
-                            onReplyUpdate={() => loadReplies(comment.comment_id)}
-                            displayName={`${repostData.user.f_name} ${repostData.user.l_name}`}
-                            displayAvatar={reposterAvatar}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    
-                  </div>
-                </div>
-              </div>
-            ))}
+        {/* Actions */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e9ecef', padding: '8px 16px', backgroundColor: '#fafbfc' }}>
+          <button
+            onClick={handleLikeToggle}
+            className="post-action-item"
+            style={{ color: liked ? '#ef4444' : '#6c757d', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 16px', borderRadius: 6, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f8f9fa')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent')}
+          >
+            <span style={{ fontSize: 16, color: liked ? '#3b82f6' : '#6b7280', fontWeight: liked ? 900 as any : 400 as any }}>👍</span>
+            <span onClick={() => setShowLikesModal(true)} style={{ color: liked ? '#ef4444' : '#6c757d', fontWeight: liked ? 600 : 400, cursor: 'pointer' }}>
+              {likesCount === 1 ? '1 like' : likesCount > 1 ? `${likesCount} likes` : 'Like'}
+            </span>
+          </button>
+          <button
+            onClick={() => setShowCommentInput(v => !v)}
+            className="post-action-item"
+            style={{ color: '#6c757d', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 16px', borderRadius: 6, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f8f9fa')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent')}
+          >
+            <span style={{ fontSize: 14 }}>💬</span>
+            Comment
+          </button>
+          <RepostButton
+            originalPost={{
+              post_id: original.post_id || 0,
+              post_content: original.post_content || '',
+              post_image: undefined,
+              post_images: getSortedImages(original),
+              user: {
+                user_id: original.user?.user_id || 0,
+                f_name: original.user?.f_name || '',
+                l_name: original.user?.l_name || '',
+                profile_pic: original.user?.profile_pic
+              },
+              created_at: (original.created_at as any) || ''
+            }}
+            currentUser={{ name: reposterName, profile_pic: reposterAvatar }}
+            onRepost={onRefresh}
+            formatTime={formatTime}
+            isForum={context === 'forum'}
+            isDonation={context === 'donation'}
+            style={{ color: '#6c757d', padding: '8px 16px', borderRadius: 6 }}
+            className="post-action-item"
+          />
+        </div>
+
+        {/* Comment input */}
+        {showCommentInput && (
+          <div style={{ padding: '12px 16px' }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                value={commentValue}
+                onChange={(e) => setCommentValue(e.target.value)}
+                placeholder="Write a comment..."
+                style={{ flex: 1, padding: '8px 12px', border: '1px solid #ddd', borderRadius: 20, fontSize: 14 }}
+              />
+              <button onClick={handleCommentSubmit} disabled={!commentValue.trim()} style={{ padding: '8px 16px', borderRadius: 20, border: 'none', color: '#fff', background: commentValue.trim() ? '#007bff' : '#ccc', cursor: commentValue.trim() ? 'pointer' : 'not-allowed' }}>
+                Post
+              </button>
+            </div>
           </div>
         )}
       </div>
 
+      {/* Likes modal */}
+      {showLikesModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setShowLikesModal(false)}>
+          <div style={{ background: '#fff', borderRadius: 12, width: '90%', maxWidth: 400, padding: 20, position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowLikesModal(false)} style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.05)', border: 'none', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer' }}>×</button>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: 16, fontWeight: 700, color: '#1e4c7a', textAlign: 'center' }}>👍 People who liked this</h3>
+            {likesLoading ? (
+              <div style={{ textAlign: 'center', padding: 20, color: '#6c757d' }}>Loading likes...</div>
+            ) : fetchedLikes.length ? (
+              fetchedLikes.map((like: any, i: number) => {
+                const u = like.user || like;
+                const name = `${u.f_name || ''} ${u.m_name || ''} ${u.l_name || ''}`.trim() || 'Unknown User';
+                const pic = getProfilePicUrl(u.profile_pic);
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '10px 6px', borderBottom: i < fetchedLikes.length - 1 ? '1px solid #eee' : 'none' }}>
+                    <img src={pic} alt={name} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', marginRight: 12 }} onError={handleProfilePicError} />
+                    <div style={{ fontWeight: 600, fontSize: 15, color: '#333' }}>{name}</div>
+                  </div>
+                );
+              })
+            ) : (
+              <div style={{ textAlign: 'center', padding: 20, color: '#6c757d' }}>No likes yet</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

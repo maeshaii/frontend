@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost } from '../services/api';
+import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost, getPostLikes, getRepostLikes } from '../services/api';
 import { 
   commentOnForumPost, 
   deleteForumComment, 
@@ -17,10 +17,10 @@ import {
 } from '../services/api';
 import ctulogo from '../images/ctulogo.png';
 import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
-import RepostButton from './RepostButton';
 import PhotoGalleryModal from './PhotoGalleryModal';
 import Reply from './Reply';
 import ReplyInput from './ReplyInput';
+import RepostButton from './RepostButton';
 
 interface RepostItem {
   repost_id: number;
@@ -120,8 +120,7 @@ interface PostCardProps {
   setEditCommentContent?: (fn: (prev: { [key: number]: string }) => { [key: number]: string }) => void;
   isForum?: boolean; // New prop to indicate forum context
   isDonation?: boolean; // New prop to indicate donation context
-  isRepost?: boolean; // New prop to indicate if this is a repost
-  repostData?: RepostItem; // Data about the repost
+  // Repost props removed
   onViewOriginalPost?: (originalPost: PostItem) => void; // Callback to view original post in modal
 }
 
@@ -141,8 +140,7 @@ const PostCard: React.FC<PostCardProps> = ({
   setEditPostContent,
   likedPosts = {},
   setLikedPosts,
-  repostedPosts = {},
-  setRepostedPosts,
+  // Repost state removed
   showCommentInput = {},
   setShowCommentInput,
   showAllComments = {},
@@ -155,16 +153,24 @@ const PostCard: React.FC<PostCardProps> = ({
   setEditCommentContent,
   isForum = false, // Default to false for backward compatibility
   isDonation = false, // Default to false for backward compatibility
-  isRepost = false, // Default to false for backward compatibility
-  repostData, // Optional repost data
+  // Repost flags removed
   onViewOriginalPost, // Optional callback to view original post
 }) => {
   console.log('PostCard currentUserId:', currentUserId);
+  // Repost removed on web
+  const isRepost = false;
+  const repostData: any = null;
+  const [showRepostLikesModal, _setShowRepostLikesModal] = useState(false);
+  const [showDonationRepostLikesModal, _setShowDonationRepostLikesModal] = useState(false);
+  const setShowRepostLikesModal = (_: any) => {};
+  const setShowDonationRepostLikesModal = (_: any) => {};
+  const repostedPosts: { [key: number]: boolean } = {};
   const [showPhotoGallery, setShowPhotoGallery] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [showLikesModal, setShowLikesModal] = useState(false);
-  const [showRepostLikesModal, setShowRepostLikesModal] = useState(false);
-  const [showDonationRepostLikesModal, setShowDonationRepostLikesModal] = useState(false);
+  // Repost likes modals removed on web
+  const [fetchedLikes, setFetchedLikes] = useState<any[]>([]);
+  const [likesLoading, setLikesLoading] = useState(false);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
 
   // Debug useEffect for showLikesModal
@@ -172,15 +178,14 @@ const PostCard: React.FC<PostCardProps> = ({
     console.log('showLikesModal state changed:', showLikesModal);
   }, [showLikesModal]);
 
-  // Debug useEffect for showRepostLikesModal
+  // Fetch likes when modal opens
   useEffect(() => {
-    console.log('showRepostLikesModal state changed:', showRepostLikesModal);
-  }, [showRepostLikesModal]);
+    if (showLikesModal) {
+      fetchLikes();
+    }
+  }, [showLikesModal]);
 
-  // Debug useEffect for showDonationRepostLikesModal
-  useEffect(() => {
-    console.log('showDonationRepostLikesModal state changed:', showDonationRepostLikesModal);
-  }, [showDonationRepostLikesModal]);
+  // Repost likes modals removed
   const commentOptionsRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   const [showCommentOptions, setShowCommentOptions] = useState<{ [key: number]: boolean }>({});
   const [editingRepostCaption, setEditingRepostCaption] = useState<{ [key: number]: boolean }>({});
@@ -509,6 +514,7 @@ const PostCard: React.FC<PostCardProps> = ({
         
         // Then make API call
         await likeRepost(repostId);
+        console.log('🔍 DEBUG: likeRepost API call successful for:', repostId);
       } else if (isForum) {
         // Use forum like API
         console.log('Liking forum post:', post.post_id);
@@ -565,6 +571,7 @@ const PostCard: React.FC<PostCardProps> = ({
         
         // Then make API call
         await unlikeRepost(repostId);
+        console.log('🔍 DEBUG: unlikeRepost API call successful for:', repostId);
       } else if (isForum) {
         // Use forum unlike API
         console.log('Unliking forum post:', post.post_id);
@@ -645,6 +652,7 @@ const PostCard: React.FC<PostCardProps> = ({
           if (repostData) {
             repostData.comments = [...(repostData.comments || []), newComment as any];
             repostData.comments_count = (repostData.comments_count || 0) + 1;
+            console.log('🔍 DEBUG: Updated repostData comments:', repostData.comments);
           }
         }
       } else if (isForum) {
@@ -719,7 +727,9 @@ const PostCard: React.FC<PostCardProps> = ({
       }
       
       if ((result && result.success) || (result.data && result.data.success)) {
+        console.log('🔍 DEBUG: Comment submitted successfully for itemId:', itemId);
         setCommentInput(prev => ({ ...prev, [itemId]: '' }));
+        setShowCommentInput?.(prev => ({ ...prev, [itemId]: false }));
         onPostUpdate?.();
       }
     } catch (error) {
@@ -1016,6 +1026,32 @@ const PostCard: React.FC<PostCardProps> = ({
   const handleCancelEditRepostCaption = () => {
     setEditingRepostCaption(prev => ({ ...prev, [post.post_id]: false }));
     setEditRepostCaptionContent(prev => ({ ...prev, [post.post_id]: repostData?.repost_caption || '' }));
+  };
+
+  // Fetch likes for the modal
+  const fetchLikes = async () => {
+    if (likesLoading) return;
+    
+    setLikesLoading(true);
+    try {
+      let likesData;
+      if (isRepostPost && repostData?.repost_id) {
+        // Fetch likes for repost
+        likesData = await getRepostLikes(repostData.repost_id);
+      } else {
+        // Fetch likes for regular post
+        likesData = await getPostLikes(post.post_id);
+      }
+      
+      if (likesData && likesData.likes) {
+        setFetchedLikes(likesData.likes);
+      }
+    } catch (error) {
+      console.error('Error fetching likes:', error);
+      setFetchedLikes([]);
+    } finally {
+      setLikesLoading(false);
+    }
   };
 
   const handleDeleteRepost = async () => {
@@ -1634,24 +1670,16 @@ const PostCard: React.FC<PostCardProps> = ({
                 </div>
               </div>
 
-            {/* Interaction buttons for the repost */}
-            <div className="profile-repost-actions">
+            {/* Repost Actions - Same as regular post actions */}
+            <div className="post-actions" style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              borderTop: '1px solid #e9ecef'
+            }}>
               <button
                 onClick={() => {
-                  const repostId = repostData?.repost_id;
-                  console.log('Repost like button clicked:', {
-                    repost_id: repostId,
-                    likedPosts: likedPosts,
-                    isLiked: likedPosts[repostId],
-                    likes: post.likes,
-                    buttonColor: likedPosts[repostId] ? '#ef4444' : '#6c757d',
-                    textColor: likedPosts[repostId] ? '#ef4444' : '#6c757d'
-                  });
-                  if (likedPosts[repostId]) {
-                    handleUnlike();
-                  } else {
-                    handleLike();
-                  }
+                  console.log('Like button clicked for repost:', repostData?.repost_id, 'likedPosts:', likedPosts[repostData?.repost_id]);
+                  likedPosts[repostData?.repost_id] ? handleUnlike() : handleLike();
                 }}
                 className="post-action-item"
                 style={{
@@ -1690,7 +1718,7 @@ const PostCard: React.FC<PostCardProps> = ({
                     cursor: 'pointer'
                   }}
                 >
-                  {post.likes_count === 1 ? '1 like' : (post.likes_count && post.likes_count > 1) ? `${post.likes_count} likes` : 'Like'}
+                  {repostData?.likes_count === 1 ? '1 like' : (repostData?.likes_count && repostData.likes_count > 1) ? `${repostData.likes_count} likes` : 'Like'}
                 </span>
               </button>
               <button
@@ -1719,32 +1747,38 @@ const PostCard: React.FC<PostCardProps> = ({
                 <span style={{ fontSize: '14px' }}>💬</span>
                 Comment
               </button>
-              {/* Show RepostButton for all posts including reposts */}
               <RepostButton
-                  originalPost={{
-                    post_id: post.post_id,
-                    post_content: post.post_content,
-                    post_image: post.post_image,
-                    post_images: post.post_images,
-                    user: {
-                      user_id: post.user?.user_id || 0,
-                      f_name: post.user?.f_name || '',
-                      l_name: post.user?.l_name || '',
-                      profile_pic: post.user?.profile_pic
-                    },
-                    created_at: post.created_at || ''
-                  }}
-                  currentUser={{
-                    name: `${displayName}`,
-                    profile_pic: displayAvatar
-                  }}
-                  isReposted={repostedPosts[post.post_id] || false}
-                  onRepost={onPostUpdate}
-                  formatTime={formatTime}
-                  isForum={isForum}
-                  isDonation={isDonation}
-                  className={`profile-repost-action-item ${repostedPosts[post.post_id] ? 'reposted' : ''}`}
-                />
+                originalPost={{
+                  post_id: post.post_id,
+                  post_content: post.post_content,
+                  post_image: post.post_image,
+                  post_images: post.post_images,
+                  user: {
+                    user_id: post.user?.user_id || 0,
+                    f_name: post.user?.f_name || '',
+                    l_name: post.user?.l_name || '',
+                    profile_pic: post.user?.profile_pic
+                  },
+                  created_at: post.created_at || ''
+                }}
+                currentUser={{
+                  name: `${displayName}`,
+                  profile_pic: displayAvatar
+                }}
+                isReposted={repostedPosts[post.post_id] || false}
+                onRepost={onPostUpdate}
+                formatTime={formatTime}
+                isForum={isForum}
+                isDonation={isDonation}
+                style={{
+                  color: repostedPosts[post.post_id] ? '#007bff' : '#6c757d',
+                  fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  transition: 'background-color 0.2s'
+                }}
+                className="post-action-item"
+              />
             </div>
 
             {/* Comment input for repost */}
@@ -1831,9 +1865,18 @@ const PostCard: React.FC<PostCardProps> = ({
             )}
 
             {/* Repost Comments Section */}
-            {repostData?.comments && repostData.comments.length > 0 && (
+            {repostData?.comments && (
               <div className="comments-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
-                {(showAllComments[repostData?.repost_id || post.post_id] ? repostData.comments : repostData.comments.slice(0, 2)).map((comment) => {
+                {(() => {
+                  console.log('🔍 DEBUG: Comments display - repostData.comments:', repostData.comments, 'comments_count:', repostData.comments_count, 'showAllComments:', showAllComments[repostData?.repost_id || post.post_id]);
+                  return null;
+                })()}
+                {repostData.comments.length === 0 ? (
+                  <div style={{ color: '#6c757d', fontSize: '14px', fontStyle: 'italic' }}>
+                    No comments yet
+                  </div>
+                ) : (
+                  (showAllComments[repostData?.repost_id || post.post_id] ? repostData.comments : repostData.comments.slice(0, 2)).map((comment: any) => {
                   return (
                     <div key={comment.comment_id} className="comment-item" style={{ 
                       display: 'flex', 
@@ -1888,7 +1931,8 @@ const PostCard: React.FC<PostCardProps> = ({
                       </div>
                     </div>
                   );
-                })}
+                })
+                )}
                 {repostData?.comments && repostData.comments.length > 2 && !showAllComments[repostData?.repost_id || post.post_id] && (
                   <button
                     className="view-all-comments-btn"
@@ -3026,8 +3070,17 @@ const PostCard: React.FC<PostCardProps> = ({
             </h2>
 
             <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {post.likes && post.likes.length > 0 ? (
-                post.likes.map((like: any, index: number) => {
+              {likesLoading ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '20px',
+                  color: '#6c757d',
+                  fontSize: '14px',
+                }}>
+                  Loading likes...
+                </div>
+              ) : fetchedLikes && fetchedLikes.length > 0 ? (
+                fetchedLikes.map((like: any, index: number) => {
                   const likeUser = like.user || like;
                   const userName = `${likeUser.f_name || ''} ${likeUser.m_name || ''} ${likeUser.l_name || ''}`.trim();
                   const userProfilePic = likeUser.profile_pic ? 
@@ -3055,7 +3108,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         display: 'flex',
                         alignItems: 'center',
                         padding: '12px',
-                        borderBottom: index < (post.likes?.length || 0) - 1 ? '1px solid #f0f0f0' : 'none',
+                        borderBottom: index < (fetchedLikes?.length || 0) - 1 ? '1px solid #f0f0f0' : 'none',
                         cursor: 'pointer',
                         borderRadius: '8px',
                         transition: 'background-color 0.2s ease',

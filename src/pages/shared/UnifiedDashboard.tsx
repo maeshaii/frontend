@@ -3,6 +3,7 @@ import { useNavigate, Link, useParams } from 'react-router-dom';
 import AlumniTopBar from '../alumni/AlumniTopBar';
 import PostCreate from '../alumni/PostCreate';
 import PostCard from '../../components/PostCard';
+import RepostCard from '../../components/RepostCard';
 import TrackerReminderModal from '../../components/TrackerReminderModal';
 import ctulogo from '../../images/ctulogo.png';
 import '../alumni/dashboard.css';
@@ -217,6 +218,17 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [editingComment, setEditingComment] = useState<{ [key: number]: boolean }>({});
   const [editCommentContent, setEditCommentContent] = useState<{ [key: number]: string }>({});
   const [editingDonationComment, setEditingDonationComment] = useState<{ [key: number]: boolean }>({});
+
+  // Helper function to determine if a post is liked
+  const getIsLiked = (post: any, currentUserId: number | null) => {
+    if (post.is_liked !== undefined) {
+      return post.is_liked;
+    }
+    if (post.likes && Array.isArray(post.likes) && currentUserId) {
+      return post.likes.some((like: any) => like.user_id === currentUserId);
+    }
+    return false;
+  };
   const [editDonationCommentContent, setEditDonationCommentContent] = useState<{ [key: number]: string }>({});
   const [following, setFollowing] = useState<any[]>([]);
   const [showPostModal, setShowPostModal] = useState(false);
@@ -495,14 +507,14 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
       const liked: { [key: number]: boolean } = {};
       console.log('🔍 DEBUG: Initializing likedPosts for currentUserId:', currentUserId);
       sortedPosts.forEach((post: any) => {
-        if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
-          const isLiked = post.likes.some((like: any) => like.user_id === currentUserId);
+        if (post.item_type === 'post') {
+          const isLiked = getIsLiked(post, currentUserId);
           liked[post.post_id] = isLiked;
-          console.log('🔍 DEBUG: Post', post.post_id, 'isLiked:', isLiked, 'likes:', post.likes);
-        } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
-          const isLiked = post.likes.some((like: any) => like.user_id === currentUserId);
+          console.log('🔍 DEBUG: Post', post.post_id, 'isLiked:', isLiked, 'is_liked field:', post.is_liked, 'likes:', post.likes);
+        } else if (post.item_type === 'repost') {
+          const isLiked = getIsLiked(post, currentUserId);
           liked[post.repost_id] = isLiked;
-          console.log('🔍 DEBUG: Repost', post.repost_id, 'isLiked:', isLiked, 'likes:', post.likes);
+          console.log('🔍 DEBUG: Repost', post.repost_id, 'isLiked:', isLiked, 'is_liked field:', post.is_liked, 'likes:', post.likes);
         }
       });
       console.log('🔍 DEBUG: Final likedPosts state:', liked);
@@ -1343,8 +1355,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           displayName={formatDisplayName(donationRepostItem.user, currentUserId === donationRepostItem.user.user_id, user)}
                           displayAvatar={donationRepostItem.user.profile_pic ? (String(donationRepostItem.user.profile_pic).startsWith('http') ? donationRepostItem.user.profile_pic : `http://127.0.0.1:8000${donationRepostItem.user.profile_pic}`) : ctulogo}
                           formatTime={formatHybrid}
-                          isRepost={true}
-                          repostData={donationRepostItem.repostData}
+                          
                           onViewOriginalPost={handleViewOriginalPost}
                           likedPosts={likedDonations}
                           setLikedPosts={setLikedDonations}
@@ -1443,10 +1454,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                             const currentUserId = getCurrentUserId(user);
                             const liked: { [key: number]: boolean } = {};
                             (updatedPosts || []).forEach((post: any) => {
-                              if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
-                                liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-                              } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
-                                liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                              if (post.item_type === 'post') {
+                                liked[post.post_id] = getIsLiked(post, currentUserId);
+                              } else if (post.item_type === 'repost') {
+                                liked[post.repost_id] = getIsLiked(post, currentUserId);
                               }
                             });
                             setLikedPosts(liked);
@@ -1579,10 +1590,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                             const currentUserId = getCurrentUserId(user);
                             const liked: { [key: number]: boolean } = {};
                             (updatedPosts || []).forEach((post: any) => {
-                              if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
-                                liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-                              } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
-                                liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                              if (post.item_type === 'post') {
+                                liked[post.post_id] = getIsLiked(post, currentUserId);
+                              } else if (post.item_type === 'repost') {
+                                liked[post.repost_id] = getIsLiked(post, currentUserId);
                               }
                             });
                             setLikedPosts(liked);
@@ -1605,87 +1616,35 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                   }
                 } else if (item.feed_type === 'post') {
                   // Handle post items (existing logic)
-                  // Check if this is a repost item or a regular post item
+                  // Render repost items with new RepostCard
                   if (item.item_type === 'repost' && 'repost_id' in item) {
-                    // Render as repost card (nested structure)
-                    const repostItem = item as RepostFeedItem;
-                    const repostCard = (
-                      <PostCard
-                        key={`repost-${repostItem.repost_id}`}
-                        post={{
-                          ...repostItem.original_post,
-                          post_id: repostItem.repost_id, // Use repost_id for interactions
-                          likes: repostItem.likes || [],
-                          comments: repostItem.comments || [],
-                          likes_count: repostItem.likes_count || 0,
-                          comments_count: repostItem.comments_count || 0,
-                        } as PostItem}
+                    const r = item as RepostFeedItem;
+                    acc.push(
+                      <RepostCard
+                        key={`repost-${r.repost_id}`}
+                        repost={{
+                          repost_id: r.repost_id,
+                          repost_date: r.repost_date,
+                          repost_caption: r.repost_caption,
+                          user: { user_id: r.user?.user_id || 0, f_name: r.user?.f_name, l_name: r.user?.l_name, profile_pic: r.user?.profile_pic },
+                          likes: r.likes || [],
+                          likes_count: r.likes_count || 0,
+                          comments: r.comments || [],
+                          comments_count: r.comments_count || 0,
+                          original_post: r.original_post ? {
+                            post_id: r.original_post.post_id,
+                            created_at: r.original_post.created_at,
+                            post_content: r.original_post.post_content,
+                            post_images: r.original_post.post_image ? [{ image_id: 0, image_url: r.original_post.post_image, order: 0 }] : undefined,
+                            user: r.original_post.user ? { user_id: r.original_post.user.user_id || 0, f_name: r.original_post.user.f_name, l_name: r.original_post.user.l_name, profile_pic: r.original_post.user.profile_pic } : undefined
+                          } : undefined
+                        }}
                         currentUserId={currentUserId}
-                        isOwn={currentUserId === repostItem.user.user_id}
-                        displayName={formatDisplayName(repostItem.user, currentUserId === repostItem.user.user_id, user)}
-                        displayAvatar={repostItem.user.profile_pic ? (String(repostItem.user.profile_pic).startsWith('http') ? repostItem.user.profile_pic : `http://127.0.0.1:8000${repostItem.user.profile_pic}`) : ctulogo}
                         formatTime={formatHybrid}
-                        isRepost={true}
-                        repostData={{
-                          repost_id: repostItem.repost_id,
-                          repost_date: repostItem.repost_date,
-                          repost_caption: repostItem.repost_caption,
-                          user: repostItem.user,
-                          likes: repostItem.likes || [],
-                          likes_count: repostItem.likes_count || 0,
-                          comments: repostItem.comments || [],
-                          comments_count: repostItem.comments_count || 0,
-                          original_post: repostItem.original_post
-                        }}
-                        onViewOriginalPost={handleViewOriginalPost}
-                        likedPosts={likedPosts}
-                        setLikedPosts={setLikedPosts}
-                        showCommentInput={showCommentInput}
-                        setShowCommentInput={setShowCommentInput}
-                        commentInput={commentInput}
-                        setCommentInput={setCommentInput}
-                        editingComment={editingComment}
-                        setEditingComment={setEditingComment}
-                        editCommentContent={editCommentContent}
-                        setEditCommentContent={setEditCommentContent}
-                        onPostUpdate={() => {
-                          console.log('onPostUpdate called - refreshing posts...');
-                          getPosts().then(updatedPosts => {
-                            console.log('Updated posts after repost:', updatedPosts);
-                            console.log('Repost items in update:', updatedPosts.filter((item: any) => item.item_type === 'repost'));
-                            setPosts(updatedPosts || []);
-                            
-                            const currentUserId = getCurrentUserId(user);
-                            const liked: { [key: number]: boolean } = {};
-                            (updatedPosts || []).forEach((post: any) => {
-                              if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
-                                liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-                              } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
-                                liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-                              }
-                            });
-                            setLikedPosts(liked);
-
-                            const reposted: { [key: number]: boolean} = {};
-                            (updatedPosts || []).forEach((post: any) => {
-                              if (post.item_type === 'post') {
-                                reposted[post.post_id] = false; // Will be calculated from reposts_count
-                              }
-                            });
-                            setRepostedPosts(reposted);
-                          });
-                        }}
-                        showOptions={showOptions}
-                        setShowOptions={setShowOptions}
-                        editingPost={editingPost}
-                        setEditingPost={setEditingPost}
-                        editPostContent={editPostContent}
-                        setEditPostContent={setEditPostContent}
-                        repostedPosts={repostedPosts}
-                        setRepostedPosts={setRepostedPosts}
+                        onRefresh={() => getPosts().then(setPosts)}
+                        context={'post'}
                       />
                     );
-                    acc.push(repostCard);
                     return acc;
                   }
                   
@@ -1715,10 +1674,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           const currentUserId = getCurrentUserId(user);
                           const liked: { [key: number]: boolean } = {};
                           (updatedPosts || []).forEach((post: any) => {
-                            if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
-                              liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-                            } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
-                              liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                            if (post.item_type === 'post') {
+                              liked[post.post_id] = getIsLiked(post, currentUserId);
+                            } else if (post.item_type === 'repost') {
+                              liked[post.repost_id] = getIsLiked(post, currentUserId);
                             }
                           });
                           setLikedPosts(liked);
@@ -1782,65 +1741,33 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 
                 // Check if this is a repost item or a regular post item
                 if (item.item_type === 'repost' && 'repost_id' in item) {
-                  // Render as repost card (nested structure)
-                  const repostItem = item as RepostFeedItem;
-                  const repostCard = (
-                    <PostCard
-                      key={`repost-${repostItem.repost_id}`}
-                      post={{
-                        ...repostItem.original_post,
-                        post_id: repostItem.repost_id, // Use repost_id for interactions
-                        likes: repostItem.likes || [],
-                        comments: repostItem.comments || [],
-                        likes_count: repostItem.likes_count || 0,
-                        comments_count: repostItem.comments_count || 0,
-                      } as PostItem}
+                  const r = item as RepostFeedItem;
+                  acc.push(
+                    <RepostCard
+                      key={`repost-${r.repost_id}`}
+                      repost={{
+                        repost_id: r.repost_id,
+                        repost_date: r.repost_date,
+                        repost_caption: r.repost_caption,
+                        user: { user_id: r.user?.user_id || 0, f_name: r.user?.f_name, l_name: r.user?.l_name, profile_pic: r.user?.profile_pic },
+                        likes: r.likes || [],
+                        likes_count: r.likes_count || 0,
+                        comments: r.comments || [],
+                        comments_count: r.comments_count || 0,
+                        original_post: r.original_post ? {
+                          post_id: r.original_post.post_id,
+                          created_at: r.original_post.created_at,
+                          post_content: r.original_post.post_content,
+                          post_images: r.original_post.post_image ? [{ image_id: 0, image_url: r.original_post.post_image, order: 0 }] : undefined,
+                          user: r.original_post.user ? { user_id: r.original_post.user.user_id || 0, f_name: r.original_post.user.f_name, l_name: r.original_post.user.l_name, profile_pic: r.original_post.user.profile_pic } : undefined
+                        } : undefined
+                      }}
                       currentUserId={currentUserId}
-                      isOwn={currentUserId === repostItem.user.user_id}
-                      displayName={formatDisplayName(repostItem.user, currentUserId === repostItem.user.user_id, user)}
-                      displayAvatar={repostItem.user.profile_pic ? (String(repostItem.user.profile_pic).startsWith('http') ? repostItem.user.profile_pic : `http://127.0.0.1:8000${repostItem.user.profile_pic}`) : ctulogo}
                       formatTime={formatHybrid}
-                      isRepost={true}
-                      repostData={{
-                        repost_id: repostItem.repost_id,
-                        repost_date: repostItem.repost_date,
-                        repost_caption: repostItem.repost_caption,
-                        user: repostItem.user,
-                        likes: repostItem.likes || [],
-                        likes_count: repostItem.likes_count || 0,
-                        comments: repostItem.comments || [],
-                        comments_count: repostItem.comments_count || 0,
-                        original_post: repostItem.original_post
-                      }}
-                      onViewOriginalPost={handleViewOriginalPost}
-                      onPostUpdate={() => {
-                        getPosts().then(updatedPosts => {
-                          setPosts(updatedPosts || []);
-                        });
-                      }}
-                      showOptions={showOptions}
-                      setShowOptions={setShowOptions}
-                      editingPost={editingPost}
-                      setEditingPost={setEditingPost}
-                      editPostContent={editPostContent}
-                      setEditPostContent={setEditPostContent}
-                      likedPosts={likedPosts}
-                      setLikedPosts={setLikedPosts}
-                      repostedPosts={repostedPosts}
-                      setRepostedPosts={setRepostedPosts}
-                      showCommentInput={showCommentInput}
-                      setShowCommentInput={setShowCommentInput}
-                      showAllComments={showAllComments}
-                      setShowAllComments={setShowAllComments}
-                      commentInput={commentInput}
-                      setCommentInput={setCommentInput}
-                      editingComment={editingComment}
-                      setEditingComment={setEditingComment}
-                      editCommentContent={editCommentContent}
-                      setEditCommentContent={setEditCommentContent}
+                      onRefresh={() => getPosts().then(setPosts)}
+                      context={'post'}
                     />
                   );
-                  acc.push(repostCard);
                   return acc;
                 }
                 
@@ -1870,10 +1797,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         const currentUserId = getCurrentUserId(user);
                         const liked: { [key: number]: boolean } = {};
                         (updatedPosts || []).forEach((post: any) => {
-                          if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
-                            liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-                          } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
-                            liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                          if (post.item_type === 'post') {
+                            liked[post.post_id] = getIsLiked(post, currentUserId);
+                          } else if (post.item_type === 'repost') {
+                            liked[post.repost_id] = getIsLiked(post, currentUserId);
                           }
                         });
                         setLikedPosts(liked);
@@ -2055,10 +1982,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                     const currentUserId = getCurrentUserId(user);
                     const liked: { [key: number]: boolean } = {};
                     (updatedPosts || []).forEach((post: any) => {
-                      if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
-                        liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-                      } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
-                        liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                      if (post.item_type === 'post') {
+                        liked[post.post_id] = getIsLiked(post, currentUserId);
+                      } else if (post.item_type === 'repost') {
+                        liked[post.repost_id] = getIsLiked(post, currentUserId);
                       }
                     });
                     setLikedPosts(liked);
@@ -2329,10 +2256,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                     const currentUserId = getCurrentUserId(user);
                     const liked: { [key: number]: boolean } = {};
                     (updatedPosts || []).forEach((post: any) => {
-                      if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
-                        liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentUserId);
-                      } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
-                        liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentUserId);
+                      if (post.item_type === 'post') {
+                        liked[post.post_id] = getIsLiked(post, currentUserId);
+                      } else if (post.item_type === 'repost') {
+                        liked[post.repost_id] = getIsLiked(post, currentUserId);
                       }
                     });
                     setLikedPosts(liked);

@@ -886,6 +886,18 @@ export const unlikeDonation = async (donationId: number) => {
   return response.data;
 };
 
+// Get likes for a specific post
+export const getPostLikes = async (postId: number) => {
+  const response = await api.get(`posts/${postId}/likes/`);
+  return response.data;
+};
+
+// Get likes for a specific repost
+export const getRepostLikes = async (repostId: number) => {
+  const response = await api.get(`reposts/${repostId}/likes/`);
+  return response.data;
+};
+
 export const getDonationComments = async (donationId: number) => {
   const response = await api.get(`donations/${donationId}/comments/`);
   return response.data;

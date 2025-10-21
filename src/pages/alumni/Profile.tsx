@@ -1513,8 +1513,7 @@ getPosts()
                   displayName={repostDisplayName}
                   displayAvatar={repostDisplayAvatar}
                   formatTime={formatTimeAgo}
-                  isRepost={true}
-                  repostData={repostItem}
+                  
                   onViewOriginalPost={handleViewOriginalPost}
                   onPostUpdate={() => {
                     getPosts().then(updatedPosts => {
@@ -1613,8 +1612,7 @@ getPosts()
                   displayName={displayName}
                   displayAvatar={displayAvatar}
                   formatTime={formatTimeAgo}
-                  isRepost={true}
-                  repostData={repost}
+                  
                   onViewOriginalPost={handleViewOriginalPost}
                   onPostUpdate={() => {
                     getPosts().then(updatedPosts => {
@@ -3321,6 +3319,7 @@ getPosts()
                 displayName={formatDisplayName(modalPost.user, getCurrentUserId(user) === modalPost.user?.user_id, user)}
                 displayAvatar={modalPost.user?.profile_pic ? (String(modalPost.user.profile_pic).startsWith('http') ? modalPost.user.profile_pic : `http://127.0.0.1:8000${modalPost.user.profile_pic}`) : ctulogo}
                 formatTime={formatTimeAgo}
+                
                 onViewOriginalPost={handleViewOriginalPost}
                 onPostUpdate={() => {
                   // Refresh the post data in modal and update the main posts list
@@ -3459,6 +3458,7 @@ getPosts()
                 displayName={formatDisplayName(originalPostModalData.user, getCurrentUserId(user) === originalPostModalData.user?.user_id, user)}
                 displayAvatar={originalPostModalData.user?.profile_pic ? (String(originalPostModalData.user.profile_pic).startsWith('http') ? originalPostModalData.user.profile_pic : `http://127.0.0.1:8000${originalPostModalData.user.profile_pic}`) : ctulogo}
                 formatTime={formatTimeAgo}
+                
                 onViewOriginalPost={handleViewOriginalPost}
                 onPostUpdate={() => {
                   // Refresh the original post data in modal
