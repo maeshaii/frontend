@@ -40,6 +40,7 @@ interface QuestionItem {
   type: string;
   options?: string[];
   required?: boolean;
+  order?: number;
 }
 
 interface CategoryItem {
@@ -78,10 +79,20 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   useEffect(() => {
     if (questionsQuery.data) {
       // Handle both direct array and object with categories property
+      let categoriesData;
       if (Array.isArray(questionsQuery.data)) {
-        setCategories(questionsQuery.data as CategoryItem[]);
+        categoriesData = questionsQuery.data as CategoryItem[];
       } else if (questionsQuery.data.categories) {
-        setCategories(questionsQuery.data.categories as CategoryItem[]);
+        categoriesData = questionsQuery.data.categories as CategoryItem[];
+      }
+      
+      if (categoriesData) {
+        // Sort questions within each category by order
+        const sortedCategories = categoriesData.map(cat => ({
+          ...cat,
+          questions: cat.questions.sort((a, b) => (a.order || 0) - (b.order || 0))
+        }));
+        setCategories(sortedCategories);
       }
     }
   }, [questionsQuery.data]);
@@ -417,6 +428,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         options:
           newQuestionDraft.type !== 'text' ? newQuestionDraft.options?.filter((opt) => opt) : [],
         required: newQuestionDraft.required || false,
+        order: categories[catIdx].questions.length, // Set order to end of current questions
       };
       console.log('Sending question data:', questionData);  // Debug print
       const data = await trackerApi.addQuestion(questionData);
@@ -517,9 +529,11 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
               console.log('🔍 Required missing in API response, using edited value:', merged.required);
             }
             console.log('🔍 Final merged question for UI:', merged);
+            const updatedQuestions = cat.questions.map((q, idx) => (idx === qIdx ? merged : q));
+            // Sort questions by order after update
             return {
               ...cat,
-              questions: cat.questions.map((q, idx) => (idx === qIdx ? merged : q)),
+              questions: updatedQuestions.sort((a, b) => (a.order || 0) - (b.order || 0)),
             };
           })
         );
@@ -950,7 +964,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                   {cat.title.toLowerCase().includes('employment status') ||
                     cat.title.toLowerCase().includes('unemployed') ||
                     cat.title.toLowerCase().includes('further study')}
-                  {cat.questions.map((q, qIdx) => {
+                  {cat.questions.sort((a, b) => (a.order || 0) - (b.order || 0)).map((q, qIdx) => {
                     if (shouldHideQuestionText(q.text)) return null;
                     if (q.text.toLowerCase().includes('current position')) {
                       return (
@@ -1343,7 +1357,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                       {cat.questions.length === 0 && (
                         <p style={{ color: '#888' }}>No questions yet.</p>
                       )}
-                      {cat.questions.map((q, qIdx) => (
+                      {cat.questions.sort((a, b) => (a.order || 0) - (b.order || 0)).map((q, qIdx) => (
                         <div className="card question-box" key={q.id} style={{ marginBottom: 8 }}>
                           {editingQuestion &&
                           editingQuestion.catIdx === catIdx &&

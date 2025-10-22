@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test for Notifications</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .connecting { background-color: #fff3cd; color: #856404; }
+        .message { background-color: #f8f9fa; padding: 10px; margin: 5px 0; border-left: 4px solid #007bff; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        input { padding: 8px; margin: 5px; width: 300px; }
+    </style>
+</head>
+<body>
+    <h1>🔌 WebSocket Notification Test</h1>
+    
+    <div id="status" class="status disconnected">Disconnected</div>
+    
+    <div>
+        <input type="text" id="tokenInput" placeholder="Enter JWT Token (optional)" />
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <button onclick="sendPing()">Send Ping</button>
+        <button onclick="clearMessages()">Clear Messages</button>
+    </div>
+    
+    <h3>Messages:</h3>
+    <div id="messages"></div>
+    
+    <script>
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        
+        function updateStatus(message, className) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${className}`;
+        }
+        
+        function addMessage(message, type = 'info') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong> [${type.toUpperCase()}]: ${message}`;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                addMessage('Already connected!', 'warning');
+                return;
+            }
+            
+            const token = document.getElementById('tokenInput').value.trim();
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.hostname;
+            const port = window.location.port || (protocol === 'wss:' ? '443' : '8000');
+            
+            let wsUrl = `${protocol}//${host}:${port}/ws/notifications/`;
+            
+            if (token) {
+                wsUrl += `?token=${encodeURIComponent(token)}`;
+            }
+            
+            addMessage(`Connecting to: ${wsUrl}`, 'info');
+            updateStatus('Connecting...', 'connecting');
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                updateStatus('Connected', 'connected');
+                addMessage('WebSocket connected successfully!', 'success');
+                reconnectAttempts = 0;
+            };
+            
+            ws.onmessage = function(event) {
+                addMessage(`Received: ${event.data}`, 'success');
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'notification_update') {
+                        addMessage(`🔔 NEW NOTIFICATION: ${data.notification.content}`, 'notification');
+                    }
+                } catch (e) {
+                    // Not JSON, that's fine
+                }
+            };
+            
+            ws.onclose = function(event) {
+                updateStatus('Disconnected', 'disconnected');
+                addMessage(`WebSocket closed: ${event.code} - ${event.reason}`, 'warning');
+                
+                if (!event.wasClean && reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    addMessage(`Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`, 'info');
+                    setTimeout(connect, 2000 * reconnectAttempts);
+                }
+            };
+            
+            ws.onerror = function(error) {
+                updateStatus('Error', 'disconnected');
+                addMessage(`WebSocket error: ${error}`, 'error');
+            };
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close(1000, 'User disconnect');
+                ws = null;
+            }
+        }
+        
+        function sendPing() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }));
+                addMessage('Sent ping', 'info');
+            } else {
+                addMessage('WebSocket not connected', 'error');
+            }
+        }
+        
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+        
+        // Auto-connect on page load
+        window.onload = function() {
+            addMessage('Page loaded. Click Connect to test WebSocket.', 'info');
+        };
+    </script>
+</body>
+</html>

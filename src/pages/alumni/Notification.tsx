@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchNotifications, deleteNotifications, markNotificationAsRead, api } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
+import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
 
 function formatHybrid(iso?: string | null): string {
   if (!iso) return 'Unknown time';
@@ -29,8 +30,19 @@ function formatHybrid(iso?: string | null): string {
 }
 
 const NotificationPage: React.FC = () => {
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use real-time notifications hook
+  const { 
+    notifications: realTimeNotifications, 
+    isLoading, 
+    error,
+    refreshNotifications,
+    markAsRead: markAsReadRealTime
+  } = useRealTimeNotifications({
+    enablePolling: true,
+    pollingInterval: 30000,
+    autoConnect: true
+  });
+
   const [selected, setSelected] = useState<number[]>([]);
   const [search, setSearch] = useState('');
   const [showProfile, setShowProfile] = useState(false);
@@ -65,7 +77,8 @@ const NotificationPage: React.FC = () => {
     if (selected.length === 0) return;
     const result = await deleteNotifications(selected);
     if (result.success) {
-      setNotifications(notifications.filter((n: any) => !selected.includes(n.id)));
+      // Refresh notifications after deletion
+      await refreshNotifications();
       setSelected([]);
     } else {
       alert('Failed to delete notifications.');
@@ -73,23 +86,16 @@ const NotificationPage: React.FC = () => {
   };
 
 
+  // Real-time notifications are handled by the hook
   useEffect(() => {
     const userStr = localStorage.getItem('user');
     if (!userStr) {
       navigate('/login');
       return;
     }
-    const user = JSON.parse(userStr);
-    if (!user.id) return;
-    setLoading(true);
-    fetchNotifications(user.id)
-      .then((data) => {
-        setNotifications(data.notifications || []);
-      })
-      .finally(() => setLoading(false));
   }, [navigate]);
 
-  const filteredNotifications = notifications.filter((n: any) =>
+  const filteredNotifications = realTimeNotifications.filter((n: any) =>
     n.content.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -261,7 +267,7 @@ const NotificationPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-              {loading ? (
+              {isLoading ? (
                 <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24 }}>Loading...</td></tr>
               ) : filteredNotifications.length === 0 ? (
                 <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#888' }}>No notifications found.</td></tr>
@@ -286,12 +292,8 @@ const NotificationPage: React.FC = () => {
                       if (!notif.is_read) {
                         try {
                           await markNotificationAsRead(notif.id);
-                          // Update local state
-                          setNotifications(prev => 
-                            prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n)
-                          );
-                          // Dispatch event to update notification count in topbar
-                          window.dispatchEvent(new CustomEvent('notificationRead'));
+                          // Use real-time hook to mark as read
+                          await markAsReadRealTime(notif.id);
                         } catch (error) {
                           console.error('Error marking notification as read:', error);
                         }

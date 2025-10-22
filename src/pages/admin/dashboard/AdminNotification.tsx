@@ -2,10 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { fetchNotifications } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from '../../alumni/AlumniTopBar';
+import { useRealTimeNotifications } from '../../../hooks/useRealTimeNotifications';
 
 const AdminNotificationPage: React.FC = () => {
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use real-time notifications hook
+  const { 
+    notifications: realTimeNotifications, 
+    isLoading, 
+    error,
+    refreshNotifications,
+    markAsRead: markAsReadRealTime
+  } = useRealTimeNotifications({
+    enablePolling: true,
+    pollingInterval: 30000,
+    autoConnect: true
+  });
+
   const [selected, setSelected] = useState<number[]>([]);
   const [search, setSearch] = useState('');
   const [showProfile, setShowProfile] = useState(false);
@@ -36,18 +48,10 @@ const AdminNotificationPage: React.FC = () => {
       navigate('/login');
       return;
     }
-    const user = JSON.parse(userStr);
-    const id = user?.user_id || user?.id;
-    if (!id) return;
-    setLoading(true);
-    fetchNotifications(id)
-      .then((data: any) => {
-        setNotifications(data.notifications || []);
-      })
-      .finally(() => setLoading(false));
   }, [navigate]);
 
-  const filteredNotifications = notifications.filter((n: any) =>
+  // Use real-time notifications instead of manual fetching
+  const filteredNotifications = realTimeNotifications.filter((n: any) =>
     (n.content || '').toLowerCase().includes(search.toLowerCase())
   );
 
@@ -177,7 +181,7 @@ const AdminNotificationPage: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {isLoading ? (
                 <tr>
                   <td colSpan={6} style={{ textAlign: 'center', padding: 24 }}>
                     Loading...

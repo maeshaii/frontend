@@ -3,6 +3,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
 import { api, getAdminPesoUsers, getUserInfo, fetchNotificationCount } from '../../services/api';
+import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
 import 'primeicons/primeicons.css';
 
 interface AlumniTopBarProps {
@@ -32,8 +33,12 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   const [searchResults, setSearchResults] = React.useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = React.useState(false);
 
-  // New state for notification count
-  const [notificationCount, setNotificationCount] = React.useState(0);
+  // Use real-time notifications hook
+  const { notificationCount, isConnected: notificationConnected } = useRealTimeNotifications({
+    enablePolling: true,
+    pollingInterval: 30000,
+    autoConnect: true
+  });
   
   // State for admin and PESO user IDs
   const [adminUserIds, setAdminUserIds] = React.useState<number[]>([]);
@@ -56,41 +61,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     fetchAdminPesoUsers();
   }, []);
 
-  // Fetch notification count
-  const loadNotificationCount = React.useCallback(() => {
-    const user = getUserInfo();
-    if (!user || !(user.user_id || user.id)) {
-      setNotificationCount(0);
-      return;
-    }
-    const uid = Number(user.user_id || user.id);
-    fetchNotificationCount(uid)
-      .then((data) => {
-        if (data && typeof data.count === 'number') {
-          setNotificationCount(data.count);
-        } else {
-          setNotificationCount(0);
-        }
-      })
-      .catch(() => {
-        setNotificationCount(0);
-      });
-  }, []);
-
-  React.useEffect(() => {
-    loadNotificationCount();
-    
-    // Listen for notification read events to refresh count
-    const handleNotificationRead = () => {
-      loadNotificationCount();
-    };
-    
-    window.addEventListener('notificationRead', handleNotificationRead);
-    
-    return () => {
-      window.removeEventListener('notificationRead', handleNotificationRead);
-    };
-  }, [loadNotificationCount]);
+  // Real-time notifications are handled by the hook
 
   // Handle click outside to close profile dropdown
   useEffect(() => {
@@ -556,6 +527,20 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           >
             {notificationCount}
           </span>
+        )}
+        {/* WebSocket connection indicator */}
+        {notificationConnected && (
+          <span style={{
+            position: 'absolute',
+            top: -2,
+            right: -2,
+            width: 8,
+            height: 8,
+            backgroundColor: '#4CAF50',
+            borderRadius: '50%',
+            border: '2px solid white',
+            pointerEvents: 'none'
+          }} title="Real-time notifications connected" />
         )}
         <span style={{ 
           color: 'white', 

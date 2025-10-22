@@ -25,8 +25,13 @@ import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType, AlignmentType, HeadingLevel, BorderStyle } from 'docx';
+import { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType, AlignmentType, HeadingLevel, BorderStyle, ImageRun } from 'docx';
 import { saveAs } from 'file-saver';
+
+// Import institutional images
+import ctuLogo from '../images/ctu_logo-removebg-preview.png';
+import bagongPilipinasLogo from '../images/bagong_pilipinas_logo-removebg-preview.png';
+import footerImage from '../images/footer-removebg-preview.png';
 
 interface Props {
   onClose: () => void;
@@ -51,6 +56,214 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     const p = Number(part) || 0;
     const t = Number(total) || 0;
     return t > 0 ? `${((p / t) * 100).toFixed(2)}%` : '0.00%';
+  };
+
+  // Utility function to convert image to base64 for PDF
+  const getImageAsBase64 = async (imagePath: string): Promise<string> => {
+    try {
+      const response = await fetch(imagePath);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('Error loading image:', error);
+      return '';
+    }
+  };
+
+  // ========================================
+  // PDF HEADER FUNCTION
+  // ========================================
+  // Utility function to add institutional header to PDF
+  const addInstitutionalHeaderToPDF = async (doc: jsPDF, pageWidth: number) => {
+    try {
+      // Load images
+      const ctuLogoBase64 = await getImageAsBase64(ctuLogo);
+      const bagongPilipinasBase64 = await getImageAsBase64(bagongPilipinasLogo);
+      
+      let yPosition = 15;
+      
+      // Create a proper 3-column layout like Word document
+      // Left column: CTU Logo - smaller and higher position
+      if (ctuLogoBase64) {
+        doc.addImage(ctuLogoBase64, 'PNG', 60, yPosition + 5, 35, 35); // Smaller (35x35) and higher (yPosition + 5)
+      }
+      
+      // Right column: Bagong Pilipinas Logo - smaller and higher position
+      if (bagongPilipinasBase64) {
+        doc.addImage(bagongPilipinasBase64, 'PNG', pageWidth - 95, yPosition + 5, 35, 35); // Smaller (35x35) and higher (yPosition + 5)
+      }
+
+      // Center column: Institutional text (positioned between logos with tighter spacing)
+      const centerX = pageWidth / 2;
+      
+      // Republic of the Philippines - Match Word default size (12pt)
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Republic of the Philippines', centerX, yPosition + 4, { align: 'center' }); // Tighter spacing (was 6, now 4)
+      
+      // CEBU TECHNOLOGICAL UNIVERSITY (bold, red) - Match Word size 24 exactly
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(220, 20, 60);
+      doc.setFontSize(12); // Exact match to Word size 24
+      doc.text('CEBU TECHNOLOGICAL UNIVERSITY', centerX, yPosition + 12, { align: 'center' }); // Much tighter spacing (was 14, now 12)
+      
+      // Address - Match Word default size (12pt)
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(10); // Match Word default size
+      doc.text('M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines', centerX, yPosition + 17, { align: 'center' }); // Much tighter spacing (was 20, now 17)
+      
+      // Website and Phone - Match Word default size (12pt)
+      doc.setFontSize(10); // Match Word default size
+      doc.text('Website: http://www.ctu.edu.ph', centerX, yPosition + 21, { align: 'center' }); // Much tighter spacing (was 25, now 21)
+      doc.text('Phone: +6332 402 4060 loc. 1146', centerX, yPosition + 25, { align: 'center' }); // Much tighter spacing (was 30, now 25)
+      
+      // UNIVERSITY ALUMNI AFFAIRS OFFICE (bold, red) - Match Word size 18 exactly
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(220, 20, 60);
+      doc.setFontSize(9); // Exact match to Word size 18
+      doc.text('UNIVERSITY ALUMNI AFFAIRS OFFICE', centerX, yPosition + 30, { align: 'center' }); // Much tighter spacing (was 36, now 30)
+      
+      // Reset color for content
+      doc.setTextColor(0, 0, 0);
+    } catch (error) {
+      console.error('Error adding institutional header to PDF:', error);
+    }
+  };
+
+  // ========================================
+  // PDF FOOTER FUNCTION
+  // ========================================
+  // Utility function to add institutional footer to PDF
+  const addInstitutionalFooterToPDF = async (doc: jsPDF, pageWidth: number, pageHeight: number) => {
+    try {
+      const footerBase64 = await getImageAsBase64(footerImage);
+      
+      if (footerBase64) {
+        // Add compact footer image at the bottom - match Word document proportions
+        // Calculate proper width and height to maintain aspect ratio
+        const footerWidth = pageWidth - 40; // Full width minus margins
+        const footerHeight = 12; // Compact height like Word document
+        
+        doc.addImage(footerBase64, 'PNG', 20, pageHeight - 30, footerWidth, footerHeight);
+        
+        // Add footer text below the image
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Generated by Cebu Technological University Alumni Affairs Office', pageWidth / 2, pageHeight - 12, { align: 'center' });
+        doc.text('This report is generated automatically by the Alumni Tracking System', pageWidth / 2, pageHeight - 7, { align: 'center' });
+      }
+    } catch (error) {
+      console.error('Error adding institutional footer to PDF:', error);
+    }
+  };
+
+  // ========================================
+  // EXCEL HEADER FUNCTION
+  // ========================================
+  // Utility function to add institutional header to Excel
+  const addInstitutionalHeaderToExcel = (sheet: any, startRow: number = 1) => {
+    let r = startRow;
+    
+    // Add empty row for spacing (moved down)
+    sheet.getRow(r).height = 10;
+    r++;
+    
+    // Set row height for header section
+    sheet.getRow(r).height = 20;
+    sheet.getRow(r + 1).height = 25;
+    sheet.getRow(r + 2).height = 20;
+    sheet.getRow(r + 3).height = 20;
+    sheet.getRow(r + 4).height = 20;
+    sheet.getRow(r + 5).height = 20;
+    sheet.getRow(r + 6).height = 20;
+    sheet.getRow(r + 7).height = 25;
+    sheet.getRow(r + 8).height = 20;
+    sheet.getRow(r + 9).height = 20; // Added for report title spacing
+    
+    // Republic of the Philippines
+    sheet.getCell(`A${r}`).value = 'Republic of the Philippines';
+    sheet.getCell(`A${r}`).font = { bold: true, size: 11 };
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.mergeCells(`A${r}:H${r}`);
+    r++;
+    
+    // CEBU TECHNOLOGICAL UNIVERSITY (bold, red)
+    sheet.getCell(`A${r}`).value = 'CEBU TECHNOLOGICAL UNIVERSITY';
+    sheet.getCell(`A${r}`).font = { bold: true, size: 16, color: { argb: 'FFDC143C' } }; // Red color
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.mergeCells(`A${r}:H${r}`);
+    r++;
+    
+    // Address
+    sheet.getCell(`A${r}`).value = 'M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines';
+    sheet.getCell(`A${r}`).font = { size: 10 };
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.mergeCells(`A${r}:H${r}`);
+    r++;
+    
+    // Website and Phone
+    sheet.getCell(`A${r}`).value = 'Website: http://www.ctu.edu.ph';
+    sheet.getCell(`A${r}`).font = { size: 9 };
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.mergeCells(`A${r}:H${r}`);
+    r++;
+    
+    sheet.getCell(`A${r}`).value = 'Phone: +6332 402 4060 loc. 1146';
+    sheet.getCell(`A${r}`).font = { size: 9 };
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.mergeCells(`A${r}:H${r}`);
+    r++;
+    
+    // UNIVERSITY ALUMNI AFFAIRS OFFICE (bold, red)
+    sheet.getCell(`A${r}`).value = 'UNIVERSITY ALUMNI AFFAIRS OFFICE';
+    sheet.getCell(`A${r}`).font = { bold: true, size: 12, color: { argb: 'FFDC143C' } }; // Red color
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.mergeCells(`A${r}:H${r}`);
+    r += 3; // Added extra spacing before report title
+    
+    // Report Title
+    sheet.getCell(`A${r}`).value = 'PERCENTAGE OF GRADUATE TRACING BATCH 2023';
+    sheet.getCell(`A${r}`).font = { bold: true, size: 14 };
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.mergeCells(`A${r}:H${r}`);
+    r++;
+    
+    // Report Subtitle
+    sheet.getCell(`A${r}`).value = 'REPORT FOR THE 3RD QUARTER QPRO 2025';
+    sheet.getCell(`A${r}`).font = { bold: true, size: 12 };
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.mergeCells(`A${r}:H${r}`);
+    r += 2;
+    
+    return r;
+  };
+
+  // ========================================
+  // EXCEL FOOTER FUNCTION
+  // ========================================
+  // Utility function to add institutional footer to Excel
+  const addInstitutionalFooterToExcel = (sheet: any, startRow: number) => {
+    let r = startRow + 2;
+    
+    // Add footer information
+    sheet.getCell(`A${r}`).value = 'Generated by Cebu Technological University Alumni Affairs Office';
+    sheet.getCell(`A${r}`).font = { italic: true, size: 9 };
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center' };
+    sheet.mergeCells(`A${r}:H${r}`);
+    r++;
+    
+    sheet.getCell(`A${r}`).value = 'This report is generated automatically by the Alumni Tracking System';
+    sheet.getCell(`A${r}`).font = { italic: true, size: 9 };
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center' };
+    sheet.mergeCells(`A${r}:H${r}`);
+    
+    return r;
   };
 
   // Refs for chart containers
@@ -665,13 +878,22 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     const doc = new jsPDF('landscape', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    let yPosition = 20;
+    
+    // Add institutional header
+    await addInstitutionalHeaderToPDF(doc, pageWidth);
+    
+    let yPosition = 70; // Moved higher (was 100, now 85)
 
-    // Title
-    doc.setFontSize(20);
+    // Report Title
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('Alumni Statistics Report', pageWidth / 2, yPosition, { align: 'center' });
-    yPosition += 10;
+    doc.text('PERCENTAGE OF GRADUATE TRACING BATCH 2023', pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 8;
+    
+    // Report Subtitle
+    doc.setFontSize(12);
+    doc.text('REPORT FOR THE 3RD QUARTER QPRO 2025', pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 15;
 
     // Metadata
     doc.setFontSize(10);
@@ -1089,11 +1311,17 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       }
     }
 
+    // Add institutional footer to all pages
+    await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+
     // Save PDF
     const filename = `Alumni_Statistics_${exportType}_${selectedYear}_${selectedProgram}.pdf`;
     doc.save(filename);
   };
 
+  // ========================================
+  // WORD EXPORT FUNCTION
+  // ========================================
   // Word Export Utility Function
   const exportToWord = async (
     statsByType: Record<string, any>,
@@ -1102,13 +1330,227 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   ) => {
     const children: (Paragraph | Table)[] = [];
 
-    // Title
+    // Load images for Word document
+    const ctuLogoBase64 = await getImageAsBase64(ctuLogo);
+    const bagongPilipinasBase64 = await getImageAsBase64(bagongPilipinasLogo);
+    const footerBase64 = await getImageAsBase64(footerImage);
+
+    // ========================================
+    // WORD HEADER SECTION
+    // ========================================
+    // Create header with proper logo positioning using a table
+    if (ctuLogoBase64 && bagongPilipinasBase64) {
     children.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: {
+            top: { style: BorderStyle.NONE },
+            bottom: { style: BorderStyle.NONE },
+            left: { style: BorderStyle.NONE },
+            right: { style: BorderStyle.NONE },
+            insideHorizontal: { style: BorderStyle.NONE },
+            insideVertical: { style: BorderStyle.NONE },
+          },
+          rows: [
+            new TableRow({
+              children: [
+                // Left cell - CTU Logo
+                new TableCell({
+                  children: [
       new Paragraph({
-        text: 'Alumni Statistics Report',
-        heading: HeadingLevel.HEADING_1,
+                      text: '',
+                      spacing: { before: 200 }, // Move logo down
+                    }),
+                    new Paragraph({
+                      children: [
+                        new ImageRun({
+                          data: ctuLogoBase64.split(',')[1],
+                          type: 'png',
+                          transformation: {
+                            width: 100, // Bigger logo
+                            height: 100, // Bigger logo
+                          },
+                        }),
+                      ],
+                      alignment: AlignmentType.CENTER,
+                    }),
+                  ],
+                  width: { size: 20, type: WidthType.PERCENTAGE },
+                  borders: {
+                    top: { style: BorderStyle.NONE },
+                    bottom: { style: BorderStyle.NONE },
+                    left: { style: BorderStyle.NONE },
+                    right: { style: BorderStyle.NONE },
+                  },
+                }),
+                // Center cell - Institutional text
+                new TableCell({
+                  children: [
+                    new Paragraph({
+                      text: 'Republic of the Philippines',
+                      alignment: AlignmentType.CENTER,
+                      spacing: { after: 100 },
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: 'CEBU TECHNOLOGICAL UNIVERSITY',
+                          bold: true,
+                          color: 'DC143C',
+                          size: 24,
+                        }),
+                      ],
+                      alignment: AlignmentType.CENTER,
+                      spacing: { after: 100 },
+                    }),
+                    new Paragraph({
+                      text: 'M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines',
+                      alignment: AlignmentType.CENTER,
+                      spacing: { after: 100 },
+                    }),
+                    new Paragraph({
+                      text: 'Website: http://www.ctu.edu.ph',
+                      alignment: AlignmentType.CENTER,
+                      spacing: { after: 50 },
+                    }),
+                    new Paragraph({
+                      text: 'Phone: +6332 402 4060 loc. 1146',
+                      alignment: AlignmentType.CENTER,
+                      spacing: { after: 100 },
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: 'UNIVERSITY ALUMNI AFFAIRS OFFICE',
+                          bold: true,
+                          color: 'DC143C',
+                          size: 18,
+                        }),
+                      ],
         alignment: AlignmentType.CENTER,
         spacing: { after: 200 },
+                    }),
+                  ],
+                  width: { size: 60, type: WidthType.PERCENTAGE },
+                  borders: {
+                    top: { style: BorderStyle.NONE },
+                    bottom: { style: BorderStyle.NONE },
+                    left: { style: BorderStyle.NONE },
+                    right: { style: BorderStyle.NONE },
+                  },
+                }),
+                // Right cell - Bagong Pilipinas Logo
+                new TableCell({
+                  children: [
+                    new Paragraph({
+                      text: '',
+                      spacing: { before: 200 }, // Move logo down
+                    }),
+                    new Paragraph({
+                      children: [
+                        new ImageRun({
+                          data: bagongPilipinasBase64.split(',')[1],
+                          type: 'png',
+                          transformation: {
+                            width: 100, // Bigger logo
+                            height: 100, // Bigger logo
+                          },
+                        }),
+                      ],
+                      alignment: AlignmentType.CENTER,
+                    }),
+                  ],
+                  width: { size: 20, type: WidthType.PERCENTAGE },
+                  borders: {
+                    top: { style: BorderStyle.NONE },
+                    bottom: { style: BorderStyle.NONE },
+                    left: { style: BorderStyle.NONE },
+                    right: { style: BorderStyle.NONE },
+                  },
+                }),
+              ],
+            }),
+          ],
+        })
+      );
+    } else {
+      // Fallback if logos not available - just text
+      children.push(
+        new Paragraph({
+          text: 'Republic of the Philippines',
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'CEBU TECHNOLOGICAL UNIVERSITY',
+              bold: true,
+              color: 'DC143C',
+              size: 24,
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          text: 'M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines',
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          text: 'Website: http://www.ctu.edu.ph',
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 50 },
+        }),
+        new Paragraph({
+          text: 'Phone: +6332 402 4060 loc. 1146',
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'UNIVERSITY ALUMNI AFFAIRS OFFICE',
+              bold: true,
+              color: 'DC143C',
+              size: 18,
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+        })
+      );
+    }
+
+
+    // Report Title
+    children.push(
+      new Paragraph({
+        text: '',
+        spacing: { before: 200 }, // Add space before title
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'PERCENTAGE OF GRADUATE TRACING BATCH 2023',
+            bold: true,
+            size: 28,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'REPORT FOR THE 3RD QUARTER QPRO 2025',
+            bold: true,
+            size: 20,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 400 },
       })
     );
 
@@ -1369,6 +1811,51 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       }
     }
 
+    // ========================================
+    // WORD FOOTER SECTION
+    // ========================================
+    // Add institutional footer with image
+    children.push(
+      new Paragraph({
+        text: '',
+        spacing: { before: 800, after: 200 },
+      })
+    );
+
+    // Add compact footer image if available
+    if (footerBase64) {
+      children.push(
+        new Paragraph({
+          children: [
+            new ImageRun({
+              data: footerBase64.split(',')[1],
+              type: 'png',
+              transformation: {
+                width: 600,
+                height: 30, // Compact height to match the logo row design
+              },
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+        })
+      );
+    }
+
+    // Add footer text
+    children.push(
+      new Paragraph({
+        text: 'Generated by Cebu Technological University Alumni Affairs Office',
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        text: 'This report is generated automatically by the Alumni Tracking System',
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 100 },
+      })
+    );
+
     // Create document
     const doc = new Document({
       sections: [{
@@ -1453,17 +1940,20 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // If exporting only QPRO, produce a single-tab workbook with summary + details (no charts)
       if (!allStats && generatedStats?.type === 'QPRO') {
         const sheet = workbook.addWorksheet('QPRO Report');
-        let r = 1;
-        sheet.getCell(`A${r}`).value = 'QPRO Complete Statistics Report';
-        sheet.getCell(`A${r}`).font = { bold: true };
-        r++;
+        
+        // Add institutional header
+        let r = addInstitutionalHeaderToExcel(sheet, 1);
+        
+        // Add metadata
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
         sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
         // Make summary headers bold
@@ -1505,6 +1995,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const mapped = sortAlumniData((detailedDataByType['QPRO'] || []).map(mapQPRORow));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
 
+        // Add institutional footer
+        addInstitutionalFooterToExcel(sheet, r);
+
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
         const buffer = await workbook.xlsx.writeBuffer();
@@ -1522,17 +2015,20 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // If exporting only CHED, produce a single-tab workbook with CHED matrix + details
       if (!allStats && generatedStats?.type === 'CHED') {
         const sheet = workbook.addWorksheet('CHED Report');
-        let r = 1;
-        sheet.getCell(`A${r}`).value = 'CHED Complete Statistics Report';
-        sheet.getCell(`A${r}`).font = { bold: true };
-        r++;
+        
+        // Add institutional header
+        let r = addInstitutionalHeaderToExcel(sheet, 1);
+        
+        // Add metadata
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
         sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
         // Make summary headers bold
@@ -1579,6 +2075,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const mapped = sortAlumniData((detailedDataByType['CHED'] || []).map(mapQPRORow));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
 
+        // Add institutional footer
+        addInstitutionalFooterToExcel(sheet, r);
+
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
         const buffer = await workbook.xlsx.writeBuffer();
@@ -1596,17 +2095,20 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // If exporting only AACUP, produce a single-tab workbook with AACUP matrix + details
       if (!allStats && generatedStats?.type === 'AACUP') {
         const sheet = workbook.addWorksheet('AACUP Report');
-        let r = 1;
-        sheet.getCell(`A${r}`).value = 'AACUP Complete Statistics Report';
-        sheet.getCell(`A${r}`).font = { bold: true };
-        r++;
+        
+        // Add institutional header
+        let r = addInstitutionalHeaderToExcel(sheet, 1);
+        
+        // Add metadata
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
         sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
         // Make summary headers bold
@@ -1652,6 +2154,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const mapped2 = sortAlumniData((detailedDataByType['AACUP'] || []).map(mapQPRORow));
         mapped2.forEach((vals) => { sheet.addRow(vals); r++; });
 
+        // Add institutional footer
+        addInstitutionalFooterToExcel(sheet, r);
+
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
         const buffer = await workbook.xlsx.writeBuffer();
@@ -1669,17 +2174,20 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // If exporting only HIGH_POSITION, produce a single-tab workbook with summary + filtered details
       if (!allStats && generatedStats?.type === 'HIGH_POSITION') {
         const sheet = workbook.addWorksheet('High Position Report');
-        let r = 1;
-        sheet.getCell(`A${r}`).value = 'HIGH POSITION Complete Statistics Report';
-        sheet.getCell(`A${r}`).font = { bold: true };
-        r++;
+        
+        // Add institutional header
+        let r = addInstitutionalHeaderToExcel(sheet, 1);
+        
+        // Add metadata
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
         sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
         // Make summary headers bold
@@ -1744,6 +2252,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         });
         rows.forEach((vals) => { sheet.addRow(vals); r++; });
 
+        // Add institutional footer
+        addInstitutionalFooterToExcel(sheet, r);
+
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
         const buffer = await workbook.xlsx.writeBuffer();
@@ -1761,17 +2272,20 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // If exporting only SUC, produce a single-tab workbook with SUC matrix + details
       if (!allStats && generatedStats?.type === 'SUC') {
         const sheet = workbook.addWorksheet('SUC Report');
-        let r = 1;
-        sheet.getCell(`A${r}`).value = 'SUC Complete Statistics Report';
-        sheet.getCell(`A${r}`).font = { bold: true };
-        r++;
+        
+        // Add institutional header
+        let r = addInstitutionalHeaderToExcel(sheet, 1);
+        
+        // Add metadata
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
         sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL'; r += 2;
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL';
+        sheet.getCell(`A${r}`).font = { bold: true };
+        r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
         // Make summary headers bold
@@ -1817,6 +2331,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const mapped = sortAlumniData((detailedDataByType['SUC'] || []).map(mapQPRORow));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
 
+        // Add institutional footer
+        addInstitutionalFooterToExcel(sheet, r);
+
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
         const buffer = await workbook.xlsx.writeBuffer();
@@ -1835,9 +2352,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
       let rowIdx = 1;
       if (allStats) {
-        worksheet.getCell(`A${rowIdx}`).value = `All Complete Statistics Report`;
-        worksheet.getCell(`A${rowIdx}`).font = { bold: true };
-        rowIdx++;
+        // Add institutional header
+        rowIdx = addInstitutionalHeaderToExcel(worksheet, 1);
+        
+        // Add metadata
         worksheet.getCell(`A${rowIdx}`).value = `Generated Date`;
         worksheet.getCell(`B${rowIdx}`).value = new Date().toLocaleDateString();
         worksheet.getCell(`A${rowIdx}`).font = { bold: true };
@@ -2545,6 +3063,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       if (Array.isArray((workbook as any).worksheets)) {
         (workbook as any).worksheets.forEach((s: ExcelJS.Worksheet) => autoSizeAndWrapSheet(s));
       }
+
+      // Add institutional footer to main worksheet
+      addInstitutionalFooterToExcel(worksheet, rowIdx);
 
       // Download the Excel file
       const buffer = await workbook.xlsx.writeBuffer();
