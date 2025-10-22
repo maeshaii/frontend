@@ -257,6 +257,12 @@ export const fetchAlumniStatistics = async () => {
   return response.data;
 };
 
+// Fetch graduation years for dropdowns
+export const fetchGraduationYears = async () => {
+  const response = await api.get('alumni/graduation-years/');
+  return response.data;
+};
+
 // Fetch alumni user list
 export const fetchAlumniList = async () => {
   const response = await api.get('alumni/list/');
@@ -307,8 +313,7 @@ export const importOJT = async (
   file: File,
   batchYear: string,
   course: string,
-  coordinatorUsername: string,
-  section: string
+  coordinatorUsername: string
 ) => {
   try {
     const formData = new FormData();
@@ -316,7 +321,6 @@ export const importOJT = async (
     formData.append('batch_year', batchYear);
     formData.append('program', course);
     formData.append('coordinator_username', coordinatorUsername);
-    formData.append('section', section);
 
     const response = await api.post('ojt/import/', formData, {
       headers: {
@@ -356,10 +360,14 @@ export const fetchOJTStatistics = async (coordinatorUsername?: string) => {
 };
 
 // Fetch OJT data by year for coordinators
-export const fetchOJTByYear = async (year: string, coordinatorUsername?: string) => {
-  const path = coordinatorUsername
-    ? `ojt/by-year/?year=${year}&coordinator=${coordinatorUsername}`
-    : `ojt/by-year/?year=${year}`;
+export const fetchOJTByYear = async (year: string, coordinatorUsername?: string, section?: string) => {
+  let path = `ojt/by-year/?year=${year}`;
+  if (coordinatorUsername) {
+    path += `&coordinator=${coordinatorUsername}`;
+  }
+  if (section) {
+    path += `&section=${section}`;
+  }
   const response = await api.get(path);
   return response.data;
 };
@@ -382,6 +390,17 @@ export const updateOJTStatus = async (userId: number, status: string) => {
 // Send completed OJT list to admin (returns count)
 export const sendCompletedOJTToAdmin = async (year?: number | string, userIds?: number[]) => {
   const response = await api.post('ojt/send-to-admin/', { year, user_ids: userIds || [] });
+  return response.data;
+};
+
+// Set send date for OJT batch
+export const setSendDate = async (coordinatorUsername: string, batchYear: number, section: string | null, sendDate: string) => {
+  const response = await api.post('ojt/set-send-date/', {
+    coordinator_username: coordinatorUsername,
+    batch_year: batchYear,
+    section: section,
+    send_date: sendDate
+  });
   return response.data;
 };
 

@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { FaChartBar, FaUser, FaUserCircle, FaTh, FaPowerOff, FaGift, FaPaperPlane, FaUsersCog } from 'react-icons/fa';
-import { LuLocateFixed } from 'react-icons/lu';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import logoLogin from '../../../images/logo_login.png';
 import ConfirmModal from '../../../components/ConfirmModal';
@@ -84,14 +82,14 @@ const Sidebar = () => {
   };
 
   const links = [
-    { to: '/dashboard', label: 'Dashboard', icon: <FaTh style={styles.icon} /> },
-    { to: '/statistics', label: 'Statistics', icon: <FaChartBar style={styles.icon} /> },
-    { to: '/users', label: 'Users', icon: <FaUser style={styles.icon} /> },
-    { to: '/user-management', label: 'User Management', icon: <FaUsersCog style={styles.icon} /> },
-    { to: '/ccict/profile', label: 'Profile', icon: <FaUserCircle style={styles.icon} /> },
-    { to: '/tracker', label: 'Tracker', icon: <LuLocateFixed style={styles.icon} /> },
-    { to: '/requests', label: 'Requests', icon: <FaPaperPlane style={styles.icon} /> },
-    { to: '/rewards', label: 'Rewards', icon: <FaGift style={styles.icon} /> },
+    { to: '/dashboard', label: 'Dashboard' },
+    { to: '/statistics', label: 'Statistics' },
+    { to: '/users', label: 'Users' },
+    { to: '/user-management', label: 'User Management' },
+    { to: '/ccict/profile', label: 'Profile' },
+    { to: '/tracker', label: 'Tracker' },
+    { to: '/requests', label: 'Requests' },
+    { to: '/rewards', label: 'Rewards' },
   ];
 
   return (
@@ -112,7 +110,15 @@ const Sidebar = () => {
                   ...(location.pathname === link.to ? styles.activeNavItem : {}),
                 }}
               >
-                {link.icon} {link.label}
+                {link.to === '/dashboard' && <span style={styles.icon}>📊</span>}
+                {link.to === '/statistics' && <span style={styles.icon}>📈</span>}
+                {link.to === '/users' && <span style={styles.icon}>👥</span>}
+                {link.to === '/user-management' && <span style={styles.icon}>⚙️</span>}
+                {link.to === '/ccict/profile' && <span style={styles.icon}>👤</span>}
+                {link.to === '/tracker' && <span style={styles.icon}>📍</span>}
+                {link.to === '/requests' && <span style={styles.icon}>📨</span>}
+                {link.to === '/rewards' && <span style={styles.icon}>🎁</span>}
+                {link.label}
               </Link>
             </li>
           ))}
@@ -127,7 +133,7 @@ const Sidebar = () => {
           setShowLogoutConfirm(true);
         }}
       >
-        <FaPowerOff style={styles.icon} /> Logout
+        <span style={styles.icon}>🚪</span> Logout
       </a>
 
       <ConfirmModal

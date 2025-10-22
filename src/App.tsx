@@ -2,6 +2,7 @@ import React from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './services/utils/queryClient';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import Dashboard from './pages/admin/dashboard/index';
 import Statistics from './pages/admin/statistics/index';
 import ViewStats from './pages/admin/statistics/ViewStats';
@@ -38,9 +39,10 @@ import UnifiedDashboard from './pages/shared/UnifiedDashboard';
 
 const App: React.FC = () => {
   return (
-    <QueryClientProvider client={queryClient}>
-      <Router>
-        <Routes>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <Router>
+          <Routes>
           {/* Redirect root URL to /login */}
           <Route path="/" element={<Navigate to="/login" replace />} />
 
@@ -299,9 +301,10 @@ const App: React.FC = () => {
         <Route path="/users" element={<Users />} />
         etc.
         */}
-        </Routes>
-      </Router>
-    </QueryClientProvider>
+          </Routes>
+        </Router>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 };
 

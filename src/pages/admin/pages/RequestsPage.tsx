@@ -61,7 +61,7 @@ const RequestsPage: React.FC = () => {
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar />
       <div style={{ flex: 1, padding: '24px 32px', backgroundColor: '#f5f6fa', marginLeft: 240 }}>
-        <h2 style={{ margin: 0, color: '#0b2a55', marginBottom: '16px' }}>Coordinator Requests</h2>
+        <h2 style={{ margin: 0, color: '#0b2a55', marginBottom: '16px' }}>OJT Submissions</h2>
         
         {/* Filters */}
         <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>

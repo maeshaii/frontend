@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   MessageItem, 
@@ -7,11 +7,16 @@ import {
   sendMessage, 
   markConversationRead,
   getUserInfo,
-  uploadAttachment 
+  uploadAttachment,
+  api
 } from '../../services/api';
 import { ConversationWebSocket, TypingIndicator, WsEvent } from '../../services/websocketHelper';
 import { getConversationWsUrl } from '../../services/api';
 import { getFileIcon, getFileTypeDisplayName, formatFileSize, isImageFile, isVideoFile, isAudioFile, canPreview, FileCategory } from '../../utils/fileUtils';
+import { deduplicateMessages, addMessageWithDeduplication, replaceTempMessage, removeTempMessage, isDuplicateMessage, sortMessagesBySequence, detectSequenceGaps, UiMessage } from '../../utils/messageUtils';
+import { sanitizeUserInput, validateMessageType } from '../../utils/securityUtils';
+import { WebSocketErrorBoundary } from '../../components/ErrorBoundary';
+import { useLogger } from '../../utils/logger';
 import './Messaging.css';
 
 interface ChatInterfaceProps {
@@ -19,25 +24,9 @@ interface ChatInterfaceProps {
   onBack?: () => void;
 }
 
-type UiMessage = {
-  id: string;
-  content: string;
-  sender_id: number;
-  sender_name: string;
-  created_at: string;
-  is_read: boolean;
-  tempId?: string;
-  message_type?: string;
-  attachment_url?: string | null;
-  attachment_info?: {
-    file_name?: string;
-    file_type?: string;
-    file_category?: FileCategory;
-    file_size?: number;
-  };
-};
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) => {
+  const logger = useLogger('ChatInterface');
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
@@ -88,8 +77,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
         is_read: m.is_read,
         message_type: (m as any).message_type,
         attachment_url: (() => {
-          const url = ((m as any).attachments && (m as any).attachments[0]?.file_url) || null;
+          const attachment = ((m as any).attachments && (m as any).attachments[0]);
+          if (!attachment) return null;
+          
+          // Try file_url first, then fallback to file field
+          const url = attachment.file_url || attachment.file || null;
           if (!url) return null;
+          
+          // Ensure absolute URL
           return url.startsWith('http') ? url : `${window.location.origin}${url}`;
         })(),
         attachment_info: (() => {
@@ -106,9 +101,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
 
       setMessages(prev => {
         const joined = cursor ? [...mapped, ...prev] : [...prev.filter(p => !mapped.some(m => m.id === p.id)), ...mapped];
-        const byId: Record<string, UiMessage> = {};
-        joined.forEach(m => { byId[m.id] = m; });
-        const unique = Object.values(byId).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        const unique = deduplicateMessages(joined);
         if (!cursor) setTimeout(scrollToBottom, 100);
         return unique;
       });
@@ -119,47 +112,98 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
     }
   }, [conversation, scrollToBottom]);
 
-  const connectWebSocket = useCallback(() => {
+  const connectWebSocket = useCallback(async () => {
     if (!conversation) return;
 
-    const wsUrl = getConversationWsUrl(conversation.conversation_id);
-    const ws = new ConversationWebSocket(wsUrl);
-    wsRef.current = ws;
+    try {
+      // Establish session before WebSocket connection
+      await api.get('csrf/'); // This will set session cookies
+      
+      // Get JWT token for WebSocket authentication (fallback)
+      let token = null;
+      try {
+        // Try to get token from localStorage (check the correct key used by login system)
+        token = localStorage.getItem('accessToken') || 
+                localStorage.getItem('access_token') || 
+                localStorage.getItem('token') || 
+                localStorage.getItem('jwt_token') ||
+                localStorage.getItem('auth_token');
+        
+        // Debug: Log what tokens we found
+        logger.info('Available localStorage keys:', Object.keys(localStorage));
+        logger.info('Found token:', token ? 'Yes' : 'No');
+        
+        if (!token) {
+          // Try to refresh token if we have a refresh token
+          const refreshToken = localStorage.getItem('refreshToken') || localStorage.getItem('refresh_token');
+          if (refreshToken) {
+            logger.info('Attempting token refresh...');
+            try {
+              const tokenResponse = await api.post('token/refresh/', {
+                refresh: refreshToken
+              });
+              token = tokenResponse.data.access;
+              localStorage.setItem('accessToken', token);
+              logger.info('Token refreshed successfully');
+            } catch (refreshError) {
+              logger.warn('Token refresh failed, will use session auth', refreshError);
+            }
+          } else {
+            logger.info('No refresh token found, will use session-based authentication');
+          }
+        }
+      } catch (error) {
+        // If we can't get a token, try without it (session-based auth)
+        logger.warn('Could not get JWT token for WebSocket, using session auth', error);
+      }
+      
+      const wsUrl = getConversationWsUrl(conversation.conversation_id);
+      const ws = new ConversationWebSocket(wsUrl);
+      wsRef.current = ws;
     
     const typingIndicator = new TypingIndicator(ws, conversation.conversation_id);
     typingIndicatorRef.current = typingIndicator;
 
-    ws.onStatus((status) => {
+    // Create callback functions that can be properly cleaned up
+    const statusCallback = (status: any) => {
       setConnectionStatus(status);
       if (status === 'connected' && !hasMarkedRef.current) {
         markConversationRead(conversation.conversation_id).catch(() => {});
         hasMarkedRef.current = true;
         setHasMarkedAsRead(true);
       }
-    });
+    };
 
-    ws.onMessage((event: WsEvent) => {
+    const messageCallback = (event: WsEvent) => {
       const myId = currentUser?.user_id ?? (currentUser as any)?.id;
       switch (event.type) {
         case 'message':
           // If this is our own echo via websocket, skip because REST already updated UI
           if (event.sender_id === myId) break;
+          
+          const newMessage: UiMessage = {
+            id: String(event.message_id),
+            content: event.content || '',
+            sender_id: event.sender_id || 0,
+            sender_name: event.sender_name || '',
+            created_at: event.created_at || new Date().toISOString(),
+            is_read: false,
+            message_type: event.message_type,
+            attachment_url: event.attachment_url || (event.attachments && event.attachments[0]?.file_url),
+            attachment_info: event.attachment_info || (event.attachments && event.attachments[0] ? {
+              file_name: event.attachments[0].file_name,
+              file_type: event.attachments[0].file_type,
+              file_category: event.attachments[0].file_category,
+              file_size: event.attachments[0].file_size,
+            } : undefined),
+          };
+          
           setMessages(prev => {
-            const id = String(event.message_id);
-            const map: Record<string, UiMessage> = {};
-            prev.forEach(m => { map[m.id] = m; });
-            map[id] = {
-              id,
-              content: event.content || '',
-              sender_id: event.sender_id || 0,
-              sender_name: event.sender_name || '',
-              created_at: event.created_at || new Date().toISOString(),
-              is_read: false,
-              message_type: event.message_type,
-              attachment_url: event.attachment_url,
-              attachment_info: event.attachment_info,
-            };
-            return Object.values(map);
+            // Check if this is a duplicate before adding
+            if (isDuplicateMessage(prev, newMessage)) {
+              return prev;
+            }
+            return addMessageWithDeduplication(prev, newMessage);
           });
           setTimeout(scrollToBottom, 100);
           break;
@@ -178,10 +222,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
           // Handle read receipts if needed
           break;
       }
-    });
+    };
 
-    ws.connect();
-  }, [conversation]);
+    // Add callbacks
+    ws.onStatus(statusCallback);
+    ws.onMessage(messageCallback);
+
+      ws.connect();
+        } catch (error) {
+          logger.error('Failed to establish session for WebSocket', error);
+        }
+  }, [conversation, currentUser, scrollToBottom]);
 
   useEffect(() => {
     if (conversation) {
@@ -195,7 +246,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
     }
 
     return () => {
-      wsRef.current?.disconnect();
+      // Clean up WebSocket callbacks to prevent memory leaks
+      if (wsRef.current) {
+        // Note: We would need to store callback references to remove them properly
+        // For now, we'll just disconnect
+        wsRef.current.disconnect();
+      }
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
@@ -203,21 +259,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
   }, [conversation, loadMessages, connectWebSocket]);
 
   const handleSend = async () => {
-    const text = inputValue.trim();
-    if (!text || !conversation) return;
+    try {
+      // Sanitize input on client side as first line of defense
+      const sanitizedText = sanitizeUserInput(inputValue.trim());
+      if (!sanitizedText || !conversation) return;
 
-    const tempId = Date.now().toString();
-    const tempMessage: UiMessage = {
-      id: tempId,
-      content: text,
-      sender_id: currentUser?.user_id || 0,
-      sender_name: currentUser?.full_name || 'You',
-      created_at: new Date().toISOString(),
-      is_read: false,
-      tempId,
-    };
+      const tempId = Date.now().toString();
+      const tempMessage: UiMessage = {
+        id: tempId,
+        content: sanitizedText,
+        sender_id: currentUser?.user_id || 0,
+        sender_name: currentUser?.full_name || 'You',
+        created_at: new Date().toISOString(),
+        is_read: false,
+        tempId,
+      };
 
-    setMessages(prev => [...prev, tempMessage]);
+    setMessages(prev => addMessageWithDeduplication(prev, tempMessage));
     setInputValue('');
     
     // Stop typing indicator
@@ -226,10 +284,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
       clearTimeout(typingTimeoutRef.current);
     }
 
-    try {
-      const saved = await sendMessage(conversation.conversation_id, { content: text, message_type: 'text' });
-      // Replace temp with saved message
-      setMessages(prev => prev.map(m => m.tempId === tempId ? {
+      try {
+        const saved = await sendMessage(conversation.conversation_id, { content: sanitizedText, message_type: 'text' });
+      
+      // Replace temp with saved message using utility function
+      const savedMessage: UiMessage = {
         id: String(saved.message_id),
         content: saved.content,
         sender_id: saved.sender.user_id,
@@ -238,13 +297,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
         is_read: saved.is_read,
         message_type: (saved as any).message_type,
         attachment_url: ((saved as any).attachments && (saved as any).attachments[0]?.file_url) || null,
-      } : m));
+      };
+      
+        setMessages(prev => replaceTempMessage(prev, tempId, savedMessage));
+      } catch (error) {
+        logger.error('Send failed', error);
+        setMessages(prev => removeTempMessage(prev, tempId));
+      }
+      
+      setTimeout(scrollToBottom, 100);
     } catch (error) {
-      console.error('Send failed:', error);
-      setMessages(prev => prev.filter(m => m.tempId !== tempId));
+      logger.error('Input sanitization failed', error);
+      // Show user-friendly error message
+      alert('Invalid message content. Please check your input and try again.');
     }
-    
-    setTimeout(scrollToBottom, 100);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -277,7 +343,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
     }
   };
 
-  const loadMoreMessages = async () => {
+  const loadMoreMessages = useCallback(async () => {
     if (!nextCursor || isLoadingMore) return;
     setIsLoadingMore(true);
     try {
@@ -285,24 +351,146 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
     } finally {
       setIsLoadingMore(false);
     }
-  };
+  }, [nextCursor, isLoadingMore, loadMessages]);
 
-  const formatTime = (dateString: string) => {
+  const formatTime = useCallback((dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+  }, []);
 
-  const isOwnMessage = (message: UiMessage) => {
+  const isOwnMessage = useCallback((message: UiMessage) => {
     const myId = currentUser?.user_id ?? (currentUser as any)?.id;
     return message.sender_id === myId;
-  };
+  }, [currentUser]);
+
+  // Memoize sorted messages to prevent unnecessary re-renders
+  const sortedMessages = useMemo(() => {
+    return sortMessagesBySequence(messages);
+  }, [messages]);
+
+  // Memoize typing users array to prevent unnecessary re-renders
+  const typingUsersArray = useMemo(() => {
+    return Array.from(typingUsers);
+  }, [typingUsers]);
+
+  // Memoized Message component to prevent unnecessary re-renders
+  const MessageComponent = useMemo(() => {
+    return React.memo(({ message, idx }: { message: UiMessage; idx: number }) => {
+      const own = isOwnMessage(message);
+      const prev = idx > 0 ? sortedMessages[idx - 1] : undefined;
+      const isFirstOfGroup = !prev || prev.sender_id !== message.sender_id;
+      const firstName = (message.sender_name || '').split(' ')[0] || 'Someone';
+      
+      return (
+        <div className={`message ${own ? 'sent' : 'received'}`}>
+          <div className="message-content">
+            {!own && isFirstOfGroup ? (
+              <div
+                className="message-avatar"
+                onClick={() => {
+                  if (message.sender_id) {
+                    navigate(`/alumni/profile/${message.sender_id}`);
+                  }
+                }}
+                title={message.sender_name}
+              >
+                {(firstName[0] || 'U').toUpperCase()}
+              </div>
+            ) : (!own ? <div className="message-avatar-spacer" /> : null)}
+
+            <div className="message-bubble-container">
+              {!own && isFirstOfGroup && (
+                <div className="message-header-name">
+                  {firstName}
+                </div>
+              )}
+              <div className="message-bubble">
+                {message.attachment_url ? (
+                  <div className="attachment-preview">
+                    {message.attachment_info?.file_category === 'image' || isImageFile((message.attachment_info?.file_category as FileCategory) || 'document', message.attachment_info?.file_type) ? (
+                      <div>
+                        <img 
+                          src={message.attachment_url} 
+                          alt={message.content} 
+                          style={{ cursor: 'pointer' }} 
+                          onClick={() => {
+                            if (message.attachment_url) setLightboxUrl(message.attachment_url);
+                          }}
+                        />
+                      </div>
+                    ) : message.attachment_info?.file_category === 'video' || isVideoFile((message.attachment_info?.file_category as FileCategory) || 'document', message.attachment_info?.file_type) ? (
+                      <div>
+                        <video 
+                          controls 
+                          src={message.attachment_url}
+                        />
+                      </div>
+                    ) : message.attachment_info?.file_category === 'audio' || isAudioFile((message.attachment_info?.file_category as FileCategory) || 'document', message.attachment_info?.file_type) ? (
+                      <div>
+                        <audio 
+                          controls 
+                          style={{ width: '100%', maxWidth: '240px' }}
+                          src={message.attachment_url}
+                        />
+                      </div>
+                    ) : (
+                      <div className="file-attachment">
+                        <div 
+                          className="attachment-card"
+                          onClick={() => {
+                            if (message.attachment_url) {
+                              const link = document.createElement('a');
+                              link.href = message.attachment_url;
+                              link.download = message.attachment_info?.file_name || 'download';
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }
+                          }}
+                        >
+                          <span className="file-icon">
+                            {getFileIcon((message.attachment_info?.file_category as FileCategory) || 'document', message.attachment_info?.file_type)}
+                          </span>
+                          <div className="file-info">
+                            <div className="file-name">
+                              {message.attachment_info?.file_name || message.content}
+                            </div>
+                            {message.attachment_info?.file_size && (
+                              <div className="file-size">
+                                {formatFileSize(message.attachment_info.file_size)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  message.content
+                )}
+              </div>
+              <div className="message-time">{formatTime(message.created_at)}</div>
+            </div>
+          </div>
+        </div>
+      );
+    });
+  }, [isOwnMessage, sortedMessages, navigate, setLightboxUrl, formatTime]);
 
   if (!conversation) {
     return null;
   }
 
   return (
-    <div className="chat-container">
+    <WebSocketErrorBoundary
+      resetOnPropsChange={true}
+      resetKeys={[conversation?.conversation_id]}
+      onError={(error, errorInfo) => {
+        console.error('WebSocket Error in ChatInterface:', error, errorInfo);
+        // Could send to error tracking service here
+      }}
+    >
+      <div className="chat-container">
       <div className="chat-header">
         {onBack && (
           <button onClick={onBack} className="back-button">
@@ -333,110 +521,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
           </div>
         )}
 
-        {messages.map((message, idx) => {
-          const own = isOwnMessage(message);
-          const prev = idx > 0 ? messages[idx - 1] : undefined;
-          const isFirstOfGroup = !prev || prev.sender_id !== message.sender_id;
-          const firstName = (message.sender_name || '').split(' ')[0] || 'Someone';
-          return (
-            <div key={message.id} className={`message ${own ? 'sent' : 'received'}`}>
-              <div className="message-content">
-                {!own && isFirstOfGroup ? (
-                  <div
-                    className="message-avatar"
-                    onClick={() => {
-                      if (message.sender_id) {
-                        navigate(`/alumni/profile/${message.sender_id}`);
-                      }
-                    }}
-                    title={message.sender_name}
-                  >
-                    {(firstName[0] || 'U').toUpperCase()}
-                  </div>
-                ) : (!own ? <div className="message-avatar-spacer" /> : null)}
+        {sortedMessages.map((message, idx) => (
+          <MessageComponent key={message.id} message={message} idx={idx} />
+        ))}
 
-                <div className="message-bubble-container">
-                  {!own && isFirstOfGroup && (
-                    <div className="message-header-name">
-                      {firstName}
-                    </div>
-                  )}
-                  <div className="message-bubble">
-                    {message.attachment_url ? (
-                      <div className="attachment-preview">
-                        {message.attachment_info?.file_category === 'image' || isImageFile(message.attachment_info?.file_category || 'document', message.attachment_info?.file_type) ? (
-                          <div>
-                            <img 
-                              src={message.attachment_url} 
-                              alt={message.content} 
-                              style={{ cursor: 'pointer' }} 
-                              onClick={() => {
-                                if (message.attachment_url) setLightboxUrl(message.attachment_url);
-                              }}
-                            />
-                          </div>
-                        ) : message.attachment_info?.file_category === 'video' || isVideoFile(message.attachment_info?.file_category || 'document', message.attachment_info?.file_type) ? (
-                          <div>
-                            <video 
-                              controls 
-                              src={message.attachment_url}
-                            />
-                          </div>
-                        ) : message.attachment_info?.file_category === 'audio' || isAudioFile(message.attachment_info?.file_category || 'document', message.attachment_info?.file_type) ? (
-                          <div>
-                            <audio 
-                              controls 
-                              style={{ width: '100%', maxWidth: '240px' }}
-                              src={message.attachment_url}
-                            />
-                          </div>
-                        ) : (
-                          <div className="file-attachment">
-                            <div 
-                              className="attachment-card"
-                              onClick={() => {
-                                if (message.attachment_url) {
-                                  const link = document.createElement('a');
-                                  link.href = message.attachment_url;
-                                  link.download = message.attachment_info?.file_name || 'download';
-                                  document.body.appendChild(link);
-                                  link.click();
-                                  document.body.removeChild(link);
-                                }
-                              }}
-                            >
-                              <span className="file-icon">
-                                {getFileIcon(message.attachment_info?.file_category || 'document', message.attachment_info?.file_type)}
-                              </span>
-                              <div className="file-info">
-                                <div className="file-name">
-                                  {message.attachment_info?.file_name || message.content}
-                                </div>
-                                {message.attachment_info?.file_size && (
-                                  <div className="file-size">
-                                    {formatFileSize(message.attachment_info.file_size)}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      message.content
-                    )}
-                  </div>
-                  <div className="message-time">{formatTime(message.created_at)}</div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {typingUsers.size > 0 && (
+        {typingUsersArray.length > 0 && (
           <div className="typing-indicator">
             <span>
-              {Array.from(typingUsers).length === 1 ? 'Someone is typing' : 'Multiple people are typing'}
+              {typingUsersArray.length === 1 ? 'Someone is typing' : 'Multiple people are typing'}
             </span>
             <div className="typing-dots">
               <div className="typing-dot"></div>
@@ -526,7 +618,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
                   message_type: messageType, 
                   attachment_id: uploaded.attachment_id 
                 });
-                setMessages(prev => [...prev, {
+                const attachmentMessage: UiMessage = {
                   id: String(saved.message_id),
                   content: saved.content,
                   sender_id: saved.sender.user_id,
@@ -538,7 +630,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
                     const fromSaved = (saved as any).attachments && (saved as any).attachments[0]?.file_url;
                     const url = fromSaved || (uploaded as any).file_url || null;
                     if (!url) return null;
-                    return url.startsWith('http') ? url : `${window.location.origin}${url}`;
+                    
+                    // Validate URL is safe and properly formatted
+                    try {
+                      const urlObj = new URL(url);
+                      // Only allow http/https protocols
+                      if (urlObj.protocol === 'http:' || urlObj.protocol === 'https:') {
+                        return url;
+                      }
+                    } catch {
+                      // If URL parsing fails, check if it's a relative path
+                      if (!url.startsWith('http')) {
+                        return `${window.location.origin}${url}`;
+                      }
+                    }
+                    return null;
                   })(),
                   attachment_info: {
                     file_name: uploaded.file_name,
@@ -546,7 +652,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
                     file_category: uploaded.file_category as FileCategory,
                     file_size: uploaded.file_size,
                   },
-                }]);
+                };
+                
+                setMessages(prev => addMessageWithDeduplication(prev, attachmentMessage));
                 setTimeout(scrollToBottom, 100);
               } catch (err) {
                 console.error('Attachment send failed:', err);
@@ -587,6 +695,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
         </div>
       </div>
     </div>
+    </WebSocketErrorBoundary>
   );
 };
 

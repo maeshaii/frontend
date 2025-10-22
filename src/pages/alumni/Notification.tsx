@@ -1741,6 +1741,290 @@ const NotificationPage: React.FC = () => {
                     return <span>{openNotif.content}</span>;
                   })()}
                 </div>
+              ) : (openNotif.type && openNotif.type.toLowerCase() === 'repost') ? (
+                <div style={{
+                  background: '#f8f9fa',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  border: '1px solid #e9ecef'
+                }}>
+                  {/* Main Post Header */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    marginBottom: '16px'
+                  }}>
+                    {/* Profile Picture */}
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      overflow: 'hidden',
+                      flexShrink: 0
+                    }}>
+                      <ProfilePicComponent 
+                        userId={(() => {
+                          const actorIdMatch = openNotif.content?.match(/<!--ACTOR_ID:(\d+)-->/);
+                          return actorIdMatch ? actorIdMatch[1] : undefined;
+                        })()}
+                        userName={(() => {
+                          const nameMatch = openNotif.content.match(/^([^<]+?)\s+(reposted)/i);
+                          return nameMatch ? nameMatch[1].trim() : '';
+                        })()}
+                        size="40px"
+                      />
+                    </div>
+                    
+                    {/* User Info */}
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontSize: '16px',
+                        fontWeight: '700',
+                        color: '#333',
+                        marginBottom: '2px'
+                      }}>
+                        {(() => {
+                          const nameMatch = openNotif.content.match(/^([^<]+?)\s+(reposted)/i);
+                          return nameMatch ? nameMatch[1].trim() : 'User';
+                        })()}
+                      </div>
+                      <div style={{
+                        fontSize: '12px',
+                        color: '#666'
+                      }}>
+                        {formatHybrid(openNotif.date)}
+                      </div>
+                    </div>
+                    
+                    {/* More Options */}
+                    <div style={{
+                      color: '#666',
+                      cursor: 'pointer',
+                      fontSize: '18px',
+                      fontWeight: 'bold'
+                    }}>
+                      ⋯
+                    </div>
+                  </div>
+                  
+                  {/* Reposted Content Block */}
+                  <div style={{
+                    background: 'white',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    border: '1px solid #e9ecef',
+                    marginBottom: '16px'
+                  }}>
+                    {/* Original Post Header */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      marginBottom: '12px'
+                    }}>
+                      {/* Original Poster Profile Picture */}
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        flexShrink: 0
+                      }}>
+                        <ProfilePicComponent 
+                          userId={(() => {
+                            const originalPosterMatch = openNotif.content.match(/<!--ORIGINAL_POSTER_ID:(\d+)-->/);
+                            return originalPosterMatch ? originalPosterMatch[1] : undefined;
+                          })()}
+                          userName={(() => {
+                            const originalPosterMatch = openNotif.content.match(/<!--ORIGINAL_POSTER_NAME:([^>]+)-->/);
+                            return originalPosterMatch ? originalPosterMatch[1] : 'Original Poster';
+                          })()}
+                          size="32px"
+                        />
+                      </div>
+                      
+                      {/* Original Poster Info */}
+                      <div style={{ flex: 1 }}>
+                        <div style={{
+                          fontSize: '14px',
+                          fontWeight: '700',
+                          color: '#333',
+                          marginBottom: '2px'
+                        }}>
+                          {(() => {
+                            const originalPosterMatch = openNotif.content.match(/<!--ORIGINAL_POSTER_NAME:([^>]+)-->/);
+                            return originalPosterMatch ? originalPosterMatch[1] : 'Original Poster';
+                          })()}
+                        </div>
+                        <div style={{
+                          fontSize: '11px',
+                          color: '#666'
+                        }}>
+                          {(() => {
+                            const originalDateMatch = openNotif.content.match(/<!--ORIGINAL_DATE:([^>]+)-->/);
+                            return originalDateMatch ? formatHybrid(originalDateMatch[1]) : 'Some time ago';
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Original Post Content */}
+                    <div style={{
+                      fontSize: '14px',
+                      color: '#333',
+                      lineHeight: '1.4',
+                      marginBottom: '12px'
+                    }}>
+                      {(() => {
+                        // Extract original post content, removing HTML comments
+                        const contentMatch = openNotif.content.match(/reposted your post[^:]*:\s*(.+?)(?:\s*<!--|$)/s);
+                        if (contentMatch) {
+                          return contentMatch[1].replace(/<!--[^>]+-->/g, '').trim();
+                        }
+                        // Fallback: show cleaned content
+                        return openNotif.content.replace(/<!--[^>]+-->/g, '').replace(/^[^:]+:\s*/, '').trim();
+                      })()}
+                    </div>
+                    
+                    {/* No likes yet */}
+                    <div style={{
+                      fontSize: '12px',
+                      color: '#666',
+                      marginBottom: '12px'
+                    }}>
+                      No likes yet
+                    </div>
+                    
+                    {/* Interaction Buttons */}
+                    <div style={{
+                      display: 'flex',
+                      gap: '24px',
+                      alignItems: 'center'
+                    }}>
+                      {/* Like Button */}
+                      <button style={{
+                        background: 'none',
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        color: '#666',
+                        fontSize: '14px',
+                        fontWeight: '500'
+                      }}>
+                        <span style={{ fontSize: '16px' }}>👍</span>
+                        Like
+                      </button>
+                      
+                      {/* Comment Button */}
+                      <button style={{
+                        background: 'none',
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        color: '#666',
+                        fontSize: '14px',
+                        fontWeight: '500'
+                      }}>
+                        <span style={{ fontSize: '16px' }}>💬</span>
+                        Comment
+                      </button>
+                      
+                      {/* Repost Button */}
+                      <button style={{
+                        background: 'none',
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        color: '#666',
+                        fontSize: '14px',
+                        fontWeight: '500'
+                      }}>
+                        <span style={{ fontSize: '16px' }}>🔄</span>
+                        Repost
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* View Post Button */}
+                  <button
+                    style={{
+                      background: '#0066cc',
+                      color: '#fff',
+                      padding: '10px 20px',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                      fontSize: '14px',
+                      width: '100%',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#0056b3';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#0066cc';
+                    }}
+                    onClick={async () => {
+                      // Extract repost ID and navigate to the post
+                      const repostIdMatch = openNotif.content.match(/<!--REPOST_ID:(\d+)-->/);
+                      const postIdMatch = openNotif.content.match(/<!--POST_ID:(\d+)-->/);
+                      
+                      if (repostIdMatch || postIdMatch) {
+                        const postId = repostIdMatch?.[1] || postIdMatch?.[1];
+                        setPostLoading(true);
+                        
+                        try {
+                          const response = await api.get(`posts/${postId}/detail/`);
+                          if (response.data) {
+                            setOpenNotif(null);
+                            const userStr = localStorage.getItem('user');
+                            const user = userStr ? JSON.parse(userStr) : null;
+                            const userId = user?.user_id || user?.id;
+                            
+                            if (userId) {
+                              const isAdmin = !!(user && user.account_type && user.account_type.admin);
+                              const isPeso = !!(user && user.account_type && user.account_type.peso);
+                              const userRole = user?.role || user?.user_type;
+                              
+                              let dashboardPath = '';
+                              if (isAdmin) {
+                                dashboardPath = `/ccict/dashboard/${userId}`;
+                              } else if (isPeso) {
+                                dashboardPath = `/peso/dashboard/${userId}`;
+                              } else if (userRole === 'ojt' || userRole === 'coordinator') {
+                                dashboardPath = `/ojt/dashboard/${userId}`;
+                              } else {
+                                dashboardPath = `/alumni/dashboard/${userId}`;
+                              }
+                              
+                              localStorage.setItem('pendingRepostView', postId);
+                              navigate(dashboardPath);
+                            }
+                          }
+                        } catch (error: any) {
+                          if (error.response && error.response.status === 404) {
+                            alert('This post has been deleted by the owner.');
+                          } else {
+                            alert('Unable to load the post. It may have been deleted.');
+                          }
+                        } finally {
+                          setPostLoading(false);
+                        }
+                      }
+                    }}
+                    disabled={postLoading}
+                  >
+                    {postLoading ? 'Loading...' : 'View Post'}
+                  </button>
+                </div>
               ) : (openNotif.type && (openNotif.type.toLowerCase() === 'like' || openNotif.type.toLowerCase() === 'comment' || openNotif.type.toLowerCase() === 'admin_peso_post' || openNotif.type.toLowerCase() === 'reply' || openNotif.type.toLowerCase() === 'mention')) ? (
                 <div>
                   <div style={{ whiteSpace: 'pre-wrap' }}>
