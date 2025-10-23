@@ -3,6 +3,7 @@ import { fetchNotifications, deleteNotifications, markNotificationAsRead, api, g
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import { getProfilePicUrl } from '../../utils/profilePicUtils';
+import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
 
 function formatHybrid(iso?: string | null): string {
   if (!iso) return 'Unknown time';
@@ -30,8 +31,19 @@ function formatHybrid(iso?: string | null): string {
 }
 
 const NotificationPage: React.FC = () => {
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use real-time notifications hook
+  const { 
+    notifications: realTimeNotifications, 
+    isLoading, 
+    error,
+    refreshNotifications,
+    markAsRead: markAsReadRealTime
+  } = useRealTimeNotifications({
+    enablePolling: true,
+    pollingInterval: 30000,
+    autoConnect: true
+  });
+
   const [selected, setSelected] = useState<number[]>([]);
   const [search, setSearch] = useState('');
   const [showProfile, setShowProfile] = useState(false);
@@ -52,9 +64,9 @@ const NotificationPage: React.FC = () => {
   // Load profile pictures for notifications
   React.useEffect(() => {
     const loadProfilePics = async () => {
-      console.log('🔍 Loading profile pics for notifications:', notifications.length);
-      
-      for (const notif of notifications) {
+      console.log('🔍 Loading profile pics for notifications:', realTimeNotifications.length);
+
+      for (const notif of realTimeNotifications) {
         // Extract user info from ALL notification types
         let userId = null;
         let userName = null;
@@ -123,10 +135,10 @@ const NotificationPage: React.FC = () => {
       }
     };
 
-    if (notifications.length > 0) {
+    if (realTimeNotifications.length > 0) {
       loadProfilePics();
     }
-  }, [notifications]);
+  }, [realTimeNotifications]);
 
   // Cleanup old cache entries on component mount
   React.useEffect(() => {
@@ -248,8 +260,8 @@ const NotificationPage: React.FC = () => {
       let confirmMessage: string;
       
       if (deleteAll) {
-        notificationIds = notifications.map(n => n.id);
-        confirmMessage = `Are you sure you want to delete ALL ${notifications.length} notifications? This action cannot be undone.`;
+        notificationIds = realTimeNotifications.map(n => n.id);
+        confirmMessage = `Are you sure you want to delete ALL ${realTimeNotifications.length} notifications? This action cannot be undone.`;
       } else {
     if (selected.length === 0) return;
         notificationIds = selected;
@@ -259,13 +271,9 @@ const NotificationPage: React.FC = () => {
       if (window.confirm(confirmMessage)) {
         const result = await deleteNotifications(notificationIds);
     if (result.success) {
-          if (deleteAll) {
-            setNotifications([]);
+      // Refresh notifications after deletion
+      await refreshNotifications();
       setSelected([]);
-          } else {
-            setNotifications(prev => prev.filter(n => !selected.includes(n.id)));
-            setSelected([]);
-          }
     } else {
       alert('Failed to delete notifications.');
         }
@@ -277,34 +285,27 @@ const NotificationPage: React.FC = () => {
   };
 
   const handleSelectAll = () => {
-    if (selected.length === notifications.length) {
+    if (selected.length === realTimeNotifications.length) {
       // If all are selected, unselect all
       setSelected([]);
     } else {
       // Otherwise, select all
-      const allIds = notifications.map(n => n.id);
+      const allIds = realTimeNotifications.map(n => n.id);
       setSelected(allIds);
     }
   };
 
 
+  // Real-time notifications are handled by the hook
   useEffect(() => {
     const userStr = localStorage.getItem('user');
     if (!userStr) {
       navigate('/login');
       return;
     }
-    const user = JSON.parse(userStr);
-    if (!user.id) return;
-    setLoading(true);
-    fetchNotifications(user.id)
-      .then((data) => {
-        setNotifications(data.notifications || []);
-      })
-      .finally(() => setLoading(false));
   }, [navigate]);
 
-  const filteredNotifications = notifications.filter((n: any) =>
+  const filteredNotifications = realTimeNotifications.filter((n: any) =>
     n.content.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -375,17 +376,15 @@ const NotificationPage: React.FC = () => {
 
   // Mark all as read function
   const markAllAsRead = async () => {
-    const unreadNotifications = notifications.filter(n => !n.is_read);
+    const unreadNotifications = realTimeNotifications.filter(n => !n.is_read);
     if (unreadNotifications.length === 0) return;
     
     try {
       for (const notif of unreadNotifications) {
         await markNotificationAsRead(notif.id);
       }
-      setNotifications(prev => 
-        prev.map(n => ({ ...n, is_read: true }))
-      );
-      window.dispatchEvent(new CustomEvent('notificationRead'));
+      // Refresh notifications after marking all as read
+      await refreshNotifications();
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
     }
@@ -1155,7 +1154,7 @@ const NotificationPage: React.FC = () => {
                 Notifications
               </h1>
               <p style={{ margin: 0, color: '#6c757d', fontSize: '14px' }}>
-                {notifications.filter(n => !n.is_read).length} unread notifications
+                {realTimeNotifications.filter(n => !n.is_read).length} unread notifications
               </p>
             </div>
             
@@ -1235,9 +1234,9 @@ const NotificationPage: React.FC = () => {
                   onMouseLeave={(e) => {
                     e.currentTarget.style.background = '#6c757d';
                   }}
-                  title={selected.length === notifications.length ? "Unselect All" : "Select All"}
+                  title={selected.length === realTimeNotifications.length ? "Unselect All" : "Select All"}
                 >
-                  {selected.length === notifications.length ? "Unselect All" : "Select All"}
+                  {selected.length === realTimeNotifications.length ? "Unselect All" : "Select All"}
           </button>
                 
                 <button
@@ -1250,11 +1249,11 @@ const NotificationPage: React.FC = () => {
                       handleDelete(false);
                     }
                   }}
-            style={{ 
-                    background: '#dc3545', 
+                  style={{
+                    background: '#dc3545',
                     color: 'white',
-                    border: 'none', 
-                    cursor: 'pointer', 
+                    border: 'none',
+                    cursor: 'pointer',
                     padding: '8px 12px',
                     borderRadius: '8px',
                     fontSize: '14px',
@@ -1278,17 +1277,17 @@ const NotificationPage: React.FC = () => {
 
         {/* Notifications List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {loading ? (
-            <div style={{ 
-              textAlign: 'center', 
+              {isLoading ? (
+            <div style={{
+              textAlign: 'center',
               padding: '60px 24px',
               background: 'white',
               borderRadius: '12px',
               boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
               border: '1px solid #e9ecef'
             }}>
-              <div style={{ 
-                fontSize: '32px', 
+              <div style={{
+                fontSize: '32px',
                 marginBottom: '16px',
                 animation: 'spin 1s linear infinite'
               }}>⏳</div>
@@ -1346,10 +1345,8 @@ const NotificationPage: React.FC = () => {
                       if (!notif.is_read) {
                         try {
                           await markNotificationAsRead(notif.id);
-                          setNotifications(prev => 
-                            prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n)
-                          );
-                          window.dispatchEvent(new CustomEvent('notificationRead'));
+                          // Use real-time hook to mark as read
+                          await markAsReadRealTime(notif.id);
                         } catch (error) {
                           console.error('Error marking notification as read:', error);
                         }

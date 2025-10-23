@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Force WebSocket Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .connecting { background-color: #fff3cd; color: #856404; }
+        .message { background-color: #f8f9fa; padding: 10px; margin: 5px 0; border-left: 4px solid #007bff; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        input { padding: 8px; margin: 5px; width: 300px; }
+        .error { color: red; font-weight: bold; }
+        .success { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🔌 Force WebSocket Connection Test</h1>
+    
+    <div id="status" class="status disconnected">Disconnected</div>
+    
+    <div>
+        <input type="text" id="tokenInput" placeholder="Enter JWT Token" />
+        <button onclick="testConnection()">Test Connection</button>
+        <button onclick="clearMessages()">Clear Messages</button>
+    </div>
+    
+    <h3>Debug Messages:</h3>
+    <div id="messages"></div>
+    
+    <script>
+        let ws = null;
+        
+        function updateStatus(message, className) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${className}`;
+        }
+        
+        function addMessage(message, type = 'info') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : '';
+            messageDiv.innerHTML = `<strong>${timestamp}</strong> [${type.toUpperCase()}] <span class="${className}">${message}</span>`;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function testConnection() {
+            const token = document.getElementById('tokenInput').value.trim();
+            
+            if (!token) {
+                addMessage('Please enter a JWT token', 'error');
+                return;
+            }
+            
+            addMessage('Starting WebSocket connection test...', 'info');
+            
+            // Test different URL formats - FIXED: Use correct backend port 8000
+            const urls = [
+                'ws://localhost:8000/ws/notifications/',
+                'ws://127.0.0.1:8000/ws/notifications/',
+                `ws://localhost:8000/ws/notifications/?token=${encodeURIComponent(token)}`,
+                `ws://127.0.0.1:8000/ws/notifications/?token=${encodeURIComponent(token)}`
+            ];
+            
+            testUrls(urls, 0);
+        }
+        
+        function testUrls(urls, index) {
+            if (index >= urls.length) {
+                addMessage('All URL tests completed', 'info');
+                return;
+            }
+            
+            const url = urls[index];
+            addMessage(`Testing URL ${index + 1}/${urls.length}: ${url}`, 'info');
+            
+            if (ws) {
+                ws.close();
+            }
+            
+            ws = new WebSocket(url);
+            
+            ws.onopen = function() {
+                addMessage(`✅ SUCCESS: Connected to ${url}`, 'success');
+                updateStatus('Connected', 'connected');
+                
+                // Send ping
+                ws.send(JSON.stringify({ type: 'ping' }));
+                addMessage('Sent ping message', 'info');
+                
+                // Test next URL after a delay
+                setTimeout(() => {
+                    ws.close();
+                    testUrls(urls, index + 1);
+                }, 2000);
+            };
+            
+            ws.onmessage = function(event) {
+                addMessage(`📨 Received: ${event.data}`, 'success');
+            };
+            
+            ws.onclose = function(event) {
+                addMessage(`🔌 Closed: ${event.code} - ${event.reason}`, 'info');
+                updateStatus('Disconnected', 'disconnected');
+            };
+            
+            ws.onerror = function(error) {
+                addMessage(`❌ Error with ${url}: ${error}`, 'error');
+                updateStatus('Error', 'disconnected');
+                
+                // Test next URL
+                setTimeout(() => {
+                    testUrls(urls, index + 1);
+                }, 1000);
+            };
+        }
+        
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+        
+        // Auto-fill token from localStorage if available
+        window.onload = function() {
+            const token = localStorage.getItem('accessToken');
+            if (token) {
+                document.getElementById('tokenInput').value = token;
+                addMessage('Auto-filled token from localStorage', 'info');
+            } else {
+                addMessage('No token found in localStorage', 'error');
+            }
+        };
+    </script>
+</body>
+</html>
