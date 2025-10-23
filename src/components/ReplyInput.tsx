@@ -54,88 +54,99 @@ const ReplyInput: React.FC<ReplyInputProps> = ({
 
   return (
     <div style={{ 
-      marginLeft: '40px', 
+      marginLeft: '32px', 
       marginTop: '8px',
-      paddingLeft: '12px',
-      borderLeft: '2px solid #e0e0e0'
+      display: 'flex',
+      gap: '8px'
     }}>
-      <div>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-          {/* User Avatar */}
-          <img
-            src={displayAvatar || '/default-avatar.png'}
-            alt={displayName}
+      {/* User Avatar */}
+      <img
+        src={displayAvatar || '/default-avatar.png'}
+        alt={displayName}
+        style={{
+          width: '24px',
+          height: '24px',
+          borderRadius: '50%',
+          objectFit: 'cover',
+          flexShrink: 0
+        }}
+      />
+      
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Reply Input */}
+        <MentionInput
+          value={replyContent}
+          onChange={setReplyContent}
+          placeholder="Write a reply..."
+          onSubmit={handleSubmit}
+          disabled={isSubmitting}
+          style={{
+            minHeight: '32px',
+            maxHeight: '120px',
+            borderRadius: '18px',
+            fontSize: '13px',
+            border: '1px solid #ccd0d5',
+            backgroundColor: '#f0f2f5',
+            padding: '8px 12px',
+            resize: 'none'
+          }}
+        />
+        
+        {/* Submit Buttons */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '12px',
+          marginTop: '4px',
+          marginLeft: '12px'
+        }}>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!replyContent.trim() || isSubmitting}
             style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '50%',
-              objectFit: 'cover',
-              flexShrink: 0
+              background: 'none',
+              border: 'none',
+              color: !replyContent.trim() || isSubmitting ? '#bcc0c4' : '#0866ff',
+              cursor: !replyContent.trim() || isSubmitting ? 'not-allowed' : 'pointer',
+              fontSize: '12px',
+              padding: '0',
+              fontWeight: '600'
             }}
-          />
-          
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {/* User Name */}
-            <div style={{ 
-              fontSize: '12px', 
-              color: '#666', 
-              marginBottom: '4px',
-              fontWeight: '500'
-            }}>
-              Replying as {displayName}
-            </div>
-            
-            {/* Reply Input */}
-            <MentionInput
-              value={replyContent}
-              onChange={setReplyContent}
-              placeholder="Write a reply..."
-              onSubmit={handleSubmit}
-              disabled={isSubmitting}
-              style={{
-                minHeight: '60px',
-                borderRadius: '20px',
-                fontSize: '13px',
-                transition: 'border-color 0.2s ease'
-              }}
-            />
-            
-            {/* Submit Button */}
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'flex-end', 
-              marginTop: '8px' 
-            }}>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={!replyContent.trim() || isSubmitting}
-              style={{
-                padding: '6px 16px',
-                backgroundColor: replyContent.trim() ? '#007bff' : '#ccc',
-                color: 'white',
-                border: 'none',
-                borderRadius: '16px',
-                cursor: replyContent.trim() ? 'pointer' : 'not-allowed',
-                fontSize: '12px',
-                fontWeight: '500',
-                transition: 'background-color 0.2s ease'
-              }}
-              onMouseEnter={(e) => {
-                if (replyContent.trim()) {
-                  e.currentTarget.style.backgroundColor = '#0056b3';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (replyContent.trim()) {
-                  e.currentTarget.style.backgroundColor = '#007bff';
-                }
-              }}
-            >
-              {isSubmitting ? 'Posting...' : 'Reply'}
-            </button>
-            </div>
-          </div>
+            onMouseEnter={(e) => {
+              if (replyContent.trim() && !isSubmitting) {
+                e.currentTarget.style.textDecoration = 'underline';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.textDecoration = 'none';
+            }}
+          >
+            {isSubmitting ? 'Posting...' : 'Reply'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setReplyContent('');
+              onReplyAdded();
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#65676b',
+              cursor: 'pointer',
+              fontSize: '12px',
+              padding: '0',
+              fontWeight: '600'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.textDecoration = 'underline';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.textDecoration = 'none';
+            }}
+          >
+            Cancel
+          </button>
         </div>
       </div>
     </div>

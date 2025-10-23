@@ -66,9 +66,15 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
     try {
       if (postType === 'forum') {
         // Create forum post
+        console.log('Creating forum post with data:', {
+          content: postContent,
+          images: postImages,
+          images_count: postImages.length
+        });
+        
         await createForumPost({
           content: postContent,
-          image: postImage
+          images: postImages
         });
       } else if (postType === 'donation') {
         // Create donation request

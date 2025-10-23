@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import { getProfilePicUrl } from '../../utils/profilePicUtils';
 import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
+import ctulogo from '../../images/ctulogo.png';
 
 function formatHybrid(iso?: string | null): string {
   if (!iso) return 'Unknown time';
@@ -878,50 +879,27 @@ const NotificationPage: React.FC = () => {
               borderRadius: '50%'
             }}
             onError={(e) => {
-              // Fallback to initial letter if image fails to load
+              // Fallback to CTU logo if image fails to load
               const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              const parent = target.parentElement;
-              if (parent) {
-                parent.innerHTML = `
-                  <div style="
-                    width: 100%;
-                    height: 100%;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: white;
-                    font-size: 18px;
-                    font-weight: 600;
-                    border-radius: 50%;
-                  ">
-                    ${userName.charAt(0).toUpperCase()}
-                  </div>
-                `;
-              }
+              target.src = ctulogo;
             }}
           />
         );
       }
     }
     
-    // Fallback to initial letter
+    // Fallback to CTU logo
     return (
-      <div style={{
-        width: '100%',
-        height: '100%',
-        borderRadius: '50%',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'white',
-        fontSize: '16px',
-        fontWeight: '600'
-      }}>
-        {userName.charAt(0).toUpperCase()}
-      </div>
+      <img
+        src={ctulogo}
+        alt={userName}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          borderRadius: '50%'
+        }}
+      />
     );
   };
 
@@ -943,9 +921,9 @@ const NotificationPage: React.FC = () => {
               return;
             }
             
-            // Fetch from API
+            // Fetch from API using the correct alumni/profile endpoint
             console.log('Fetching profile pic from API for user:', userId);
-            const response = await api.get(`users/${userId}/`);
+            const response = await api.get(`alumni/profile/${userId}/`);
             console.log('API response for user:', userId, response.data);
             
             if (response.data && response.data.profile_pic) {
@@ -985,20 +963,16 @@ const NotificationPage: React.FC = () => {
     
     if (isLoading) {
       return (
-        <div style={{
-          width: size,
-          height: size,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'white',
-          fontSize: '16px',
-          fontWeight: '600'
-        }}>
-          {userName.charAt(0).toUpperCase()}
-        </div>
+        <img
+          src={ctulogo}
+          alt={userName}
+          style={{
+            width: size,
+            height: size,
+            objectFit: 'cover',
+            borderRadius: '50%'
+          }}
+        />
       );
     }
     
@@ -1014,49 +988,26 @@ const NotificationPage: React.FC = () => {
             borderRadius: '50%'
           }}
           onError={(e) => {
-            // Fallback to initial letter if image fails to load
+            // Fallback to CTU logo if image fails to load
             const target = e.target as HTMLImageElement;
-            target.style.display = 'none';
-            const parent = target.parentElement;
-            if (parent) {
-              parent.innerHTML = `
-                <div style="
-                  width: ${size};
-                  height: ${size};
-                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  color: white;
-                  font-size: 16px;
-                  font-weight: 600;
-                  border-radius: 50%;
-                ">
-                  ${userName.charAt(0).toUpperCase()}
-                </div>
-              `;
-            }
+            target.src = ctulogo;
           }}
         />
       );
     }
     
-    // Fallback to initial letter
+    // Fallback to CTU logo
     return (
-      <div style={{
-        width: '100%',
-        height: '100%',
-        borderRadius: '50%',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'white',
-        fontSize: '16px',
-        fontWeight: '600'
-      }}>
-        {userName.charAt(0).toUpperCase()}
-      </div>
+      <img
+        src={ctulogo}
+        alt={userName}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          borderRadius: '50%'
+        }}
+      />
     );
   };
 

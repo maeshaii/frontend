@@ -393,3 +393,8 @@
 .suggested-user-follow-button.following:hover {
   background: #e8e8e8;
 }
+
+/* Hide scrollbar for scrollable feed */
+.scrollable-feed::-webkit-scrollbar {
+  display: none;
+}

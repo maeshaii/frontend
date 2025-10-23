@@ -632,6 +632,7 @@ export const getForums = async () => {
 export const createForumPost = async (forumData: {
   content: string;
   image?: string;
+  images?: string[];
 }) => {
   const response = await api.post('forum/', forumData);
   return response.data;

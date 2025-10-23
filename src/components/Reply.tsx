@@ -251,30 +251,37 @@ const Reply: React.FC<ReplyProps> = ({
 
   return (
     <div style={{ 
-      marginTop: '8px', 
-      marginLeft: '20px',
-      padding: '8px 12px',
-      backgroundColor: '#f8f9fa',
-      borderRadius: '8px',
-      border: '1px solid #e9ecef'
+      marginTop: '6px', 
+      marginLeft: '32px',
+      display: 'flex',
+      gap: '8px'
     }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-        {/* User Avatar */}
-        <img
-          src={userAvatar}
-          alt={userName}
-          style={{
-            width: '24px',
-            height: '24px',
-            borderRadius: '50%',
-            objectFit: 'cover',
-            flexShrink: 0
-          }}
-        />
-        
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {/* User Name and Time */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+      {/* User Avatar */}
+      <img
+        src={userAvatar}
+        alt={userName}
+        style={{
+          width: '24px',
+          height: '24px',
+          borderRadius: '50%',
+          objectFit: 'cover',
+          flexShrink: 0,
+          cursor: 'pointer'
+        }}
+        onClick={() => window.location.href = getProfilePath(reply.user.user_id)}
+      />
+      
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Reply Content Container */}
+        <div style={{
+          backgroundColor: '#f0f2f5',
+          borderRadius: '18px',
+          padding: '8px 12px',
+          display: 'inline-block',
+          maxWidth: '100%'
+        }}>
+          {/* User Name */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
             <button
               onClick={() => window.location.href = getProfilePath(reply.user.user_id)}
               style={{
@@ -284,46 +291,39 @@ const Reply: React.FC<ReplyProps> = ({
                 cursor: 'pointer',
                 fontWeight: '600',
                 fontSize: '13px',
-                color: '#333',
+                color: '#050505',
                 textDecoration: 'none'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = '#007bff';
                 e.currentTarget.style.textDecoration = 'underline';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.color = '#333';
                 e.currentTarget.style.textDecoration = 'none';
               }}
             >
               {userName}
             </button>
-            <span style={{ fontSize: '11px', color: '#888' }}>
-              {formatTime(reply.date_created)}
-            </span>
             
-            {/* Three dots menu for own replies */}
+            {/* Three dots menu for own replies - inside bubble */}
             {isOwnReply && (
-              <div style={{ position: 'relative' }} ref={optionsRef}>
+              <div style={{ position: 'relative', marginLeft: 'auto' }} ref={optionsRef}>
                 <button
                   onClick={() => setShowOptions(!showOptions)}
                   style={{
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
-                    padding: '2px',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    color: '#666',
+                    padding: '0 4px',
+                    fontSize: '14px',
+                    color: '#65676b',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
+                    alignItems: 'center'
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#f0f0f0';
+                    e.currentTarget.style.color = '#050505';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = '#65676b';
                   }}
                 >
                   ⋯
@@ -334,12 +334,14 @@ const Reply: React.FC<ReplyProps> = ({
                     position: 'absolute',
                     top: '100%',
                     right: '0',
+                    marginTop: '4px',
                     backgroundColor: 'white',
-                    border: '1px solid #ddd',
+                    border: '1px solid #e4e6eb',
                     borderRadius: '8px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                    boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
                     zIndex: 1000,
-                    minWidth: '120px'
+                    minWidth: '120px',
+                    overflow: 'hidden'
                   }}>
                     <button
                       onClick={() => {
@@ -354,11 +356,11 @@ const Reply: React.FC<ReplyProps> = ({
                         textAlign: 'left',
                         cursor: 'pointer',
                         fontSize: '13px',
-                        color: '#333',
-                        borderBottom: '1px solid #f0f0f0'
+                        color: '#050505',
+                        fontWeight: '400'
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f8f9fa';
+                        e.currentTarget.style.backgroundColor = '#f2f3f5';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = 'transparent';
@@ -379,10 +381,11 @@ const Reply: React.FC<ReplyProps> = ({
                         textAlign: 'left',
                         cursor: 'pointer',
                         fontSize: '13px',
-                        color: '#dc3545'
+                        color: '#050505',
+                        fontWeight: '400'
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f8f9fa';
+                        e.currentTarget.style.backgroundColor = '#f2f3f5';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = 'transparent';
@@ -398,68 +401,63 @@ const Reply: React.FC<ReplyProps> = ({
           
           {/* Reply Content */}
           {isEditing ? (
-            <div>
-              <textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                style={{
-                  width: '100%',
-                  minHeight: '60px',
-                  padding: '8px',
-                  border: '1px solid #ddd',
-                  borderRadius: '8px',
-                  fontSize: '13px',
-                  resize: 'vertical',
-                  fontFamily: 'inherit'
-                }}
-                autoFocus
-              />
-              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                <button
-                  onClick={handleEdit}
-                  style={{
-                    padding: '6px 12px',
-                    backgroundColor: '#007bff',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '12px'
-                  }}
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => {
-                    setIsEditing(false);
-                    setEditContent(reply.reply_content);
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    backgroundColor: '#6c757d',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '12px'
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
+            <textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              style={{
+                width: '100%',
+                minHeight: '50px',
+                padding: '8px 12px',
+                border: '1px solid #ccd0d5',
+                borderRadius: '18px',
+                fontSize: '13px',
+                resize: 'vertical',
+                fontFamily: 'inherit',
+                backgroundColor: '#ffffff'
+              }}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleEdit();
+                } else if (e.key === 'Escape') {
+                  setIsEditing(false);
+                  setEditContent(reply.reply_content);
+                }
+              }}
+            />
           ) : (
-            <div style={{ fontSize: '13px', color: '#555', lineHeight: '1.4' }}>
+            <div style={{ 
+              fontSize: '13px', 
+              color: '#050505', 
+              lineHeight: '1.38',
+              wordBreak: 'break-word'
+            }}>
               {renderTextWithLinks(reply.reply_content)}
             </div>
           )}
-
-          {/* Reply Button */}
-          <div style={{ marginTop: '8px' }}>
+        </div>
+        
+        {/* Actions below the bubble - Time and Reply button */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '12px', 
+          marginTop: '2px',
+          marginLeft: '12px'
+        }}>
+          <span style={{ 
+            fontSize: '12px', 
+            color: '#65676b',
+            fontWeight: '400'
+          }}>
+            {formatTime(reply.date_created)}
+          </span>
+          
+          {!isEditing && (
             <button
               onClick={() => {
                 setShowReplyInput(!showReplyInput);
-                // Pre-fill with mention when opening reply input
                 if (!showReplyInput) {
                   setReplyContent(`@${userName} `);
                 }
@@ -467,95 +465,175 @@ const Reply: React.FC<ReplyProps> = ({
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#007bff',
+                color: '#65676b',
                 cursor: 'pointer',
                 fontSize: '12px',
-                padding: '4px 8px',
-                borderRadius: '4px',
-                transition: 'background-color 0.2s ease'
+                padding: '0',
+                fontWeight: '600'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f0f8ff';
+                e.currentTarget.style.textDecoration = 'underline';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.textDecoration = 'none';
               }}
             >
               Reply
             </button>
-          </div>
+          )}
+          
+          {isEditing && (
+            <>
+              <button
+                onClick={handleEdit}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#0866ff',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  padding: '0',
+                  fontWeight: '600'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditContent(reply.reply_content);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#65676b',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  padding: '0',
+                  fontWeight: '600'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                Cancel
+              </button>
+            </>
+          )}
+        </div>
 
-          {/* Reply Input */}
-          {showReplyInput && (
-            <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                <img
-                  src={displayAvatar || ctulogo}
-                  alt={displayName || 'User'}
+        {/* Reply Input */}
+        {showReplyInput && (
+          <div style={{ 
+            marginTop: '8px',
+            marginLeft: '0'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <img
+                src={displayAvatar || ctulogo}
+                alt={displayName || 'User'}
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  flexShrink: 0
+                }}
+              />
+              <div style={{ flex: 1 }}>
+                <textarea
+                  value={replyContent}
+                  onChange={(e) => setReplyContent(e.target.value)}
+                  placeholder={`Reply to ${userName}...`}
                   style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    objectFit: 'cover',
-                    flexShrink: 0
+                    width: '100%',
+                    minHeight: '32px',
+                    maxHeight: '120px',
+                    padding: '8px 12px',
+                    border: '1px solid #ccd0d5',
+                    borderRadius: '18px',
+                    fontSize: '13px',
+                    resize: 'none',
+                    fontFamily: 'inherit',
+                    backgroundColor: '#f0f2f5'
+                  }}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleReplySubmit();
+                    } else if (e.key === 'Escape') {
+                      setShowReplyInput(false);
+                      setReplyContent('');
+                    }
                   }}
                 />
-                <div style={{ flex: 1 }}>
-                  <textarea
-                    value={replyContent}
-                    onChange={(e) => setReplyContent(e.target.value)}
-                    placeholder={`Mention ${userName} in your reply...`}
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '12px', 
+                  marginTop: '4px',
+                  marginLeft: '12px'
+                }}>
+                  <button
+                    onClick={handleReplySubmit}
+                    disabled={!replyContent.trim() || isSubmittingReply}
                     style={{
-                      width: '100%',
-                      minHeight: '40px',
-                      padding: '8px',
-                      border: '1px solid #ddd',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      resize: 'vertical',
-                      fontFamily: 'inherit'
+                      background: 'none',
+                      border: 'none',
+                      color: !replyContent.trim() || isSubmittingReply ? '#bcc0c4' : '#0866ff',
+                      cursor: !replyContent.trim() || isSubmittingReply ? 'not-allowed' : 'pointer',
+                      fontSize: '12px',
+                      padding: '0',
+                      fontWeight: '600'
                     }}
-                    autoFocus
-                  />
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
-                    <button
-                      onClick={() => {
-                        setShowReplyInput(false);
-                        setReplyContent('');
-                      }}
-                      style={{
-                        padding: '6px 12px',
-                        backgroundColor: '#6c757d',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '12px'
-                      }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleReplySubmit}
-                      disabled={!replyContent.trim() || isSubmittingReply}
-                      style={{
-                        padding: '6px 12px',
-                        backgroundColor: replyContent.trim() && !isSubmittingReply ? '#007bff' : '#ccc',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: replyContent.trim() && !isSubmittingReply ? 'pointer' : 'not-allowed',
-                        fontSize: '12px'
-                      }}
-                    >
-                      {isSubmittingReply ? 'Posting...' : 'Reply'}
-                    </button>
-                  </div>
+                    onMouseEnter={(e) => {
+                      if (replyContent.trim() && !isSubmittingReply) {
+                        e.currentTarget.style.textDecoration = 'underline';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.textDecoration = 'none';
+                    }}
+                  >
+                    {isSubmittingReply ? 'Posting...' : 'Reply'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowReplyInput(false);
+                      setReplyContent('');
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#65676b',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      padding: '0',
+                      fontWeight: '600'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.textDecoration = 'underline';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.textDecoration = 'none';
+                    }}
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

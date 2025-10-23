@@ -4,6 +4,7 @@ import { Box, Card, Typography, Avatar, TextField } from '@mui/material';
 import AlumniTopBar from './AlumniTopBar';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
+import RepostCard from '../../components/RepostCard';
 import ctulogo from '../../images/ctulogo.png';
 import { getProfilePicUrl, handleProfilePicError } from '../../utils/profilePicUtils';
 import { getDonationRequests, followUser, unfollowUser, checkFollowStatus } from '../../services/api';
@@ -422,43 +423,33 @@ const DonationPage: React.FC = () => {
                 const displayName = item.user?.name || `${item.user?.f_name || ''} ${item.user?.m_name || ''} ${item.user?.l_name || ''}`.trim() || 'Unknown User';
                 const displayAvatar = getProfilePicUrl(item.user?.profile_pic);
                 
-                if (item.item_type === 'repost') {
+                if (item.item_type === 'repost' && item.repostData) {
                   return (
-                    <PostCard
-                      key={`repost-${item.post_id}`}
-                      post={item}
-                      currentUserId={currentUserId}
-                      isOwn={isOwn}
-                      displayName={displayName}
-                      displayAvatar={displayAvatar}
-                      formatTime={formatTime}
-                      
-                      onPostUpdate={() => {
-                        fetchDonationPosts(false); // No loading indicator for updates
+                    <RepostCard
+                      key={`repost-${item.repostData.repost_id}`}
+                      repost={{
+                        repost_id: item.repostData.repost_id,
+                        repost_date: item.repostData.repost_date,
+                        repost_caption: item.repostData.repost_caption,
+                        user: item.repostData.user,
+                        likes: item.repostData.likes || [],
+                        likes_count: item.repostData.likes_count || 0,
+                        comments: item.repostData.comments || [],
+                        comments_count: item.repostData.comments_count || 0,
+                        original_post: item.repostData.original_post ? {
+                          donation_id: item.repostData.original_post.donation_id,
+                          post_content: item.repostData.original_post.post_content,
+                          post_images: item.repostData.original_post.post_images,
+                          created_at: item.repostData.original_post.created_at,
+                          user: item.repostData.original_post.user
+                        } : undefined
                       }}
-                      likedPosts={likedDonations}
-                      setLikedPosts={setLikedDonations}
-                      repostedPosts={repostedDonations}
-                      setRepostedPosts={setRepostedDonations}
-                      showAllComments={showAllComments}
-                      setShowAllComments={setShowAllComments}
-                      showCommentInput={showCommentInput}
-                      setShowCommentInput={setShowCommentInput}
-                      commentInput={commentInput}
-                      setCommentInput={setCommentInput}
-                      editingComment={editingComment}
-                      setEditingComment={setEditingComment}
-                      editCommentContent={editCommentContent}
-                      setEditCommentContent={setEditCommentContent}
-                      showOptions={showOptions}
-                      setShowOptions={setShowOptions}
-                      editingPost={editingDonation}
-                      setEditingPost={setEditingDonation}
-                      editPostContent={editDonationContent}
-                      setEditPostContent={setEditDonationContent}
-                      isForum={false}
-                      isDonation={true}
-                      onViewOriginalPost={handleViewOriginalDonation}
+                      currentUserId={currentUserId}
+                      formatTime={formatTime}
+                      context="donation"
+                      onRefresh={() => {
+                        fetchDonationPosts(false);
+                      }}
                     />
                   );
                 }

@@ -612,15 +612,16 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                   repost_date: repost.repost_date,
                   repost_caption: repost.repost_caption,
                   user: repost.user,
+                  likes: repost.likes || [],
+                  likes_count: repost.likes_count || 0,
+                  comments: repost.comments || [],
+                  comments_count: repost.comments_count || 0,
                   original_post: {
                     donation_id: donation.donation_id,
-                    description: donation.description,
-                    post_content: donation.description, // Add post_content for compatibility with PostCard
-                    images: donation.images,
+                    post_content: donation.description,
+                    post_images: donation.images,
                     created_at: donation.created_at,
-                    user: donation.user,
-                    likes: donation.likes || [],
-                    likes_count: donation.likes_count || 0
+                    user: donation.user
                   }
                 }
               });
@@ -1196,12 +1197,6 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         </div>
         {/* Center Content */}
         <div className="center-content">
-          <div className="post-start" onClick={() => setShowComposer(true)} style={{ cursor: 'pointer' }}>
-            <div className="post-start-input-container">
-              <img src={user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo} alt="Profile" className="post-start-profile-image" />
-              <input type="text" placeholder="Start a post" className="post-start-input" readOnly />
-            </div>
-          </div>
           {showComposer && (
             <PostCreate
               onPosted={async () => {
@@ -1219,6 +1214,24 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
               user={user ?? { name: '', profile_pic: undefined }}
             />
           )}
+          {/* Scrollable Feed Container */}
+          <div 
+            className="scrollable-feed"
+            style={{
+              maxHeight: 'calc(100vh - 140px)',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              paddingRight: '8px',
+              scrollbarWidth: 'none', /* Firefox */
+              msOverflowStyle: 'none'  /* IE and Edge */
+            }}
+          >
+          <div className="post-start" onClick={() => setShowComposer(true)} style={{ cursor: 'pointer', marginBottom: '16px' }}>
+            <div className="post-start-input-container">
+              <img src={user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo} alt="Profile" className="post-start-profile-image" />
+              <input type="text" placeholder="Start a post" className="post-start-input" readOnly />
+            </div>
+          </div>
           {(() => {
             if (userType === 'alumni' || userType === 'ojt') {
               // Create a unified feed with both posts and donations, sorted by date
@@ -1241,8 +1254,51 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 });
               });
               
-              // Sort the unified feed by date (newest first)
+              // Sort the unified feed with CCICT/PESO posts prioritized, then by date
               const sortedUnifiedFeed = unifiedFeed.sort((a: any, b: any) => {
+                // Helper function to check if post is from CCICT or PESO
+                const isPriority = (item: any): boolean => {
+                  let itemUserId: number | undefined;
+                  let itemUser: any;
+                  
+                  if (item.feed_type === 'post') {
+                    if (item.item_type === 'repost' && 'repost_id' in item) {
+                      itemUserId = item.user?.user_id;
+                      itemUser = item.user;
+                    } else {
+                      itemUserId = item.user?.user_id;
+                      itemUser = item.user;
+                    }
+                  } else if (item.feed_type === 'donation' || item.feed_type === 'donation_repost') {
+                    itemUserId = item.user?.user_id;
+                    itemUser = item.user;
+                  }
+                  
+                  // Check if user is CCICT or PESO
+                  let isCcict = false, isPeso = false;
+                  if (itemUser && itemUser.account_type) {
+                    isCcict = !!(itemUser.account_type.ccict || itemUser.account_type.admin);
+                    isPeso = !!itemUser.account_type.peso;
+                  }
+                  
+                  // Also check against fetched admin and PESO user IDs
+                  if (itemUserId && pesoUserIds.includes(itemUserId)) {
+                    isPeso = true;
+                  } else if (itemUserId && adminUserIds.includes(itemUserId)) {
+                    isCcict = true;
+                  }
+                  
+                  return isCcict || isPeso;
+                };
+                
+                const aPriority = isPriority(a);
+                const bPriority = isPriority(b);
+                
+                // If one is priority and the other isn't, priority comes first
+                if (aPriority && !bPriority) return -1;
+                if (!aPriority && bPriority) return 1;
+                
+                // If both are priority or both are not, sort by date
                 const dateA = new Date(a.sort_date);
                 const dateB = new Date(b.sort_date);
                 return dateB.getTime() - dateA.getTime();
@@ -1343,35 +1399,34 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 // Handle different feed item types
                 if (item.feed_type === 'donation' || item.feed_type === 'donation_repost') {
                   // Handle donation items
-                  if (item.feed_type === 'donation_repost') {
-                    // Render as donation repost card
-                    const donationRepostItem = item;
+                  if (item.feed_type === 'donation_repost' && item.repostData) {
+                    // Render as donation repost card using RepostCard
                     const donationRepostCard = (
-                      <PostCard
-                          key={`donation-repost-${donationRepostItem.post_id}`}
-                          post={donationRepostItem}
+                      <RepostCard
+                          key={`donation-repost-${item.repostData.repost_id}`}
+                          repost={{
+                            repost_id: item.repostData.repost_id,
+                            repost_date: item.repostData.repost_date,
+                            repost_caption: item.repostData.repost_caption,
+                            user: item.repostData.user,
+                            likes: item.repostData.likes || item.likes || [],
+                            likes_count: item.repostData.likes_count || item.likes_count || 0,
+                            comments: item.repostData.comments || item.comments || [],
+                            comments_count: item.repostData.comments_count || item.comments_count || 0,
+                            original_post: item.repostData.original_post ? {
+                              donation_id: item.repostData.original_post.donation_id,
+                              post_content: item.repostData.original_post.post_content,
+                              post_images: item.repostData.original_post.post_images,
+                              created_at: item.repostData.original_post.created_at,
+                              user: item.repostData.original_post.user
+                            } : undefined
+                          }}
                           currentUserId={currentUserId}
-                          isOwn={currentUserId === donationRepostItem.user.user_id}
-                          displayName={formatDisplayName(donationRepostItem.user, currentUserId === donationRepostItem.user.user_id, user)}
-                          displayAvatar={donationRepostItem.user.profile_pic ? (String(donationRepostItem.user.profile_pic).startsWith('http') ? donationRepostItem.user.profile_pic : `http://127.0.0.1:8000${donationRepostItem.user.profile_pic}`) : ctulogo}
                           formatTime={formatHybrid}
-                          
-                          onViewOriginalPost={handleViewOriginalPost}
-                          likedPosts={likedDonations}
-                          setLikedPosts={setLikedDonations}
-                          showCommentInput={showCommentInput}
-                          setShowCommentInput={setShowCommentInput}
-                          commentInput={commentInput}
-                          setCommentInput={setCommentInput}
-                          editingComment={editingComment}
-                          setEditingComment={setEditingComment}
-                          editCommentContent={editCommentContent}
-                          setEditCommentContent={setEditCommentContent}
-                          isDonation={true}
-                        onPostUpdate={() => {
-                          console.log('onPostUpdate called for donation repost - refreshing...');
-                          // Refresh both posts and donations
-                          Promise.all([getPosts(), getDonationRequests()]).then(([updatedPosts, donationResponse]) => {
+                          context="donation"
+                          onRefresh={() => {
+                            // Refresh donations
+                            getDonationRequests().then((donationResponse) => {
                             if (donationResponse.success) {
                               // Transform donation data
                               const transformedDonations: any[] = donationResponse.donations.map((donation: any) => ({
@@ -1428,17 +1483,16 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                                         repost_date: repost.repost_date,
                                         repost_caption: repost.repost_caption,
                                         user: repost.user,
+                                        likes: repost.likes || [],
+                                        likes_count: repost.likes_count || 0,
+                                        comments: repost.comments || [],
+                                        comments_count: repost.comments_count || 0,
                                         original_post: {
                                           donation_id: donation.donation_id,
-                                          description: donation.description,
-                                          post_content: donation.description, // Add post_content for compatibility with PostCard
-                                          images: donation.images,
-                                          post_images: donation.images, // Add post_images for compatibility with getImagesFromPost
-                                          post_image: donation.images && donation.images.length > 0 ? donation.images[0].image_url : null, // Add post_image for single image compatibility
+                                          post_content: donation.description,
+                                          post_images: donation.images,
                                           created_at: donation.created_at,
-                                          user: donation.user,
-                                          likes: donation.likes || [],
-                                          likes_count: donation.likes_count || 0
+                                          user: donation.user
                                         }
                                       }
                                     });
@@ -1448,30 +1502,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                               
                               setDonations(mixedFeed);
                             }
-                            setPosts(updatedPosts || []);
-                            
-                            // Update likedPosts state
-                            const currentUserId = getCurrentUserId(user);
-                            const liked: { [key: number]: boolean } = {};
-                            (updatedPosts || []).forEach((post: any) => {
-                              if (post.item_type === 'post') {
-                                liked[post.post_id] = getIsLiked(post, currentUserId);
-                              } else if (post.item_type === 'repost') {
-                                liked[post.repost_id] = getIsLiked(post, currentUserId);
-                              }
                             });
-                            setLikedPosts(liked);
-                          });
-                        }}
-                        showOptions={showOptions}
-                        setShowOptions={setShowOptions}
-                        editingPost={editingPost}
-                        setEditingPost={setEditingPost}
-                        editPostContent={editPostContent}
-                        setEditPostContent={setEditPostContent}
-                        repostedPosts={repostedDonations}
-                        setRepostedPosts={setRepostedDonations}
-                        isForum={false}
+                          }}
                       />
                     );
                     acc.push(donationRepostCard);
@@ -1858,6 +1890,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
               return renderedItems;
             }
           })()}
+          </div>
+          {/* End Scrollable Feed Container */}
         </div>
         {/* Right Sidebar */}
         <div className="right-sidebar">

@@ -286,15 +286,16 @@ const PostCard: React.FC<PostCardProps> = ({
     setShowReplies(prev => ({ ...prev, [commentId]: !prev[commentId] }));
   };
 
-  // Facebook-style: Load ALL replies for ALL comments immediately
+  // Auto-load replies for comments that have replies_count > 0
   useEffect(() => {
     if (post.comments && post.comments.length > 0) {
-      console.log('PostCard: Facebook-style loading ALL replies for ALL comments');
       post.comments.forEach(comment => {
-        // Load replies for every comment (Facebook approach)
-        loadReplies(comment.comment_id);
-        // Always show replies (Facebook shows them by default)
-        setShowReplies(prev => ({ ...prev, [comment.comment_id]: true }));
+        if (comment.replies_count && comment.replies_count > 0) {
+          // Only load if not already loaded
+          if (!commentReplies[comment.comment_id]) {
+            loadReplies(comment.comment_id);
+          }
+        }
       });
     }
   }, [post.comments, loadReplies]);
@@ -2664,46 +2665,50 @@ const PostCard: React.FC<PostCardProps> = ({
                       <div key={comment.comment_id} className="comment-item" style={{ 
                         display: 'flex', 
                         gap: '8px', 
-                        marginBottom: '8px', 
-                        padding: '12px', 
-                        backgroundColor: '#f8f9fa', 
-                        borderRadius: '12px',
-                        border: '1px solid #e9ecef',
-                        marginLeft: '8px',
-                        marginRight: '8px'
+                        marginBottom: '12px', 
+                        marginLeft: '12px',
+                        marginRight: '12px'
                       }}>
                         <img
                           src={getProfilePicUrl(comment.user.profile_pic)}
                           alt="Profile"
                           className="comment-profile-image"
-                          style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                          style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }}
                           onError={handleProfilePicError}
+                          onClick={() => window.location.href = getProfilePath(comment.user.user_id)}
                         />
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <button
-                              onClick={() => window.location.href = getProfilePath(comment.user.user_id)}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                padding: '0',
-                                cursor: 'pointer',
-                                fontWeight: 'bold',
-                                fontSize: '12px',
-                                color: '#333',
-                                textDecoration: 'none'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.color = '#007bff';
-                                e.currentTarget.style.textDecoration = 'underline';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.color = '#333';
-                                e.currentTarget.style.textDecoration = 'none';
-                              }}
-                            >
-                              {comment.user.f_name} {comment.user.m_name} {comment.user.l_name}
-                            </button>
+                          {/* Comment bubble container */}
+                          <div style={{
+                            backgroundColor: '#f0f2f5',
+                            borderRadius: '18px',
+                            padding: '8px 12px',
+                            display: 'inline-block',
+                            maxWidth: '100%',
+                            position: 'relative'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                              <button
+                                onClick={() => window.location.href = getProfilePath(comment.user.user_id)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  padding: '0',
+                                  cursor: 'pointer',
+                                  fontWeight: '600',
+                                  fontSize: '13px',
+                                  color: '#050505',
+                                  textDecoration: 'none'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.textDecoration = 'underline';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.textDecoration = 'none';
+                                }}
+                              >
+                                {`${comment.user.f_name} ${comment.user.m_name || ''} ${comment.user.l_name}`.trim()}
+                              </button>
                             {((Number(currentUserId) === Number(comment.user.user_id) && setEditingComment && setEditCommentContent) || isOwn) && !editingComment[comment.comment_id] && (
                               <div style={{ position: 'relative' }} ref={(el) => { commentOptionsRefs.current[comment.comment_id] = el; }}>
                                 <button
@@ -2712,10 +2717,15 @@ const PostCard: React.FC<PostCardProps> = ({
                                     background: 'none',
                                     border: 'none',
                                     cursor: 'pointer',
-                                    fontSize: '16px',
-                                    color: '#666',
-                                    padding: 0,
-                                    marginLeft: '8px',
+                                    fontSize: '14px',
+                                    color: '#65676b',
+                                    padding: '0 4px'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.color = '#050505';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.color = '#65676b';
                                   }}
                                 >
                                   ⋯
@@ -2726,198 +2736,173 @@ const PostCard: React.FC<PostCardProps> = ({
                                       position: 'absolute',
                                       right: 0,
                                       top: '100%',
+                                      marginTop: '4px',
                                       background: '#fff',
-                                      border: '1px solid #ddd',
+                                      border: '1px solid #e4e6eb',
                                       borderRadius: '8px',
-                                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                      boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
                                       zIndex: 1000,
-                                      width: '120px',
+                                      minWidth: '120px',
+                                      overflow: 'hidden'
                                     }}
                                   >
                                     {(String(currentUserId) === String(comment.user.user_id) && setEditingComment) && (
                                       <button
                                         onClick={() => handleEditComment(comment.comment_id)}
                                         style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
                                           width: '100%',
                                           padding: '8px 12px',
                                           background: 'none',
                                           border: 'none',
                                           textAlign: 'left',
                                           cursor: 'pointer',
-                                          fontSize: '14px',
-                                          gap: '8px',
-                                          borderRadius: '4px',
-                                          transition: 'all 0.2s ease',
-                                          color: '#374151'
+                                          fontSize: '13px',
+                                          color: '#050505',
+                                          fontWeight: '400'
                                         }}
                                         onMouseEnter={(e) => {
-                                          e.currentTarget.style.backgroundColor = '#f3f4f6';
-                                          e.currentTarget.style.color = '#1f2937';
+                                          e.currentTarget.style.backgroundColor = '#f2f3f5';
                                         }}
                                         onMouseLeave={(e) => {
                                           e.currentTarget.style.backgroundColor = 'transparent';
-                                          e.currentTarget.style.color = '#374151';
                                         }}
                                       >
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                                        </svg>
                                         Edit
                                       </button>
                                     )}
                                     <button
                                       onClick={() => handleDeleteComment(comment.comment_id)}
                                       style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
                                         width: '100%',
                                         padding: '8px 12px',
                                         background: 'none',
                                         border: 'none',
                                         textAlign: 'left',
                                         cursor: 'pointer',
-                                        fontSize: '14px',
-                                        color: '#dc2626',
-                                        gap: '8px',
-                                        borderRadius: '4px',
-                                        transition: 'all 0.2s ease'
+                                        fontSize: '13px',
+                                        color: '#050505',
+                                        fontWeight: '400'
                                       }}
                                       onMouseEnter={(e) => {
-                                        e.currentTarget.style.backgroundColor = '#fef2f2';
-                                        e.currentTarget.style.color = '#b91c1c';
+                                        e.currentTarget.style.backgroundColor = '#f2f3f5';
                                       }}
                                       onMouseLeave={(e) => {
                                         e.currentTarget.style.backgroundColor = 'transparent';
-                                        e.currentTarget.style.color = '#dc2626';
                                       }}
                                     >
-                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <polyline points="3,6 5,6 21,6"/>
-                                        <path d="M19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
-                                        <line x1="10" y1="11" x2="10" y2="17"/>
-                                        <line x1="14" y1="11" x2="14" y2="17"/>
-                                      </svg>
                                       Delete
                                     </button>
                                   </div>
                                 )}
                               </div>
                             )}
-                          </div>
-                          {editingComment[comment.comment_id] ? (
-                            <div style={{ marginTop: 4 }}>
+                            </div>
+                            
+                            {/* Comment Content */}
+                            {editingComment[comment.comment_id] ? (
                               <textarea
                                 value={editCommentContent[comment.comment_id] || ''}
                                 onChange={(e) => setEditCommentContent?.(prev => ({ ...prev, [comment.comment_id]: e.target.value }))}
                                 style={{
                                   width: '100%',
-                                  minHeight: '60px',
-                                  padding: '6px',
-                                  border: '1px solid #ddd',
-                                  borderRadius: '8px',
-                                  fontSize: '14px',
+                                  minHeight: '50px',
+                                  padding: '8px 12px',
+                                  border: '1px solid #ccd0d5',
+                                  borderRadius: '18px',
+                                  fontSize: '13px',
                                   resize: 'vertical',
+                                  backgroundColor: '#ffffff',
+                                  fontFamily: 'inherit'
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSaveEditComment(comment.comment_id);
+                                  } else if (e.key === 'Escape') {
+                                    handleCancelEditComment(comment.comment_id);
+                                  }
                                 }}
                               />
-                              <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                            ) : (
+                              <div style={{ fontSize: '13px', color: '#050505', lineHeight: '1.38', wordBreak: 'break-word' }}>
+                                {renderTextWithLinks(comment.comment_content)}
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Actions below bubble */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px', marginLeft: '12px' }}>
+                            <span style={{ fontSize: '12px', color: '#65676b', fontWeight: '400' }}>
+                              {formatTime(comment.date_created)}
+                            </span>
+                            
+                            {!editingComment[comment.comment_id] && (
+                              <button
+                                onClick={() => setShowReplyInput(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#65676b',
+                                  cursor: 'pointer',
+                                  fontSize: '12px',
+                                  padding: '0',
+                                  fontWeight: '600'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.textDecoration = 'underline';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.textDecoration = 'none';
+                                }}
+                              >
+                                Reply
+                              </button>
+                            )}
+                            
+                            {editingComment[comment.comment_id] && (
+                              <div style={{ display: 'flex', gap: '12px' }}>
                                 <button
                                   onClick={() => handleSaveEditComment(comment.comment_id)}
                                   style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                                    color: '#fff',
+                                    background: 'none',
                                     border: 'none',
-                                    borderRadius: '6px',
-                                    padding: '8px 16px',
+                                    color: '#0866ff',
                                     cursor: 'pointer',
                                     fontSize: '12px',
-                                    gap: '6px',
-                                    fontWeight: '500',
-                                    transition: 'all 0.2s ease',
-                                    boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)'
+                                    padding: '0',
+                                    fontWeight: '600'
                                   }}
                                   onMouseEnter={(e) => {
-                                    e.currentTarget.style.transform = 'translateY(-1px)';
-                                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
+                                    e.currentTarget.style.textDecoration = 'underline';
                                   }}
                                   onMouseLeave={(e) => {
-                                    e.currentTarget.style.transform = 'translateY(0)';
-                                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
+                                    e.currentTarget.style.textDecoration = 'none';
                                   }}
                                 >
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                                    <polyline points="17,21 17,13 7,13 7,21"/>
-                                    <polyline points="7,3 7,8 15,8"/>
-                                  </svg>
                                   Save
                                 </button>
                                 <button
                                   onClick={() => handleCancelEditComment(comment.comment_id)}
                                   style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
-                                    color: '#fff',
+                                    background: 'none',
                                     border: 'none',
-                                    borderRadius: '6px',
-                                    padding: '8px 16px',
+                                    color: '#65676b',
                                     cursor: 'pointer',
                                     fontSize: '12px',
-                                    gap: '6px',
-                                    fontWeight: '500',
-                                    transition: 'all 0.2s ease',
-                                    boxShadow: '0 2px 4px rgba(107, 114, 128, 0.3)'
+                                    padding: '0',
+                                    fontWeight: '600'
                                   }}
                                   onMouseEnter={(e) => {
-                                    e.currentTarget.style.transform = 'translateY(-1px)';
-                                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(107, 114, 128, 0.4)';
+                                    e.currentTarget.style.textDecoration = 'underline';
                                   }}
                                   onMouseLeave={(e) => {
-                                    e.currentTarget.style.transform = 'translateY(0)';
-                                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(107, 114, 128, 0.3)';
+                                    e.currentTarget.style.textDecoration = 'none';
                                   }}
                                 >
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <line x1="18" y1="6" x2="6" y2="18"/>
-                                    <line x1="6" y1="6" x2="18" y2="18"/>
-                                  </svg>
                                   Cancel
                                 </button>
                               </div>
-                            </div>
-                          ) : (
-                            <div style={{ fontSize: '14px', color: '#555' }}>
-                              {renderTextWithLinks(comment.comment_content)}
-                            </div>
-                          )}
-                          <div style={{ fontSize: '11px', color: '#888', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <span>{formatTime(comment.date_created)}</span>
-                            <button
-                              onClick={() => setShowReplyInput(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                color: '#007bff',
-                                cursor: 'pointer',
-                                fontSize: '11px',
-                                padding: '2px 4px',
-                                borderRadius: '4px',
-                                transition: 'background-color 0.2s ease'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = '#f0f8ff';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = 'transparent';
-                              }}
-                            >
-                              Reply
-                            </button>
+                            )}
                           </div>
                           
                           {/* Reply Input */}

@@ -4,6 +4,7 @@ import { Box, Card, Typography, Avatar, TextField } from '@mui/material';
 import AlumniTopBar from './AlumniTopBar';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
+import RepostCard from '../../components/RepostCard';
 import ctulogo from '../../images/ctulogo.png';
 import { getProfilePicUrl, handleProfilePicError } from '../../utils/profilePicUtils';
 import { getForums, followUser, unfollowUser, checkFollowStatus } from '../../services/api';
@@ -22,6 +23,11 @@ interface PostItem {
   post_title?: string;
   post_content: string;
   post_image?: string | null;
+  post_images?: Array<{
+    image_id: number;
+    image_url: string;
+    order: number;
+  }>;
   created_at?: string | null;
   user?: {
     user_id?: number;
@@ -260,6 +266,7 @@ const ForumPage: React.FC = () => {
         post_id: forum.post_id, // forum_id from backend
         post_content: forum.post_content,
         post_image: forum.post_image,
+        post_images: forum.post_images,
         created_at: forum.created_at,
         type: 'forum',
         user: {
@@ -297,6 +304,7 @@ const ForumPage: React.FC = () => {
               post_id: repost.repost_id, // Use repost_id for interactions
               post_content: post.post_content,
               post_image: post.post_image,
+              post_images: post.post_images,
               created_at: repost.repost_date, // Use repost date for sorting
               type: 'forum',
               item_type: 'repost',
@@ -320,6 +328,7 @@ const ForumPage: React.FC = () => {
                   post_id: post.post_id,
                   post_content: post.post_content,
                   post_image: post.post_image,
+                  post_images: post.post_images,
                   created_at: post.created_at,
                   user: post.user
                 }
@@ -594,35 +603,49 @@ const ForumPage: React.FC = () => {
                   const displayAvatar = getProfilePicUrl(item.user?.profile_pic);
                   
                   // Render as repost if item_type is 'repost'
-                  if (item.item_type === 'repost') {
+                  if (item.item_type === 'repost' && item.repostData) {
                     return (
-                      <PostCard
-                        key={`repost-${item.post_id}`}
-                        post={item}
+                      <RepostCard
+                        key={`repost-${item.repostData.repost_id}`}
+                        repost={{
+                          repost_id: item.repostData.repost_id,
+                          repost_date: item.repostData.repost_date,
+                          repost_caption: item.repostData.repost_caption,
+                          user: item.repostData.user,
+                          likes: item.repostData.likes || [],
+                          likes_count: item.repostData.likes_count || 0,
+                          comments: item.repostData.comments || [],
+                          comments_count: item.repostData.comments_count || 0,
+                          original_post: item.repostData.original_post ? {
+                            post_id: item.repostData.original_post.post_id,
+                            created_at: item.repostData.original_post.created_at,
+                            post_content: item.repostData.original_post.post_content,
+                            post_images: item.repostData.original_post.post_images || (item.repostData.original_post.post_image ? [{ image_id: 0, image_url: item.repostData.original_post.post_image, order: 0 }] : undefined),
+                            user: item.repostData.original_post.user
+                          } : undefined
+                        }}
                         currentUserId={currentUserId}
-                        isOwn={isOwn}
-                        displayName={displayName}
-                        displayAvatar={displayAvatar}
                         formatTime={formatTime}
-                        
-                        onPostUpdate={() => {
+                        context="forum"
+                        onRefresh={() => {
                           // Immediate update without page refresh - similar to UnifiedDashboard
                           getForums().then((forumsData) => {
                             // Transform forum data to match PostItem interface
                             const transformedPosts: PostItem[] = forumsData.map((forum: any) => ({
-                              post_id: forum.post_id,
-                              post_content: forum.post_content,
-                              post_image: forum.post_image,
-                              created_at: forum.created_at,
-                              type: forum.type,
-                              user: forum.user,
-                              likes_count: forum.likes_count,
-                              comments_count: forum.comments_count,
-                              reposts_count: forum.reposts_count,
-                              is_liked: forum.is_liked,
-                              likes: forum.likes || [],
-                              comments: forum.comments || [],
-                              reposts: forum.reposts || []
+                          post_id: forum.post_id,
+                          post_content: forum.post_content,
+                          post_image: forum.post_image,
+                          post_images: forum.post_images,
+                          created_at: forum.created_at,
+                          type: forum.type,
+                          user: forum.user,
+                          likes_count: forum.likes_count,
+                          comments_count: forum.comments_count,
+                          reposts_count: forum.reposts_count,
+                          is_liked: forum.is_liked,
+                          likes: forum.likes || [],
+                          comments: forum.comments || [],
+                          reposts: forum.reposts || []
                             }));
                             
                             // Create a mixed feed of posts and reposts, sorted by date
@@ -643,6 +666,7 @@ const ForumPage: React.FC = () => {
                                     post_id: repost.repost_id,
                                     post_content: post.post_content,
                                     post_image: post.post_image,
+                                    post_images: post.post_images,
                                     created_at: repost.repost_date,
                                     type: 'forum',
                                     item_type: 'repost',
@@ -666,6 +690,7 @@ const ForumPage: React.FC = () => {
                                         post_id: post.post_id,
                                         post_content: post.post_content,
                                         post_image: post.post_image,
+                                        post_images: post.post_images,
                                         created_at: post.created_at,
                                         user: post.user
                                       }
@@ -713,28 +738,6 @@ const ForumPage: React.FC = () => {
                             setRepostedPosts(reposted);
                           });
                         }}
-                        showOptions={showOptions}
-                        setShowOptions={setShowOptions}
-                        editingPost={editingPost}
-                        setEditingPost={setEditingPost}
-                        editPostContent={editPostContent}
-                        setEditPostContent={setEditPostContent}
-                        likedPosts={likedPosts}
-                        setLikedPosts={setLikedPosts}
-                        repostedPosts={repostedPosts}
-                        setRepostedPosts={setRepostedPosts}
-                        showCommentInput={showCommentInput}
-                        setShowCommentInput={setShowCommentInput}
-                        showAllComments={showAllComments}
-                        setShowAllComments={setShowAllComments}
-                        commentInput={commentInput}
-                        setCommentInput={setCommentInput}
-                        editingComment={editingComment}
-                        setEditingComment={setEditingComment}
-                        editCommentContent={editCommentContent}
-                        setEditCommentContent={setEditCommentContent}
-                        isForum={true}
-                        onViewOriginalPost={handleViewOriginalPost}
                       />
                     );
                   }
@@ -754,19 +757,20 @@ const ForumPage: React.FC = () => {
                         getForums().then((forumsData) => {
                           // Transform forum data to match PostItem interface
                           const transformedPosts: PostItem[] = forumsData.map((forum: any) => ({
-                            post_id: forum.post_id,
-                            post_content: forum.post_content,
-                            post_image: forum.post_image,
-                            created_at: forum.created_at,
-                            type: forum.type,
-                            user: forum.user,
-                            likes_count: forum.likes_count,
-                            comments_count: forum.comments_count,
-                            reposts_count: forum.reposts_count,
-                            is_liked: forum.is_liked,
-                            likes: forum.likes || [],
-                            comments: forum.comments || [],
-                            reposts: forum.reposts || []
+                          post_id: forum.post_id,
+                          post_content: forum.post_content,
+                          post_image: forum.post_image,
+                          post_images: forum.post_images,
+                          created_at: forum.created_at,
+                          type: forum.type,
+                          user: forum.user,
+                          likes_count: forum.likes_count,
+                          comments_count: forum.comments_count,
+                          reposts_count: forum.reposts_count,
+                          is_liked: forum.is_liked,
+                          likes: forum.likes || [],
+                          comments: forum.comments || [],
+                          reposts: forum.reposts || []
                           }));
                           
                           // Create a mixed feed of posts and reposts, sorted by date
@@ -787,6 +791,7 @@ const ForumPage: React.FC = () => {
                                   post_id: repost.repost_id,
                                   post_content: post.post_content,
                                   post_image: post.post_image,
+                                  post_images: post.post_images,
                                   created_at: repost.repost_date,
                                   type: 'forum',
                                   item_type: 'repost',
@@ -810,6 +815,7 @@ const ForumPage: React.FC = () => {
                                       post_id: post.post_id,
                                       post_content: post.post_content,
                                       post_image: post.post_image,
+                                      post_images: post.post_images,
                                       created_at: post.created_at,
                                       user: post.user
                                     }
