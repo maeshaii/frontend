@@ -359,6 +359,15 @@ export const fetchOJTStatistics = async (coordinatorUsername?: string) => {
   return response.data;
 };
 
+// Fetch OJT company statistics (company names with student counts)
+export const fetchOJTCompanyStatistics = async (coordinatorUsername?: string) => {
+  const path = coordinatorUsername
+    ? `ojt/company-statistics/?coordinator=${coordinatorUsername}`
+    : 'ojt/company-statistics/';
+  const response = await api.get(path);
+  return response.data;
+};
+
 // Fetch OJT data by year for coordinators
 export const fetchOJTByYear = async (year: string, coordinatorUsername?: string, section?: string) => {
   let path = `ojt/by-year/?year=${year}`;
