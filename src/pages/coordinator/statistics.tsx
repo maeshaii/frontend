@@ -27,19 +27,19 @@ export default function Statistics() {
     const loadCompanyStatistics = async () => {
       if (!coordinatorUsername) return;
       
-      setLoading(true);
-      try {
+    setLoading(true);
+    try {
         const response = await fetchOJTCompanyStatistics(coordinatorUsername);
         if (response.success) {
           setCompanies(response.companies || []);
           setTotalCompanies(response.total_companies || 0);
           setTotalStudents(response.total_students || 0);
-        }
-      } catch (error) {
-        console.error('Error loading company statistics:', error);
-      } finally {
-        setLoading(false);
       }
+    } catch (error) {
+        console.error('Error loading company statistics:', error);
+    } finally {
+      setLoading(false);
+    }
     };
 
     if (coordinatorUsername) {
@@ -50,9 +50,9 @@ export default function Statistics() {
   if (loading) {
     return (
       <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
         height: '100vh',
         backgroundColor: '#f8fafc'
       }}>
@@ -286,7 +286,7 @@ export default function Statistics() {
               }}>
                 📈
               </div>
-            </div>
+          </div>
             <p style={{
               margin: '0 0 4px 0',
               fontSize: '14px',
@@ -444,14 +444,14 @@ export default function Statistics() {
                 {companies.map((company, index) => (
                   <tr
                     key={index}
-                    style={{
+            style={{
                       borderBottom: index < companies.length - 1 ? '1px solid #f1f5f9' : 'none',
                       transition: 'background-color 0.2s ease'
                     }}
-                    onMouseEnter={(e) => {
+            onMouseEnter={(e) => {
                       e.currentTarget.style.backgroundColor = '#f8fafc';
-                    }}
-                    onMouseLeave={(e) => {
+            }}
+            onMouseLeave={(e) => {
                       e.currentTarget.style.backgroundColor = 'white';
                     }}
                   >
@@ -491,7 +491,7 @@ export default function Statistics() {
                 ))}
               </tbody>
             </table>
-          </div>
+              </div>
         )}
       </div>
     </div>

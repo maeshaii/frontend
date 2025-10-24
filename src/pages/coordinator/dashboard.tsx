@@ -3,7 +3,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
-import { fetchOJTStatistics, importOJT, setSendDate } from '../../services/api';
+import { fetchOJTStatistics, importOJT, setSendDate, getSendDates } from '../../services/api';
 import logoLogin from '../../images/logo_login.png';
 
 export default function Dashboard() {
@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
   const [showDateModal, setShowDateModal] = useState(false);
   const [sendDate, setSendDateState] = useState('');
+  const [existingSendDates, setExistingSendDates] = useState<any[]>([]);
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -98,7 +99,7 @@ export default function Dashboard() {
           const result = await importOJT(file, selectedYear.toString(), program, coordinatorUsername);
           console.log(`Import result for ${file.name}:`, result);
           
-          if (result.success) {
+      if (result.success) {
             totalCreated += result.created_count || 0;
             if (result.passwords && Array.isArray(result.passwords)) {
               allPasswords = [...allPasswords, ...result.passwords];
@@ -734,7 +735,18 @@ export default function Dashboard() {
                     transition: 'all 0.2s ease',
                     boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)'
                   }}
-                  onClick={() => setShowDateModal(true)}
+                  onClick={async () => {
+                    // Fetch existing send dates before showing modal
+                    try {
+                      const result = await getSendDates(coordinatorUsername);
+                      if (result.success && result.scheduled_dates) {
+                        setExistingSendDates(result.scheduled_dates);
+                      }
+                    } catch (error) {
+                      console.error('Error fetching send dates:', error);
+                    }
+                    setShowDateModal(true);
+                  }}
                   onMouseEnter={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
                     target.style.backgroundColor = '#059669';
@@ -1431,6 +1443,7 @@ export default function Dashboard() {
                 onClick={() => {
                   setShowDateModal(false);
                   setSendDateState('');
+                  setExistingSendDates([]);
                 }}
                 style={{
                   position: 'absolute',
@@ -1491,6 +1504,40 @@ export default function Dashboard() {
 
             {/* Content Area */}
             <div style={{ padding: '32px' }}>
+              {/* Existing Schedule Warning */}
+              {existingSendDates.length > 0 && (
+                <div style={{
+                  backgroundColor: '#fef3c7',
+                  border: '2px solid #fbbf24',
+                  borderRadius: '12px',
+                  padding: '16px 20px',
+                  marginBottom: '24px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px'
+                }}>
+                  <span style={{ fontSize: '24px', flexShrink: 0 }}>⚠️</span>
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ color: '#92400e', fontSize: '15px', display: 'block', marginBottom: '8px' }}>
+                      Existing Scheduled Dates Found
+                    </strong>
+                    <div style={{ color: '#78350f', fontSize: '14px', lineHeight: '1.6' }}>
+                      {existingSendDates.map((sd, idx) => (
+                        <div key={idx} style={{ marginBottom: '4px' }}>
+                          • <strong>Batch {sd.batch_year}</strong>{sd.section && ` (Section ${sd.section})`}: {new Date(sd.send_date).toLocaleDateString()} 
+                          <span style={{ fontSize: '12px', marginLeft: '8px', opacity: 0.8 }}>
+                            (Set on {new Date(sd.created_at).toLocaleDateString()})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: '8px', fontSize: '13px', color: '#92400e', fontStyle: 'italic' }}>
+                      Setting a new date will update the existing schedule.
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Process Overview Card */}
               <div style={{
                 backgroundColor: '#f8fafc',
@@ -1620,7 +1667,8 @@ export default function Dashboard() {
               <button
                 onClick={() => {
                   setShowDateModal(false);
-                    setSendDateState('');
+                  setSendDateState('');
+                  setExistingSendDates([]);
                 }}
                 style={{
                     padding: '14px 28px',
@@ -1652,30 +1700,81 @@ export default function Dashboard() {
               </button>
               <button
                   onClick={async () => {
-                  if (sendDate) {
-                      try {
+                    if (!sendDate) {
+                      alert('Please select a date first');
+                      return;
+                    }
+                    
+                    try {
+                      // If "ALL" is selected, schedule for all available years
+                      if (selectedBatchFilter === 'ALL') {
+                        let successCount = 0;
+                        let failCount = 0;
+                        
+                        // Get all unique years from the stats
+                        const yearsToProcess = [...new Set(ojtYears.map(y => y.year))];
+                        
+                        if (yearsToProcess.length === 0) {
+                          alert('No OJT batches found to schedule');
+                          return;
+                        }
+                        
+                        for (const year of yearsToProcess) {
+                          try {
+                            const result = await setSendDate(
+                              coordinatorUsername,
+                              year,
+                              null,
+                              sendDate
+                            );
+                            if (result.success) {
+                              successCount++;
+                            } else {
+                              failCount++;
+                            }
+                          } catch (error) {
+                            console.error(`Error scheduling year ${year}:`, error);
+                            failCount++;
+                          }
+                        }
+                        
+                        if (successCount > 0) {
+                          alert(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatches scheduled: ${successCount}\nFailed: ${failCount}\n\nOn this date, ALL completed OJT students from ALL batches will be automatically sent to admin!`);
+                          setShowDateModal(false);
+                          setSendDateState('');
+                          setExistingSendDates([]);
+                        } else {
+                          alert('Failed to schedule any batches. Please try again.');
+                        }
+                      } else {
+                        // Schedule for specific year
+                        const batchYear = parseInt(selectedBatchFilter);
+                        if (isNaN(batchYear)) {
+                          alert('Invalid batch year selected');
+                          return;
+                        }
+                        
                         const result = await setSendDate(
                           coordinatorUsername,
-                          parseInt(selectedBatchFilter),
-                          null, // Always process entire batch
+                          batchYear,
+                          null,
                           sendDate
                         );
                         
                         if (result.success) {
-                          alert(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatch: ${selectedBatchFilter} (ENTIRE BATCH)\n\nOn this date:\n• ALL completed OJT students will be automatically sent to admin\n• ALL ongoing students will be marked as incomplete\n\nThe entire batch will be processed automatically!`);
-                    setShowDateModal(false);
+                          alert(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatch: ${selectedBatchFilter}\n\nOn this date:\n• ALL completed OJT students will be automatically sent to admin\n• ALL ongoing students will be marked as incomplete`);
+                          setShowDateModal(false);
                           setSendDateState('');
-                  } else {
+                          setExistingSendDates([]);
+                        } else {
                           alert(`Error: ${result.message}`);
                         }
-                      } catch (error) {
-                        console.error('Error setting send date:', error);
-                        alert('Failed to set schedule. Please try again.');
                       }
-                    } else {
-                      alert('Please select a date first');
-                  }
-                }}
+                    } catch (error) {
+                      console.error('Error setting send date:', error);
+                      alert('Failed to set schedule. Please try again.');
+                    }
+                  }}
                 style={{
                     padding: '14px 28px',
                   border: '2px solid #e5e7eb',

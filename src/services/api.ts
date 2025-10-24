@@ -402,6 +402,12 @@ export const sendCompletedOJTToAdmin = async (year?: number | string, userIds?: 
   return response.data;
 };
 
+// Get existing send dates for coordinator
+export const getSendDates = async (coordinatorUsername: string) => {
+  const response = await api.get(`ojt/get-send-dates/?coordinator=${coordinatorUsername}`);
+  return response.data;
+};
+
 // Set send date for OJT batch
 export const setSendDate = async (coordinatorUsername: string, batchYear: number, section: string | null, sendDate: string) => {
   const response = await api.post('ojt/set-send-date/', {
