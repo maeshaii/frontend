@@ -13,7 +13,8 @@ const API_BASE = ensureApiSuffix(process.env.REACT_APP_API_URL);
 
 const api = axios.create({
   baseURL: API_BASE,
-  withCredentials: false, 
+  withCredentials: false,
+  timeout: 10000, // 10 second timeout for login
 });
 
 // Public API instance for endpoints that don't require authentication
@@ -768,7 +769,7 @@ export const searchUsersForMessaging = async (q: string) => {
 
 export const searchAlumni = async (q: string) => {
   const { data } = await api.get(`alumni/search/?q=${encodeURIComponent(q)}`);
-  return data as { results: Array<{ id: number; name: string; profile_pic: string | null; account_type: { user: boolean; admin: boolean; peso: boolean } }> };
+  return data as { results: Array<{ id: number; name: string; profile_pic: string | null; account_type: { user: boolean; admin: boolean; peso: boolean; ojt: boolean } }> };
 };
 
 export const getPostFromComment = async (commentId: number) => {

@@ -7,6 +7,7 @@ import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api, creat
 import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment } from '../../services/api';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
+import RepostCard from '../../components/RepostCard';
 
 function getCurrentUserId(user: AlumniUser | null): number | null {
   if (!user) return null;
@@ -89,6 +90,9 @@ interface AlumniUser {
     ccict?: boolean;
     admin?: boolean;
     peso?: boolean;
+    ojt?: boolean;
+    user?: boolean;
+    coordinator?: boolean;
   };
 }
 
@@ -134,7 +138,12 @@ interface PostItem {
   post_id: number;
   post_title?: string;
   post_content: string;
-  post_image?: string | null;
+  post_image?: string | null; // Backward compatibility
+  post_images?: Array<{ // Multiple images
+    image_id: number;
+    image_url: string;
+    order: number;
+  }>;
   created_at?: string | null;
   likes_count?: number;
   comments_count?: number;
@@ -1289,7 +1298,7 @@ getPosts()
                             // Always navigate to the follower's profile if we have a valid ID
                             if (destId && !isNaN(Number(destId))) {
                               console.log('Followers: Navigating to follower profile:', destId);
-                              navigate(`/alumni/profile/${destId}`);
+                              navigate(`/profile/${destId}`);
                             } else {
                               console.log('Followers: Invalid follower ID:', destId);
                             }
@@ -1360,7 +1369,7 @@ getPosts()
                             // Always navigate to the followed user's profile if we have a valid ID
                             if (destId && !isNaN(Number(destId))) {
                               console.log('Following: Navigating to followed user profile:', destId);
-                              navigate(`/alumni/profile/${destId}`);
+                              navigate(`/profile/${destId}`);
                             } else {
                               console.log('Following: Invalid followed user ID:', destId);
                             }
@@ -1498,24 +1507,38 @@ getPosts()
               const repostDisplayAvatar = isOwnRepost && user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : (repostUserAvatar || ctulogo);
               
               return (
-                <PostCard
+                <RepostCard
                   key={`repost-${repostItem.repost_id}`}
-                  post={{
-                    ...repostItem.original_post,
-                    post_id: repostItem.repost_id, // Use repost_id for interactions
+                  repost={{
+                    repost_id: repostItem.repost_id,
+                    repost_date: repostItem.repost_date,
+                    repost_caption: repostItem.repost_caption,
+                    user: { 
+                      user_id: repostItem.user?.user_id || 0, 
+                      f_name: repostItem.user?.f_name, 
+                      l_name: repostItem.user?.l_name, 
+                      profile_pic: repostItem.user?.profile_pic 
+                    },
                     likes: repostItem.likes || [],
-                    comments: repostItem.comments || [],
                     likes_count: repostItem.likes_count || 0,
+                    comments: repostItem.comments || [],
                     comments_count: repostItem.comments_count || 0,
+                    original_post: repostItem.original_post ? {
+                      post_id: repostItem.original_post.post_id,
+                      created_at: repostItem.original_post.created_at,
+                      post_content: repostItem.original_post.post_content,
+                      post_images: repostItem.original_post.post_images || (repostItem.original_post.post_image ? [{ image_id: 0, image_url: repostItem.original_post.post_image, order: 0 }] : undefined),
+                      user: repostItem.original_post.user ? { 
+                        user_id: repostItem.original_post.user.user_id || 0, 
+                        f_name: repostItem.original_post.user.f_name, 
+                        l_name: repostItem.original_post.user.l_name, 
+                        profile_pic: repostItem.original_post.user.profile_pic 
+                      } : undefined
+                    } : undefined
                   }}
                   currentUserId={currentId}
-                  isOwn={isOwnRepost}
-                  displayName={repostDisplayName}
-                  displayAvatar={repostDisplayAvatar}
                   formatTime={formatTimeAgo}
-                  
-                  onViewOriginalPost={handleViewOriginalPost}
-                  onPostUpdate={() => {
+                  onRefresh={() => {
                     getPosts().then(updatedPosts => {
                       const currentUserId = Number(id) || Number(JSON.parse(localStorage.getItem('user') || '{}').user_id || JSON.parse(localStorage.getItem('user') || '{}').id);
                       
@@ -1539,9 +1562,34 @@ getPosts()
                           return false;
                         });
                         
+                        // Sort posts by most recent date considering repost_date for reposts and created_at for original posts
+                        subset.sort((a: any, b: any) => {
+                          let aDate: Date;
+                          let bDate: Date;
+                          
+                          // Handle repost items
+                          if (a.item_type === 'repost') {
+                            aDate = new Date(a.repost_date || 0);
+                          } else if (a.reposts && a.reposts.length > 0) {
+                            aDate = new Date(a.reposts[0].repost_date);
+                          } else {
+                            aDate = new Date(a.created_at || 0);
+                          }
+                          
+                          if (b.item_type === 'repost') {
+                            bDate = new Date(b.repost_date || 0);
+                          } else if (b.reposts && b.reposts.length > 0) {
+                            bDate = new Date(b.reposts[0].repost_date);
+                          } else {
+                            bDate = new Date(b.created_at || 0);
+                          }
+                          
+                          return bDate.getTime() - aDate.getTime();
+                        });
+                        
                         setPosts(subset);
                         
-                        // Update likedPosts state
+                        // Update liked posts state
                         const liked: { [key: number]: boolean } = {};
                         subset.forEach((post: any) => {
                           if (post.item_type === 'post' && post.likes && Array.isArray(post.likes)) {
@@ -1555,34 +1603,15 @@ getPosts()
                         // Update repostedPosts state
                         const reposted: { [key: number]: boolean } = {};
                         subset.forEach((post: any) => {
-                          if (post.item_type === 'post') {
-                            reposted[post.post_id] = false; // Will be calculated from reposts_count
+                          if (post.item_type === 'post' && post.reposts && Array.isArray(post.reposts)) {
+                            reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentId);
                           }
                         });
                         setRepostedPosts(reposted);
                       }
                     });
                   }}
-                  showOptions={showOptions}
-                  setShowOptions={setShowOptions}
-                  editingPost={editingPost}
-                  setEditingPost={setEditingPost}
-                  editPostContent={editPostContent}
-                  setEditPostContent={setEditPostContent}
-                  likedPosts={likedPosts}
-                  setLikedPosts={setLikedPosts}
-                  repostedPosts={repostedPosts}
-                  setRepostedPosts={setRepostedPosts}
-                  showCommentInput={showCommentInput}
-                  setShowCommentInput={setShowCommentInput}
-                  showAllComments={showAllComments}
-                  setShowAllComments={setShowAllComments}
-                  commentInput={commentInput}
-                  setCommentInput={setCommentInput}
-                  editingComment={editingComment}
-                  setEditingComment={setEditingComment}
-                  editCommentContent={editCommentContent}
-                  setEditCommentContent={setEditCommentContent}
+                  context={'post'}
                 />
               );
             }

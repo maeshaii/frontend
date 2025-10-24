@@ -180,8 +180,18 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
       // Don't prevent navigation if saving fails
     }
     
-    // Always redirect to alumni profile
-    navigate(`/alumni/profile/${userId}`);
+    // Find the user in search results to determine account type
+    const selectedUser = searchResults.find(user => (user.user_id ?? user.id) === userId);
+    
+    // Navigate based on account type - unified profile route
+    if (selectedUser?.account_type?.peso) {
+      navigate(`/peso/profile/${userId}`);
+    } else if (selectedUser?.account_type?.admin) {
+      navigate(`/ccict/profile/${userId}`);
+    } else {
+      // Unified profile route for alumni, OJT, and other users
+      navigate(`/profile/${userId}`);
+    }
   };
 
   // Refactored admin URLs
@@ -207,13 +217,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     } else if (isPeso) {
       dashboardPath = `/peso/dashboard/${userId}`;
     } else {
-      // Check if user is OJT or alumni based on user data
-      const userRole = user?.role || user?.user_type;
-      if (userRole === 'ojt' || userRole === 'coordinator') {
-        dashboardPath = `/ojt/dashboard/${userId}`;
-      } else {
-        dashboardPath = `/alumni/dashboard/${userId}`;
-      }
+      // Unified dashboard for alumni and OJT users
+      dashboardPath = `/dashboard/${userId}`;
     }
     
     navigate(dashboardPath);
@@ -245,13 +250,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     } else if (isPeso) {
       notificationPath = `/peso/notifications/`;
     } else {
-      // Check if user is OJT or alumni based on user data
-      const userRole = user?.role || user?.user_type;
-      if (userRole === 'ojt' || userRole === 'coordinator') {
-        notificationPath = `/ojt/notifications/`;
-      } else {
-        notificationPath = `/alumni/notifications/`;
-      }
+      // Unified notifications for alumni and OJT users
+      notificationPath = `/notifications`;
     }
     
     navigate(notificationPath);
@@ -269,13 +269,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     } else if (isPeso) {
       profilePath = `/peso/profile/${userId}`;
     } else {
-      // Check if user is OJT or alumni based on user data
-      const userRole = user?.role || user?.user_type;
-      if (userRole === 'ojt' || userRole === 'coordinator') {
-        profilePath = `/ojt/profile/${userId}`;
-      } else {
-        profilePath = `/alumni/profile/${userId}`;
-      }
+      // Unified profile route for alumni and OJT users
+      profilePath = `/profile/${userId}`;
     }
     
     navigate(profilePath);
@@ -856,7 +851,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                   }} 
                   onClick={() => {
                     setShowProfile(false);
-                    const settingsPath = isAdmin ? '/ccict/settings' : '/alumni/settings';
+                    const settingsPath = isAdmin ? '/ccict/settings' : '/settings';
                     navigate(settingsPath);
                   }}
                   onMouseEnter={(e) => {

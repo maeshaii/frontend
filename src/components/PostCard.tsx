@@ -16,7 +16,7 @@ import {
   deleteRepost
 } from '../services/api';
 import ctulogo from '../images/ctulogo.png';
-import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
+import { getProfilePicUrl, handleProfilePicError, getImageUrl } from '../utils/profilePicUtils';
 import PhotoGalleryModal from './PhotoGalleryModal';
 import Reply from './Reply';
 import ReplyInput from './ReplyInput';
@@ -226,7 +226,7 @@ const PostCard: React.FC<PostCardProps> = ({
     } else if (currentPath.startsWith('/ccict')) {
       return `/ccict/profile/${userId}`;
     } else {
-      return `/alumni/profile/${userId}`;
+      return `/profile/${userId}`;
     }
   };
 
@@ -237,12 +237,19 @@ const PostCard: React.FC<PostCardProps> = ({
         // Take the first result (most relevant match)
         const user = response.results[0];
         const currentPath = window.location.pathname;
-        if (currentPath.startsWith('/peso')) {
+        
+        // Navigate based on user account type - unified profile route
+        if (user.account_type?.peso) {
+          window.location.href = `/peso/profile/${user.id}`;
+        } else if (user.account_type?.admin) {
+          window.location.href = `/ccict/profile/${user.id}`;
+        } else if (currentPath.startsWith('/peso')) {
           window.location.href = `/peso/profile/${user.id}`;
         } else if (currentPath.startsWith('/ccict')) {
           window.location.href = `/ccict/profile/${user.id}`;
         } else {
-          window.location.href = `/alumni/profile/${user.id}`;
+          // Unified profile route for alumni, OJT, and other users
+          window.location.href = `/profile/${user.id}`;
         }
       } else {
         alert(`No user found with name "${searchTerm}"`);
@@ -304,8 +311,15 @@ const PostCard: React.FC<PostCardProps> = ({
   const getImagesFromPost = (post: PostItem): string[] => {
     const images: string[] = [];
     
+    console.log('=== WEB POST CARD IMAGE DEBUG ===');
+    console.log('Post ID:', post.post_id);
+    console.log('Post images array:', post.post_images);
+    console.log('Post image field:', post.post_image);
+    console.log('User type:', post.user);
+    
     // Add multiple images if available (for regular posts)
     if (post.post_images && post.post_images.length > 0) {
+      console.log('Adding post_images array:', post.post_images);
       // Sort by order and extract URLs
       const sortedImages = [...post.post_images].sort((a, b) => a.order - b.order);
       images.push(...sortedImages.map(img => img.image_url));
@@ -313,6 +327,7 @@ const PostCard: React.FC<PostCardProps> = ({
     
     // Add donation images if available (for donation posts)
     if (images.length === 0 && (post as any).images && (post as any).images.length > 0) {
+      console.log('Adding donation images:', (post as any).images);
       // Sort by order and extract URLs
       const sortedImages = [...(post as any).images].sort((a: any, b: any) => a.order - b.order);
       images.push(...sortedImages.map((img: any) => img.image_url));
@@ -320,8 +335,12 @@ const PostCard: React.FC<PostCardProps> = ({
     
     // Add single image if no multiple images and single image exists
     if (images.length === 0 && post.post_image) {
+      console.log('Adding single post_image:', post.post_image);
       images.push(post.post_image);
     }
+    
+    console.log('Final images array:', images);
+    console.log('=== END WEB POST CARD IMAGE DEBUG ===');
     
     return images;
   };
@@ -1127,7 +1146,7 @@ const PostCard: React.FC<PostCardProps> = ({
                       } else if (currentPath.startsWith('/ccict')) {
                         window.location.href = `/ccict/profile/${displayUser.user_id}`;
                       } else {
-                        window.location.href = `/alumni/profile/${displayUser.user_id}`;
+                        window.location.href = `/profile/${displayUser.user_id}`;
                       }
                     }
                   }}
@@ -1144,7 +1163,7 @@ const PostCard: React.FC<PostCardProps> = ({
                           } else if (currentPath.startsWith('/ccict')) {
                             window.location.href = `/ccict/profile/${displayUser.user_id}`;
                           } else {
-                            window.location.href = `/alumni/profile/${displayUser.user_id}`;
+                            window.location.href = `/profile/${displayUser.user_id}`;
                           }
                         }
                       }}
@@ -1382,7 +1401,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 <div className="profile-repost-original-header">
                   <div className="profile-repost-original-header-left">
                   <img
-                    src={repostData.original_post.user?.profile_pic ? (String(repostData.original_post.user.profile_pic).startsWith('http') ? repostData.original_post.user.profile_pic : `http://127.0.0.1:8000${repostData.original_post.user.profile_pic}`) : ctulogo}
+                    src={getProfilePicUrl(repostData.original_post.user?.profile_pic)}
                     alt="Profile"
                       className="profile-repost-original-profile-image"
                     onClick={() => {
@@ -1393,7 +1412,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         } else if (currentPath.startsWith('/ccict')) {
                           window.location.href = `/ccict/profile/${repostData.original_post.user.user_id}`;
                         } else {
-                          window.location.href = `/alumni/profile/${repostData.original_post.user.user_id}`;
+                          window.location.href = `/profile/${repostData.original_post.user.user_id}`;
                         }
                       }
                     }}
@@ -1414,7 +1433,7 @@ const PostCard: React.FC<PostCardProps> = ({
                           } else if (currentPath.startsWith('/ccict')) {
                             window.location.href = `/ccict/profile/${repostData.original_post.user.user_id}`;
                           } else {
-                            window.location.href = `/alumni/profile/${repostData.original_post.user.user_id}`;
+                            window.location.href = `/profile/${repostData.original_post.user.user_id}`;
                           }
                         }
                       }}
@@ -1445,13 +1464,7 @@ const PostCard: React.FC<PostCardProps> = ({
                     {originalImages.length === 1 ? (
                       // Single image
                       <img
-                        src={
-                          typeof originalImages[0] === 'string' && originalImages[0].startsWith('/media/')
-                            ? `http://127.0.0.1:8000${originalImages[0]}`
-                            : typeof originalImages[0] === 'string' && !originalImages[0].startsWith('http')
-                            ? `http://127.0.0.1:8000${originalImages[0]}`
-                            : originalImages[0]
-                        }
+                        src={getImageUrl(originalImages[0])}
                         alt="original post"
                         className="profile-repost-original-image"
                         style={{ 
@@ -1530,11 +1543,7 @@ const PostCard: React.FC<PostCardProps> = ({
                               overflow: 'hidden'
                             }}>
                               <img
-                                src={
-                                  typeof image === 'string' && image.startsWith('/media/')
-                                    ? `http://127.0.0.1:8000${image}`
-                                    : image
-                                }
+                                src={getImageUrl(image)}
                                 alt={`original post ${index + 1}`}
                                 style={{
                                   width: '100%',
@@ -1976,7 +1985,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 } else if (currentPath.startsWith('/ccict')) {
                   window.location.href = `/ccict/profile/${displayUser.user_id}`;
                 } else {
-                  window.location.href = `/alumni/profile/${displayUser.user_id}`;
+                            window.location.href = `/profile/${displayUser.user_id}`;
                 }
               }
             }}
@@ -1995,7 +2004,7 @@ const PostCard: React.FC<PostCardProps> = ({
                     } else if (currentPath.startsWith('/ccict')) {
                       window.location.href = `/ccict/profile/${displayUser.user_id}`;
                     } else {
-                      window.location.href = `/alumni/profile/${displayUser.user_id}`;
+                            window.location.href = `/profile/${displayUser.user_id}`;
                     }
                   }
                 }}
@@ -2238,13 +2247,7 @@ const PostCard: React.FC<PostCardProps> = ({
             {images.length === 1 ? (
               // Single image
           <img
-            src={
-                  typeof images[0] === 'string' && images[0].startsWith('/media/')
-                    ? `http://127.0.0.1:8000${images[0]}`
-                    : typeof images[0] === 'string' && !images[0].startsWith('http')
-                    ? `http://127.0.0.1:8000${images[0]}`
-                    : images[0]
-            }
+            src={getImageUrl(images[0])}
             alt="post"
                 style={{ 
                   width: 'auto',
@@ -2322,15 +2325,7 @@ const PostCard: React.FC<PostCardProps> = ({
                       overflow: 'hidden'
                     }}>
                       <img
-                        src={
-                          typeof image === 'string' && image.startsWith('/media/')
-                            ? `http://127.0.0.1:8000${image}`
-                            : typeof image === 'string' && image.startsWith('data:')
-                            ? image
-                            : typeof image === 'string' && !image.startsWith('http')
-                            ? `http://127.0.0.1:8000${image}`
-                            : image
-                        }
+                        src={getImageUrl(image)}
                         alt={`post ${index + 1}`}
                         style={{
                           width: '100%',
@@ -3068,11 +3063,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 fetchedLikes.map((like: any, index: number) => {
                   const likeUser = like.user || like;
                   const userName = `${likeUser.f_name || ''} ${likeUser.m_name || ''} ${likeUser.l_name || ''}`.trim();
-                  const userProfilePic = likeUser.profile_pic ? 
-                    (String(likeUser.profile_pic).startsWith('http') ? 
-                      likeUser.profile_pic : 
-                      `http://127.0.0.1:8000${likeUser.profile_pic}`) : 
-                    ctulogo;
+                  const userProfilePic = getProfilePicUrl(likeUser.profile_pic);
 
                   return (
                     <div
@@ -3085,7 +3076,7 @@ const PostCard: React.FC<PostCardProps> = ({
                           } else if (currentPath.startsWith('/ccict')) {
                             window.location.href = `/ccict/profile/${likeUser.user_id}`;
                           } else {
-                            window.location.href = `/alumni/profile/${likeUser.user_id}`;
+                            window.location.href = `/profile/${likeUser.user_id}`;
                           }
                         }
                       }}
@@ -3226,11 +3217,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 repostData.likes.map((like: any, index: number) => {
                   const likeUser = like.user || like;
                   const userName = `${likeUser.f_name || ''} ${likeUser.m_name || ''} ${likeUser.l_name || ''}`.trim();
-                  const userProfilePic = likeUser.profile_pic ? 
-                    (String(likeUser.profile_pic).startsWith('http') ? 
-                      likeUser.profile_pic : 
-                      `http://127.0.0.1:8000${likeUser.profile_pic}`) : 
-                    ctulogo;
+                  const userProfilePic = getProfilePicUrl(likeUser.profile_pic);
 
                   return (
                     <div
@@ -3243,7 +3230,7 @@ const PostCard: React.FC<PostCardProps> = ({
                           } else if (currentPath.startsWith('/ccict')) {
                             window.location.href = `/ccict/profile/${likeUser.user_id}`;
                           } else {
-                            window.location.href = `/alumni/profile/${likeUser.user_id}`;
+                            window.location.href = `/profile/${likeUser.user_id}`;
                           }
                         }
                       }}
@@ -3384,11 +3371,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 repostData.likes.map((like: any, index: number) => {
                   const likeUser = like.user || like;
                   const userName = `${likeUser.f_name || ''} ${likeUser.m_name || ''} ${likeUser.l_name || ''}`.trim();
-                  const userProfilePic = likeUser.profile_pic ? 
-                    (String(likeUser.profile_pic).startsWith('http') ? 
-                      likeUser.profile_pic : 
-                      `http://127.0.0.1:8000${likeUser.profile_pic}`) : 
-                    ctulogo;
+                  const userProfilePic = getProfilePicUrl(likeUser.profile_pic);
 
                   return (
                     <div
@@ -3401,7 +3384,7 @@ const PostCard: React.FC<PostCardProps> = ({
                           } else if (currentPath.startsWith('/ccict')) {
                             window.location.href = `/ccict/profile/${likeUser.user_id}`;
                           } else {
-                            window.location.href = `/alumni/profile/${likeUser.user_id}`;
+                            window.location.href = `/profile/${likeUser.user_id}`;
                           }
                         }
                       }}

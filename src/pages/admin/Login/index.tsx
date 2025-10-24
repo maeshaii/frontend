@@ -20,7 +20,14 @@ const Login = () => {
     setError('');
     
     try {
+      console.log('Starting login process...');
+      const startTime = Date.now();
+      
       const data = await loginUser(acc_username, acc_password);
+      
+      const loginTime = Date.now() - startTime;
+      console.log(`Login completed in ${loginTime}ms`);
+      
       if (data.success) {
         localStorage.setItem('user', JSON.stringify(data.user));
         if (data.must_change_password) {
@@ -34,12 +41,11 @@ const Login = () => {
             navigate('/dashboard');
           } else if (data.user.account_type.peso) {
             navigate(`/peso/dashboard/${userId}`);
-          } else if (data.user.account_type.user) {
-            navigate(`/alumni/dashboard/${userId}`);
           } else if (data.user.account_type.coordinator) {
             navigate(`/coordinator/dashboard/${userId}`);
-          } else if (data.user.account_type.ojt) {
-            navigate(`/ojt/dashboard/${userId}`);
+          } else if (data.user.account_type.user || data.user.account_type.ojt) {
+            // Unified dashboard for alumni and OJT users
+            navigate(`/dashboard/${userId}`);
           } else {
             navigate('/dashboard');
           }
@@ -49,8 +55,17 @@ const Login = () => {
       } else {
         setError(data.message || 'Invalid credentials');
       }
-    } catch (error) {
-      setError('An unexpected error occurred. Please try again.');
+    } catch (error: any) {
+      console.error('Login error:', error);
+      if (error.code === 'ECONNABORTED') {
+        setError('Login timeout - server is taking too long to respond. Please try again.');
+      } else if (error.response?.status === 500) {
+        setError('Server error - please try again in a moment.');
+      } else if (error.code === 'ERR_NETWORK') {
+        setError('Network error - please check your connection.');
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }

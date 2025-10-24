@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { likeRepost, unlikeRepost, commentOnRepost, getRepostLikes, editRepostComment, deleteRepostComment, editRepost, deleteRepost, editPost, deletePost, getCommentReplies } from '../services/api';
-import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
+import { getProfilePicUrl, handleProfilePicError, getImageUrl } from '../utils/profilePicUtils';
 import RepostButton from './RepostButton';
 import ReplyInput from './ReplyInput';
 import Reply from './Reply';
@@ -59,9 +59,43 @@ interface RepostCardProps {
   setEditRepostContent?: (fn: (prev: { [key: string | number]: string }) => { [key: string | number]: string }) => void;
 }
 
-const getSortedImages = (post?: PostItemLite) => {
-  if (!post?.post_images || !Array.isArray(post.post_images)) return [] as Array<{ image_id: number; image_url: string; order: number }>;
-  return [...post.post_images].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+// Photo gallery helpers - same as PostCard
+const getImagesFromPost = (post: PostItemLite): string[] => {
+  const images: string[] = [];
+  
+  console.log('=== REPOST CARD IMAGE DEBUG ===');
+  console.log('Original post data:', post);
+  console.log('Post images array:', post.post_images);
+  console.log('Post image field:', (post as any).post_image);
+  console.log('Post images type:', typeof post.post_images);
+  console.log('Post images length:', post.post_images?.length);
+  
+  // Add multiple images if available (for regular posts)
+  if (post.post_images && post.post_images.length > 0) {
+    console.log('Adding post_images array:', post.post_images);
+    // Sort by order and extract URLs
+    const sortedImages = [...post.post_images].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    images.push(...sortedImages.map(img => img.image_url));
+  }
+  
+  // Add donation images if available (for donation posts)
+  if (images.length === 0 && (post as any).images && (post as any).images.length > 0) {
+    console.log('Adding donation images:', (post as any).images);
+    // Sort by order and extract URLs
+    const sortedImages = [...(post as any).images].sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+    images.push(...sortedImages.map((img: any) => img.image_url));
+  }
+  
+  // Add single image if no multiple images and single image exists
+  if (images.length === 0 && (post as any).post_image) {
+    console.log('Adding single post_image:', (post as any).post_image);
+    images.push((post as any).post_image);
+  }
+  
+  console.log('Final images array:', images);
+  console.log('=== END REPOST CARD IMAGE DEBUG ===');
+  
+  return images;
 };
 
 const RepostCard: React.FC<RepostCardProps> = ({ 
@@ -260,7 +294,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
     } else if (path.startsWith('/ccict')) {
       return `/ccict/profile/${userId}`;
     } else {
-      return `/alumni/profile/${userId}`;
+      return `/profile/${userId}`;
     }
   };
 
@@ -505,7 +539,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
     } else if (path.startsWith('/ccict')) {
       window.location.href = `/ccict/dashboard/${id}`;
     } else {
-      window.location.href = `/alumni/dashboard/${id}`;
+      window.location.href = `/dashboard/${id}`;
     }
   };
 
@@ -568,90 +602,79 @@ const RepostCard: React.FC<RepostCardProps> = ({
           </div>
         </div>
         
-        {/* Three dots menu */}
-        <div className="post-header-right" style={{ position: 'relative' }} ref={optionsMenuRef}>
-          <button
-            onClick={() => {
-              setLocalShowRepostOptions(!localShowRepostOptions);
-              // Also update props if provided
-              setShowOptions?.(prev => ({ ...prev, [repost.repost_id]: !prev[repost.repost_id] }));
-            }}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '18px',
-              color: '#666'
-            }}
-          >
-            ⋯
-          </button>
-          
-          {localShowRepostOptions && (
-            <div
+        {/* Three dots menu - only show for owned reposts */}
+        {isOwn && (
+          <div className="post-header-right" style={{ position: 'relative' }} ref={optionsMenuRef}>
+            <button
+              onClick={() => {
+                setLocalShowRepostOptions(!localShowRepostOptions);
+                // Also update props if provided
+                setShowOptions?.(prev => ({ ...prev, [repost.repost_id]: !prev[repost.repost_id] }));
+              }}
               style={{
-                position: 'absolute',
-                right: 0,
-                top: '100%',
-                background: '#fff',
-                border: '1px solid #ddd',
-                borderRadius: '8px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                zIndex: 1000,
-                minWidth: '120px',
-                overflow: 'hidden'
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '18px',
+                color: '#666'
               }}
             >
-              {isOwn ? (
-                <>
-                  <button
-                    onClick={handleEditRepost}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      border: 'none',
-                      background: 'transparent',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      color: '#333'
-                    }}
-                    onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f8f9fa')}
-                    onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent')}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={handleDeleteRepost}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      border: 'none',
-                      background: 'transparent',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      color: '#dc3545'
-                    }}
-                    onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f8f9fa')}
-                    onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent')}
-                  >
-                    Delete
-                  </button>
-                </>
-              ) : (
-                <div style={{
-                  padding: '8px 12px',
-                  fontSize: '14px',
-                  color: '#666',
-                  textAlign: 'center'
-                }}>
-                  No options available
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+              ⋯
+            </button>
+            
+            {localShowRepostOptions && (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: '100%',
+                  background: '#fff',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  zIndex: 1000,
+                  minWidth: '120px',
+                  overflow: 'hidden'
+                }}
+              >
+                <button
+                  onClick={handleEditRepost}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: 'none',
+                    background: 'transparent',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    color: '#333'
+                  }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f8f9fa')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent')}
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={handleDeleteRepost}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: 'none',
+                    background: 'transparent',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    color: '#dc3545'
+                  }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f8f9fa')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent')}
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Edit repost caption */}
@@ -908,19 +931,125 @@ const RepostCard: React.FC<RepostCardProps> = ({
                 <div style={{ fontSize: 13, color: '#333', lineHeight: 1.5, marginBottom: 8 }}>{original.post_content}</div>
               )
             )}
-            {getSortedImages(original).length > 0 && (
-              <div style={{ marginTop: 8 }}>
-                {getSortedImages(original).map((img, idx) => (
-                  <img
-                    key={img.image_id}
-                    src={img.image_url}
-                    alt={`Post image ${idx + 1}`}
-                    style={{ width: '100%', maxHeight: 400, objectFit: 'cover', borderRadius: 8, marginBottom: idx < getSortedImages(original).length - 1 ? 8 : 0 }}
-                    onError={handleProfilePicError}
-                  />
-                ))}
-              </div>
-            )}
+            {(() => {
+              const originalImages = getImagesFromPost(original);
+              if (originalImages.length === 0) return null;
+
+              return (
+                <div style={{ marginTop: 8 }}>
+                  {originalImages.length === 1 ? (
+                    // Single image
+                    <img
+                      src={getImageUrl(originalImages[0])}
+                      alt="original post"
+                      style={{ 
+                        cursor: 'pointer',
+                        width: 'auto',
+                        height: 'auto',
+                        maxWidth: '100%',
+                        maxHeight: '40vh',
+                        borderRadius: '8px',
+                        objectFit: 'contain'
+                      }}
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        console.error('Failed to load original post image:', originalImages[0]);
+                      }}
+                    />
+                  ) : (
+                    // Multiple images grid for original post - Facebook style (smaller)
+                    <div style={{
+                      display: 'grid',
+                      gap: 2,
+                      borderRadius: 8,
+                      overflow: 'hidden',
+                      ...(originalImages.length === 2 ? {
+                        gridTemplateColumns: '1fr 1fr',
+                        height: '300px'
+                      } : originalImages.length === 3 ? {
+                        gridTemplateColumns: '2fr 1fr',
+                        gridTemplateRows: '1fr 1fr',
+                        height: '300px'
+                      } : originalImages.length === 4 ? {
+                        gridTemplateColumns: '1fr 1fr',
+                        gridTemplateRows: '1fr 1fr',
+                        height: '300px'
+                      } : {
+                        gridTemplateColumns: '1fr 1fr 1fr',
+                        gridTemplateRows: '1fr 1fr',
+                        height: '300px'
+                      })
+                    }}>
+                      {originalImages.slice(0, originalImages.length <= 6 ? originalImages.length : 6).map((image, index) => {
+                        let gridArea = '';
+                        if (originalImages.length === 3) {
+                          // Facebook 3-image layout: large left, two stacked right
+                          gridArea = index === 0 ? '1 / 1 / 3 / 2' : `1 / 2 / 2 / 3`;
+                          if (index === 2) gridArea = '2 / 2 / 3 / 3';
+                        }
+                        
+                        return (
+                          <div key={index} style={{ 
+                            position: 'relative',
+                            gridArea: gridArea,
+                            overflow: 'hidden'
+                          }}>
+                            <img
+                              src={getImageUrl(image)}
+                              alt={`original post ${index + 1}`}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                minHeight: '120px',
+                                objectFit: 'contain',
+                                cursor: 'pointer',
+                                transition: 'transform 0.2s ease',
+                                backgroundColor: '#f8f9fa'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.02)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                              }}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                console.error('Failed to load original post image:', image);
+                              }}
+                            />
+                            {/* Show "+X more" overlay for the 6th image if there are more than 6 */}
+                            {index === 5 && originalImages.length > 6 && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  background: 'rgba(0, 0, 0, 0.75)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: 'white',
+                                  fontSize: 14,
+                                  fontWeight: 'bold',
+                                  cursor: 'pointer',
+                                  borderRadius: 6
+                                }}
+                              >
+                                +{originalImages.length - 6}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -995,7 +1124,11 @@ const RepostCard: React.FC<RepostCardProps> = ({
               post_id: original.post_id || 0,
               post_content: original.post_content || '',
               post_image: undefined,
-              post_images: getSortedImages(original),
+              post_images: getImagesFromPost(original).map((url, index) => ({
+                image_id: index + 1,
+                image_url: url,
+                order: index
+              })),
               user: {
                 user_id: original.user?.user_id || 0,
                 f_name: original.user?.f_name || '',
@@ -1061,7 +1194,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                       ? `/peso/profile/${comment.user.user_id}` 
                       : window.location.pathname.startsWith('/ccict')
                       ? `/ccict/profile/${comment.user.user_id}`
-                      : `/alumni/profile/${comment.user.user_id}`;
+                      : `/profile/${comment.user.user_id}`;
                     window.location.href = profilePath;
                   }}
                 />

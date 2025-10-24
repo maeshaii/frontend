@@ -69,7 +69,12 @@ interface PostItem {
   post_id: number;
   post_title?: string;
   post_content: string;
-  post_image?: string | null;
+  post_image?: string | null; // Backward compatibility
+  post_images?: Array<{ // Multiple images
+    image_id: number;
+    image_url: string;
+    order: number;
+  }>;
   created_at?: string | null;
   likes_count?: number;
   comments_count?: number;
@@ -79,7 +84,7 @@ interface PostItem {
     l_name?: string;
     profile_pic?: string;
     name?: string;
-    account_type?: { ccict?: boolean; peso?: boolean; admin?: boolean };
+    account_type?: { ccict?: boolean; peso?: boolean; admin?: boolean; ojt?: boolean; user?: boolean; coordinator?: boolean };
   };
   comments?: CommentItem[];
   reposts?: RepostItem[];
@@ -257,6 +262,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
           setActualUserType('peso');
         } else if (userObj.account_type.coordinator) {
           setActualUserType('coordinator');
+        } else if (userObj.account_type.ojt) {
+          setActualUserType('ojt');
         } else if (userObj.account_type.user) {
           setActualUserType('alumni');
         } else {
@@ -274,7 +281,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   
   // Debug logging for quicklinks
   console.log('Quicklinks Debug - actualUserType:', actualUserType);
-  console.log('Quicklinks Debug - should show quicklinks:', actualUserType === 'alumni');
+  console.log('Quicklinks Debug - should show quicklinks:', actualUserType === 'alumni' || actualUserType === 'ojt');
   
 
   useEffect(() => {
@@ -704,49 +711,58 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
 
   // Check for pending post view when component mounts or navigates here
   useEffect(() => {
-    // First check localStorage for pending post view
+    // Clear any stale localStorage entries that might cause issues
     const pendingPostId = localStorage.getItem('pendingPostView');
     if (pendingPostId) {
       console.log('Found pending post view in localStorage:', pendingPostId);
-      // Clear the pending post ID
+      // Clear the pending post ID to prevent repeated attempts
       localStorage.removeItem('pendingPostView');
       
-      // Check if it's a forum, donation, or comment post
-      if (pendingPostId.startsWith('forum:')) {
-        const forumId = pendingPostId.replace('forum:', '');
-        handleViewForumPost(forumId);
-      } else if (pendingPostId.startsWith('donation:')) {
-        const donationId = pendingPostId.replace('donation:', '');
-        handleViewDonationPost(donationId);
-      } else if (pendingPostId.startsWith('comment:')) {
-        // For comment notifications, we need to get the post ID from the comment
-        const commentId = pendingPostId.replace('comment:', '');
-        handleViewPostFromComment(commentId);
-      } else if (pendingPostId.startsWith('reply:')) {
-        // For reply notifications, we need to get the post ID from the reply
-        const replyId = pendingPostId.replace('reply:', '');
-        handleViewPostFromReply(replyId);
-      } else {
-        // Regular post
-        handleViewPost(pendingPostId);
+      // Check for pending profile picture data and apply it to posts
+      const pendingProfilePic = localStorage.getItem('pendingProfilePic');
+      if (pendingProfilePic) {
+        try {
+          const profilePicData = JSON.parse(pendingProfilePic);
+          console.log('🔍 Found pending profile pic data for posts update:', profilePicData);
+          
+          // Update posts with the profile picture from notification
+          setPosts(prevPosts => {
+            return prevPosts.map(post => {
+              if (post.user && post.user.user_id == profilePicData.userId) {
+                return {
+                  ...post,
+                  user: {
+                    ...post.user,
+                    profile_pic: profilePicData.profilePicUrl
+                  }
+                };
+              }
+              return post;
+            });
+          });
+          
+          // Clear the pending profile pic data after use
+          localStorage.removeItem('pendingProfilePic');
+        } catch (error) {
+          console.error('Error parsing pending profile pic data for posts:', error);
+          localStorage.removeItem('pendingProfilePic');
+        }
       }
+      
+      // Skip trying to view the post if it's stale - just clear it
+      console.log('Skipping stale post view to prevent 404 errors');
+      return; // Exit early to prevent trying to view deleted posts
     }
-    // If no localStorage pendingPostView, check URL parameters
-    else if (params && Object.keys(params).length > 0) {
-      // Extract post ID from URL parameters (e.g., /alumni/dashboard/123)
-      const urlPostId = Object.values(params)[0]; // Get the first parameter value
-      if (urlPostId && urlPostId !== userId) { // Make sure it's not the userId
-        console.log('Found post ID in URL parameters:', urlPostId);
-        // Regular post from URL
-        handleViewPost(urlPostId);
-      }
-    }
+    
+    // For dashboard routes, never try to view posts from URL parameters
+    // Dashboard URLs like /ojt/dashboard/118 have user IDs, not post IDs
+    console.log('Dashboard route detected - skipping post view attempts');
 
     // Check for pending repost view when component mounts or navigates here
     const pendingRepostId = localStorage.getItem('pendingRepostView');
     if (pendingRepostId) {
       console.log('Found pending repost view:', pendingRepostId);
-      // Clear the pending repost ID
+      // Clear the pending repost ID to prevent repeated attempts
       localStorage.removeItem('pendingRepostView');
       
       // Show repost modal
@@ -785,6 +801,37 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
       const response = await api.get(`posts/${postId}/detail/`);
       console.log('🔍 OJT DEBUG: API response:', response.data);
       if (response.data) {
+        // Check for pending profile picture data from notification
+        const pendingProfilePic = localStorage.getItem('pendingProfilePic');
+        console.log('🔍 Checking for pending profile pic data:', pendingProfilePic);
+        if (pendingProfilePic) {
+          try {
+            const profilePicData = JSON.parse(pendingProfilePic);
+            console.log('🔍 Found pending profile pic data:', profilePicData);
+            console.log('🔍 Post author user_id:', response.data.user?.user_id);
+            console.log('🔍 Profile pic data user_id:', profilePicData.userId);
+            
+            // Check if the profile pic data is for this post's author
+            if (response.data.user && response.data.user.user_id == profilePicData.userId) {
+              // Override the profile picture with the one from the notification
+              console.log('🔍 Before update - post user profile_pic:', response.data.user.profile_pic);
+              response.data.user.profile_pic = profilePicData.profilePicUrl;
+              console.log('🔍 After update - post user profile_pic:', response.data.user.profile_pic);
+              console.log('🔍 Updated post user profile pic with notification data:', profilePicData.profilePicUrl);
+            } else {
+              console.log('🔍 Profile pic data user ID does not match post author user ID');
+            }
+            
+            // Clear the pending profile pic data after use
+            localStorage.removeItem('pendingProfilePic');
+          } catch (error) {
+            console.error('Error parsing pending profile pic data:', error);
+            localStorage.removeItem('pendingProfilePic');
+          }
+        } else {
+          console.log('🔍 No pending profile pic data found');
+        }
+        
         setModalPost(response.data);
         setShowPostModal(true);
         console.log('🔍 OJT DEBUG: Post modal should now be visible');
@@ -795,10 +842,13 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
       console.error('🚨 OJT DEBUG: Error status:', error.response?.status);
       console.error('🚨 OJT DEBUG: Error data:', error.response?.data);
       
-      // Better error handling with specific messages
+      // Better error handling with specific messages - only show alerts for user-initiated actions
       if (error.response?.status === 404) {
         console.log('🚨 OJT DEBUG: Post not found (404)');
-        alert('This post has been deleted or is no longer available.');
+        // Only show alert if this is a user-initiated action, not automatic loading
+        if (postId && !postId.startsWith('pending')) {
+          alert('This post has been deleted or is no longer available.');
+        }
       } else if (error.response?.status === 403) {
         console.log('🚨 OJT DEBUG: Permission denied (403)');
         alert('You do not have permission to view this post.');
@@ -815,7 +865,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         alert('Network error. Please check your connection and try again.');
       } else {
         console.error('🚨 OJT DEBUG: Unexpected error details:', error);
-        alert('Failed to load post. Please try again later.');
+        // Only show alert for user-initiated actions
+        if (postId && !postId.startsWith('pending')) {
+          alert('Failed to load post. Please try again later.');
+        }
       }
     } finally {
       setPostLoading(false);
@@ -1088,10 +1141,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 } else if ((user as any).account_type.ojt) {
                   navigate('/ojt/profile');
                 } else {
-                  navigate('/alumni/profile');
+                  navigate('/profile');
                 }
               } else {
-                navigate('/alumni/profile');
+                navigate('/profile');
               }
             }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; }}
@@ -1105,7 +1158,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
             </div>
           </div>
           {/* Quick Links: show based on actual user type */}
-          {actualUserType === 'alumni' && (
+          {(actualUserType === 'alumni' || actualUserType === 'ojt') && (
             <div className="quick-links" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8 }}>
                 <div 
@@ -1163,23 +1216,24 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 {actualUserType === 'alumni' && (
-                  <div
-                    className="quick-link-card"
-                    onClick={() => navigate('/alumni/forum')}
-                    style={{ flex: 1, cursor: 'pointer', transition: 'transform 0.2s ease-in-out' }}
-                    onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
-                  >
-                    <div className="quick-link-orange-header"></div>
-                    <div className="quick-link-content">
-                      <div className="quick-link-icon forum-icon">C</div>
-                      <div className="quick-link-text">FORUM</div>
-                    </div>
-                  </div>
-                )}
                 <div
                   className="quick-link-card"
-                  onClick={() => navigate('/alumni/donation')}
+                  onClick={() => navigate('/forum')}
+                  style={{ flex: 1, cursor: 'pointer', transition: 'transform 0.2s ease-in-out' }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                >
+                  <div className="quick-link-orange-header"></div>
+                  <div className="quick-link-content">
+                    <div className="quick-link-icon forum-icon">C</div>
+                    <div className="quick-link-text">FORUM</div>
+                  </div>
+                </div>
+                )}
+                {actualUserType === 'alumni' && (
+                <div
+                  className="quick-link-card"
+                  onClick={() => navigate('/donation')}
                   style={{ flex: 1, cursor: 'pointer', transition: 'transform 0.2s ease-in-out' }}
                   onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; }}
                   onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
@@ -1190,6 +1244,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                     <div className="quick-link-text">DONATION</div>
                   </div>
                 </div>
+                )}
               </div>
             </div>
           )}
@@ -1667,7 +1722,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                             post_id: r.original_post.post_id,
                             created_at: r.original_post.created_at,
                             post_content: r.original_post.post_content,
-                            post_images: r.original_post.post_image ? [{ image_id: 0, image_url: r.original_post.post_image, order: 0 }] : undefined,
+                            post_images: r.original_post.post_images || (r.original_post.post_image ? [{ image_id: 0, image_url: r.original_post.post_image, order: 0 }] : undefined),
                             user: r.original_post.user ? { user_id: r.original_post.user.user_id || 0, f_name: r.original_post.user.f_name, l_name: r.original_post.user.l_name, profile_pic: r.original_post.user.profile_pic } : undefined
                           } : undefined
                         }}
@@ -1790,7 +1845,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           post_id: r.original_post.post_id,
                           created_at: r.original_post.created_at,
                           post_content: r.original_post.post_content,
-                          post_images: r.original_post.post_image ? [{ image_id: 0, image_url: r.original_post.post_image, order: 0 }] : undefined,
+                          post_images: r.original_post.post_images || (r.original_post.post_image ? [{ image_id: 0, image_url: r.original_post.post_image, order: 0 }] : undefined),
                           user: r.original_post.user ? { user_id: r.original_post.user.user_id || 0, f_name: r.original_post.user.f_name, l_name: r.original_post.user.l_name, profile_pic: r.original_post.user.profile_pic } : undefined
                         } : undefined
                       }}
@@ -1928,7 +1983,14 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {suggestedUsers.length > 0 ? (
                 suggestedUsers.slice(0, 6).map((user) => (
-                  <div key={user.id} className="suggested-user-item" onClick={() => navigate(`/alumni/profile/${user.id}`)} style={{ cursor: 'pointer' }}>
+                  <div key={user.id} className="suggested-user-item" onClick={() => {
+                    const currentUserRole = (user as any)?.role || (user as any)?.user_type;
+                    if ((user as any)?.account_type?.ojt || currentUserRole === 'ojt' || currentUserRole === 'coordinator') {
+                      navigate(`/ojt/profile/${user.id}`);
+                    } else {
+                      navigate(`/profile/${user.id}`);
+                    }
+                  }} style={{ cursor: 'pointer' }}>
                     <img src={user.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo} alt={user.name} className="suggested-user-profile-image" />
                     <div className="suggested-user-name">{user.name} {user.batch ? `(${user.batch})` : ''}</div>
                     <button className="suggested-user-follow-button" onClick={e => { e.stopPropagation(); handleFollow(user.id); }} disabled={followLoading[user.id]}>
@@ -2159,7 +2221,12 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                     background: 'white',
                   }}
                   onClick={() => {
-                    navigate(`/alumni/profile/${user.id}`);
+                    const currentUserRole = (user as any)?.role || (user as any)?.user_type;
+                    if ((user as any)?.account_type?.ojt || currentUserRole === 'ojt' || currentUserRole === 'coordinator') {
+                      navigate(`/ojt/profile/${user.id}`);
+                    } else {
+                      navigate(`/profile/${user.id}`);
+                    }
                     setShowAllUsersModal(false);
                   }}
                   onMouseEnter={(e) => {

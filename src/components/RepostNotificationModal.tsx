@@ -430,7 +430,7 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
                           } else if (currentPath.startsWith('/ccict')) {
                             window.location.href = `/ccict/profile/${repost.user.user_id}`;
                           } else {
-                            window.location.href = `/alumni/profile/${repost.user.user_id}`;
+                            window.location.href = `/profile/${repost.user.user_id}`;
                           }
                         }
                       }}
@@ -447,7 +447,7 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
                               } else if (currentPath.startsWith('/ccict')) {
                                 window.location.href = `/ccict/profile/${repost.user.user_id}`;
                               } else {
-                                window.location.href = `/alumni/profile/${repost.user.user_id}`;
+                                window.location.href = `/profile/${repost.user.user_id}`;
                               }
                             }
                           }}
@@ -504,7 +504,7 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
                               } else if (currentPath.startsWith('/ccict')) {
                                 window.location.href = `/ccict/profile/${originalPost.user.user_id}`;
                               } else {
-                                window.location.href = `/alumni/profile/${originalPost.user.user_id}`;
+                                window.location.href = `/profile/${originalPost.user.user_id}`;
                               }
                             }
                           }}
@@ -521,7 +521,7 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
                                 } else if (currentPath.startsWith('/ccict')) {
                                   window.location.href = `/ccict/profile/${originalPost.user.user_id}`;
                                 } else {
-                                  window.location.href = `/alumni/profile/${originalPost.user.user_id}`;
+                                  window.location.href = `/profile/${originalPost.user.user_id}`;
                                 }
                               }
                             }}

@@ -473,7 +473,7 @@ const ForumPage: React.FC = () => {
                               
                               if (destId && !isNaN(Number(destId))) {
                                 console.log('Members: Navigating to member profile:', destId);
-                                navigate(`/alumni/profile/${destId}`);
+                                navigate(`/profile/${destId}`);
                               } else {
                                 console.log('Members: Invalid member ID:', destId);
                               }
@@ -1026,7 +1026,7 @@ const ForumPage: React.FC = () => {
                     onClick={() => {
                       const destId = member.id;
                       if (destId && Number(destId) !== Number(currentUserId)) {
-                        navigate(`/alumni/profile/${destId}`);
+                        navigate(`/profile/${destId}`);
                         setShowMembersModal(false);
                       }
                     }}

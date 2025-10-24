@@ -53,7 +53,7 @@ const Reply: React.FC<ReplyProps> = ({
     } else if (currentPath.startsWith('/ccict')) {
       return `/ccict/profile/${userId}`;
     } else {
-      return `/alumni/profile/${userId}`;
+      return `/profile/${userId}`;
     }
   };
 
@@ -69,7 +69,7 @@ const Reply: React.FC<ReplyProps> = ({
         } else if (currentPath.startsWith('/ccict')) {
           window.location.href = `/ccict/profile/${user.id}`;
         } else {
-          window.location.href = `/alumni/profile/${user.id}`;
+          window.location.href = `/profile/${user.id}`;
         }
       } else {
         alert(`No user found with name "${searchTerm}"`);

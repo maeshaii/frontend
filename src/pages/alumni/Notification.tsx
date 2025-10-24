@@ -69,16 +69,20 @@ const NotificationPage: React.FC = () => {
 
       for (const notif of realTimeNotifications) {
         // Extract user info from ALL notification types
-        let userId = null;
-        let userName = null;
+        let userId: string | null = null;
+        let userName: string | null = null;
         
         console.log('🔍 Processing notification for profile pic loading:', notif.type, notif.content);
         
-        // Method 1: Look for ACTOR_ID in the notification content (most reliable)
+        // Method 1: Look for ACTOR_ID or AUTHOR_ID in the notification content (most reliable)
         const actorIdMatch = notif.content.match(/<!--ACTOR_ID:(\d+)-->/);
+        const authorIdMatch = notif.content.match(/<!--AUTHOR_ID:(\d+)-->/);
         if (actorIdMatch) {
           userId = actorIdMatch[1];
           console.log('🔍 Found ACTOR_ID for profile pic loading:', userId);
+        } else if (authorIdMatch) {
+          userId = authorIdMatch[1];
+          console.log('🔍 Found AUTHOR_ID for profile pic loading:', userId);
         }
         
         // Method 2: For follow notifications: "Name|user_id started following you."
@@ -91,7 +95,16 @@ const NotificationPage: React.FC = () => {
           }
         }
         
-        // Method 3: Extract user name from the beginning of the content for all types
+        // Method 3: Look for AUTHOR_NAME marker (most reliable for peso notifications)
+        if (!userName) {
+          const authorNameMatch = notif.content.match(/<!--AUTHOR_NAME:([^>]+)-->/);
+          if (authorNameMatch) {
+            userName = authorNameMatch[1];
+            console.log('🔍 Found AUTHOR_NAME for profile pic loading:', userName);
+          }
+        }
+        
+        // Method 4: Extract user name from the beginning of the content for all types
         if (!userName) {
           const patterns = [
             /^([^<]+?)\s+(commented|mentioned|liked|reposted|started following)/i,
@@ -109,7 +122,7 @@ const NotificationPage: React.FC = () => {
           }
         }
         
-        // Method 4: If we have userName but no userId, try to find userId from the content
+        // Method 5: If we have userName but no userId, try to find userId from the content
         if (userName && !userId) {
           const idMatch = notif.content.match(/(\d+)/);
           if (idMatch) {
@@ -120,7 +133,14 @@ const NotificationPage: React.FC = () => {
         
         console.log('🔍 Processing notification for profile pic:', { userId, userName, type: notif.type });
         
-        if (userId && !loadedProfilePics.current.has(userId)) {
+        // Check for AUTHOR_PIC marker first (most efficient for peso notifications)
+        const authorPicMatch = notif.content.match(/<!--AUTHOR_PIC:([^>]+)-->/);
+        if (authorPicMatch && userId) {
+          const profilePicUrl = getProfilePicUrl(authorPicMatch[1]);
+          console.log('🔍 Found AUTHOR_PIC for profile pic loading:', profilePicUrl);
+          setUserProfilePics(prev => ({ ...prev, [userId!]: profilePicUrl }));
+          loadedProfilePics.current.add(userId);
+        } else if (userId && !loadedProfilePics.current.has(userId)) {
           console.log('🔍 Loading profile pic for userId:', userId);
           loadedProfilePics.current.add(userId);
           await fetchUserProfilePic(userId);
@@ -245,7 +265,7 @@ const NotificationPage: React.FC = () => {
           } else if (currentPath.startsWith('/ccict')) {
             window.location.href = `/ccict/dashboard/${response.post_id}`;
           } else {
-            window.location.href = `/alumni/dashboard/${response.post_id}`;
+            window.location.href = `/dashboard/${response.post_id}`;
           }
         }
       }
@@ -396,8 +416,8 @@ const NotificationPage: React.FC = () => {
       console.log('Attempting to redirect for notification:', notif);
       console.log('Notification content:', notif.content);
       
-      // Handle ALL post-related notifications (like, comment, repost, mention) - redirect to dashboard with post ID
-      const isPostRelated = ['like', 'comment', 'repost', 'mention'].some(type => 
+      // Handle ALL post-related notifications (like, comment, repost, mention, admin_peso_post) - redirect to dashboard with post ID
+      const isPostRelated = ['like', 'comment', 'repost', 'mention', 'admin_peso_post'].some(type => 
         notif.type.toLowerCase().includes(type)
       );
       
@@ -440,7 +460,7 @@ const NotificationPage: React.FC = () => {
                 } else if (currentPath.startsWith('/ccict')) {
                   navigate(`/ccict/dashboard/${urlPostId}`);
                 } else {
-                  navigate(`/alumni/dashboard/${urlPostId}`);
+                  navigate(`/dashboard/${urlPostId}`);
                 }
               }, 100);
               return;
@@ -457,7 +477,7 @@ const NotificationPage: React.FC = () => {
                 } else if (currentPath.startsWith('/ccict')) {
                   window.location.href = `/ccict/dashboard/${userId}`;
                 } else {
-                  window.location.href = `/alumni/dashboard/${userId}`;
+                  window.location.href = `/dashboard/${userId}`;
                 }
                 return;
               }
@@ -484,7 +504,7 @@ const NotificationPage: React.FC = () => {
               } else if (currentPath.startsWith('/ccict')) {
                 window.location.href = `/ccict/dashboard/${originalPostId}`;
               } else {
-                window.location.href = `/alumni/dashboard/${originalPostId}`;
+                window.location.href = `/dashboard/${originalPostId}`;
               }
               return;
             } else if (commentId) {
@@ -498,7 +518,7 @@ const NotificationPage: React.FC = () => {
               } else if (currentPath.startsWith('/ccict')) {
                 window.location.href = `/ccict/dashboard/${commentId}`;
               } else {
-                window.location.href = `/alumni/dashboard/${commentId}`;
+                window.location.href = `/dashboard/${commentId}`;
               }
               return;
             } else if (replyId) {
@@ -512,7 +532,7 @@ const NotificationPage: React.FC = () => {
               } else if (currentPath.startsWith('/ccict')) {
                 window.location.href = `/ccict/dashboard/${replyId}`;
               } else {
-                window.location.href = `/alumni/dashboard/${replyId}`;
+                window.location.href = `/dashboard/${replyId}`;
               }
               return;
             }
@@ -542,6 +562,19 @@ const NotificationPage: React.FC = () => {
               localStorage.setItem('pendingPostView', postId);
             }
             
+            // Store profile picture information from notification for peso posts
+            const authorPicMatch = notif.content.match(/<!--AUTHOR_PIC:([^>]+)-->/);
+            const authorIdMatch = notif.content.match(/<!--AUTHOR_ID:(\d+)-->/);
+            if (authorPicMatch && authorIdMatch) {
+              const profilePicData = {
+                userId: authorIdMatch[1],
+                profilePicUrl: authorPicMatch[1],
+                timestamp: Date.now()
+              };
+              localStorage.setItem('pendingProfilePic', JSON.stringify(profilePicData));
+              console.log('🔍 Stored profile pic data for redirect:', profilePicData);
+            }
+            
             // Add a small delay to ensure proper navigation
             setTimeout(() => {
               // Redirect to dashboard with post ID in URL
@@ -551,7 +584,7 @@ const NotificationPage: React.FC = () => {
               } else if (currentPath.startsWith('/ccict')) {
                 navigate(`/ccict/dashboard/${postId}`);
               } else {
-                navigate(`/alumni/dashboard/${postId}`);
+                navigate(`/dashboard/${postId}`);
               }
             }, 100);
             return;
@@ -568,7 +601,7 @@ const NotificationPage: React.FC = () => {
               } else if (currentPath.startsWith('/ccict')) {
                 window.location.href = `/ccict/dashboard/${userId}`;
               } else {
-                window.location.href = `/alumni/dashboard/${userId}`;
+                window.location.href = `/dashboard/${userId}`;
               }
               return;
             }
@@ -593,7 +626,7 @@ const NotificationPage: React.FC = () => {
         } else if (currentPath.startsWith('/ccict')) {
           window.location.href = `/ccict/dashboard/${postId}`;
         } else {
-          window.location.href = `/alumni/dashboard/${postId}`;
+          window.location.href = `/dashboard/${postId}`;
         }
         return;
       } else {
@@ -615,9 +648,9 @@ const NotificationPage: React.FC = () => {
           } else if (isPeso) {
             dashboardPath = `/peso/dashboard/${userId}`;
           } else if (userRole === 'ojt' || userRole === 'coordinator') {
-            dashboardPath = `/ojt/dashboard/${userId}`;
+            dashboardPath = `/dashboard/${userId}`;
           } else {
-            dashboardPath = `/alumni/dashboard/${userId}`;
+            dashboardPath = `/dashboard/${userId}`;
           }
           
           navigate(dashboardPath);
@@ -641,9 +674,9 @@ const NotificationPage: React.FC = () => {
         } else if (isPeso) {
           dashboardPath = `/peso/dashboard/${userId}`;
         } else if (userRole === 'ojt' || userRole === 'coordinator') {
-          dashboardPath = `/ojt/dashboard/${userId}`;
+          dashboardPath = `/dashboard/${userId}`;
         } else {
-          dashboardPath = `/alumni/dashboard/${userId}`;
+          dashboardPath = `/dashboard/${userId}`;
         }
         
         console.log('Redirecting to main dashboard due to error:', dashboardPath);
@@ -903,14 +936,23 @@ const NotificationPage: React.FC = () => {
     );
   };
 
-  const ProfilePicComponent = ({ userId, userName, size = '40px' }: { userId?: string, userName: string, size?: string }) => {
+  const ProfilePicComponent = ({ userId, userName, size = '40px', directPicUrl }: { userId?: string, userName: string, size?: string, directPicUrl?: string }) => {
     const [profilePicUrl, setProfilePicUrl] = React.useState<string | null>(null);
     const [isLoading, setIsLoading] = React.useState(true);
     
     React.useEffect(() => {
       const loadProfilePic = async () => {
         try {
-          console.log('ProfilePicComponent loading:', { userId, userName });
+          console.log('ProfilePicComponent loading:', { userId, userName, directPicUrl });
+          
+          // If we have a direct profile picture URL, use it immediately
+          if (directPicUrl) {
+            const profilePicUrl = getProfilePicUrl(directPicUrl);
+            console.log('Using direct profile pic URL:', profilePicUrl);
+            setProfilePicUrl(profilePicUrl);
+            setIsLoading(false);
+            return;
+          }
           
           if (userId) {
             // Try to get from cache first
@@ -959,7 +1001,7 @@ const NotificationPage: React.FC = () => {
       };
       
       loadProfilePic();
-    }, [userId, userName]);
+    }, [userId, userName, directPicUrl]);
     
     if (isLoading) {
       return (
@@ -1058,9 +1100,9 @@ const NotificationPage: React.FC = () => {
           } else {
             const userRole = currentUser?.role || currentUser?.user_type;
             if (userRole === 'ojt' || userRole === 'coordinator') {
-              backPath = `/ojt/dashboard/${userId}`;
+              backPath = `/dashboard/${userId}`;
             } else {
-              backPath = `/alumni/dashboard/${userId}`;
+              backPath = `/dashboard/${userId}`;
             }
           }
           
@@ -1353,12 +1395,15 @@ const NotificationPage: React.FC = () => {
                   }}>
                     {(() => {
                       // Extract basic actor identity from content to resolve avatar
-                      let userId = '';
-                      let userName = '';
+                      let userId: string = '';
+                      let userName: string = '';
 
                       const actorIdMatch = notif.content.match(/<!--ACTOR_ID:(\d+)-->/);
+                      const authorIdMatch = notif.content.match(/<!--AUTHOR_ID:(\d+)-->/);
                       if (actorIdMatch) {
                         userId = actorIdMatch[1];
+                      } else if (authorIdMatch) {
+                        userId = authorIdMatch[1];
                       }
 
                       if (!userId && notif.type?.toLowerCase() === 'follow') {
@@ -1369,6 +1414,14 @@ const NotificationPage: React.FC = () => {
                         }
                       }
 
+                      // Check for AUTHOR_NAME marker (most reliable for peso notifications)
+                      if (!userName) {
+                        const authorNameMatch = notif.content.match(/<!--AUTHOR_NAME:([^>]+)-->/);
+                        if (authorNameMatch) {
+                          userName = authorNameMatch[1];
+                        }
+                      }
+
                       if (!userName) {
                         const nameMatch = notif.content.match(/^([^<]+?)\s+(commented|mentioned|liked|reposted|started following|donation|post)/i);
                         if (nameMatch) {
@@ -1376,11 +1429,16 @@ const NotificationPage: React.FC = () => {
                         }
                       }
 
+                      // Check for AUTHOR_PIC marker (most efficient for peso notifications)
+                      const authorPicMatch = notif.content.match(/<!--AUTHOR_PIC:([^>]+)-->/);
+                      const directPicUrl = authorPicMatch ? authorPicMatch[1] : undefined;
+
                       return (
                         <ProfilePicComponent
                           userId={userId || undefined}
                           userName={userName || 'User'}
                           size="48px"
+                          directPicUrl={directPicUrl}
                         />
                       );
                     })()}
@@ -1407,7 +1465,7 @@ const NotificationPage: React.FC = () => {
                         if (t.includes('like')) {
                           return (
                             <svg {...svgProps} stroke="#ef4444">
-                              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" />
+                              <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
                             </svg>
                           );
                         }
@@ -1479,7 +1537,7 @@ const NotificationPage: React.FC = () => {
                                 <span
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    navigate(`/alumni/profile/${followerId}`);
+                                    navigate(`/profile/${followerId}`);
                                   }}
                                   style={{
                                     color: '#0066cc',
@@ -1668,7 +1726,7 @@ const NotificationPage: React.FC = () => {
                         <span>
                           <span
                             onClick={() => {
-                              navigate(`/alumni/profile/${followerId}`);
+                              navigate(`/profile/${followerId}`);
                               setOpenNotif(null);
                             }}
                             style={{
@@ -1948,9 +2006,9 @@ const NotificationPage: React.FC = () => {
                               } else if (isPeso) {
                                 dashboardPath = `/peso/dashboard/${userId}`;
                               } else if (userRole === 'ojt' || userRole === 'coordinator') {
-                                dashboardPath = `/ojt/dashboard/${userId}`;
+                                dashboardPath = `/dashboard/${userId}`;
                               } else {
-                                dashboardPath = `/alumni/dashboard/${userId}`;
+                                dashboardPath = `/dashboard/${userId}`;
                               }
                               
                               localStorage.setItem('pendingRepostView', postId);
@@ -1959,7 +2017,8 @@ const NotificationPage: React.FC = () => {
                           }
                         } catch (error: any) {
                           if (error.response && error.response.status === 404) {
-                            alert('This post has been deleted by the owner.');
+                            console.log('Post not found (404) - likely deleted');
+                            // Don't show alert for deleted posts to avoid spam
                           } else {
                             alert('Unable to load the post. It may have been deleted.');
                           }
@@ -2059,9 +2118,9 @@ const NotificationPage: React.FC = () => {
                               } else if (isPeso) {
                                 dashboardPath = `/peso/dashboard/${userId}`;
                               } else if (userRole === 'ojt' || userRole === 'coordinator') {
-                                dashboardPath = `/ojt/dashboard/${userId}`;
+                                dashboardPath = `/dashboard/${userId}`;
                               } else {
-                                dashboardPath = `/alumni/dashboard/${userId}`;
+                                dashboardPath = `/dashboard/${userId}`;
                               }
                               
                               // Store post ID with type indicator
@@ -2078,7 +2137,8 @@ const NotificationPage: React.FC = () => {
                         } catch (error: any) {
                           // Post doesn't exist or error occurred
                           if (error.response && error.response.status === 404) {
-                            alert('This post has been deleted by the owner.');
+                            console.log('Post not found (404) - likely deleted');
+                            // Don't show alert for deleted posts to avoid spam
                           } else {
                             alert('Unable to load the post. It may have been deleted.');
                           }
@@ -2102,10 +2162,9 @@ const NotificationPage: React.FC = () => {
                             dashboardPath = `/ccict/dashboard/${userId}`;
                           } else if (isPeso) {
                             dashboardPath = `/peso/dashboard/${userId}`;
-                          } else if (userRole === 'ojt' || userRole === 'coordinator') {
-                            dashboardPath = `/ojt/dashboard/${userId}`;
                           } else {
-                            dashboardPath = `/alumni/dashboard/${userId}`;
+                            // Unified dashboard for alumni and OJT users
+                            dashboardPath = `/dashboard/${userId}`;
                           }
                           
                           navigate(dashboardPath);
