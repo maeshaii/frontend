@@ -411,8 +411,6 @@ getPosts()
         liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentId);
       } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
         liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentId);
-      } else if (post.liked_by_user !== undefined) {
-        liked[post.post_id] = !!post.liked_by_user;
       }
     });
     setLikedPosts(liked);
@@ -1068,8 +1066,6 @@ getPosts()
             liked[post.post_id] = post.likes.some((like: any) => like.user_id === currentId);
           } else if (post.item_type === 'repost' && post.likes && Array.isArray(post.likes)) {
             liked[post.repost_id] = post.likes.some((like: any) => like.user_id === currentId);
-          } else if (post.liked_by_user !== undefined) {
-            liked[post.post_id] = !!post.liked_by_user;
           }
         });
         setLikedPosts(liked);
@@ -1174,7 +1170,7 @@ getPosts()
             </div>
 
             {/* Social Media and Email for Alumni/OJT accounts */}
-            {user && !user.account_type?.admin && !user.account_type?.peso && !user.account_type?.ccict && (
+            {user && ((!user.account_type?.admin && !user.account_type?.peso && !user.account_type?.ccict) || (isOwnProfile && (user.account_type?.admin || user.account_type?.ccict))) && (
               <div className="profile-contact-info">
                 {/* Social Media */}
                 <div className="profile-contact-item">
@@ -1258,14 +1254,7 @@ getPosts()
           </div>
 
           {/* Followers - Hide for admin and PESO accounts */}
-
-
-          {/* Followers - Hide for admin and PESO accounts */}
-          {!user?.account_type?.admin && 
-           !user?.account_type?.peso && 
-           !user?.account_type?.ccict &&
-           !user?.name?.toLowerCase().includes('admin') &&
-           !user?.name?.toLowerCase().includes('peso') && (
+          {!user?.account_type?.peso && (!user?.account_type?.admin || isOwnProfile) && (!user?.account_type?.ccict || isOwnProfile) && (
           <div className="profile-followers-card">
             <div className="profile-followers-header">
               <div className="profile-followers-title">Followers ({followers.length})</div>
@@ -1332,11 +1321,7 @@ getPosts()
           )}
 
           {/* Following - Hide for admin and PESO accounts */}
-          {!user?.account_type?.admin && 
-           !user?.account_type?.peso && 
-           !user?.account_type?.ccict &&
-           !user?.name?.toLowerCase().includes('admin') &&
-           !user?.name?.toLowerCase().includes('peso') && (
+          {!user?.account_type?.peso && (!user?.account_type?.admin || isOwnProfile) && (!user?.account_type?.ccict || isOwnProfile) && (
           <div className="profile-followers-card">
             <div className="profile-followers-header">
               <div className="profile-followers-title">Following ({following.length})</div>
@@ -1425,11 +1410,7 @@ getPosts()
               <div className="profile-name">{user?.name || 'no name detected'}</div>
               
               <div className="profile-other-actions-below-university">
-                {!isOwnProfile && 
-                 !user?.account_type?.admin && 
-                 !user?.account_type?.peso && 
-                 !user?.name?.toLowerCase().includes('admin') &&
-                 !user?.name?.toLowerCase().includes('peso') && (
+                {!isOwnProfile && !user?.account_type?.peso && !user?.account_type?.admin && !user?.account_type?.ccict && (
                   <button
                     className={`profile-follow-button ${isFollowing ? 'following' : ''}`}
                     onClick={isFollowing ? handleUnfollow : handleFollow}

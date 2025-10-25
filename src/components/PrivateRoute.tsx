@@ -43,19 +43,10 @@ export const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, roles }) =
           const raw = localStorage.getItem('user');
           const user = raw ? JSON.parse(raw) : null;
           const at = user?.account_type || {};
-          
-          // Debug logging
-          console.log('🔍 PRIVATE ROUTE DEBUG: Required roles:', roles);
-          console.log('🔍 PRIVATE ROUTE DEBUG: User object:', user);
-          console.log('🔍 PRIVATE ROUTE DEBUG: Account type:', at);
-          
           const hasRole = roles.some((r) => at[r] === true);
-          console.log('🔍 PRIVATE ROUTE DEBUG: Has required role:', hasRole);
-          
           setAuthorized(!!hasRole);
           return;
-        } catch (error) {
-          console.error('🔍 PRIVATE ROUTE DEBUG: Error parsing user:', error);
+        } catch {
           setAuthorized(false);
           return;
         }

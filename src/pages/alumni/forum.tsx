@@ -148,6 +148,19 @@ const ForumPage: React.FC = () => {
     }
   }, [currentUserId, allMembers.length, membersLoading]);
 
+  // Check for pending forum post view from notification
+  useEffect(() => {
+    const pendingForumPostId = localStorage.getItem('pendingForumPostView');
+    if (pendingForumPostId && posts.length > 0) {
+      console.log('Found pending forum post view:', pendingForumPostId);
+      localStorage.removeItem('pendingForumPostView');
+      // Wait a bit for posts to load before opening the modal
+      setTimeout(() => {
+        handleViewForumPostById(pendingForumPostId);
+      }, 300);
+    }
+  }, [posts]);
+
   const fetchAllMembers = async () => {
     try {
       setMembersLoading(true);
@@ -251,6 +264,34 @@ const ForumPage: React.FC = () => {
     } catch (error) {
       console.error('Error fetching original post:', error);
       alert('Failed to load original post.');
+    } finally {
+      setPostLoading(false);
+    }
+  };
+
+  // Handle viewing a forum post by ID (for notifications)
+  const handleViewForumPostById = async (postId: string) => {
+    console.log('handleViewForumPostById called with postId:', postId);
+    setPostLoading(true);
+    try {
+      const { api } = await import('../../services/api');
+      const response = await api.get(`forum/${postId}/`);
+      console.log('Forum post API response:', response.data);
+      if (response.data) {
+        setOriginalPostModalData(response.data);
+        
+        // Update the liked state for the modal post
+        setLikedPosts(prev => ({
+          ...prev,
+          [response.data.post_id]: response.data.liked_by_user || false
+        }));
+        
+        setShowOriginalPostModal(true);
+        console.log('Forum post modal opened for notification');
+      }
+    } catch (error) {
+      console.error('Error fetching forum post by ID:', error);
+      // Silently fail - the post may have been deleted
     } finally {
       setPostLoading(false);
     }

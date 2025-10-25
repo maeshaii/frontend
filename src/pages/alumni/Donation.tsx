@@ -128,6 +128,19 @@ const DonationPage: React.FC = () => {
     fetchDonationPosts();
   }, [currentUserId]);
 
+  // Check for pending donation post view from notification
+  useEffect(() => {
+    const pendingDonationPostId = localStorage.getItem('pendingDonationPostView');
+    if (pendingDonationPostId && donations.length > 0) {
+      console.log('Found pending donation post view:', pendingDonationPostId);
+      localStorage.removeItem('pendingDonationPostView');
+      // Wait a bit for donations to load before opening the modal
+      setTimeout(() => {
+        handleViewDonationPostById(pendingDonationPostId);
+      }, 300);
+    }
+  }, [donations]);
+
   // Removed member-related functions since we're using About card instead
 
   // Fetch donation requests
@@ -266,6 +279,34 @@ const DonationPage: React.FC = () => {
   const handleViewOriginalDonation = (originalDonation: any) => {
     setOriginalDonationModalData(originalDonation);
     setShowOriginalDonationModal(true);
+  };
+
+  // Handle viewing a donation post by ID (for notifications)
+  const handleViewDonationPostById = async (donationId: string) => {
+    console.log('handleViewDonationPostById called with donationId:', donationId);
+    setDonationLoading(true);
+    try {
+      const { api } = await import('../../services/api');
+      const response = await api.get(`donations/${donationId}/`);
+      console.log('Donation post API response:', response.data);
+      if (response.data) {
+        setOriginalDonationModalData(response.data);
+        
+        // Update the liked state for the modal donation
+        setLikedDonations(prev => ({
+          ...prev,
+          [response.data.donation_id]: response.data.liked_by_user || false
+        }));
+        
+        setShowOriginalDonationModal(true);
+        console.log('Donation post modal opened for notification');
+      }
+    } catch (error) {
+      console.error('Error fetching donation post by ID:', error);
+      // Silently fail - the post may have been deleted
+    } finally {
+      setDonationLoading(false);
+    }
   };
 
   if (loading) {

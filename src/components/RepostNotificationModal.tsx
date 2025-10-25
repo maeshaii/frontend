@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../services/api';
+import React, { useState, useEffect, useRef } from 'react';
+import { api, getCommentReplies } from '../services/api';
 import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
+import ReplyInput from './ReplyInput';
+import Reply from './Reply';
 import ctulogo from '../images/ctulogo.png';
 
 interface RepostNotificationModalProps {
@@ -8,21 +10,42 @@ interface RepostNotificationModalProps {
   onClose: () => void;
   repostId: string;
   reposterName?: string;
+  commentId?: string;
 }
 
-const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpen, onClose, repostId, reposterName }) => {
+const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpen, onClose, repostId, reposterName, commentId }) => {
   const [repost, setRepost] = useState<any>(null);
   const [originalPost, setOriginalPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [likedReposts, setLikedReposts] = useState<{ [key: number]: boolean }>({});
   const [repostedReposts, setRepostedReposts] = useState<{ [key: number]: boolean }>({});
+  const [showReplyInput, setShowReplyInput] = useState<{ [key: number]: boolean }>({});
+  const [showMainCommentInput, setShowMainCommentInput] = useState(false);
+  const [mainCommentValue, setMainCommentValue] = useState('');
+  const [commentReplies, setCommentReplies] = useState<{ [key: number]: any[] }>({});
+  const [showReplies, setShowReplies] = useState<{ [key: number]: boolean }>({});
+  const commentRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
     if (isOpen && repostId) {
       fetchRepostData();
     }
   }, [isOpen, repostId]);
+
+  useEffect(() => {
+    if (commentId && repost && repost.comments && commentRefs.current[commentId]) {
+      const commentElement = commentRefs.current[commentId];
+      if (commentElement) {
+        commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Optional: Add a temporary highlight
+        commentElement.style.backgroundColor = '#fff2e6'; // Light orange background
+        setTimeout(() => {
+          commentElement.style.backgroundColor = ''; // Remove highlight
+        }, 3000); // Highlight for 3 seconds
+      }
+    }
+  }, [commentId, repost]);
 
   // Initialize liked/reposted states when repost data is loaded
   useEffect(() => {
@@ -57,16 +80,29 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
       setLoading(true);
       setError(null);
 
+      const token = localStorage.getItem('accessToken');
+      console.log('fetchRepostData - Access Token present:', !!token);
+      console.log('fetchRepostData - Repost ID:', repostId);
+
       // Fetch the specific repost by ID
       const repostResponse = await api.get(`reposts/${repostId}/detail/`);
-      console.log('Repost data received:', repostResponse.data);
-      console.log('Likes data:', repostResponse.data.likes);
       setRepost(repostResponse.data);
       setOriginalPost(repostResponse.data.original);
 
-    } catch (err) {
+      // After fetching repost data, check for comments with existing replies and load them
+      if (repostResponse.data.comments && repostResponse.data.comments.length > 0) {
+        const initialShowReplies: { [key: number]: boolean } = {};
+        repostResponse.data.comments.forEach(async (comment: any) => {
+          if (comment.replies_count > 0) {
+            await loadReplies(comment.comment_id); // Load replies for each comment
+            initialShowReplies[comment.comment_id] = true; // Set to show replies by default
+          }
+        });
+        setShowReplies(prev => ({ ...prev, ...initialShowReplies }));
+      }
+    } catch (err: any) {
       console.error('Error fetching repost data:', err);
-      setError('Failed to load repost data');
+      setError(err.response?.data?.detail || 'Failed to load repost data');
     } finally {
       setLoading(false);
     }
@@ -138,6 +174,18 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
     return images;
   };
 
+  const loadReplies = async (commentId: number) => {
+    try {
+      const response = await getCommentReplies(commentId);
+      if (response && response.replies) {
+        setCommentReplies(prev => ({ ...prev, [commentId]: response.replies }));
+      }
+    } catch (error) {
+      console.error('Error loading replies:', error);
+      setCommentReplies(prev => ({ ...prev, [commentId]: [] }));
+    }
+  };
+
   const handleLike = async (repostId: number) => {
     try {
       if (likedReposts[repostId]) {
@@ -180,24 +228,33 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
   };
 
   const handleComment = async (repostId: number) => {
+    setShowMainCommentInput(prev => !prev);
+  };
+
+  const handleReplyAdded = async (commentId: string) => {
+    setShowReplyInput(prev => ({ ...prev, [commentId]: false }));
+    fetchRepostData(); // Refresh all comments and replies
+  };
+
+  const handleMainCommentSubmit = async () => {
+    if (!mainCommentValue.trim()) return;
+    if (!repost?.repost_id) return;
+    if (!repost.user?.user_id) return; // Ensure we have a user ID for context
+
     try {
-      // For now, create a simple comment
-      const commentContent = prompt('Enter your comment:');
-      if (commentContent && commentContent.trim()) {
-        const result = await api.post(`reposts/${repostId}/comments/`, {
-          comment_content: commentContent.trim()
-        });
-        
-        if (result.data && result.data.success) {
-          alert('Comment posted successfully!');
-          // Refresh the repost data to show the new comment
-          fetchRepostData();
-        } else {
-          alert('Failed to post comment. Please try again.');
-        }
+      const result = await api.post(`reposts/${repost.repost_id}/comments/`, {
+        comment_content: mainCommentValue.trim(),
+      });
+
+      if (result.data && result.data.success) {
+        setMainCommentValue('');
+        setShowMainCommentInput(false);
+        fetchRepostData(); // Refresh all comments and replies
+      } else {
+        alert('Failed to post comment. Please try again.');
       }
     } catch (error) {
-      console.error('Error posting comment:', error);
+      console.error('Error posting main comment:', error);
       alert('Failed to post comment. Please try again.');
     }
   };
@@ -527,7 +584,7 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
                             }}
                           >
                             {renderName(originalPost.user)}
-                          </div>
+                        </div>
                           <div className="profile-repost-original-author-details">
                             <span>{formatTime(originalPost.created_at)}</span>
                           </div>
@@ -762,6 +819,139 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
                     🔄 Repost
                   </button>
                 </div>
+
+                {/* Main Comment Input */}
+                {showMainCommentInput && repost.user && (
+                  <div style={{ marginTop: 16, padding: '0 16px' }}>
+                    <ReplyInput
+                      commentId={0} // No parent comment for main comment, use 0 as placeholder
+                      currentUserId={repost.user.user_id}
+                      displayName={renderName(repost.user)}
+                      displayAvatar={getProfilePicUrl(repost.user?.profile_pic)}
+                      onReplyAdded={() => {
+                        setMainCommentValue('');
+                        setShowMainCommentInput(false);
+                        fetchRepostData(); // Refresh all comments and replies
+                      }}
+                      commentAuthor={{
+                        user_id: repost.user.user_id,
+                        f_name: repost.user.f_name || '',
+                        m_name: repost.user.m_name || '',
+                        l_name: repost.user.l_name || '',
+                        name: renderName(repost.user)
+                      }}
+                      placeholder="Write a comment..."
+                      initialValue={mainCommentValue}
+                      onValueChange={setMainCommentValue}
+                    />
+                  </div>
+                )}
+
+                {/* Comments section */}
+                {repost.comments && repost.comments.length > 0 && (
+                  <div style={{ marginTop: 16, borderTop: '1px solid #eee', paddingTop: 16 }}>
+                    {repost.comments.map((comment: any) => (
+                      <div 
+                        key={comment.comment_id}
+                        ref={el => commentRefs.current[comment.comment_id] = el}
+                        style={{
+                          display: 'flex',
+                          gap: 8,
+                          marginBottom: 12,
+                          padding: '8px 0',
+                          borderRadius: 8,
+                          transition: 'background-color 0.3s ease',
+                          position: 'relative',
+                        }}
+                      >
+                        <img
+                          src={getProfilePicUrl(comment.user?.profile_pic)}
+                          alt="Profile"
+                          style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                          onError={handleProfilePicError}
+                        />
+                        <div style={{ flex: 1, backgroundColor: '#f0f2f5', borderRadius: 12, padding: '8px 12px' }}>
+                          <div style={{ fontWeight: '600', fontSize: 13, color: '#050505', marginBottom: 2 }}>
+                            {renderName(comment.user)}
+                          </div>
+                          <div style={{ fontSize: 13, color: '#333', lineHeight: 1.4 }}>
+                            {renderTextWithLinks(comment.comment_content)}
+                          </div>
+                          <div style={{ fontSize: 10, color: '#666', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {formatTime(comment.date_created)}
+                            <button
+                              onClick={() => setShowReplyInput(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#007bff',
+                                cursor: 'pointer',
+                                fontSize: '10px',
+                                padding: '0',
+                                fontWeight: '600'
+                              }}
+                            >
+                              Reply
+                            </button>
+                          </div>
+                          {comment.replies_count > 0 && (
+                            <button
+                              onClick={() => {
+                                setShowReplies(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }));
+                                if (!showReplies[comment.comment_id]) {
+                                  loadReplies(comment.comment_id);
+                                }
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#007bff',
+                                cursor: 'pointer',
+                                fontSize: '10px',
+                                padding: '0 8px',
+                                fontWeight: '600'
+                              }}
+                            >
+                              {showReplies[comment.comment_id] ? 'Hide replies' : `View ${comment.replies_count} replies`}
+                            </button>
+                          )}
+                          {commentReplies[comment.comment_id] && commentReplies[comment.comment_id].length > 0 && showReplies[comment.comment_id] && (
+                            <div style={{ marginTop: 8, marginLeft: 16 }}>
+                              {commentReplies[comment.comment_id].map((reply: any) => (
+                                <Reply
+                                  key={reply.reply_id}
+                                  reply={reply}
+                                  commentId={comment.comment_id}
+                                  currentUserId={repost.user.user_id}
+                                  formatTime={formatTime}
+                                  onReplyUpdate={() => loadReplies(comment.comment_id)}
+                                  displayName={renderName(repost.user)}
+                                  displayAvatar={getProfilePicUrl(repost.user?.profile_pic)}
+                                />
+                              ))}
+                            </div>
+                          )}
+                          {showReplyInput[comment.comment_id] && repost.user && (
+                            <ReplyInput
+                              commentId={comment.comment_id}
+                              currentUserId={repost.user.user_id}
+                              displayName={renderName(repost.user)}
+                              displayAvatar={getProfilePicUrl(repost.user?.profile_pic)}
+                              onReplyAdded={() => handleReplyAdded(String(comment.comment_id))}
+                              commentAuthor={{
+                                user_id: comment.user?.user_id || 0,
+                                f_name: comment.user?.f_name || '',
+                                m_name: comment.user?.m_name || '',
+                                l_name: comment.user?.l_name || '',
+                                name: renderName(comment.user)
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (

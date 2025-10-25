@@ -360,6 +360,15 @@ export const fetchOJTStatistics = async (coordinatorUsername?: string) => {
   return response.data;
 };
 
+// Fetch OJT company statistics (company names with student counts)
+export const fetchOJTCompanyStatistics = async (coordinatorUsername?: string) => {
+  const path = coordinatorUsername
+    ? `ojt/company-statistics/?coordinator=${coordinatorUsername}`
+    : 'ojt/company-statistics/';
+  const response = await api.get(path);
+  return response.data;
+};
+
 // Fetch OJT data by year for coordinators
 export const fetchOJTByYear = async (year: string, coordinatorUsername?: string, section?: string) => {
   let path = `ojt/by-year/?year=${year}`;
@@ -391,6 +400,12 @@ export const updateOJTStatus = async (userId: number, status: string) => {
 // Send completed OJT list to admin (returns count)
 export const sendCompletedOJTToAdmin = async (year?: number | string, userIds?: number[]) => {
   const response = await api.post('ojt/send-to-admin/', { year, user_ids: userIds || [] });
+  return response.data;
+};
+
+// Get existing send dates for coordinator
+export const getSendDates = async (coordinatorUsername: string) => {
+  const response = await api.get(`ojt/get-send-dates/?coordinator=${coordinatorUsername}`);
   return response.data;
 };
 

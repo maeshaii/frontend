@@ -703,8 +703,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           </span>
         )}
         {/* WebSocket connection indicator */}
-        {notificationConnected && (
-          <span style={{
+        {/* <span style={{
             position: 'absolute',
             top: -2,
             right: -2,
@@ -714,8 +713,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             borderRadius: '50%',
             border: '2px solid white',
             pointerEvents: 'none'
-          }} title="Real-time notifications connected" />
-        )}
+          }} title="Real-time notifications connected" /> */}
         <span style={{ 
           color: 'white', 
           fontSize: 12, 

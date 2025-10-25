@@ -201,7 +201,7 @@ const App: React.FC = () => {
             path="/ccict/profile"
             element={
               <PrivateRoute>
-                <AdminDashboard />
+                <AdminProfilePage />
               </PrivateRoute>
             }
           />

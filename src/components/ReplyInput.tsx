@@ -12,9 +12,12 @@ interface ReplyInputProps {
     user_id: number;
     f_name: string;
     m_name?: string;
-    l_name: string;
+    l_name?: string;
     name: string;
   };
+  placeholder?: string;
+  initialValue?: string;
+  onValueChange?: (value: string) => void;
 }
 
 const ReplyInput: React.FC<ReplyInputProps> = ({ 

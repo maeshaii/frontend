@@ -3,7 +3,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
-import { fetchOJTStatistics, importOJT, fetchCoordinatorSections, setSendDate } from '../../services/api';
+import { fetchOJTStatistics, importOJT, fetchCoordinatorSections, setSendDate, getSendDates } from '../../services/api';
 import logoLogin from '../../images/logo_login.png';
 
 export default function Dashboard() {
@@ -11,7 +11,7 @@ export default function Dashboard() {
   const [showModal, setShowModal] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [selectedCard, setSelectedCard] = useState<{ year: number; section?: string } | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [program, setProgram] = useState('BSIT');
   // Generate years from 2000 to 2025 (descending order)
@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
   const [showDateModal, setShowDateModal] = useState(false);
   const [sendDate, setSendDateState] = useState('');
+  const [existingSendDates, setExistingSendDates] = useState<any[]>([]);
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -62,38 +63,94 @@ export default function Dashboard() {
   }, [coordinatorUsername]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      const filesArray = Array.from(e.target.files);
+      setSelectedFiles(filesArray);
     } else {
-      setSelectedFile(null);
+      setSelectedFiles([]);
     }
   };
 
+  const removeFile = (indexToRemove: number) => {
+    setSelectedFiles(prevFiles => prevFiles.filter((_, index) => index !== indexToRemove));
+  };
+
   const handleImport = async () => {
-    if (!selectedFile || !selectedYear) {
-      alert('Please select a file and choose a graduation year');
+    if (selectedFiles.length === 0 || !selectedYear) {
+      alert('Please select at least one file and choose a graduation year');
       return;
     }
 
     setImportLoading(true);
     try {
-      const result = await importOJT(selectedFile, selectedYear.toString(), program, coordinatorUsername);
+      console.log(`Starting OJT import for ${selectedFiles.length} file(s)...`);
+      
+      let totalCreated = 0;
+      let allPasswords: any[] = [];
+      let allSections: string[] = [];
+      let failedFiles: string[] = [];
+      
+      // Import each file sequentially
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        console.log(`Importing file ${i + 1}/${selectedFiles.length}: ${file.name}`);
+        
+        try {
+          const result = await importOJT(file, selectedYear.toString(), program, coordinatorUsername);
+          console.log(`Import result for ${file.name}:`, result);
+          
       if (result.success) {
-        alert(`OJT import successful! Found ${result.sections?.length || 0} sections.`);
-        
-        // Handle password download if passwords were generated
-        if (result.passwords && result.passwords.length > 0) {
-          downloadPasswords(result.passwords);
+            totalCreated += result.created_count || 0;
+            if (result.passwords && Array.isArray(result.passwords)) {
+              allPasswords = [...allPasswords, ...result.passwords];
+            }
+            if (result.sections && Array.isArray(result.sections)) {
+              result.sections.forEach((section: string) => {
+                if (!allSections.includes(section)) {
+                  allSections.push(section);
+                }
+              });
+            }
+          } else {
+            failedFiles.push(file.name);
+          }
+        } catch (error) {
+          console.error(`Error importing ${file.name}:`, error);
+          failedFiles.push(file.name);
         }
-        
-        setShowModal(false);
-        await refreshOJTData();
-      } else {
-        alert(result.message || 'OJT import failed');
       }
-    } catch (error) {
+      
+      // Show summary message
+      let summaryMessage = `✅ Import completed!\n\n`;
+      summaryMessage += `Files processed: ${selectedFiles.length}\n`;
+      summaryMessage += `Total students created: ${totalCreated}\n`;
+      if (allSections.length > 0) {
+        summaryMessage += `Sections: ${allSections.join(', ')}\n`;
+      }
+      if (failedFiles.length > 0) {
+        summaryMessage += `\n⚠️ Failed files: ${failedFiles.join(', ')}`;
+      }
+      alert(summaryMessage);
+      
+      // Download all passwords if any exist
+      if (allPasswords.length > 0) {
+        console.log('Downloading passwords for', allPasswords.length, 'students');
+        downloadPasswords(allPasswords);
+        alert(`📥 Password file has been downloaded with ${allPasswords.length} student passwords!`);
+      } else {
+        console.log('No passwords to download');
+      }
+      
+      // Close modal and refresh data
+      setShowModal(false);
+      setSelectedFiles([]);
+      setSelectedYear(null);
+      
+      // Refresh the OJT data to update cards
+      await refreshOJTData();
+    } catch (error: any) {
       console.error('OJT import error:', error);
-      alert('OJT import failed. Please try again.');
+      alert(`❌ Import failed: ${error?.message || 'Please try again.'}`);
     } finally {
       setImportLoading(false);
     }
@@ -403,8 +460,8 @@ export default function Dashboard() {
   };
 
   const links = [
-    { to: `/coordinator/dashboard/${coordinatorUsername}`, label: 'Dashboard' },
     { to: '/coordinator/imports', label: 'Imports' },
+    { to: '/coordinator/statistics', label: 'Statistics' },
   ];
 
   return (
@@ -429,14 +486,22 @@ export default function Dashboard() {
                     ...(link.label === 'Dashboard' && activePage === 'dashboard'
                       ? styles.activeNavItem
                       : {}),
+                    ...(link.label === 'Statistics' && activePage === 'statistics'
+                      ? styles.activeNavItem
+                      : {}),
                   }}
                   onClick={() => {
                     if (link.label === 'Dashboard') {
                       setActivePage('dashboard');
                       setSelectedCard(null);
+                      setShowStats(false);
                     } else if (link.label === 'Imports') {
                       setActivePage('imports');
+                      setShowStats(false);
                       refreshOJTData();
+                    } else if (link.label === 'Statistics') {
+                      setActivePage('statistics');
+                      setShowStats(true);
                     }
                   }}
                 >
@@ -670,7 +735,18 @@ export default function Dashboard() {
                     transition: 'all 0.2s ease',
                     boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)'
                   }}
-                  onClick={() => setShowDateModal(true)}
+                  onClick={async () => {
+                    // Fetch existing send dates before showing modal
+                    try {
+                      const result = await getSendDates(coordinatorUsername);
+                      if (result.success && result.scheduled_dates) {
+                        setExistingSendDates(result.scheduled_dates);
+                      }
+                    } catch (error) {
+                      console.error('Error fetching send dates:', error);
+                    }
+                    setShowDateModal(true);
+                  }}
                   onMouseEnter={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
                     target.style.backgroundColor = '#059669';
@@ -956,7 +1032,7 @@ export default function Dashboard() {
               <button
                 onClick={() => {
                   setShowModal(false);
-                  setSelectedFile(null);
+                  setSelectedFiles([]);
                   setSelectedYear(null);
                 }}
                 style={{
@@ -1113,6 +1189,7 @@ export default function Dashboard() {
                   >
               <input
                 type="file"
+                multiple
                 onChange={handleFileChange}
                       style={{
                         position: 'absolute',
@@ -1143,7 +1220,7 @@ export default function Dashboard() {
                       color: '#374151',
                       margin: '0 0 4px 0'
                     }}>
-                      {selectedFile ? selectedFile.name : 'Choose Excel File'}
+                      {selectedFiles.length > 0 ? `${selectedFiles.length} file(s) selected` : 'Choose Excel Files'}
                     </p>
                     <p style={{
                       fontSize: '14px',
@@ -1157,10 +1234,77 @@ export default function Dashboard() {
                       color: '#9ca3af',
                       margin: '8px 0 0 0'
                     }}>
-                      Supports .xlsx and .xls files
+                      Supports .xlsx and .xls files (multiple selection)
                     </p>
                   </div>
                 </div>
+
+                {/* Selected Files List */}
+                {selectedFiles.length > 0 && (
+                  <div style={{ marginTop: '16px' }}>
+                    <p style={{ 
+                      fontSize: '13px', 
+                      fontWeight: '600', 
+                      color: '#374151',
+                      marginBottom: '8px'
+                    }}>
+                      Selected Files:
+                    </p>
+                    <div style={{ 
+                      maxHeight: '150px', 
+                      overflowY: 'auto',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      padding: '8px'
+                    }}>
+                      {selectedFiles.map((file, index) => (
+                        <div key={index} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          backgroundColor: index % 2 === 0 ? '#f9fafb' : 'white',
+                          borderRadius: '6px',
+                          marginBottom: '4px'
+                        }}>
+                          <span style={{
+                            fontSize: '13px',
+                            color: '#374151',
+                            flex: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            📄 {file.name}
+                          </span>
+                          <button
+                            onClick={() => removeFile(index)}
+                            style={{
+                              marginLeft: '8px',
+                              padding: '4px 8px',
+                              backgroundColor: '#fee2e2',
+                              color: '#dc2626',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#fecaca';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#fee2e2';
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}
@@ -1172,7 +1316,7 @@ export default function Dashboard() {
               <button
                 onClick={() => {
                   setShowModal(false);
-                  setSelectedFile(null);
+                  setSelectedFiles([]);
                   setSelectedYear(null);
                 }}
                 disabled={importLoading}
@@ -1209,16 +1353,16 @@ export default function Dashboard() {
               </button>
                 <button
                   onClick={handleImport}
-                  disabled={importLoading || !selectedFile || !selectedYear}
+                  disabled={importLoading || selectedFiles.length === 0 || !selectedYear}
                   style={{
                     padding: '14px 28px',
                     border: '2px solid #e5e7eb',
                     borderRadius: '12px',
-                    background: importLoading || !selectedFile || !selectedYear 
+                    background: importLoading || selectedFiles.length === 0 || !selectedYear 
                       ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)'
                       : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                     color: 'white',
-                    cursor: importLoading || !selectedFile || !selectedYear ? 'not-allowed' : 'pointer',
+                    cursor: importLoading || selectedFiles.length === 0 || !selectedYear ? 'not-allowed' : 'pointer',
                     fontWeight: '700',
                     fontSize: '15px',
                     transition: 'all 0.3s ease',
@@ -1228,14 +1372,14 @@ export default function Dashboard() {
                     gap: '8px'
                   }}
                   onMouseEnter={(e) => {
-                    if (!importLoading && selectedFile && selectedYear) {
+                    if (!importLoading && selectedFiles.length > 0 && selectedYear) {
                       const target = e.currentTarget as HTMLButtonElement;
                       target.style.transform = 'translateY(-2px)';
                       target.style.boxShadow = '0 8px 16px -4px rgba(245, 158, 11, 0.4)';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!importLoading && selectedFile && selectedYear) {
+                    if (!importLoading && selectedFiles.length > 0 && selectedYear) {
                       const target = e.currentTarget as HTMLButtonElement;
                       target.style.transform = 'translateY(0)';
                       target.style.boxShadow = '0 4px 6px -1px rgba(245, 158, 11, 0.3)';
@@ -1299,6 +1443,7 @@ export default function Dashboard() {
                 onClick={() => {
                   setShowDateModal(false);
                   setSendDateState('');
+                  setExistingSendDates([]);
                 }}
                 style={{
                   position: 'absolute',
@@ -1359,6 +1504,40 @@ export default function Dashboard() {
 
             {/* Content Area */}
             <div style={{ padding: '32px' }}>
+              {/* Existing Schedule Warning */}
+              {existingSendDates.length > 0 && (
+                <div style={{
+                  backgroundColor: '#fef3c7',
+                  border: '2px solid #fbbf24',
+                  borderRadius: '12px',
+                  padding: '16px 20px',
+                  marginBottom: '24px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px'
+                }}>
+                  <span style={{ fontSize: '24px', flexShrink: 0 }}>⚠️</span>
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ color: '#92400e', fontSize: '15px', display: 'block', marginBottom: '8px' }}>
+                      Existing Scheduled Dates Found
+                    </strong>
+                    <div style={{ color: '#78350f', fontSize: '14px', lineHeight: '1.6' }}>
+                      {existingSendDates.map((sd, idx) => (
+                        <div key={idx} style={{ marginBottom: '4px' }}>
+                          • <strong>Batch {sd.batch_year}</strong>{sd.section && ` (Section ${sd.section})`}: {new Date(sd.send_date).toLocaleDateString()} 
+                          <span style={{ fontSize: '12px', marginLeft: '8px', opacity: 0.8 }}>
+                            (Set on {new Date(sd.created_at).toLocaleDateString()})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: '8px', fontSize: '13px', color: '#92400e', fontStyle: 'italic' }}>
+                      Setting a new date will update the existing schedule.
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Process Overview Card */}
               <div style={{
                 backgroundColor: '#f8fafc',
@@ -1488,7 +1667,8 @@ export default function Dashboard() {
               <button
                 onClick={() => {
                   setShowDateModal(false);
-                    setSendDateState('');
+                  setSendDateState('');
+                  setExistingSendDates([]);
                 }}
                 style={{
                     padding: '14px 28px',
@@ -1520,30 +1700,81 @@ export default function Dashboard() {
               </button>
               <button
                   onClick={async () => {
-                  if (sendDate) {
-                      try {
+                    if (!sendDate) {
+                      alert('Please select a date first');
+                      return;
+                    }
+                    
+                    try {
+                      // If "ALL" is selected, schedule for all available years
+                      if (selectedBatchFilter === 'ALL') {
+                        let successCount = 0;
+                        let failCount = 0;
+                        
+                        // Get all unique years from the stats
+                        const yearsToProcess = [...new Set(ojtYears.map(y => y.year))];
+                        
+                        if (yearsToProcess.length === 0) {
+                          alert('No OJT batches found to schedule');
+                          return;
+                        }
+                        
+                        for (const year of yearsToProcess) {
+                          try {
+                            const result = await setSendDate(
+                              coordinatorUsername,
+                              year,
+                              null,
+                              sendDate
+                            );
+                            if (result.success) {
+                              successCount++;
+                            } else {
+                              failCount++;
+                            }
+                          } catch (error) {
+                            console.error(`Error scheduling year ${year}:`, error);
+                            failCount++;
+                          }
+                        }
+                        
+                        if (successCount > 0) {
+                          alert(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatches scheduled: ${successCount}\nFailed: ${failCount}\n\nOn this date, ALL completed OJT students from ALL batches will be automatically sent to admin!`);
+                          setShowDateModal(false);
+                          setSendDateState('');
+                          setExistingSendDates([]);
+                        } else {
+                          alert('Failed to schedule any batches. Please try again.');
+                        }
+                      } else {
+                        // Schedule for specific year
+                        const batchYear = parseInt(selectedBatchFilter);
+                        if (isNaN(batchYear)) {
+                          alert('Invalid batch year selected');
+                          return;
+                        }
+                        
                         const result = await setSendDate(
                           coordinatorUsername,
-                          parseInt(selectedBatchFilter),
-                          null, // Always process entire batch
+                          batchYear,
+                          null,
                           sendDate
                         );
                         
                         if (result.success) {
-                          alert(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatch: ${selectedBatchFilter} (ENTIRE BATCH)\n\nOn this date:\n• ALL completed OJT students will be automatically sent to admin\n• ALL ongoing students will be marked as incomplete\n\nThe entire batch will be processed automatically!`);
-                    setShowDateModal(false);
+                          alert(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatch: ${selectedBatchFilter}\n\nOn this date:\n• ALL completed OJT students will be automatically sent to admin\n• ALL ongoing students will be marked as incomplete`);
+                          setShowDateModal(false);
                           setSendDateState('');
-                  } else {
+                          setExistingSendDates([]);
+                        } else {
                           alert(`Error: ${result.message}`);
                         }
-                      } catch (error) {
-                        console.error('Error setting send date:', error);
-                        alert('Failed to set schedule. Please try again.');
                       }
-                    } else {
-                      alert('Please select a date first');
-                  }
-                }}
+                    } catch (error) {
+                      console.error('Error setting send date:', error);
+                      alert('Failed to set schedule. Please try again.');
+                    }
+                  }}
                 style={{
                     padding: '14px 28px',
                   border: '2px solid #e5e7eb',

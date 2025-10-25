@@ -768,7 +768,24 @@ const RepostCard: React.FC<RepostCardProps> = ({
                 onError={handleProfilePicError}
               />
               <div>
-                <div style={{ fontWeight: 'bold', fontSize: 13, color: '#333' }}>{originalPosterName || 'Original Post'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontWeight: 'bold', fontSize: 13, color: '#333' }}>{originalPosterName || 'Original Post'}</div>
+                  {original.donation_id && (
+                    <span style={{
+                      background: 'linear-gradient(135deg, #174f84 0%, #2d5aa0 100%)',
+                      color: '#ffffff',
+                      fontSize: '10px',
+                      fontWeight: '600',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                    }}>
+                      💝 Donation
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontSize: 11, color: '#666' }}>{formatTime(original.created_at)}</div>
               </div>
             </div>

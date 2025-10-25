@@ -11,6 +11,7 @@ import '../alumni/profile.css';
 import { getPosts, followUser, getAdminPesoUsers, api, getDonationRequests } from '../../services/api';
 import { trackerApi } from '../../services/trackerApi';
 import RepostNotificationModal from '../../components/RepostNotificationModal';
+import RepostModal from '../../components/RepostModal';
 
 interface UnifiedDashboardProps {
   userType: 'alumni' | 'peso' | 'admin' | 'ojt';
@@ -245,6 +246,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [showTrackerModal, setShowTrackerModal] = useState(false);
   const [showRepostModal, setShowRepostModal] = useState(false);
   const [repostModalData, setRepostModalData] = useState<{repostId: string, reposterName?: string} | null>(null);
+  const [showRepostNotificationModal, setShowRepostNotificationModal] = useState(false);
+  const [repostNotificationModalData, setRepostNotificationModalData] = useState<{repostId: string; reposterName?: string; commentId?: string} | null>(null);
+  const [showPhotoGalleryModal, setShowPhotoGalleryModal] = useState(false);
   const navigate = useNavigate();
 
   // Determine user type from localStorage instead of props
@@ -711,63 +715,72 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
 
   // Check for pending post view when component mounts or navigates here
   useEffect(() => {
-    // Clear any stale localStorage entries that might cause issues
     const pendingPostId = localStorage.getItem('pendingPostView');
     if (pendingPostId) {
-      console.log('Found pending post view in localStorage:', pendingPostId);
-      // Clear the pending post ID to prevent repeated attempts
+      console.log('Found pending post view:', pendingPostId);
       localStorage.removeItem('pendingPostView');
       
-      // Check for pending profile picture data and apply it to posts
-      const pendingProfilePic = localStorage.getItem('pendingProfilePic');
-      if (pendingProfilePic) {
-        try {
-          const profilePicData = JSON.parse(pendingProfilePic);
-          console.log('🔍 Found pending profile pic data for posts update:', profilePicData);
-          
-          // Update posts with the profile picture from notification
-          setPosts(prevPosts => {
-            return prevPosts.map(post => {
-              if (post.user && post.user.user_id == profilePicData.userId) {
-                return {
-                  ...post,
-                  user: {
-                    ...post.user,
-                    profile_pic: profilePicData.profilePicUrl
-                  }
-                };
-              }
-              return post;
-            });
+      // Check if this is a comment or reply ID that needs to be resolved
+      if (pendingPostId.startsWith('comment:') || pendingPostId.startsWith('reply:')) {
+        const idType = pendingPostId.startsWith('comment:') ? 'comment' : 'reply';
+        const id = parseInt(pendingPostId.replace(`${idType}:`, ''));
+        console.log(`Resolving ${idType} ID to post:`, id);
+        
+        // Import and use getPostFromComment (works for both comments and replies)
+        import('../../services/api').then(({ getPostFromComment }) => {
+          getPostFromComment(id).then(response => {
+            if (response.success && response.post_id) {
+              console.log('Resolved to post ID:', response.post_id);
+              handleViewPost(response.post_id.toString());
+            } else {
+              console.error(`Could not resolve ${idType} to post`);
+            }
+          }).catch(error => {
+            console.error(`Error resolving ${idType} to post:`, error);
           });
-          
-          // Clear the pending profile pic data after use
-          localStorage.removeItem('pendingProfilePic');
-        } catch (error) {
-          console.error('Error parsing pending profile pic data for posts:', error);
-          localStorage.removeItem('pendingProfilePic');
-        }
+        });
+      } else {
+        handleViewPost(pendingPostId);
       }
-      
-      // Skip trying to view the post if it's stale - just clear it
-      console.log('Skipping stale post view to prevent 404 errors');
-      return; // Exit early to prevent trying to view deleted posts
     }
-    
-    // For dashboard routes, never try to view posts from URL parameters
-    // Dashboard URLs like /ojt/dashboard/118 have user IDs, not post IDs
-    console.log('Dashboard route detected - skipping post view attempts');
 
-    // Check for pending repost view when component mounts or navigates here
     const pendingRepostId = localStorage.getItem('pendingRepostView');
+    const pendingRepostCommentId = localStorage.getItem('pendingRepostCommentId');
     if (pendingRepostId) {
       console.log('Found pending repost view:', pendingRepostId);
-      // Clear the pending repost ID to prevent repeated attempts
       localStorage.removeItem('pendingRepostView');
-      
-      // Show repost modal
-      setRepostModalData({ repostId: pendingRepostId });
-      setShowRepostModal(true);
+      if (pendingRepostCommentId) {
+        console.log('Found pending repost comment view:', pendingRepostCommentId);
+        localStorage.removeItem('pendingRepostCommentId');
+      }
+      setRepostNotificationModalData({ repostId: pendingRepostId, commentId: pendingRepostCommentId || undefined });
+      setShowRepostNotificationModal(true);
+    }
+
+    const pendingProfilePic = localStorage.getItem('pendingProfilePic');
+    if (pendingProfilePic) {
+      try {
+        const profilePicData = JSON.parse(pendingProfilePic);
+        console.log('🔍 Found pending profile pic data for posts update:', profilePicData);
+        setPosts(prevPosts => {
+          return prevPosts.map(post => {
+            if (post.user && post.user.user_id == profilePicData.userId) {
+              return {
+                ...post,
+                user: {
+                  ...post.user,
+                  profile_pic: profilePicData.profilePicUrl
+                }
+              };
+            }
+            return post;
+          });
+        });
+        localStorage.removeItem('pendingProfilePic');
+      } catch (error) {
+        console.error('Error parsing pending profile pic data for posts:', error);
+        localStorage.removeItem('pendingProfilePic');
+      }
     }
 
   }, [userId, params]); // Check when userId or params change (navigation)
@@ -1349,14 +1362,21 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 const aPriority = isPriority(a);
                 const bPriority = isPriority(b);
                 
-                // If one is priority and the other isn't, priority comes first
+                // First, sort by date to ensure recent posts are at the top
+                const dateA = new Date(a.sort_date);
+                const dateB = new Date(b.sort_date);
+                
+                // Sort by date in descending order (most recent first)
+                if (dateA.getTime() !== dateB.getTime()) {
+                  return dateB.getTime() - dateA.getTime();
+                }
+                
+                // If dates are the same, apply priority for admin/PESO posts
                 if (aPriority && !bPriority) return -1;
                 if (!aPriority && bPriority) return 1;
                 
-                // If both are priority or both are not, sort by date
-                const dateA = new Date(a.sort_date);
-                const dateB = new Date(b.sort_date);
-                return dateB.getTime() - dateA.getTime();
+                // If both are priority or both are not, maintain original order (or any stable sort)
+                return 0;
               });
               
               const filteredFeed = sortedUnifiedFeed.filter(item => {
@@ -1718,13 +1738,18 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           likes_count: r.likes_count || 0,
                           comments: r.comments || [],
                           comments_count: r.comments_count || 0,
-                          original_post: r.original_post ? {
-                            post_id: r.original_post.post_id,
-                            created_at: r.original_post.created_at,
-                            post_content: r.original_post.post_content,
-                            post_images: r.original_post.post_images || (r.original_post.post_image ? [{ image_id: 0, image_url: r.original_post.post_image, order: 0 }] : undefined),
-                            user: r.original_post.user ? { user_id: r.original_post.user.user_id || 0, f_name: r.original_post.user.f_name, l_name: r.original_post.user.l_name, profile_pic: r.original_post.user.profile_pic } : undefined
-                          } : undefined
+                          original_post: {
+                            post_id: r.original_post?.post_id,
+                            created_at: r.original_post?.created_at,
+                            post_content: r.original_post?.post_content,
+                            post_images: r.original_post?.post_images || [],
+                            user: {
+                              user_id: r.original_post?.user?.user_id || 0,
+                              f_name: r.original_post?.user?.f_name,
+                              l_name: r.original_post?.user?.l_name,
+                              profile_pic: r.original_post?.user?.profile_pic
+                            },
+                          },
                         }}
                         currentUserId={currentUserId}
                         formatTime={formatHybrid}
@@ -2420,13 +2445,13 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
       
       {/* Repost Notification Modal */}
       <RepostNotificationModal
-        isOpen={showRepostModal}
+        isOpen={showRepostNotificationModal}
         onClose={() => {
-          setShowRepostModal(false);
-          setRepostModalData(null);
+          setShowRepostNotificationModal(false);
+          setRepostNotificationModalData(null);
         }}
-        repostId={repostModalData?.repostId || ''}
-        reposterName={repostModalData?.reposterName}
+        repostId={repostNotificationModalData?.repostId || ''}
+        reposterName={repostNotificationModalData?.reposterName}
       />
     </div>
   );

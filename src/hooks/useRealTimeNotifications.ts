@@ -181,15 +181,16 @@ export function useRealTimeNotifications(
         switch (event.type) {
           case 'notification_update':
             setNotifications(prev => {
+              const currentNotifications = Array.isArray(prev) ? prev : [];
               // Add new notification or update existing one
-              const existingIndex = prev.findIndex(n => n.id === event.notification.id);
+              const existingIndex = currentNotifications.findIndex(n => n.id === event.notification.id);
               if (existingIndex >= 0) {
-                const updated = [...prev];
+                const updated = [...currentNotifications];
                 updated[existingIndex] = event.notification;
                 return updated;
               } else {
                 // Add new notification at the beginning
-                return [event.notification, ...prev];
+                return [event.notification, ...currentNotifications];
               }
             });
             
