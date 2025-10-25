@@ -128,19 +128,6 @@ const DonationPage: React.FC = () => {
     fetchDonationPosts();
   }, [currentUserId]);
 
-  // Check for pending donation post view from notification
-  useEffect(() => {
-    const pendingDonationPostId = localStorage.getItem('pendingDonationPostView');
-    if (pendingDonationPostId && donations.length > 0) {
-      console.log('Found pending donation post view:', pendingDonationPostId);
-      localStorage.removeItem('pendingDonationPostView');
-      // Wait a bit for donations to load before opening the modal
-      setTimeout(() => {
-        handleViewDonationPostById(pendingDonationPostId);
-      }, 300);
-    }
-  }, [donations]);
-
   // Removed member-related functions since we're using About card instead
 
   // Fetch donation requests
@@ -283,31 +270,86 @@ const DonationPage: React.FC = () => {
 
   // Handle viewing a donation post by ID (for notifications)
   const handleViewDonationPostById = async (donationId: string) => {
-    console.log('handleViewDonationPostById called with donationId:', donationId);
+    console.log('🔍 handleViewDonationPostById called with donationId:', donationId);
     setDonationLoading(true);
     try {
       const { api } = await import('../../services/api');
+      console.log('🔍 Fetching donation post with ID:', donationId);
       const response = await api.get(`donations/${donationId}/`);
-      console.log('Donation post API response:', response.data);
+      console.log('🔍 Donation post API response:', response.data);
       if (response.data) {
-        setOriginalDonationModalData(response.data);
+        // Transform the response to match the expected format
+        const transformedData = {
+          ...response.data,
+          donation_id: response.data.donation_id,
+          description: response.data.description || response.data.post_content,
+          post_content: response.data.description || response.data.post_content,
+          status: response.data.status,
+          created_at: response.data.created_at,
+          images: response.data.images || response.data.post_images || [],
+          post_images: response.data.images || response.data.post_images || [],
+          user: {
+            ...response.data.user,
+            profile_pic: response.data.user?.profile_pic ? 
+              (String(response.data.user.profile_pic).startsWith('http') ? 
+                response.data.user.profile_pic : 
+                `http://127.0.0.1:8000${response.data.user.profile_pic}`) : 
+              null
+          },
+          likes: response.data.likes || [],
+          comments: response.data.comments || [],
+          reposts: response.data.reposts || [],
+          likes_count: response.data.likes_count || 0,
+          comments_count: response.data.comments_count || 0,
+          reposts_count: response.data.reposts_count || 0,
+          liked_by_user: response.data.liked_by_user || false
+        };
+        
+        setOriginalDonationModalData(transformedData);
+        console.log('🔍 Set original donation modal data:', transformedData);
         
         // Update the liked state for the modal donation
         setLikedDonations(prev => ({
           ...prev,
-          [response.data.donation_id]: response.data.liked_by_user || false
+          [transformedData.donation_id]: transformedData.liked_by_user || false
         }));
         
         setShowOriginalDonationModal(true);
-        console.log('Donation post modal opened for notification');
+        console.log('✅ Donation post modal opened for notification, showOriginalDonationModal:', true);
+      } else {
+        console.error('❌ No data in API response');
       }
-    } catch (error) {
-      console.error('Error fetching donation post by ID:', error);
-      // Silently fail - the post may have been deleted
+    } catch (error: any) {
+      console.error('❌ Error fetching donation post by ID:', error);
+      console.error('❌ Error details:', error.response?.data || error.message);
+      alert('Unable to load the donation post. It may have been deleted.');
     } finally {
       setDonationLoading(false);
     }
   };
+
+  // Check for pending donation post view from notification
+  useEffect(() => {
+    console.log('🔍 useEffect for pendingDonationPostView running...');
+    const pendingDonationPostId = localStorage.getItem('pendingDonationPostView');
+    console.log('🔍 Raw localStorage value:', pendingDonationPostId);
+    if (pendingDonationPostId) {
+      console.log('🔍 Found pending donation post view:', pendingDonationPostId);
+      console.log('🔍 handleViewDonationPostById function exists?', typeof handleViewDonationPostById === 'function');
+      localStorage.removeItem('pendingDonationPostView');
+      // Wait a bit for the component to fully mount
+      setTimeout(() => {
+        console.log('🔍 Calling handleViewDonationPostById with ID:', pendingDonationPostId);
+        if (typeof handleViewDonationPostById === 'function') {
+          handleViewDonationPostById(pendingDonationPostId);
+        } else {
+          console.error('❌ handleViewDonationPostById is not a function!');
+        }
+      }, 500);
+    } else {
+      console.log('🔍 No pending donation post view found');
+    }
+  }, []); // Run only once on mount
 
   if (loading) {
     return (

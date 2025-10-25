@@ -446,13 +446,13 @@ const NotificationPage: React.FC = () => {
           // Check if it's a forum or donation notification and redirect accordingly
           // This catches ALL types of notifications (like, comment, mention, etc.)
           if (forumIdMatch) {
-            console.log('Forum notification detected - redirecting to forum page with post ID:', originalPostId);
-            localStorage.setItem('pendingForumPostView', originalPostId);
+            console.log('Forum notification detected - redirecting to forum page with forum_id:', forumIdMatch[1]);
+            localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
             navigate('/forum');
             return;
           } else if (donationIdMatch) {
-            console.log('Donation notification detected - redirecting to donation page with post ID:', originalPostId);
-            localStorage.setItem('pendingDonationPostView', originalPostId);
+            console.log('Donation notification detected - redirecting to donation page with donation_id:', donationIdMatch[1]);
+            localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
             navigate('/donation');
             return;
           }
@@ -464,13 +464,13 @@ const NotificationPage: React.FC = () => {
               
               // Check if it's a forum or donation mention
               if (forumIdMatch) {
-                console.log('Forum mention - redirecting to forum page with post ID:', originalPostId);
-                localStorage.setItem('pendingForumPostView', originalPostId);
+                console.log('Forum mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
+                localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
                 navigate('/forum');
                 return;
               } else if (donationIdMatch) {
-                console.log('Donation mention - redirecting to donation page with post ID:', originalPostId);
-                localStorage.setItem('pendingDonationPostView', originalPostId);
+                console.log('Donation mention - redirecting to donation page with donation_id:', donationIdMatch[1]);
+                localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
                 navigate('/donation');
                 return;
               } else {
@@ -499,12 +499,12 @@ const NotificationPage: React.FC = () => {
                   
                   // Check if this is a forum or donation post
                   if (forumIdMatch) {
-                    console.log('Forum comment mention - redirecting to forum page');
-                    localStorage.setItem('pendingForumPostView', resolvedPostId);
+                    console.log('Forum comment mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
+                    localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
                     navigate('/forum');
                   } else if (donationIdMatch) {
-                    console.log('Donation comment mention - redirecting to donation page');
-                    localStorage.setItem('pendingDonationPostView', resolvedPostId);
+                    console.log('Donation comment mention - redirecting to donation page with donation_id:', donationIdMatch[1]);
+                    localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
                     navigate('/donation');
                   } else {
                     // Regular post
@@ -539,12 +539,12 @@ const NotificationPage: React.FC = () => {
                   
                   // Check if this is a forum or donation post
                   if (forumIdMatch) {
-                    console.log('Forum reply mention - redirecting to forum page');
-                    localStorage.setItem('pendingForumPostView', resolvedPostId);
+                    console.log('Forum reply mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
+                    localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
                     navigate('/forum');
                   } else if (donationIdMatch) {
-                    console.log('Donation reply mention - redirecting to donation page');
-                    localStorage.setItem('pendingDonationPostView', resolvedPostId);
+                    console.log('Donation reply mention - redirecting to donation page with donation_id:', donationIdMatch[1]);
+                    localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
                     navigate('/donation');
                   } else {
                     // Regular post
@@ -579,13 +579,13 @@ const NotificationPage: React.FC = () => {
           if (postId && !isNaN(parseInt(postId))) {
             // Check if this is a forum or donation notification (even for like/comment/reply)
             if (forumIdMatch && originalPostId) {
-              console.log('Forum notification (like/comment/reply) - redirecting to forum page with post ID:', originalPostId);
-              localStorage.setItem('pendingForumPostView', originalPostId);
+              console.log('Forum notification (like/comment/reply) - redirecting to forum page with forum_id:', forumIdMatch[1]);
+              localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
               navigate('/forum');
               return;
             } else if (donationIdMatch && originalPostId) {
-              console.log('Donation notification (like/comment/reply) - redirecting to donation page with post ID:', originalPostId);
-              localStorage.setItem('pendingDonationPostView', originalPostId);
+              console.log('Donation notification (like/comment/reply) - redirecting to donation page with donation_id:', donationIdMatch[1]);
+              localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
               navigate('/donation');
               return;
             }
@@ -602,10 +602,10 @@ const NotificationPage: React.FC = () => {
                   
                   // Now redirect to forum or donation page
                   if (forumIdMatch) {
-                    localStorage.setItem('pendingForumPostView', postId);
+                    localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
                     navigate('/forum');
                   } else if (donationIdMatch) {
-                    localStorage.setItem('pendingDonationPostView', postId);
+                    localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
                     navigate('/donation');
                   }
                   return;

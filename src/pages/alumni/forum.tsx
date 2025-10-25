@@ -148,19 +148,6 @@ const ForumPage: React.FC = () => {
     }
   }, [currentUserId, allMembers.length, membersLoading]);
 
-  // Check for pending forum post view from notification
-  useEffect(() => {
-    const pendingForumPostId = localStorage.getItem('pendingForumPostView');
-    if (pendingForumPostId && posts.length > 0) {
-      console.log('Found pending forum post view:', pendingForumPostId);
-      localStorage.removeItem('pendingForumPostView');
-      // Wait a bit for posts to load before opening the modal
-      setTimeout(() => {
-        handleViewForumPostById(pendingForumPostId);
-      }, 300);
-    }
-  }, [posts]);
-
   const fetchAllMembers = async () => {
     try {
       setMembersLoading(true);
@@ -275,27 +262,70 @@ const ForumPage: React.FC = () => {
     setPostLoading(true);
     try {
       const { api } = await import('../../services/api');
+      console.log('🔍 Fetching forum post with ID:', postId);
       const response = await api.get(`forum/${postId}/`);
-      console.log('Forum post API response:', response.data);
+      console.log('🔍 Forum post API response:', response.data);
       if (response.data) {
-        setOriginalPostModalData(response.data);
+        // Transform the response to match the expected format
+        const transformedData = {
+          ...response.data,
+          post_image: response.data.post_image || null,
+          post_images: response.data.post_images || [],
+          user: {
+            ...response.data.user,
+            profile_pic: response.data.user?.profile_pic ? 
+              (String(response.data.user.profile_pic).startsWith('http') ? 
+                response.data.user.profile_pic : 
+                `http://127.0.0.1:8000${response.data.user.profile_pic}`) : 
+              null
+          }
+        };
+        
+        setOriginalPostModalData(transformedData);
+        console.log('🔍 Set original post modal data:', transformedData);
         
         // Update the liked state for the modal post
         setLikedPosts(prev => ({
           ...prev,
-          [response.data.post_id]: response.data.liked_by_user || false
+          [transformedData.post_id]: transformedData.liked_by_user || false
         }));
         
         setShowOriginalPostModal(true);
-        console.log('Forum post modal opened for notification');
+        console.log('✅ Forum post modal opened for notification, showOriginalPostModal:', true);
+      } else {
+        console.error('❌ No data in API response');
       }
-    } catch (error) {
-      console.error('Error fetching forum post by ID:', error);
-      // Silently fail - the post may have been deleted
+    } catch (error: any) {
+      console.error('❌ Error fetching forum post by ID:', error);
+      console.error('❌ Error details:', error.response?.data || error.message);
+      alert('Unable to load the forum post. It may have been deleted.');
     } finally {
       setPostLoading(false);
     }
   };
+
+  // Check for pending forum post view from notification
+  useEffect(() => {
+    console.log('🔍 useEffect for pendingForumPostView running...');
+    const pendingForumPostId = localStorage.getItem('pendingForumPostView');
+    console.log('🔍 Raw localStorage value:', pendingForumPostId);
+    if (pendingForumPostId) {
+      console.log('🔍 Found pending forum post view:', pendingForumPostId);
+      console.log('🔍 handleViewForumPostById function exists?', typeof handleViewForumPostById === 'function');
+      localStorage.removeItem('pendingForumPostView');
+      // Wait a bit for the component to fully mount
+      setTimeout(() => {
+        console.log('🔍 Calling handleViewForumPostById with ID:', pendingForumPostId);
+        if (typeof handleViewForumPostById === 'function') {
+          handleViewForumPostById(pendingForumPostId);
+        } else {
+          console.error('❌ handleViewForumPostById is not a function!');
+        }
+      }, 500);
+    } else {
+      console.log('🔍 No pending forum post view found');
+    }
+  }, []); // Run only once on mount
 
   const fetchForumPosts = async () => {
     try {
