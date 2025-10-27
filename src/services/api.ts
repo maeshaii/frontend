@@ -409,6 +409,15 @@ export const getSendDates = async (coordinatorUsername: string) => {
   return response.data;
 };
 
+// Check if all completed OJT students are already sent to admin
+export const checkAllSentStatus = async (coordinatorUsername: string, batchYear?: string) => {
+  const url = batchYear 
+    ? `ojt/check-all-sent/?coordinator=${coordinatorUsername}&batch_year=${batchYear}`
+    : `ojt/check-all-sent/?coordinator=${coordinatorUsername}`;
+  const response = await api.get(url);
+  return response.data;
+};
+
 // Set send date for OJT batch
 export const setSendDate = async (coordinatorUsername: string, batchYear: number, section: string | null, sendDate: string) => {
   const response = await api.post('ojt/set-send-date/', {

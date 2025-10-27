@@ -3,7 +3,11 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
+<<<<<<< HEAD
 import { fetchOJTStatistics, importOJT, fetchCoordinatorSections, setSendDate, getSendDates } from '../../services/api';
+=======
+import { fetchOJTStatistics, importOJT, setSendDate, getSendDates, checkAllSentStatus } from '../../services/api';
+>>>>>>> e1e0bfd4088d8ffee927a762a386577820e37af3
 import logoLogin from '../../images/logo_login.png';
 
 export default function Dashboard() {
@@ -26,6 +30,8 @@ export default function Dashboard() {
   const [showDateModal, setShowDateModal] = useState(false);
   const [sendDate, setSendDateState] = useState('');
   const [existingSendDates, setExistingSendDates] = useState<any[]>([]);
+  const [allDataSent, setAllDataSent] = useState(false);
+  const [completedCount, setCompletedCount] = useState(0);
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -739,12 +745,33 @@ export default function Dashboard() {
                     // Fetch existing send dates before showing modal
                     try {
                       const result = await getSendDates(coordinatorUsername);
+                      console.log('📅 Get Send Dates Result:', result);
                       if (result.success && result.scheduled_dates) {
+                        console.log('📋 Scheduled dates found:', result.scheduled_dates.length, result.scheduled_dates);
                         setExistingSendDates(result.scheduled_dates);
+                      } else {
+                        console.log('ℹ️ No scheduled dates found');
+                        setExistingSendDates([]);
                       }
                     } catch (error) {
-                      console.error('Error fetching send dates:', error);
+                      console.error('❌ Error fetching send dates:', error);
+                      setExistingSendDates([]);
                     }
+                    
+                    // Check if all completed students are already sent to admin for this specific batch
+                    try {
+                      const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
+                      console.log('🔍 All Sent Status:', statusResult);
+                      if (statusResult.success) {
+                        setAllDataSent(statusResult.all_sent);
+                        setCompletedCount(statusResult.total_completed || 0);
+                        console.log(`✅ Batch ${selectedBatchFilter} - All data sent: ${statusResult.all_sent}, Completed: ${statusResult.total_completed}, Sent: ${statusResult.completed_sent}, Not Sent: ${statusResult.completed_not_sent}`);
+                      }
+                    } catch (error) {
+                      console.error('❌ Error checking sent status:', error);
+                      setAllDataSent(false);
+                    }
+                    
                     setShowDateModal(true);
                   }}
                   onMouseEnter={(e) => {
@@ -944,25 +971,6 @@ export default function Dashboard() {
                             {yearData.count}
                           </span>
                         </div>
-                      </div>
-                      
-                      <div style={{
-                        marginTop: '16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '8px',
-                        backgroundColor: '#f0f9ff',
-                        borderRadius: '8px',
-                        border: '1px solid #bae6fd'
-                      }}>
-                        <span style={{
-                          fontSize: '12px',
-                          color: '#0369a1',
-                          fontWeight: '600'
-                        }}>
-                          Click to view details →
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -1424,59 +1432,19 @@ export default function Dashboard() {
             padding: '0',
             boxShadow: '0 32px 64px -12px rgba(0, 0, 0, 0.35)',
             width: '520px',
-            maxWidth: '95vw',
+            maxWidth: '85vw',
             border: '1px solid rgba(226, 232, 240, 0.8)',
             position: 'relative',
-            animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-            overflow: 'hidden'
+            animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
           }}>
             {/* Gradient Header */}
             <div style={{
               background: 'white',
-              padding: '32px 32px 24px 32px',
+              padding: '24px 36px 18px 36px',
               color: '#1f2937',
               position: 'relative',
               borderBottom: '2px solid #e5e7eb'
             }}>
-              {/* Close button */}
-              <button
-                onClick={() => {
-                  setShowDateModal(false);
-                  setSendDateState('');
-                  setExistingSendDates([]);
-                }}
-                style={{
-                  position: 'absolute',
-                  top: '20px',
-                  right: '20px',
-                  background: '#f3f4f6',
-                  border: '2px solid #e5e7eb',
-                  fontSize: '20px',
-                  color: '#6b7280',
-                  cursor: 'pointer',
-                  padding: '8px',
-            borderRadius: '12px',
-                  transition: 'all 0.2s ease',
-                  backdropFilter: 'blur(10px)'
-                }}
-                onMouseEnter={(e) => {
-                  const target = e.currentTarget as HTMLButtonElement;
-                  target.style.backgroundColor = '#e5e7eb';
-                  target.style.borderColor = '#d1d5db';
-                    target.style.color = 'white';
-                  target.style.transform = 'scale(1.1)';
-                }}
-                onMouseLeave={(e) => {
-                  const target = e.currentTarget as HTMLButtonElement;
-                  target.style.backgroundColor = '#f3f4f6';
-                  target.style.borderColor = '#e5e7eb';
-                  target.style.color = '#6b7280';
-                  target.style.transform = 'scale(1)';
-                }}
-              >
-                ✕
-              </button>
-
               {/* Header Content */}
               <div style={{ 
                 marginBottom: '16px'
@@ -1503,9 +1471,60 @@ export default function Dashboard() {
             </div>
 
             {/* Content Area */}
-            <div style={{ padding: '32px' }}>
+            <div style={{ padding: '20px 36px 32px 36px' }}>
+              {/* No Data Warning - for testing */}
+              {ojtYears.length === 0 && (
+                <div style={{
+                  backgroundColor: '#e0f2fe',
+                  border: '2px solid #0ea5e9',
+                  borderRadius: '12px',
+                  padding: '16px 20px',
+                  marginBottom: '24px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px'
+                }}>
+                  <span style={{ fontSize: '24px', flexShrink: 0 }}>ℹ️</span>
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ color: '#075985', fontSize: '15px', display: 'block', marginBottom: '8px' }}>
+                      No OJT Data Available
+                    </strong>
+                    <div style={{ color: '#0c4a6e', fontSize: '14px', lineHeight: '1.6' }}>
+                      Please import OJT students first before scheduling automatic processing.
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* All Data Already Sent Warning */}
+              {allDataSent && (
+                <div style={{
+                  backgroundColor: '#dcfce7',
+                  border: '2px solid #22c55e',
+                  borderRadius: '12px',
+                  padding: '14px 18px',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px'
+                }}>
+                  <span style={{ fontSize: '22px', flexShrink: 0 }}>✅</span>
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ color: '#166534', fontSize: '14px', display: 'block', marginBottom: '6px' }}>
+                      All Completed OJT Data Already Sent to Admin
+                    </strong>
+                    <div style={{ color: '#15803d', fontSize: '13px', lineHeight: '1.5' }}>
+                      All {completedCount} completed OJT students have been successfully sent to admin for approval.
+                    </div>
+                    <div style={{ marginTop: '6px', fontSize: '12px', color: '#166534', fontStyle: 'italic' }}>
+                      ℹ️ Note: Scheduling is not needed as all data has already been processed.
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Existing Schedule Warning */}
-              {existingSendDates.length > 0 && (
+              {existingSendDates.length > 0 && !allDataSent && (
                 <div style={{
                   backgroundColor: '#fef3c7',
                   border: '2px solid #fbbf24',
@@ -1542,31 +1561,31 @@ export default function Dashboard() {
               <div style={{
                 backgroundColor: '#f8fafc',
                 border: '1px solid #e2e8f0',
-                borderRadius: '16px',
-                padding: '24px',
-                marginBottom: '28px',
+                borderRadius: '14px',
+                padding: '20px 28px',
+                marginBottom: '20px',
                 position: 'relative',
                 overflow: 'hidden'
               }}>
                 
                 <div style={{ 
-                  marginBottom: '16px' 
+                  marginBottom: '12px' 
                 }}>
                   <span style={{ 
                     fontWeight: '700', 
                     color: '#1e293b',
-                    fontSize: '16px'
+                    fontSize: '15px'
                   }}>
                     Processing Actions
                   </span>
                 </div>
                 
-                <div style={{ paddingLeft: '52px' }}>
+                <div style={{ paddingLeft: '8px' }}>
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
-                    marginBottom: '12px',
-                    fontSize: '15px',
+                    marginBottom: '10px',
+                    fontSize: '14px',
                     color: '#475569'
                   }}>
                     <div style={{
@@ -1575,6 +1594,8 @@ export default function Dashboard() {
                       backgroundColor: '#10b981',
                       borderRadius: '50%',
                       marginRight: '16px',
+                      marginLeft: '4px',
+                      flexShrink: 0,
                       boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)'
                     }}></div>
                     <span><strong style={{ color: '#059669' }}>Completed</strong> students → Sent to admin</span>
@@ -1582,8 +1603,8 @@ export default function Dashboard() {
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
-                    marginBottom: '12px',
-                    fontSize: '15px',
+                    marginBottom: '10px',
+                    fontSize: '14px',
                     color: '#475569'
                   }}>
                     <div style={{
@@ -1592,6 +1613,8 @@ export default function Dashboard() {
                       backgroundColor: '#f59e0b',
                       borderRadius: '50%',
                       marginRight: '16px',
+                      marginLeft: '4px',
+                      flexShrink: 0,
                       boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.2)'
                     }}></div>
                     <span><strong style={{ color: '#d97706' }}>Ongoing</strong> students → Marked incomplete</span>
@@ -1599,7 +1622,7 @@ export default function Dashboard() {
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center',
-                    fontSize: '15px',
+                    fontSize: '14px',
                     color: '#475569'
                   }}>
                     <div style={{
@@ -1608,6 +1631,8 @@ export default function Dashboard() {
                       backgroundColor: '#8b5cf6',
                       borderRadius: '50%',
                       marginRight: '16px',
+                      marginLeft: '4px',
+                      flexShrink: 0,
                       boxShadow: '0 0 0 3px rgba(139, 92, 246, 0.2)'
                     }}></div>
                     <span>Processes <strong style={{ color: '#7c3aed' }}>ALL sections</strong> in batch {selectedBatchFilter}</span>
@@ -1616,13 +1641,13 @@ export default function Dashboard() {
               </div>
 
               {/* Date Selection */}
-              <div style={{ marginBottom: '32px' }}>
+              <div style={{ marginBottom: '24px' }}>
                 <label style={{ 
                   display: 'block', 
-                  marginBottom: '12px', 
+                  marginBottom: '10px', 
                   fontWeight: '700', 
                   color: '#1e293b',
-                  fontSize: '16px'
+                  fontSize: '15px'
                 }}>
                   Select Processing Date
               </label>
@@ -1633,15 +1658,17 @@ export default function Dashboard() {
                     onChange={(e) => setSendDateState(e.target.value)}
                 style={{
                   width: '100%',
-                      padding: '16px 20px',
+                      padding: '14px',
+                      paddingRight: '14px',
                       border: '2px solid #e2e8f0',
-                      borderRadius: '16px',
-                      fontSize: '16px',
+                      borderRadius: '14px',
+                      fontSize: '15px',
                       color: '#1e293b',
                       backgroundColor: 'white',
                       transition: 'all 0.3s ease',
                       outline: 'none',
-                      fontWeight: '500'
+                      fontWeight: '500',
+                      boxSizing: 'border-box'
                     }}
                     onFocus={(e) => {
                       e.target.style.borderColor = '#3b82f6';
@@ -1669,6 +1696,8 @@ export default function Dashboard() {
                   setShowDateModal(false);
                   setSendDateState('');
                   setExistingSendDates([]);
+                  setAllDataSent(false);
+                  setCompletedCount(0);
                 }}
                 style={{
                     padding: '14px 28px',
@@ -1700,6 +1729,11 @@ export default function Dashboard() {
               </button>
               <button
                   onClick={async () => {
+                    if (allDataSent) {
+                      alert('✅ All Completed OJT Data Already Sent!\n\nAll completed students have been sent to admin for approval.\nScheduling is not needed at this time.');
+                      return;
+                    }
+                    
                     if (!sendDate) {
                       alert('Please select a date first');
                       return;
@@ -1779,28 +1813,33 @@ export default function Dashboard() {
                     padding: '14px 28px',
                   border: '2px solid #e5e7eb',
                     borderRadius: '16px',
-                    background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                    background: allDataSent ? 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
                   color: '#000000',
-                  cursor: 'pointer',
+                  cursor: allDataSent ? 'not-allowed' : 'pointer',
                     fontWeight: '700',
                     fontSize: '15px',
                     transition: 'all 0.3s ease',
-                    boxShadow: '0 8px 16px rgba(59, 130, 246, 0.3)',
+                    boxShadow: allDataSent ? '0 4px 8px rgba(148, 163, 184, 0.2)' : '0 8px 16px rgba(59, 130, 246, 0.3)',
                     position: 'relative',
-                    overflow: 'hidden'
+                    overflow: 'hidden',
+                    opacity: allDataSent ? 0.6 : 1
                   }}
                   onMouseEnter={(e) => {
-                    const target = e.currentTarget as HTMLButtonElement;
-                    target.style.transform = 'translateY(-3px)';
-                    target.style.boxShadow = '0 12px 24px rgba(59, 130, 246, 0.4)';
+                    if (!allDataSent) {
+                      const target = e.currentTarget as HTMLButtonElement;
+                      target.style.transform = 'translateY(-3px)';
+                      target.style.boxShadow = '0 12px 24px rgba(59, 130, 246, 0.4)';
+                    }
                   }}
                   onMouseLeave={(e) => {
-                    const target = e.currentTarget as HTMLButtonElement;
-                    target.style.transform = 'translateY(0)';
-                    target.style.boxShadow = '0 8px 16px rgba(59, 130, 246, 0.3)';
+                    if (!allDataSent) {
+                      const target = e.currentTarget as HTMLButtonElement;
+                      target.style.transform = 'translateY(0)';
+                      target.style.boxShadow = '0 8px 16px rgba(59, 130, 246, 0.3)';
+                    }
                   }}
                 >
-                  Schedule Processing
+                  {allDataSent ? '✅ All Data Already Sent' : 'Schedule Processing'}
               </button>
               </div>
             </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchOJTByYear, updateOJTStatus, sendCompletedOJTToAdmin } from '../../services/api';
+import { fetchOJTByYear, updateOJTStatus } from '../../services/api';
 
 interface DetailsTableProps {
   onBack: () => void;
@@ -15,8 +15,6 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
   const [selected, setSelected] = useState<any | null>(null);
   const [search, setSearch] = useState(searchQuery || '');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [showSendModal, setShowSendModal] = useState(false);
-  const [sending, setSending] = useState(false);
   const [completingAll, setCompletingAll] = useState(false);
 
   useEffect(() => {
@@ -171,6 +169,10 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
       backgroundColor: '#fef3c7',
       color: '#d97706',
     },
+    statusIncomplete: {
+      backgroundColor: '#fee2e2',
+      color: '#dc2626',
+    },
     statusDropdown: {
       width: '100%',
       maxWidth: '160px',
@@ -199,16 +201,6 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
     backBtn: {
       padding: '10px 20px',
       background: '#6b7280',
-      color: 'white',
-      border: 'none',
-      borderRadius: '8px',
-      cursor: 'pointer',
-      fontWeight: '500',
-      fontSize: '14px',
-    },
-    sendBtn: {
-      padding: '10px 20px',
-      background: '#3b82f6',
       color: 'white',
       border: 'none',
       borderRadius: '8px',
@@ -327,60 +319,6 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
       alignItems: 'center',
       boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
       transition: 'all 0.2s ease',
-    },
-    sendModalOverlay: {
-      position: 'fixed' as const,
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0,0,0,0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 100,
-    },
-    sendModal: {
-      background: 'white',
-      width: '400px',
-      maxWidth: '90%',
-      borderRadius: '12px',
-      padding: '24px',
-      boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
-    },
-    sendModalTitle: {
-      fontSize: '18px',
-      fontWeight: 700,
-      marginBottom: '12px',
-      color: '#1f2937'
-    },
-    sendModalContent: {
-      fontSize: '14px',
-      color: '#6b7280',
-      marginBottom: '20px',
-      lineHeight: 1.5
-    },
-    sendModalActions: {
-      display: 'flex',
-      justifyContent: 'flex-end',
-      gap: '12px'
-    },
-    sendModalCancelBtn: {
-      padding: '8px 16px',
-      borderRadius: '6px',
-      border: '1px solid #d1d5db',
-      background: '#f9fafb',
-      cursor: 'pointer',
-      color: '#374151'
-    },
-    sendModalConfirmBtn: {
-      padding: '8px 16px',
-      borderRadius: '6px',
-      border: 'none',
-      background: '#dc2626',
-      cursor: 'pointer',
-      color: 'white',
-      fontWeight: '600'
     }
   };
 
@@ -423,9 +361,15 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
     })();
     
     // Status filter
-    const statusMatch = statusFilter === 'all' || 
-      (statusFilter === 'approved' && ojt.is_alumni) ||
-      (statusFilter === 'pending' && !ojt.is_alumni);
+    const statusMatch = (() => {
+      if (statusFilter === 'all') return true;
+      if (statusFilter === 'approved') return ojt.is_alumni;
+      if (statusFilter === 'pending') return isUserSentToAdmin(ojt);
+      if (statusFilter === 'ongoing') return !ojt.is_alumni && !isUserSentToAdmin(ojt) && (ojt.ojt_status || 'Ongoing') === 'Ongoing';
+      if (statusFilter === 'completed') return !ojt.is_alumni && !isUserSentToAdmin(ojt) && (ojt.ojt_status || 'Ongoing') === 'Completed';
+      if (statusFilter === 'incomplete') return !ojt.is_alumni && !isUserSentToAdmin(ojt) && (ojt.ojt_status || 'Ongoing') === 'Incomplete';
+      return true;
+    })();
     
     return searchMatch && statusMatch;
   });
@@ -507,6 +451,7 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
             <option value="pending" style={{ color: '#374151' }}>Pending</option>
             <option value="ongoing" style={{ color: '#374151' }}>Ongoing</option>
             <option value="completed" style={{ color: '#374151' }}>Completed</option>
+            <option value="incomplete" style={{ color: '#374151' }}>Incomplete</option>
           </select>
           
           <input
@@ -586,6 +531,13 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
                       }}>
                         PENDING
                       </span>
+                    ) : (ojt.ojt_status || 'Ongoing') === 'Incomplete' ? (
+                      <span style={{
+                        ...styles.statusText,
+                        ...styles.statusIncomplete
+                      }}>
+                        INCOMPLETE
+                      </span>
                     ) : (
                       <select
                         onClick={(e) => e.stopPropagation()}
@@ -610,7 +562,6 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
                       >
                         <option value="Completed">COMPLETED</option>
                         <option value="Ongoing">Ongoing</option>
-                        <option value="Incomplete">INCOMPLETED</option>
                       </select>
                     )}
                   </td>
@@ -640,10 +591,11 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
             onClick={async () => {
               setCompletingAll(true);
               try {
-                // Get only the students currently displayed in this section who are not already alumni
+                // Get only the students who can be updated (not alumni, not completed, not incomplete)
                 const currentSectionStudents = ojtData.filter(student => 
                   !student.is_alumni && 
-                  student.ojt_status !== 'Completed' // Only update students who aren't already completed
+                  student.ojt_status !== 'Completed' &&
+                  student.ojt_status !== 'Incomplete' // Don't update incomplete students
                 );
                 
                 // Update only the current section students to Completed status
@@ -673,15 +625,6 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
             disabled={completingAll}
           >
             {completingAll ? 'Completing...' : 'Complete All'}
-          </button>
-          <button
-            style={styles.sendBtn}
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowSendModal(true);
-            }}
-          >
-            Send to Admin
           </button>
         </div>
       </div>
@@ -834,108 +777,6 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
         </div>
       )}
 
-      {/* Send to Admin Modal */}
-      {showSendModal && (
-        <div style={styles.sendModalOverlay} onClick={() => setShowSendModal(false)}>
-          <div style={styles.sendModal} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.sendModalTitle}>Send to Admin</div>
-            <div style={styles.sendModalContent}>
-              Are you sure you want to send the completed OJT students to admin for approval?<br/>
-              This action will notify the admin about students ready for alumni conversion.
-            </div>
-            <div style={{ marginBottom: '20px' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#111827' }}>
-                Students to be sent to admin:
-              </h4>
-              <div style={{ 
-                background: '#f9fafb', 
-                border: '1px solid #e5e7eb', 
-                borderRadius: '8px', 
-                padding: '16px',
-                maxHeight: '200px', 
-                overflow: 'auto' 
-              }}>
-                {(() => {
-                  const completedStudents = ojtData.filter((r) => (r.ojt_status || 'Ongoing') === 'Completed' && !r.is_alumni);
-                  return completedStudents.length > 0 ? (
-                    <div>
-                      {completedStudents.map((student, idx) => (
-                        <div key={student.id} style={{ 
-                          padding: '8px 0', 
-                          borderBottom: idx < completedStudents.length - 1 ? '1px solid #f3f4f6' : 'none',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center'
-                        }}>
-                          <span style={{ fontWeight: '500', color: '#111827' }}>
-                            {student.first_name} {student.last_name}
-                          </span>
-                          <span style={{ fontSize: '14px', color: '#6b7280' }}>
-                            {student.ctu_id}
-                          </span>
-                        </div>
-                      ))}
-                      <div style={{ 
-                        marginTop: '12px', 
-                        padding: '8px 12px', 
-                        background: '#dbeafe', 
-                        borderRadius: '6px',
-                        fontSize: '14px',
-                        color: '#1e40af',
-                        fontWeight: '500'
-                      }}>
-                        Total: {completedStudents.length} student{completedStudents.length !== 1 ? 's' : ''}
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ textAlign: 'center', color: '#6b7280', fontStyle: 'italic' }}>
-                      No completed students found
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-            <div style={styles.sendModalActions}>
-              <button 
-                style={styles.sendModalCancelBtn}
-                onClick={() => setShowSendModal(false)}
-              >
-                Cancel
-              </button>
-              <button 
-                style={styles.sendModalConfirmBtn}
-                onClick={async () => {
-                  setSending(true);
-                  try {
-                    const completedIds = ojtData.filter((r) => (r.ojt_status || 'Ongoing') === 'Completed').map((r) => r.id);
-                    const res = await sendCompletedOJTToAdmin(selectedYear, completedIds);
-                    if (res?.success) {
-                      // Update local data to reflect sent to admin status
-                      setOjtData(prev => prev.map(user => 
-                        completedIds.includes(user.id) 
-                          ? { ...user, is_sent_to_admin: true }
-                          : user
-                      ));
-                      alert(`Sent to Admin. Completed: ${res.completed_count || completedIds.length}`);
-                    } else {
-                      alert(res?.message || 'Failed to send to admin');
-                    }
-                    setShowSendModal(false);
-                  } catch (err) {
-                    console.error('Send to admin failed', err);
-                    alert('Failed to send to admin');
-                  } finally {
-                    setSending(false);
-                  }
-                }}
-                disabled={sending}
-              >
-                {sending ? 'Sending...' : 'Send to Admin'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
