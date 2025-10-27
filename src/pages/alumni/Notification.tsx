@@ -425,23 +425,44 @@ const NotificationPage: React.FC = () => {
         const donationIdMatch = notif.content.match(/<!--DONATION_ID:(\d+)-->/);
         const commentIdMatch = notif.content.match(/<!--COMMENT_ID:(\d+)-->/);
         const replyIdMatch = notif.content.match(/<!--REPLY_ID:(\d+)-->/);
+        const repostIdMatch = notif.content.match(/<!--REPOST_ID:(\d+)-->/);
         
         // Prioritize original post IDs over comment/reply IDs for better redirects
         const originalPostId = postIdMatch?.[1] || forumIdMatch?.[1] || donationIdMatch?.[1];
         const commentId = commentIdMatch?.[1];
         const replyId = replyIdMatch?.[1];
+        const repostId = repostIdMatch?.[1];
         
         console.log('handleNotificationRedirect - Extracted IDs:', { 
           originalPostId, 
           commentId, 
           replyId,
+          repostId,
           hasForumId: !!forumIdMatch,
           hasDonationId: !!donationIdMatch,
           notificationType: notif.type 
         });
         
-        if (originalPostId || commentId || replyId) {
+        if (originalPostId || commentId || replyId || repostId) {
           const notificationType = notif.type.toLowerCase();
+          
+          // Check if it's a repost notification - handle it differently
+          if (notificationType === 'repost' && repostId) {
+            console.log('Repost notification detected - redirecting to repost:', repostId);
+            if (forumIdMatch) {
+              console.log('Forum repost notification - redirecting to forum page with repost_id:', repostId);
+              localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Store forum_id for reference
+              localStorage.setItem('pendingRepostId', repostId); // Store repost_id to display
+              navigate('/forum');
+              return;
+            } else if (donationIdMatch) {
+              console.log('Donation repost notification - redirecting to donation page with repost_id:', repostId);
+              localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Store donation_id for reference
+              localStorage.setItem('pendingRepostId', repostId); // Store repost_id to display
+              navigate('/donation');
+              return;
+            }
+          }
           
           // Check if it's a forum or donation notification and redirect accordingly
           // This catches ALL types of notifications (like, comment, mention, etc.)
@@ -577,49 +598,30 @@ const NotificationPage: React.FC = () => {
           
           // Validate post ID before redirecting
           if (postId && !isNaN(parseInt(postId))) {
-            // Check if this is a forum or donation notification (even for like/comment/reply)
-            if (forumIdMatch && originalPostId) {
-              console.log('Forum notification (like/comment/reply) - redirecting to forum page with forum_id:', forumIdMatch[1]);
+            // Check if this is a forum or donation notification (even for like/comment/reply/repost)
+            // Handle forum notifications (posts, reposts, comments, replies)
+            if (forumIdMatch) {
+              console.log(`${notificationType} notification - redirecting to forum page with forum_id:`, forumIdMatch[1]);
               localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
+              if (repostId) {
+                localStorage.setItem('pendingRepostId', repostId);
+              }
               navigate('/forum');
               return;
-            } else if (donationIdMatch && originalPostId) {
-              console.log('Donation notification (like/comment/reply) - redirecting to donation page with donation_id:', donationIdMatch[1]);
+            } 
+            // Handle donation notifications (posts, reposts, comments, replies)
+            else if (donationIdMatch) {
+              console.log(`${notificationType} notification - redirecting to donation page with donation_id:`, donationIdMatch[1]);
               localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
+              if (repostId) {
+                localStorage.setItem('pendingRepostId', repostId);
+              }
               navigate('/donation');
               return;
             }
             
-            // For forum/donation with comment-only (no originalPostId), resolve comment first
-            if ((forumIdMatch || donationIdMatch) && commentIdMatch && !originalPostId) {
-              console.log('Forum/Donation comment-only notification - resolving to post before redirect');
-              try {
-                const commentIdNum = parseInt(commentId!);
-                const response = await getPostFromComment(commentIdNum);
-                if (response.success && response.post_id) {
-                  postId = response.post_id.toString();
-                  console.log('Resolved comment to post ID:', postId);
-                  
-                  // Now redirect to forum or donation page
-                  if (forumIdMatch) {
-                    localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
-                    navigate('/forum');
-                  } else if (donationIdMatch) {
-                    localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
-                    navigate('/donation');
-                  }
-                  return;
-                } else {
-                  console.error('Could not resolve comment to post');
-                  alert('Could not find the post for this comment. It may have been deleted.');
-                  return;
-                }
-              } catch (error) {
-                console.error('Error resolving comment to post:', error);
-                alert('Error loading the post. Please try again.');
-                return;
-              }
-            }
+            // For regular posts with replies, we don't need to resolve - the IDs are already in the notification
+            // This handles reply notifications that now include POST_ID/FORUM_ID/DONATION_ID
             
             // For regular posts (not forum/donation), we need to resolve comment IDs first
             console.log(`Regular post notification - checking for post:`, postId);
@@ -651,6 +653,11 @@ const NotificationPage: React.FC = () => {
             
             // Store the post ID for the dashboard to open
             localStorage.setItem('pendingPostView', postId);
+            
+            // Store repost ID if this is a repost notification
+            if (repostId) {
+              localStorage.setItem('pendingRepostId', repostId);
+            }
             
             // Store profile picture information from notification for peso posts
             const authorPicMatch = notif.content.match(/<!--AUTHOR_PIC:([^>]+)-->/);

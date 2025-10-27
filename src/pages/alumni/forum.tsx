@@ -256,6 +256,72 @@ const ForumPage: React.FC = () => {
     }
   };
 
+  // Check for pending repost view from notification
+  const handleViewRepostById = async (repostId: string) => {
+    console.log('🔍 handleViewRepostById called with repostId:', repostId);
+    setPostLoading(true);
+    try {
+      const { api } = await import('../../services/api');
+      console.log('🔍 Fetching repost with ID:', repostId);
+      const response = await api.get(`reposts/${repostId}/detail/`);
+      console.log('🔍 Repost API response:', response.data);
+      if (response.data) {
+        // Transform repost data to show repost with original content
+        const repostData = response.data;
+        const original = repostData.original;
+        
+        // Build the data structure that PostCard expects
+        const transformedData = {
+          // Post info from original
+          post_id: original.forum_id || original.post_id || original.donation_id,
+          post_content: original.content || original.post_content || original.description,
+          post_image: null,
+          post_images: original.images || original.post_images || [],
+          type: original.type || 'forum',
+          created_at: repostData.repost_date, // Use repost date as the created_at
+          
+          // Original post user info
+          user: original.user,
+          
+          // Likes and comments from the REPOST (not original)
+          likes: repostData.likes || [],
+          comments: repostData.comments || [],
+          likes_count: repostData.likes_count || 0,
+          comments_count: repostData.comments_count || 0,
+          
+          // Repost data
+          repostData: {
+            repost_id: repostData.repost_id,
+            repost_date: repostData.repost_date,
+            repost_caption: repostData.caption,
+            user: repostData.user,
+            original_post: original
+          }
+        };
+        
+        setOriginalPostModalData(transformedData);
+        console.log('🔍 Set repost modal data:', transformedData);
+        
+        // Update the liked state for the modal repost
+        setLikedPosts(prev => ({
+          ...prev,
+          [repostData.repost_id]: repostData.likes?.some((like: any) => like.user_id === currentUserId) || false
+        }));
+        
+        setShowOriginalPostModal(true);
+        console.log('✅ Repost modal opened for notification');
+      } else {
+        console.error('❌ No data in API response');
+      }
+    } catch (error: any) {
+      console.error('❌ Error fetching repost by ID:', error);
+      console.error('❌ Error details:', error.response?.data || error.message);
+      alert('Unable to load the repost. It may have been deleted.');
+    } finally {
+      setPostLoading(false);
+    }
+  };
+
   // Handle viewing a forum post by ID (for notifications)
   const handleViewForumPostById = async (postId: string) => {
     console.log('handleViewForumPostById called with postId:', postId);
@@ -307,6 +373,24 @@ const ForumPage: React.FC = () => {
   // Check for pending forum post view from notification
   useEffect(() => {
     console.log('🔍 useEffect for pendingForumPostView running...');
+    
+    // Check for pending repost ID first
+    const pendingRepostId = localStorage.getItem('pendingRepostId');
+    if (pendingRepostId) {
+      console.log('🔍 Found pending repost ID:', pendingRepostId);
+      localStorage.removeItem('pendingRepostId');
+      setTimeout(() => {
+        console.log('🔍 Calling handleViewRepostById with ID:', pendingRepostId);
+        if (typeof handleViewRepostById === 'function') {
+          handleViewRepostById(pendingRepostId);
+        } else {
+          console.error('❌ handleViewRepostById is not a function!');
+        }
+      }, 500);
+      return; // Don't check for regular post view if we have a repost
+    }
+    
+    // Check for regular forum post view
     const pendingForumPostId = localStorage.getItem('pendingForumPostView');
     console.log('🔍 Raw localStorage value:', pendingForumPostId);
     if (pendingForumPostId) {
