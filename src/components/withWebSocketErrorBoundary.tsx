@@ -47,6 +47,16 @@ export function useWebSocketErrorHandler() {
       } else if (error instanceof Event) {
         errorMessage = `WebSocket Event error: ${error.type}`;
         errorStack = `Event type: ${error.type}, target: ${error.target}`;
+        // Add more details if available
+        if (error.target && typeof error.target === 'object') {
+          const target = error.target as any;
+          if (target.readyState !== undefined) {
+            errorStack += `, readyState: ${target.readyState}`;
+          }
+          if (target.url) {
+            errorStack += `, url: ${target.url}`;
+          }
+        }
       } else {
         errorMessage = String(error);
       }

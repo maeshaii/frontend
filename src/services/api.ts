@@ -692,6 +692,7 @@ export type ConversationSummary = {
   conversation_id: number;
   updated_at: string;
   unread_count: number;
+  is_message_request?: boolean;
   last_message?: {
     content: string;
     created_at: string;
@@ -906,6 +907,17 @@ export const repostDonation = async (donationId: number, repostCaption: string) 
   const response = await api.post(`donations/${donationId}/repost/`, {
     caption: repostCaption
   });
+  return response.data;
+};
+
+// New API functions for messaging features
+export const getMutualFollows = async (userId: number) => {
+  const response = await api.get(`follow/${userId}/mutual/`);
+  return response.data;
+};
+
+export const getOnlineUsers = async () => {
+  const response = await api.get('online-users/');
   return response.data;
 };
 

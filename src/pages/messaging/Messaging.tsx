@@ -2,14 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { ConversationSummary, listConversations } from '../../services/api';
 import AlumniTopBar from '../alumni/AlumniTopBar';
 import ConversationList from './ConversationList';
-import ChatInterface from './ChatInterface';
+import ModernChatInterface from './ModernChatInterface';
 import UserSearch from './UserSearch';
+import { ErrorBoundary } from '../../components/ErrorBoundary';
 import './Messaging.css';
+import './ErrorFallback.css';
 
 const Messaging: React.FC = () => {
   const [selectedConversation, setSelectedConversation] = useState<ConversationSummary | null>(null);
   const [showUserSearch, setShowUserSearch] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const handleResize = () => {
@@ -44,6 +48,23 @@ const Messaging: React.FC = () => {
     }
   }, []);
 
+  // Load conversations
+  useEffect(() => {
+    const loadConversations = async () => {
+      try {
+        setIsLoading(true);
+        const data = await listConversations();
+        setConversations(data || []);
+      } catch (error) {
+        console.error('Failed to load conversations:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadConversations();
+  }, []);
+
   const handleSelectConversation = (conversation: ConversationSummary) => {
     setSelectedConversation(conversation);
     if (isMobile) {
@@ -61,6 +82,11 @@ const Messaging: React.FC = () => {
     setSelectedConversation(null);
   };
 
+  const handleSearchChange = (query: string) => {
+    // Handle search functionality
+    console.log('Search query:', query);
+  };
+
   const [showProfile, setShowProfile] = useState(false);
 
   const handleLogout = () => {
@@ -69,7 +95,7 @@ const Messaging: React.FC = () => {
 
 	return (
 		<div className="messaging-page">
-      {/* Global Top Bar (matches the second image) */}
+      {/* Global Top Bar */}
       <AlumniTopBar
         showProfile={showProfile}
         setShowProfile={setShowProfile}
@@ -78,60 +104,57 @@ const Messaging: React.FC = () => {
         isPeso={false}
       />
 
-			{/* Messaging Top Bar */}
-			<div className="messaging-top-bar">
-				<div className="top-bar-left">
-					<h1 className="messaging-title">Messaging</h1>
-				</div>
-				<div className="top-bar-center">
-					<div className="search-container">
-						<span className="search-icon">🔍</span>
-						<input
-							type="text"
-							placeholder="Search messages"
-							className="search-input"
-						/>
-					</div>
-				</div>
-				<div className="top-bar-right">
-					<button className="new-message-btn" onClick={() => setShowUserSearch(true)}>
-						✏️
-					</button>
-					<div className="unread-dropdown">
-						<button className="unread-btn">Unread ▼</button>
-					</div>
-				</div>
-			</div>
-
 			<div className="messaging-container">
+        {/* Left Sidebar - Conversations */}
         {(!isMobile || !selectedConversation) && (
           <ConversationList
-            onSelectConversation={handleSelectConversation}
+            conversations={conversations}
+            onConversationSelect={handleSelectConversation}
             selectedConversationId={selectedConversation?.conversation_id}
+            onSearchChange={handleSearchChange}
+            isLoading={isLoading}
           />
         )}
         
+        {/* Main Chat Area */}
         {(!isMobile || selectedConversation) && (
-          <ChatInterface
-            conversation={selectedConversation}
-            onBack={isMobile ? handleBackToConversations : undefined}
-          />
-        )}
-
-          {!selectedConversation && !isMobile && (
-            <div className="welcome-message">
-              <div className="welcome-content">
-                <h2>Welcome to Messages</h2>
-                <p>Start a new conversation to begin messaging.</p>
-                <button 
-                  onClick={() => setShowUserSearch(true)}
-                  className="start-conversation-button"
-                >
-                  Start New Conversation
+          <ErrorBoundary
+            fallback={
+              <div className="error-fallback">
+                <h3>Something went wrong with the chat</h3>
+                <p>Please refresh the page to try again.</p>
+                <button onClick={() => window.location.reload()}>
+                  Refresh Page
                 </button>
               </div>
+            }
+          >
+            <ModernChatInterface
+              conversation={selectedConversation}
+              onBack={isMobile ? handleBackToConversations : undefined}
+            />
+          </ErrorBoundary>
+        )}
+
+
+        {/* Welcome Message for Desktop */}
+        {!selectedConversation && !isMobile && (
+          <div className="no-conversation-selected">
+            <div className="no-conversation-content">
+              <div className="no-conversation-icon">💬</div>
+              <h2 className="no-conversation-title">Welcome to Messages</h2>
+              <p className="no-conversation-message">
+                Select a conversation from the sidebar to start messaging
+              </p>
+              <button 
+                onClick={() => setShowUserSearch(true)}
+                className="new-message-btn"
+              >
+                Start New Conversation
+              </button>
             </div>
-          )}
+          </div>
+        )}
 			</div>
 
       {showUserSearch && (

@@ -159,8 +159,8 @@ export function useRealTimeNotifications(
       console.log('🔌 Token value:', token ? token.substring(0, 20) + '...' : 'null');
       
       if (!token) {
-        console.error('❌ No access token found! WebSocket will not connect.');
-        setError('No access token found for WebSocket connection');
+        console.warn('⚠️ No access token found! WebSocket will not connect.');
+        // Don't set error for missing token - just skip WebSocket
         return;
       }
       
@@ -171,7 +171,8 @@ export function useRealTimeNotifications(
       ws.onStatus((status) => {
         setIsConnected(status === 'connected');
         if (status === 'error') {
-          setError('WebSocket connection failed');
+          // Only log error, don't display to user - fallback to polling is available
+          console.warn('WebSocket connection failed, will use polling fallback');
         }
       });
 
@@ -222,12 +223,14 @@ export function useRealTimeNotifications(
 
           case 'connection_denied':
             console.warn('Notification WebSocket connection denied:', event.message);
-            setError(event.message);
+            // Don't set error - polling will handle it
+            setIsConnected(false);
             break;
 
           case 'error':
-            console.error('Notification WebSocket error:', event.message);
-            setError(event.message);
+            console.warn('Notification WebSocket error:', event.message);
+            // Don't set error - polling will handle it
+            setIsConnected(false);
             break;
         }
       });
@@ -235,13 +238,16 @@ export function useRealTimeNotifications(
       // Connect WebSocket
       console.log('🚀 Attempting to connect WebSocket...');
       ws.connect().catch((err) => {
-        console.error('❌ Failed to connect notification WebSocket:', err);
-        setError('Failed to connect to real-time notifications');
+        // Silently handle WebSocket connection failures - polling fallback will work
+        console.warn('⚠️ WebSocket connection failed, will use polling fallback:', err.message);
+        setIsConnected(false);
+        // Don't set error state - user doesn't need to know about WebSocket issues
       });
 
     } catch (err) {
-      console.error('Error setting up notification WebSocket:', err);
-      setError('Failed to setup real-time notifications');
+      // Handle errors gracefully - polling will handle notifications
+      console.warn('Error setting up notification WebSocket (will use polling):', err);
+      setIsConnected(false);
     }
   }, []);
 

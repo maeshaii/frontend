@@ -18,14 +18,16 @@ export function sanitizeUserInput(input: string, maxLength: number = 1000): stri
     throw new Error(`Input too long. Maximum ${maxLength} characters allowed.`);
   }
 
-  // Remove HTML tags
+  // Remove HTML tags (but preserve line breaks)
   sanitized = sanitized.replace(/<[^>]*>/g, '');
   
-  // Remove dangerous HTML entities
-  sanitized = sanitized.replace(/&[#\w]+;/g, '');
+  // Remove dangerous HTML entities (but keep safe ones and common punctuation)
+  sanitized = sanitized.replace(/&(?!amp;|lt;|gt;|quot;|#x27;|#x2F;|nbsp;|#32;|#160;)[#\w]+;/g, '');
   
-  // Remove excessive whitespace
-  sanitized = sanitized.replace(/\s+/g, ' ').trim();
+  // Normalize whitespace but preserve line breaks
+  sanitized = sanitized.replace(/[ \t]+/g, ' '); // Replace multiple spaces/tabs with single space
+  sanitized = sanitized.replace(/\n\s*\n/g, '\n'); // Replace multiple newlines with single newline
+  sanitized = sanitized.trim();
   
   // Check for empty content after sanitization
   if (!sanitized) {

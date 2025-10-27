@@ -22,6 +22,7 @@ export type NotificationWsEvent =
   | { type: 'notification_count_update'; count: number }
   | { type: 'connection_established'; user_id: number; timestamp: string }
   | { type: 'connection_denied'; reason: string; message: string }
+  | { type: 'rate_limit_exceeded'; reason: string; retry_after?: number }
   | { type: 'pong'; timestamp: string }
   | { type: 'error'; message: string };
 
@@ -39,6 +40,7 @@ export class NotificationWebSocket {
   private isConnecting = false;
   public isDestroyed = false;
   private heartbeatInterval: number | null = null;
+  private rateLimitRetryAfter = 0;
 
   constructor(token?: string) {
     // Get WebSocket base URL - FIXED: Use backend port 8000 instead of frontend port 3000
@@ -65,6 +67,21 @@ export class NotificationWebSocket {
   async connect(): Promise<void> {
     if (this.isConnecting || this.isDestroyed) return;
     
+    // Check rate limiting
+    if (this.rateLimitRetryAfter > 0) {
+      const now = Date.now();
+      if (now < this.rateLimitRetryAfter) {
+        const waitTime = this.rateLimitRetryAfter - now;
+        console.log(`Notification WebSocket rate limited, waiting ${waitTime}ms before reconnecting`);
+        setTimeout(() => {
+          this.connect();
+        }, waitTime);
+        return;
+      }
+      // Reset rate limit if time has passed
+      this.rateLimitRetryAfter = 0;
+    }
+    
     this.isConnecting = true;
     this.statusCallbacks.forEach(callback => callback('connecting'));
 
@@ -82,6 +99,7 @@ export class NotificationWebSocket {
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
+        this.rateLimitRetryAfter = 0;
         this.statusCallbacks.forEach(callback => callback('connected'));
         this.startHeartbeat();
         console.log('✅ Notification WebSocket connected successfully!');
@@ -91,6 +109,16 @@ export class NotificationWebSocket {
         try {
           console.log('📨 Notification WebSocket received message:', event.data);
           const data: NotificationWsEvent = JSON.parse(event.data);
+          
+          // Check for rate limit messages
+          if (data.type === 'rate_limit_exceeded' || data.type === 'connection_denied') {
+            console.warn('Notification WebSocket rate limit exceeded:', data);
+            const retryAfter = data.type === 'rate_limit_exceeded' ? (data.retry_after || 60000) : 60000;
+            this.rateLimitRetryAfter = Date.now() + retryAfter;
+            this.statusCallbacks.forEach(callback => callback('error'));
+            return;
+          }
+          
           console.log('📋 Parsed notification data:', data);
           this.eventCallbacks.forEach(callback => callback(data));
         } catch (error) {
@@ -108,9 +136,21 @@ export class NotificationWebSocket {
         }
       };
 
-      this.ws.onerror = (error) => {
-        console.error('Notification WebSocket error:', error);
+      this.ws.onerror = (event) => {
+        // Log detailed error information without throwing
+        const ws = event.target as WebSocket;
+        const errorDetails = {
+          type: event.type,
+          readyState: ws?.readyState,
+          url: wsUrl,
+          timestamp: new Date().toISOString()
+        };
+        console.warn('Notification WebSocket connection error:', errorDetails);
+        
+        this.isConnecting = false;
         this.statusCallbacks.forEach(callback => callback('error'));
+        
+        // Don't throw error here - let it fail gracefully and rely on reconnect logic
       };
 
     } catch (error) {
@@ -157,7 +197,7 @@ export class NotificationWebSocket {
     }
 
     this.reconnectAttempts++;
-    const delay = this.reconnectDelay * this.reconnectAttempts;
+    const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000); // Exponential backoff with max 30s
     
     console.log(`Scheduling notification WebSocket reconnection in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
     
