@@ -1380,6 +1380,16 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
               });
               
               const filteredFeed = sortedUnifiedFeed.filter(item => {
+                // Hide donations for OJT accounts (robust across shapes)
+                if (userType === 'ojt') {
+                  const isDonationFeed = item.feed_type === 'donation' || item.feed_type === 'donation_repost';
+                  const isDonationType = item.type === 'donation' || item.post_type === 'donation';
+                  const isDonationRepost = (item.item_type === 'repost') && (item.type === 'donation' || item.feed_type === 'donation_repost' || item.post_type === 'donation');
+                  if (isDonationFeed || isDonationType || isDonationRepost) {
+                    return false;
+                  }
+                }
+                
                 const currentUserId = getCurrentUserId(user);
                 
                 // Handle different feed item types
@@ -1472,6 +1482,15 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 const currentUserId = getCurrentUserId(user);
                 
                 // Handle different feed item types
+                // Hard block donations for OJT at render time as well (belt & suspenders)
+                if (userType === 'ojt') {
+                  const isDonation = item.feed_type === 'donation' || item.type === 'donation' || item.post_type === 'donation';
+                  const isDonationRep = (item.item_type === 'repost') && (item.type === 'donation' || item.feed_type === 'donation_repost' || item.post_type === 'donation');
+                  if (isDonation || isDonationRep) {
+                    return acc; // skip
+                  }
+                }
+
                 if (item.feed_type === 'donation' || item.feed_type === 'donation_repost') {
                   // Handle donation items
                   if (item.feed_type === 'donation_repost' && item.repostData) {

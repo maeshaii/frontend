@@ -4,6 +4,7 @@ import { getProfilePicUrl, handleProfilePicError, getImageUrl } from '../utils/p
 import RepostButton from './RepostButton';
 import ReplyInput from './ReplyInput';
 import Reply from './Reply';
+import PostStatsRow from './PostStatsRow';
 
 // Minimal, reusable types for the repost card
 interface UserLite {
@@ -120,16 +121,9 @@ const RepostCard: React.FC<RepostCardProps> = ({
 
   const [liked, setLiked] = useState<boolean>(!!repost.likes?.some(l => l.user_id === currentUserId));
   const [likesCount, setLikesCount] = useState<number>(repost.likes_count || repost.likes?.length || 0);
-
-  // Sync like state when repost data changes (e.g., after refresh)
-  useEffect(() => {
-    const isLikedByCurrentUser = !!repost.likes?.some(l => l.user_id === currentUserId);
-    setLiked(isLikedByCurrentUser);
-    setLikesCount(repost.likes_count || repost.likes?.length || 0);
-  }, [repost.likes, repost.likes_count, currentUserId]);
   const [showLikesModal, setShowLikesModal] = useState(false);
   const [likesLoading, setLikesLoading] = useState(false);
-  const [fetchedLikes, setFetchedLikes] = useState<any[]>([]);
+  const [fetchedLikes, setFetchedLikes] = useState<any[]>(repost.likes || []);
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [commentValue, setCommentValue] = useState('');
   
@@ -157,32 +151,72 @@ const RepostCard: React.FC<RepostCardProps> = ({
   // Check if current user owns this repost
   const isOwn = repost.user.user_id === currentUserId;
 
-  const handleLikeToggle = async () => {
+  const handleLike = async () => {
     if (!currentUserId) {
       console.warn('Cannot like: No current user');
       return;
     }
     
-    const previousLiked = liked;
-    const previousCount = likesCount;
+    try {
+      // Optimistic update
+      setLiked(true);
+      setLikesCount(c => c + 1);
+      setFetchedLikes(prev => [...prev, {
+        user_id: currentUserId,
+        user: {
+          user_id: currentUserId,
+          f_name: repost.user.f_name,
+          m_name: repost.user.m_name,
+          l_name: repost.user.l_name,
+          profile_pic: repost.user.profile_pic
+        }
+      }]);
+      
+      await likeRepost(repost.repost_id);
+    } catch (e) {
+      console.error('Error liking repost:', e);
+      // Rollback
+      setLiked(false);
+      setLikesCount(c => Math.max(0, c - 1));
+      setFetchedLikes(prev => prev.filter(like => {
+        const likeUser = like.user || like;
+        return likeUser.user_id !== currentUserId;
+      }));
+      alert('Failed to update like. Please try again.');
+    }
+  };
+
+  const handleUnlike = async () => {
+    if (!currentUserId) {
+      console.warn('Cannot unlike: No current user');
+      return;
+    }
     
     try {
       // Optimistic update
-      if (liked) {
-        setLiked(false);
-        setLikesCount(c => Math.max(0, c - 1));
-        await unlikeRepost(repost.repost_id);
-      } else {
-        setLiked(true);
-        setLikesCount(c => c + 1);
-        await likeRepost(repost.repost_id);
-      }
-      onRefresh?.();
+      setLiked(false);
+      setLikesCount(c => Math.max(0, c - 1));
+      setFetchedLikes(prev => prev.filter(like => {
+        const likeUser = like.user || like;
+        return likeUser.user_id !== currentUserId;
+      }));
+      
+      await unlikeRepost(repost.repost_id);
     } catch (e) {
-      console.error('Error toggling like on repost:', e);
-      // Revert on error
-      setLiked(previousLiked);
-      setLikesCount(previousCount);
+      console.error('Error unliking repost:', e);
+      // Rollback
+      setLiked(true);
+      setLikesCount(c => c + 1);
+      setFetchedLikes(prev => [...prev, {
+        user_id: currentUserId,
+        user: {
+          user_id: currentUserId,
+          f_name: repost.user.f_name,
+          m_name: repost.user.m_name,
+          l_name: repost.user.l_name,
+          profile_pic: repost.user.profile_pic
+        }
+      }]);
       alert('Failed to update like. Please try again.');
     }
   };
@@ -436,33 +470,23 @@ const RepostCard: React.FC<RepostCardProps> = ({
     }
   };
 
-  // Load likes data when component mounts to display usernames in summary
+  // Load likes data once on mount to display usernames in summary
   useEffect(() => {
-    if (likesCount > 0) {
-      let mounted = true;
-      (async () => {
-        try {
-          const data = await getRepostLikes(repost.repost_id);
-          if (mounted) {
-            setFetchedLikes(data?.likes || []);
-            // Update like state based on fetched data
-            const isLikedByCurrentUser = data?.likes?.some((like: any) => {
-              const likeUser = like.user || like;
-              return likeUser.user_id === currentUserId;
-            });
-            if (isLikedByCurrentUser !== undefined) {
-              setLiked(isLikedByCurrentUser);
-            }
-          }
-        } catch {
-          if (mounted) setFetchedLikes([]);
+    let mounted = true;
+    (async () => {
+      try {
+        const data = await getRepostLikes(repost.repost_id);
+        if (mounted) {
+          setFetchedLikes(data?.likes || []);
         }
-      })();
-      return () => {
-        mounted = false;
-      };
-    }
-  }, [repost.repost_id, likesCount, currentUserId]);
+      } catch {
+        if (mounted) setFetchedLikes([]);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [repost.repost_id]);
 
   // Sync comments from prop
   useEffect(() => {
@@ -1069,38 +1093,21 @@ const RepostCard: React.FC<RepostCardProps> = ({
             })()}
           </div>
         </div>
+      </div>
 
-        {/* Stats Row - Like Mobile */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 8px', marginBottom: 8 }}>
-                <span
-                  onClick={() => setShowLikesModal(true)}
-                  style={{ 
-                    fontSize: '12px',
-              color: '#666',
-              cursor: 'pointer'
-            }}
-          >
-            {likesCount} {likesCount === 1 ? 'like' : 'likes'}
-                </span>
-                <span
-            onClick={() => setShowCommentInput(v => !v)}
-                  style={{ 
-                    fontSize: '12px',
-              color: '#666',
-              cursor: 'pointer'
-            }}
-          >
-            {repost.comments_count || 0} comments
-          </span>
-          <span style={{ fontSize: '12px', color: '#666' }}>
-            0 reposts
-                </span>
-          </div>
+      {/* Facebook-style likes and comments display */}
+      <PostStatsRow
+        likes={fetchedLikes}
+        comments={comments}
+        onLikesClick={() => setShowLikesModal(true)}
+        onCommentsClick={() => setShowCommentInput(v => !v)}
+        animate={true}
+      />
 
-        {/* Actions */}
-        <div style={{ display: 'flex', justifyContent: 'space-around', borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+      {/* Actions */}
+      <div style={{ display: 'flex', justifyContent: 'space-around', borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
           <button
-            onClick={handleLikeToggle}
+            onClick={() => liked ? handleUnlike() : handleLike()}
             className="post-action-item"
             style={{ 
               color: liked ? '#1e3a8a' : '#555', 
@@ -1112,7 +1119,8 @@ const RepostCard: React.FC<RepostCardProps> = ({
               display: 'flex', 
               alignItems: 'center', 
               gap: 6,
-              fontWeight: liked ? 'bold' : 'normal'
+              fontWeight: liked ? 'bold' : 'normal',
+              transition: 'color 0.3s ease, font-weight 0.3s ease'
             }}
           >
             <span style={{ fontSize: 18 }}>👍</span>
@@ -1162,10 +1170,10 @@ const RepostCard: React.FC<RepostCardProps> = ({
             style={{ color: '#555', padding: '8px', fontSize: 12 }}
             className="post-action-item"
           />
-        </div>
+      </div>
 
-        {/* Comment input */}
-        {showCommentInput && (
+      {/* Comment input */}
+      {showCommentInput && (
           <div style={{ padding: '12px 16px', borderTop: '1px solid #f0f0f0' }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
@@ -1186,10 +1194,10 @@ const RepostCard: React.FC<RepostCardProps> = ({
               </button>
             </div>
           </div>
-        )}
+      )}
 
-        {/* Comments section */}
-        {(comments && comments.length > 0) || (repost.comments_count && repost.comments_count > 0) ? (
+      {/* Comments section */}
+      {(comments && comments.length > 0) || (repost.comments_count && repost.comments_count > 0) ? (
           <div className="comments-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
             {comments && comments.length > 0 ? (
               (showAllComments ? comments : comments.slice(0, 2)).map((comment) => (
@@ -1553,7 +1561,6 @@ const RepostCard: React.FC<RepostCardProps> = ({
             )}
           </div>
         ) : null}
-      </div>
 
       {/* Likes modal */}
       {showLikesModal && (
