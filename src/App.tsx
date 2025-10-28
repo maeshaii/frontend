@@ -239,6 +239,23 @@ const App: React.FC = () => {
               </PrivateRoute>
             }
           />
+          {/* OJT profile route */}
+          <Route
+            path="/ojt/profile/:id"
+            element={
+              <PrivateRoute>
+                <AlumniProfile />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/ojt/profile"
+            element={
+              <PrivateRoute roles={['user', 'ojt']}>
+                <AlumniProfile />
+              </PrivateRoute>
+            }
+          />
 
           {/* Unified routes for alumni and OJT users */}
           <Route

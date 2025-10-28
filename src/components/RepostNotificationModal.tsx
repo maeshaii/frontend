@@ -86,8 +86,24 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
 
       // Fetch the specific repost by ID
       const repostResponse = await api.get(`reposts/${repostId}/detail/`);
-      setRepost(repostResponse.data);
-      setOriginalPost(repostResponse.data.original);
+      const repostData = repostResponse.data;
+      
+      // Check if this is a donation repost and fetch comments if needed
+      if (repostData.original && repostData.original.donation_id) {
+        // This is a donation repost, fetch donation with comments
+        try {
+          const donationResponse = await api.get(`donations/${repostData.original.donation_id}/`);
+          if (donationResponse.data && donationResponse.data.comments) {
+            // Merge donation comments into repost data
+            repostData.comments = donationResponse.data.comments;
+          }
+        } catch (err) {
+          console.log('Could not fetch donation comments:', err);
+        }
+      }
+      
+      setRepost(repostData);
+      setOriginalPost(repostData.original);
 
       // After fetching repost data, check for comments with existing replies and load them
       if (repostResponse.data.comments && repostResponse.data.comments.length > 0) {

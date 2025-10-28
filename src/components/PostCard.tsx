@@ -21,6 +21,7 @@ import PhotoGalleryModal from './PhotoGalleryModal';
 import Reply from './Reply';
 import ReplyInput from './ReplyInput';
 import RepostButton from './RepostButton';
+import PostStatsRow from './PostStatsRow';
 
 interface RepostItem {
   repost_id: number;
@@ -1460,7 +1461,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 if (originalImages.length === 0) return null;
 
                 return (
-                <div style={{ marginTop: 8 }}>
+                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'center' }}>
                     {originalImages.length === 1 ? (
                       // Single image
                       <img
@@ -1603,16 +1604,17 @@ const PostCard: React.FC<PostCardProps> = ({
             </div>
           )}
 
-            {/* Facebook-style likes and comments display for repost */}
-            <div style={{ 
-              marginTop: 8, 
-              padding: '8px 12px', 
-              borderRadius: 8,
-              color: '#6c757d',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                {/* Likes text */}
-                {repostData.likes && repostData.likes.length > 0 ? (
+            {/* Facebook-style likes and comments display for repost - Only show when there are likes or comments */}
+            {((repostData.likes && repostData.likes.length > 0) || (post.comments && post.comments.length > 0)) && (
+              <div style={{ 
+                marginTop: 8, 
+                padding: '8px 12px', 
+                borderRadius: 8,
+                color: '#6c757d',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {/* Likes text */}
+                  {repostData.likes && repostData.likes.length > 0 ? (
                   <span
                     onClick={() => {
                       console.log('Repost like summary clicked, setting showRepostLikesModal to true');
@@ -1641,19 +1643,7 @@ const PostCard: React.FC<PostCardProps> = ({
                       : `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ` and ${repostData.likes.length - 1} others liked this`
                     }
                   </span>
-                ) : (
-                  <span
-                    style={{ 
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      color: '#9ca3af'
-                    }}
-                  >
-                    No likes yet
-                  </span>
-                )}
+                ) : null}
                   
                   {/* Comments count */}
                   {post.comments && post.comments.length > 0 && (
@@ -1679,6 +1669,7 @@ const PostCard: React.FC<PostCardProps> = ({
                   )}
                 </div>
               </div>
+            )}
 
             {/* Repost Actions - Same as regular post actions */}
             <div className="post-actions" style={{ 
@@ -1692,44 +1683,21 @@ const PostCard: React.FC<PostCardProps> = ({
                   likedPosts[repostData?.repost_id] ? handleUnlike() : handleLike();
                 }}
                 className="post-action-item"
-                style={{
-                  color: likedPosts[repostData?.repost_id] ? '#ef4444' : '#6c757d',
-                  fontWeight: likedPosts[repostData?.repost_id] ? '600' : '400',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
+                style={{ 
+                  color: likedPosts[repostData?.repost_id] ? '#1e3a8a' : '#555', 
+                  background: 'transparent', 
+                  border: 'none', 
+                  cursor: 'pointer', 
+                  padding: '8px', 
+                  fontSize: 12, 
+                  display: 'flex', 
+                  alignItems: 'center', 
                   gap: 6,
-                  transition: 'all 0.3s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f8f9fa';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
+                  fontWeight: likedPosts[repostData?.repost_id] ? 'bold' : 'normal'
                 }}
               >
-                <span style={{ 
-                  fontSize: '16px', 
-                  color: likedPosts[repostData?.repost_id] ? '#3b82f6' : '#6b7280',
-                  fontWeight: likedPosts[repostData?.repost_id] ? '900' : '400'
-                }}>
-                  {likedPosts[repostData?.repost_id] ? '👍' : '👍'}
-                </span>
-                <span 
-                  onClick={() => setShowRepostLikesModal(true)}
-                  style={{
-                    color: likedPosts[repostData?.repost_id] ? '#ef4444' : '#6c757d',
-                    fontWeight: likedPosts[repostData?.repost_id] ? '600' : '400',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {repostData?.likes_count === 1 ? '1 like' : (repostData?.likes_count && repostData.likes_count > 1) ? `${repostData.likes_count} likes` : 'Like'}
-                </span>
+                <span style={{ fontSize: 18 }}>👍</span>
+                <span>Like</span>
               </button>
               <button
                 onClick={() => setShowCommentInput?.(prev => ({ ...prev, [repostData?.repost_id || post.post_id]: !prev[repostData?.repost_id || post.post_id] }))}
@@ -2243,7 +2211,7 @@ const PostCard: React.FC<PostCardProps> = ({
         if (images.length === 0) return null;
 
         return (
-        <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 8, display: 'flex', justifyContent: 'center' }}>
             {images.length === 1 ? (
               // Single image
           <img
@@ -2383,81 +2351,16 @@ const PostCard: React.FC<PostCardProps> = ({
       })()}
 
       {/* Facebook-style likes and comments display */}
-      <div style={{ 
-        marginTop: 8, 
-        padding: '8px 12px', 
-        borderRadius: 8,
-        color: '#6c757d',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          {/* Likes text */}
-          {post.likes && post.likes.length > 0 ? (
-            <span
-              onClick={() => {
-                console.log('Like summary clicked (regular post), setting showLikesModal to true');
-                setShowLikesModal(true);
-              }}
-              style={{ 
-                fontSize: '12px',
-                fontWeight: '500',
-                padding: '4px 8px',
-                borderRadius: '4px',
-                color: '#6b7280',
-                cursor: 'pointer',
-                transition: 'background-color 0.2s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f8f9fa';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-              }}
-            >👍
-              {post.likes.length === 1 
-                ? `${(post.likes[0] as any).user?.f_name || post.likes[0].f_name || ''} ${(post.likes[0] as any).user?.m_name || (post.likes[0] as any).m_name || ''} ${(post.likes[0] as any).user?.l_name || post.likes[0].l_name || ''}`.trim() + ' liked this'
-                : post.likes.length === 2
-                ? `${(post.likes[0] as any).user?.f_name || post.likes[0].f_name || ''} ${(post.likes[0] as any).user?.m_name || (post.likes[0] as any).m_name || ''} ${(post.likes[0] as any).user?.l_name || post.likes[0].l_name || ''}`.trim() + ` and ${(post.likes[1] as any).user?.f_name || post.likes[1].f_name || ''} ${(post.likes[1] as any).user?.m_name || (post.likes[1] as any).m_name || ''} ${(post.likes[1] as any).user?.l_name || post.likes[1].l_name || ''}`.trim() + ' liked this'
-                : `${(post.likes[0] as any).user?.f_name || post.likes[0].f_name || ''} ${(post.likes[0] as any).user?.m_name || (post.likes[0] as any).m_name || ''} ${(post.likes[0] as any).user?.l_name || post.likes[0].l_name || ''}`.trim() + ` and ${post.likes.length - 1} others liked this`
-              }
-            </span>
-          ) : (
-            <span
-              style={{ 
-                fontSize: '12px',
-                fontWeight: '500',
-                padding: '4px 8px',
-                borderRadius: '4px',
-                color: '#9ca3af'
-              }}
-            >
-              No likes yet
-            </span>
-          )}
-            
-            {/* Comments count */}
-            {post.comments && post.comments.length > 0 && (
-              <span
-                onClick={() => setShowAllComments?.(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
-                style={{ 
-                  cursor: 'pointer', 
-                  fontSize: '12px',
-                  color: '#6c757d',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  transition: 'background-color 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f8f9fa';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                {getPluralForm(post.comments.length, 'comment', 'comments')}
-              </span>
-            )}
-          </div>
-        </div>
+      <PostStatsRow
+        likes={post.likes}
+        comments={post.comments}
+        onLikesClick={() => {
+          console.log('Like summary clicked (regular post), setting showLikesModal to true');
+          setShowLikesModal(true);
+        }}
+        onCommentsClick={() => setShowAllComments?.(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
+        animate={true}
+      />
 
       <div className="post-actions" style={{ 
         display: 'flex', 
@@ -2471,44 +2374,22 @@ const PostCard: React.FC<PostCardProps> = ({
             likedPosts[post.post_id] ? handleUnlike() : handleLike();
           }}
           className="post-action-item"
-          style={{
-            color: likedPosts[post.post_id] ? '#ef4444' : '#6c757d',
-            fontWeight: likedPosts[post.post_id] ? '600' : '400',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '8px 16px',
-            borderRadius: 8,
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
+          style={{ 
+            color: likedPosts[post.post_id] ? '#1e3a8a' : '#555', 
+            background: 'transparent', 
+            border: 'none', 
+            cursor: 'pointer', 
+            padding: '8px', 
+            fontSize: 12, 
+            display: 'flex', 
+            alignItems: 'center', 
             gap: 6,
-            transition: 'all 0.3s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#f8f9fa';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
+            fontWeight: likedPosts[post.post_id] ? 'bold' : 'normal',
+            transition: 'color 0.3s ease, font-weight 0.3s ease'
           }}
         >
-          <span style={{ 
-            fontSize: '16px', 
-            color: likedPosts[post.post_id] ? '#3b82f6' : '#6b7280',
-            fontWeight: likedPosts[post.post_id] ? '900' : '400'
-          }}>
-            {likedPosts[post.post_id] ? '👍' : '👍'}
-          </span>
-          <span 
-            onClick={() => setShowLikesModal(true)}
-            style={{
-              color: likedPosts[post.post_id] ? '#ef4444' : '#6c757d',
-              fontWeight: likedPosts[post.post_id] ? '600' : '400',
-              cursor: 'pointer'
-            }}
-          >
-            {post.likes_count === 1 ? '1 like' : (post.likes_count && post.likes_count > 1) ? `${post.likes_count} likes` : 'Like'}
-          </span>
+          <span style={{ fontSize: 18 }}>👍</span>
+          <span>Like</span>
         </button>
         <button
           onClick={() => setShowCommentInput?.(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
