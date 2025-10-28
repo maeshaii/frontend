@@ -389,7 +389,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
                 className="message-avatar"
                 onClick={() => {
                   if (message.sender_id) {
-                    navigate(`/alumni/profile/${message.sender_id}`);
+                    navigate(`/profile/${message.sender_id}`);
                   }
                 }}
                 title={message.sender_name}

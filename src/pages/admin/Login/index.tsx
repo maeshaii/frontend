@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { loginUser, fetchAlumniDetails } from '../../../services/api';
 import './Login.css';
 const background = require('../../../images/ctu.jpg');
-const logo = require('../../../images/ctulogo.png');
 const alumniLogo = require('../../../images/ctu alumni logo.jpg');
 const ccictLogo = require('../../../images/ccict.png');
 
@@ -21,7 +20,14 @@ const Login = () => {
     setError('');
     
     try {
+      console.log('Starting login process...');
+      const startTime = Date.now();
+      
       const data = await loginUser(acc_username, acc_password);
+      
+      const loginTime = Date.now() - startTime;
+      console.log(`Login completed in ${loginTime}ms`);
+      
       if (data.success) {
         localStorage.setItem('user', JSON.stringify(data.user));
         if (data.must_change_password) {
@@ -35,10 +41,11 @@ const Login = () => {
             navigate('/dashboard');
           } else if (data.user.account_type.peso) {
             navigate(`/peso/dashboard/${userId}`);
-          } else if (data.user.account_type.user) {
-            navigate(`/alumni/dashboard/${userId}`);
           } else if (data.user.account_type.coordinator) {
             navigate(`/coordinator/dashboard/${userId}`);
+          } else if (data.user.account_type.user || data.user.account_type.ojt) {
+            // Unified dashboard for alumni and OJT users
+            navigate(`/dashboard/${userId}`);
           } else {
             navigate('/dashboard');
           }
@@ -48,8 +55,17 @@ const Login = () => {
       } else {
         setError(data.message || 'Invalid credentials');
       }
-    } catch (error) {
-      setError('An unexpected error occurred. Please try again.');
+    } catch (error: any) {
+      console.error('Login error:', error);
+      if (error.code === 'ECONNABORTED') {
+        setError('Login timeout - server is taking too long to respond. Please try again.');
+      } else if (error.response?.status === 500) {
+        setError('Server error - please try again in a moment.');
+      } else if (error.code === 'ERR_NETWORK') {
+        setError('Network error - please check your connection.');
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -62,7 +78,6 @@ const Login = () => {
         <img src={background} alt="CTU Administration Building" style={styles.backgroundImage} className="login-background-image" />
         <div style={styles.leftContent}>
           <div style={{ marginTop: '-10rem' }}>
-            <img src={logo} alt="CTU Logo" style={styles.logo} className="login-logo" />
             <h2 style={styles.brandTitle} className="login-brand-title">WHERENAYOU : Connecting OJT's & Alumni Journeys</h2>
             <p style={styles.brandSubtitle}>Excellence in Technology Education</p>
           </div>
@@ -214,12 +229,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'white',
     padding: '2rem',
     paddingTop: '3rem',
-  },
-  logo: {
-    width: '120px',
-    height: '120px',
-    marginBottom: '1.5rem',
-    filter: 'drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3))',
   },
   brandTitle: {
     fontSize: '2.5rem',

@@ -13,7 +13,8 @@ const API_BASE = ensureApiSuffix(process.env.REACT_APP_API_URL);
 
 const api = axios.create({
   baseURL: API_BASE,
-  withCredentials: false, 
+  withCredentials: false,
+  timeout: 10000, // 10 second timeout for login
 });
 
 // Public API instance for endpoints that don't require authentication
@@ -359,6 +360,15 @@ export const fetchOJTStatistics = async (coordinatorUsername?: string) => {
   return response.data;
 };
 
+// Fetch OJT company statistics (company names with student counts)
+export const fetchOJTCompanyStatistics = async (coordinatorUsername?: string) => {
+  const path = coordinatorUsername
+    ? `ojt/company-statistics/?coordinator=${coordinatorUsername}`
+    : 'ojt/company-statistics/';
+  const response = await api.get(path);
+  return response.data;
+};
+
 // Fetch OJT data by year for coordinators
 export const fetchOJTByYear = async (year: string, coordinatorUsername?: string, section?: string) => {
   let path = `ojt/by-year/?year=${year}`;
@@ -390,6 +400,21 @@ export const updateOJTStatus = async (userId: number, status: string) => {
 // Send completed OJT list to admin (returns count)
 export const sendCompletedOJTToAdmin = async (year?: number | string, userIds?: number[]) => {
   const response = await api.post('ojt/send-to-admin/', { year, user_ids: userIds || [] });
+  return response.data;
+};
+
+// Get existing send dates for coordinator
+export const getSendDates = async (coordinatorUsername: string) => {
+  const response = await api.get(`ojt/get-send-dates/?coordinator=${coordinatorUsername}`);
+  return response.data;
+};
+
+// Check if all completed OJT students are already sent to admin
+export const checkAllSentStatus = async (coordinatorUsername: string, batchYear?: string) => {
+  const url = batchYear 
+    ? `ojt/check-all-sent/?coordinator=${coordinatorUsername}&batch_year=${batchYear}`
+    : `ojt/check-all-sent/?coordinator=${coordinatorUsername}`;
+  const response = await api.get(url);
   return response.data;
 };
 
@@ -632,6 +657,7 @@ export const getForums = async () => {
 export const createForumPost = async (forumData: {
   content: string;
   image?: string;
+  images?: string[];
 }) => {
   const response = await api.post('forum/', forumData);
   return response.data;
@@ -766,6 +792,21 @@ export const searchUsersForMessaging = async (q: string) => {
   return data as { users: Array<{ user_id: number; f_name: string; l_name: string }>; count: number; query: string };
 };
 
+export const searchAlumni = async (q: string) => {
+  const { data } = await api.get(`alumni/search/?q=${encodeURIComponent(q)}`);
+  return data as { results: Array<{ id: number; name: string; profile_pic: string | null; account_type: { user: boolean; admin: boolean; peso: boolean; ojt: boolean } }> };
+};
+
+export const getPostFromComment = async (commentId: number) => {
+  const { data } = await api.get(`comments/${commentId}/post/`);
+  return data as { success: boolean; post_id: number; post_type: string };
+};
+
+export const getFollowingForMentions = async () => {
+  const { data } = await api.get(`following/mentions/`);
+  return data as { success: boolean; following: Array<{ user_id: number; name: string; f_name: string; m_name: string; l_name: string; profile_pic: string }> };
+};
+
 export const uploadAttachment = async (file: File): Promise<{
   attachment_id: number;
   file_name: string;
@@ -838,7 +879,13 @@ export const createDonationRequest = async (donationData: {
 }) => {
   console.log('Creating donation request with data:', donationData);
   console.log('API base URL:', API_BASE);
+  console.log('Access token present:', !!localStorage.getItem('accessToken'));
+  
   try {
+    // Use absolute URL to avoid any parameter issues
+    const fullUrl = `${API_BASE}donations/`;
+    console.log('Full URL being used:', fullUrl);
+    
     const response = await api.post('donations/', donationData);
     console.log('Donation request response:', response);
     console.log('Response data:', response.data);
@@ -848,6 +895,10 @@ export const createDonationRequest = async (donationData: {
     console.error('Donation request API error:', error);
     console.error('Error response:', error.response);
     console.error('Error response data:', error.response?.data);
+    console.error('Error response status:', error.response?.status);
+    console.error('Error response headers:', error.response?.headers);
+    console.error('Request URL:', error.config?.url);
+    console.error('Request base URL:', error.config?.baseURL);
     throw error;
   }
 };
@@ -878,6 +929,18 @@ export const likeDonation = async (donationId: number) => {
 
 export const unlikeDonation = async (donationId: number) => {
   const response = await api.delete(`donations/${donationId}/like/`);
+  return response.data;
+};
+
+// Get likes for a specific post
+export const getPostLikes = async (postId: number) => {
+  const response = await api.get(`posts/${postId}/likes/`);
+  return response.data;
+};
+
+// Get likes for a specific repost
+export const getRepostLikes = async (repostId: number) => {
+  const response = await api.get(`reposts/${repostId}/likes/`);
   return response.data;
 };
 
@@ -918,6 +981,140 @@ export const getMutualFollows = async (userId: number) => {
 
 export const getOnlineUsers = async () => {
   const response = await api.get('online-users/');
+  return response.data;
+};
+
+// -------- Reply API Functions --------
+// These functions handle comment replies
+
+// Create a reply to a comment
+export const createReply = async (commentId: number, replyContent: string) => {
+  const response = await api.post(`comments/${commentId}/replies/`, {
+    reply_content: replyContent
+  });
+  return response.data;
+};
+
+// Get replies for a comment
+export const getCommentReplies = async (commentId: number) => {
+  const response = await api.get(`comments/${commentId}/replies/`);
+  return response.data;
+};
+
+// Edit a reply
+export const editReply = async (commentId: number, replyId: number, replyData: { reply_content: string }) => {
+  const response = await api.put(`comments/${commentId}/replies/${replyId}/`, replyData);
+  return response.data;
+};
+
+// Delete a reply
+export const deleteReply = async (commentId: number, replyId: number) => {
+  const response = await api.delete(`comments/${commentId}/replies/${replyId}/`);
+  return response.data;
+};
+
+// -------- Recent Search API Functions --------
+
+// Save a recent search
+export const saveRecentSearch = async (searchedUserId: number) => {
+  const response = await api.post('recent-searches/', {
+    searched_user_id: searchedUserId
+  });
+  return response.data;
+};
+
+// Get recent searches
+export const getRecentSearches = async () => {
+  const response = await api.get('recent-searches/');
+  return response.data;
+};
+
+// Delete a recent search
+export const deleteRecentSearch = async (searchId: number) => {
+  const response = await api.delete(`recent-searches/${searchId}/`);
+  return response.data;
+};
+
+// -------- Engagement Points API Functions --------
+
+// Get user's points
+export const getUserPoints = async (userId: number) => {
+  const response = await api.get(`engagement/leaderboard/?user_type=all&limit=1000`);
+  const leaderboard = response.data.leaderboard || [];
+  const userPoints = leaderboard.find((item: any) => item.user_id === userId);
+  return userPoints || {
+    total_points: 0,
+    rank: null,
+    points_breakdown: {
+      likes: { points: 0, count: 0 },
+      comments: { points: 0, count: 0 },
+      shares: { points: 0, count: 0 },
+      replies: { points: 0, count: 0 },
+      posts_with_photos: { points: 0, count: 0 },
+      tracker_form: { points: 0, count: 0 }
+    }
+  };
+};
+
+// Get leaderboard
+export const getEngagementLeaderboard = async (limit: number = 50, userType: string = 'all') => {
+  const response = await api.get(`engagement/leaderboard/`, {
+    params: {
+      limit,
+      user_type: userType
+    }
+  });
+  return response.data;
+};
+
+// -------- Inventory Management API Functions --------
+
+// Get all inventory items
+export const getInventoryItems = async () => {
+  const response = await api.get('inventory/');
+  return response.data;
+};
+
+// Add new inventory item
+export const addInventoryItem = async (itemData: {
+  name: string;
+  type: string;
+  quantity: number;
+  value: string;
+}) => {
+  const response = await api.post('inventory/', itemData);
+  return response.data;
+};
+
+// Update inventory item
+export const updateInventoryItem = async (itemId: number, itemData: {
+  name: string;
+  type: string;
+  quantity: number;
+  value: string;
+}) => {
+  const response = await api.put(`inventory/${itemId}/`, itemData);
+  return response.data;
+};
+
+// Delete inventory item
+export const deleteInventoryItem = async (itemId: number) => {
+  const response = await api.delete(`inventory/${itemId}/`);
+  return response.data;
+};
+
+// Give reward to user
+export const giveReward = async (userId: number, rewardId: number) => {
+  const response = await api.post('rewards/give/', {
+    user_id: userId,
+    reward_id: rewardId
+  });
+  return response.data;
+};
+
+// Get reward history
+export const getRewardHistory = async (limit: number = 50) => {
+  const response = await api.get(`rewards/history/?limit=${limit}`);
   return response.data;
 };
 

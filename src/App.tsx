@@ -31,10 +31,12 @@ import RequestsPage from './pages/admin/pages/RequestsPage';
 import UserManagement from './pages/admin/UserManagement';
 import RequestDetailsPage from './pages/admin/pages/RequestDetailsPage';
 import RewardsPage from './pages/admin/pages/RewardsPage';
+import InventoryPage from './pages/admin/pages/InventoryPage';
 import Messaging from './pages/messaging/Messaging';
 // import other pages like Statistics, Users, etc.
 import { PrivateRoute } from './components/PrivateRoute';
 import AlumniProfile from './pages/alumni/Profile';
+import UnifiedDashboard from './pages/shared/UnifiedDashboard';
 
 const App: React.FC = () => {
   return (
@@ -80,6 +82,14 @@ const App: React.FC = () => {
             element={
               <PrivateRoute roles={['admin']}>
                 <RewardsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/inventory"
+            element={
+              <PrivateRoute roles={['admin']}>
+                <InventoryPage />
               </PrivateRoute>
             }
           />
@@ -131,11 +141,12 @@ const App: React.FC = () => {
               </PrivateRoute>
             }
           />
+          {/* Unified dashboard for alumni and OJT users */}
           <Route
-            path="/alumni/dashboard/:id"
+            path="/dashboard/:id"
             element={
-              <PrivateRoute roles={['user']}>
-                <AlumniDashboard />
+              <PrivateRoute roles={['user', 'ojt']}>
+                <UnifiedDashboard userType="alumni" />
               </PrivateRoute>
             }
           />
@@ -172,54 +183,6 @@ const App: React.FC = () => {
             }
           />
           <Route
-            path="/alumni/profile"
-            element={
-              <PrivateRoute>
-                <AlumniProfile />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/alumni/forum"
-            element={
-              <PrivateRoute>
-                <ForumPage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/alumni/donation"
-            element={
-              <PrivateRoute>
-                <DonationPage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/alumni/notifications"
-            element={
-              <PrivateRoute>
-                <NotificationPage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/alumni/tracker"
-            element={
-              <PrivateRoute>
-                <AlumniTracker />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/alumni/settings"
-            element={
-              <PrivateRoute>
-                <Settings />
-              </PrivateRoute>
-            }
-          />
-          <Route
             path="/ccict/settings"
             element={
               <PrivateRoute>
@@ -247,7 +210,7 @@ const App: React.FC = () => {
             path="/ccict/profile"
             element={
               <PrivateRoute>
-                <AdminDashboard />
+                <AdminProfilePage />
               </PrivateRoute>
             }
           />
@@ -268,11 +231,80 @@ const App: React.FC = () => {
               </PrivateRoute>
             }
           />
+          {/* Unified profile route for all users */}
           <Route
-            path="/alumni/profile/:id"
+            path="/profile/:id"
             element={
               <PrivateRoute>
-                <AlumniProfile  />
+                <AlumniProfile />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <PrivateRoute roles={['user', 'ojt']}>
+                <AlumniProfile />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Unified routes for alumni and OJT users */}
+          <Route
+            path="/forum"
+            element={
+              <PrivateRoute roles={['user', 'ojt']}>
+                <ForumPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/donation"
+            element={
+              <PrivateRoute roles={['user', 'ojt']}>
+                <DonationPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <PrivateRoute roles={['user', 'ojt']}>
+                <NotificationPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/tracker"
+            element={
+              <PrivateRoute roles={['user', 'ojt']}>
+                <AlumniTracker />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <PrivateRoute roles={['user', 'ojt']}>
+                <Settings />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Keep old alumni tracker route for compatibility */}
+          <Route
+            path="/alumni/tracker"
+            element={
+              <PrivateRoute roles={['user']}>
+                <AlumniTracker />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/alumni/notifications"
+            element={
+              <PrivateRoute roles={['user']}>
+                <NotificationPage />
               </PrivateRoute>
             }
           />

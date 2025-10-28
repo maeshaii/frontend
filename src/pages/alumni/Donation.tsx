@@ -4,7 +4,9 @@ import { Box, Card, Typography, Avatar, TextField } from '@mui/material';
 import AlumniTopBar from './AlumniTopBar';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
+import RepostCard from '../../components/RepostCard';
 import ctulogo from '../../images/ctulogo.png';
+import { getProfilePicUrl, handleProfilePicError } from '../../utils/profilePicUtils';
 import { getDonationRequests, followUser, unfollowUser, checkFollowStatus } from '../../services/api';
 import './profile.css'; 
 
@@ -179,6 +181,7 @@ const DonationPage: React.FC = () => {
                 type: 'donation',
                 item_type: 'repost',
                 sort_date: repost.repost_date,
+                feed_type: 'donation_repost',
                 user: repost.user,
                 likes: repost.likes || [],
                 comments: repost.comments || [],
@@ -190,11 +193,17 @@ const DonationPage: React.FC = () => {
                   repost_date: repost.repost_date,
                   repost_caption: repost.repost_caption,
                   user: repost.user,
+                  likes: repost.likes || [],
+                  likes_count: repost.likes_count || 0,
+                  comments: repost.comments || [],
+                  comments_count: repost.comments_count || 0,
                   original_post: {
                     donation_id: donation.donation_id,
                     description: donation.description,
                     post_content: donation.description, // Add post_content for compatibility with PostCard
                     images: donation.images,
+                    post_images: donation.images, // Add post_images for compatibility with getImagesFromPost
+                    post_image: donation.images && donation.images.length > 0 ? donation.images[0].image_url : null, // Add post_image for single image compatibility
                     created_at: donation.created_at,
                     user: donation.user,
                     likes: donation.likes || [],
@@ -225,10 +234,10 @@ const DonationPage: React.FC = () => {
         sortedFeed.forEach((item: any) => {
           if (item.item_type === 'repost') {
             // For donation reposts, likes have nested user structure
-            liked[item.post_id] = item.likes?.some((like: any) => 
+            liked[item.repostData?.repost_id] = item.repostData?.likes?.some((like: any) => 
               (like.user?.user_id === currentUserId) || (like.user_id === currentUserId)
             ) || false;
-            reposted[item.post_id] = false;
+            reposted[item.repostData?.repost_id] = false;
           } else {
             const donation = response.donations.find((d: any) => d.donation_id === item.donation_id);
             if (donation) {
@@ -258,6 +267,89 @@ const DonationPage: React.FC = () => {
     setOriginalDonationModalData(originalDonation);
     setShowOriginalDonationModal(true);
   };
+
+  // Handle viewing a donation post by ID (for notifications)
+  const handleViewDonationPostById = async (donationId: string) => {
+    console.log('🔍 handleViewDonationPostById called with donationId:', donationId);
+    setDonationLoading(true);
+    try {
+      const { api } = await import('../../services/api');
+      console.log('🔍 Fetching donation post with ID:', donationId);
+      const response = await api.get(`donations/${donationId}/`);
+      console.log('🔍 Donation post API response:', response.data);
+      if (response.data) {
+        // Transform the response to match the expected format
+        const transformedData = {
+          ...response.data,
+          donation_id: response.data.donation_id,
+          description: response.data.description || response.data.post_content,
+          post_content: response.data.description || response.data.post_content,
+          status: response.data.status,
+          created_at: response.data.created_at,
+          images: response.data.images || response.data.post_images || [],
+          post_images: response.data.images || response.data.post_images || [],
+          user: {
+            ...response.data.user,
+            profile_pic: response.data.user?.profile_pic ? 
+              (String(response.data.user.profile_pic).startsWith('http') ? 
+                response.data.user.profile_pic : 
+                `http://127.0.0.1:8000${response.data.user.profile_pic}`) : 
+              null
+          },
+          likes: response.data.likes || [],
+          comments: response.data.comments || [],
+          reposts: response.data.reposts || [],
+          likes_count: response.data.likes_count || 0,
+          comments_count: response.data.comments_count || 0,
+          reposts_count: response.data.reposts_count || 0,
+          liked_by_user: response.data.liked_by_user || false
+        };
+        
+        setOriginalDonationModalData(transformedData);
+        console.log('🔍 Set original donation modal data:', transformedData);
+        
+        // Update the liked state for the modal donation
+        setLikedDonations(prev => ({
+          ...prev,
+          [transformedData.donation_id]: transformedData.liked_by_user || false
+        }));
+        
+        setShowOriginalDonationModal(true);
+        console.log('✅ Donation post modal opened for notification, showOriginalDonationModal:', true);
+      } else {
+        console.error('❌ No data in API response');
+      }
+    } catch (error: any) {
+      console.error('❌ Error fetching donation post by ID:', error);
+      console.error('❌ Error details:', error.response?.data || error.message);
+      alert('Unable to load the donation post. It may have been deleted.');
+    } finally {
+      setDonationLoading(false);
+    }
+  };
+
+  // Check for pending donation post view from notification
+  useEffect(() => {
+    console.log('🔍 useEffect for pendingDonationPostView running...');
+    const pendingDonationPostId = localStorage.getItem('pendingDonationPostView');
+    console.log('🔍 Raw localStorage value:', pendingDonationPostId);
+    if (pendingDonationPostId) {
+      console.log('🔍 Found pending donation post view:', pendingDonationPostId);
+      console.log('🔍 handleViewDonationPostById function exists?', typeof handleViewDonationPostById === 'function');
+      localStorage.removeItem('pendingDonationPostView');
+      // Wait a bit for the component to fully mount
+      setTimeout(() => {
+        console.log('🔍 Calling handleViewDonationPostById with ID:', pendingDonationPostId);
+        if (typeof handleViewDonationPostById === 'function') {
+          handleViewDonationPostById(pendingDonationPostId);
+        } else {
+          console.error('❌ handleViewDonationPostById is not a function!');
+        }
+      }, 500);
+    } else {
+      console.log('🔍 No pending donation post view found');
+    }
+  }, []); // Run only once on mount
 
   if (loading) {
     return (
@@ -412,50 +504,35 @@ const DonationPage: React.FC = () => {
                 // Handle both donations and reposts to match post/forum design
                 const isOwn = Number(item.user?.user_id) === Number(currentUserId);
                 const displayName = item.user?.name || `${item.user?.f_name || ''} ${item.user?.m_name || ''} ${item.user?.l_name || ''}`.trim() || 'Unknown User';
-                const displayAvatar = item.user?.profile_pic ? 
-                  (String(item.user.profile_pic).startsWith('http') ? 
-                    item.user.profile_pic : 
-                    `http://127.0.0.1:8000${item.user.profile_pic}`) : 
-                  ctulogo;
+                const displayAvatar = getProfilePicUrl(item.user?.profile_pic);
                 
-                if (item.item_type === 'repost') {
+                if (item.item_type === 'repost' && item.repostData) {
                   return (
-                    <PostCard
-                      key={`repost-${item.post_id}`}
-                      post={item}
-                      currentUserId={currentUserId}
-                      isOwn={isOwn}
-                      displayName={displayName}
-                      displayAvatar={displayAvatar}
-                      formatTime={formatTime}
-                      isRepost={true}
-                      repostData={item.repostData}
-                      onPostUpdate={() => {
-                        fetchDonationPosts(false); // No loading indicator for updates
+                    <RepostCard
+                      key={`repost-${item.repostData.repost_id}`}
+                      repost={{
+                        repost_id: item.repostData.repost_id,
+                        repost_date: item.repostData.repost_date,
+                        repost_caption: item.repostData.repost_caption,
+                        user: item.repostData.user,
+                        likes: item.repostData.likes || [],
+                        likes_count: item.repostData.likes_count || 0,
+                        comments: item.repostData.comments || [],
+                        comments_count: item.repostData.comments_count || 0,
+                        original_post: item.repostData.original_post ? {
+                          donation_id: item.repostData.original_post.donation_id,
+                          post_content: item.repostData.original_post.post_content,
+                          post_images: item.repostData.original_post.post_images,
+                          created_at: item.repostData.original_post.created_at,
+                          user: item.repostData.original_post.user
+                        } : undefined
                       }}
-                      likedPosts={likedDonations}
-                      setLikedPosts={setLikedDonations}
-                      repostedPosts={repostedDonations}
-                      setRepostedPosts={setRepostedDonations}
-                      showAllComments={showAllComments}
-                      setShowAllComments={setShowAllComments}
-                      showCommentInput={showCommentInput}
-                      setShowCommentInput={setShowCommentInput}
-                      commentInput={commentInput}
-                      setCommentInput={setCommentInput}
-                      editingComment={editingComment}
-                      setEditingComment={setEditingComment}
-                      editCommentContent={editCommentContent}
-                      setEditCommentContent={setEditCommentContent}
-                      showOptions={showOptions}
-                      setShowOptions={setShowOptions}
-                      editingPost={editingDonation}
-                      setEditingPost={setEditingDonation}
-                      editPostContent={editDonationContent}
-                      setEditPostContent={setEditDonationContent}
-                      isForum={false}
-                      isDonation={true}
-                      onViewOriginalPost={handleViewOriginalDonation}
+                      currentUserId={currentUserId}
+                      formatTime={formatTime}
+                      context="donation"
+                      onRefresh={() => {
+                        fetchDonationPosts(false);
+                      }}
                     />
                   );
                 }
@@ -476,6 +553,8 @@ const DonationPage: React.FC = () => {
                     }}
                     likedPosts={likedDonations}
                     setLikedPosts={setLikedDonations}
+                    repostedPosts={repostedDonations}
+                    setRepostedPosts={setRepostedDonations}
                     showAllComments={showAllComments}
                     setShowAllComments={setShowAllComments}
                     showCommentInput={showCommentInput}
@@ -640,7 +719,7 @@ const DonationPage: React.FC = () => {
                 currentUserId={currentUserId}
                 isOwn={currentUserId === originalDonationModalData.user?.user_id}
                 displayName={originalDonationModalData.user?.name || `${originalDonationModalData.user?.f_name || ''} ${originalDonationModalData.user?.m_name || ''} ${originalDonationModalData.user?.l_name || ''}`.trim() || 'Unknown User'}
-                displayAvatar={originalDonationModalData.user?.profile_pic ? (String(originalDonationModalData.user.profile_pic).startsWith('http') ? originalDonationModalData.user.profile_pic : `http://127.0.0.1:8000${originalDonationModalData.user.profile_pic}`) : ctulogo}
+                displayAvatar={getProfilePicUrl(originalDonationModalData.user?.profile_pic)}
                 formatTime={formatTime}
                 onViewOriginalPost={handleViewOriginalDonation}
                 onPostUpdate={async () => {
@@ -671,6 +750,8 @@ const DonationPage: React.FC = () => {
                 setEditPostContent={setEditDonationContent}
                 likedPosts={likedDonations}
                 setLikedPosts={setLikedDonations}
+                repostedPosts={repostedDonations}
+                setRepostedPosts={setRepostedDonations}
                 showAllComments={showAllComments}
                 setShowAllComments={setShowAllComments}
                 showCommentInput={showCommentInput}

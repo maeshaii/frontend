@@ -1,229 +1,416 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import './statistics.css';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  Cell,
-} from 'recharts';
-import { FaUsers } from 'react-icons/fa';
-import { fetchAlumniEmploymentStats } from '../../services/api';
+import { fetchOJTCompanyStatistics } from '../../services/api';
+
+interface CompanyData {
+  company_name: string;
+  count: number;
+}
 
 export default function Statistics() {
-  const [data, setData] = useState([
-    { name: 'Pending', value: 0, fill: '#DEC0F1' },
-    { name: 'Employed', value: 0, fill: '#B79CED', absorbedCount: 0 },
-    { name: 'Unemployed', value: 0, fill: '#957FEF' },
-    // Removed 'Absorb' as separate category - now combined with 'Employed'
-  ]);
+  const [companies, setCompanies] = useState<CompanyData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const [selectedBar, setSelectedBar] = useState<string | null>(null);
+  const [totalCompanies, setTotalCompanies] = useState(0);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [coordinatorUsername, setCoordinatorUsername] = useState('');
 
-  // Dynamic data loading
-  const loadStatistics = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetchAlumniEmploymentStats('ALL', 'ALL');
-      if (response.success && response.status_counts) {
-        const chartData = [
-          { name: 'Pending', value: response.status_counts.Pending || 0, fill: '#DEC0F1' },
-          { name: 'Employed', value: response.status_counts.Employed || 0, fill: '#B79CED', absorbedCount: response.status_counts.Absorbed_Count || 0 },
-          { name: 'Unemployed', value: response.status_counts.Unemployed || 0, fill: '#957FEF' },
-          // Removed 'Absorb' as separate category - now combined with 'Employed'
-        ];
-        console.log('🔍 DEBUG Coordinator: Raw response:', response);
-        console.log('🔍 DEBUG Coordinator: Absorbed_Count:', response.status_counts.Absorbed_Count);
-        setData(chartData);
-        setLastUpdated(new Date());
-      }
-    } catch (error) {
-      console.error('Error loading statistics:', error);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    // Get coordinator username from localStorage
+    const user = localStorage.getItem('user');
+    if (user) {
+      const userData = JSON.parse(user);
+      setCoordinatorUsername(userData.name || '');
     }
   }, []);
 
   useEffect(() => {
-    loadStatistics();
-  }, [loadStatistics]);
+    const loadCompanyStatistics = async () => {
+      if (!coordinatorUsername) return;
+      
+    setLoading(true);
+    try {
+        const response = await fetchOJTCompanyStatistics(coordinatorUsername);
+        if (response.success) {
+          setCompanies(response.companies || []);
+          setTotalCompanies(response.total_companies || 0);
+          setTotalStudents(response.total_students || 0);
+      }
+    } catch (error) {
+        console.error('Error loading company statistics:', error);
+    } finally {
+      setLoading(false);
+    }
+    };
 
-
-  const handleBarClick = useCallback((data: any) => {
-    setSelectedBar(selectedBar === data.name ? null : data.name);
-  }, [selectedBar]);
+    if (coordinatorUsername) {
+      loadCompanyStatistics();
+    }
+  }, [coordinatorUsername]);
 
   if (loading) {
     return (
-      <div className="chart-container">
-        <div
-          style={{
+      <div style={{
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            height: '500px',
-          }}
-        >
-          Loading statistics...
+        height: '100vh',
+        backgroundColor: '#f8fafc'
+      }}>
+        <div style={{
+          textAlign: 'center',
+          padding: '60px 20px',
+          backgroundColor: 'white',
+          borderRadius: '16px',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+        }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            backgroundColor: '#dbeafe',
+            borderRadius: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 16px'
+          }}></div>
+          <p style={{
+            fontSize: '16px',
+            color: '#64748b',
+            margin: '0',
+            fontWeight: '500'
+          }}>
+            Loading company statistics...
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="chart-container">
-      <div className="chart-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <div>
-            <h3 className="chart-title">📊 Alumni Employment Statistics</h3>
-            <p className="chart-subtitle">Employment status distribution by category</p>
+    <div style={{
+      padding: '32px',
+      backgroundColor: '#f8fafc',
+      minHeight: '100vh'
+    }}>
+      {/* Summary Cards Grid - matching CLASS OF cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+        gap: '24px',
+        marginBottom: '32px'
+      }}>
+        {/* Total Companies Card */}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '20px',
+          padding: '24px',
+          boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.1)',
+          border: '1px solid #e2e8f0',
+          transition: 'all 0.3s ease',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-4px)';
+          e.currentTarget.style.boxShadow = '0 16px 32px -8px rgba(0, 0, 0, 0.15)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 8px 16px -4px rgba(0, 0, 0, 0.1)';
+        }}>
+          {/* Decorative gradient circle */}
+          <div style={{
+            position: 'absolute',
+            top: '-20px',
+            right: '-20px',
+            width: '80px',
+            height: '80px',
+            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+            borderRadius: '50%',
+            opacity: '0.1'
+          }}></div>
+          
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              marginBottom: '20px'
+            }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                backgroundColor: '#dbeafe',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '24px'
+              }}>
+                🏢
+              </div>
+            </div>
+            <p style={{
+              margin: '0 0 4px 0',
+              fontSize: '14px',
+              color: '#64748b',
+              fontWeight: '500'
+            }}>
+              Total Companies
+            </p>
+            <p style={{
+              margin: '0',
+              fontSize: '48px',
+              fontWeight: '800',
+              color: '#3b82f6'
+            }}>
+              {totalCompanies}
+            </p>
           </div>
-          <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>
-            Last updated: {lastUpdated.toLocaleTimeString()}
+        </div>
+
+        {/* Total Students Card */}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '20px',
+          padding: '24px',
+          boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.1)',
+          border: '1px solid #e2e8f0',
+          transition: 'all 0.3s ease',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-4px)';
+          e.currentTarget.style.boxShadow = '0 16px 32px -8px rgba(0, 0, 0, 0.15)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 8px 16px -4px rgba(0, 0, 0, 0.1)';
+        }}>
+          {/* Decorative gradient circle */}
+          <div style={{
+            position: 'absolute',
+            top: '-20px',
+            right: '-20px',
+            width: '80px',
+            height: '80px',
+            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+            borderRadius: '50%',
+            opacity: '0.1'
+          }}></div>
+          
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              marginBottom: '20px'
+            }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                backgroundColor: '#dbeafe',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '24px'
+              }}>
+                👥
+              </div>
+            </div>
+            <p style={{
+              margin: '0 0 4px 0',
+              fontSize: '14px',
+              color: '#64748b',
+              fontWeight: '500'
+            }}>
+              Total OJT Students
+            </p>
+            <p style={{
+              margin: '0',
+              fontSize: '48px',
+              fontWeight: '800',
+              color: '#3b82f6'
+            }}>
+              {totalStudents}
+            </p>
           </div>
         </div>
       </div>
       
-      <div className="chart-wrapper">
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 40 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" strokeOpacity={0.6} />
-            <XAxis 
-              dataKey="name" 
-              tick={{ fontSize: 14, fill: '#666', fontWeight: '500' }}
-              tickLine={{ stroke: '#ccc' }}
-              axisLine={{ stroke: '#ddd' }}
-              height={50}
-            />
-            <YAxis 
-              tick={{ fontSize: 14, fill: '#666', fontWeight: '500' }}
-              tickLine={{ stroke: '#ccc' }}
-              axisLine={{ stroke: '#ddd' }}
-              width={50}
-            />
-            <Tooltip 
-              contentStyle={{
-                background: 'white',
-                border: '1px solid #e5e7eb',
-                borderRadius: '8px',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                padding: '12px',
-              }}
-              labelStyle={{
-                fontWeight: '600',
-                color: '#374151',
-                marginBottom: '4px',
-              }}
-              formatter={(value: any, name: any) => [
-                <span style={{ fontWeight: '700', color: '#1f2937' }}>{value.toLocaleString()} alumni</span>,
-                name
-              ]}
-            />
-            <Legend 
-              wrapperStyle={{ paddingTop: '16px' }}
-              iconType="rect"
-            />
-            <Bar 
-              dataKey="value" 
-              name="Alumni Count"
-              radius={[6, 6, 0, 0]}
-              maxBarSize={60}
-              onClick={handleBarClick}
-            >
-              {data.map((entry, index) => {
-                // Special handling for Employed bar with absorbed indicator
-                if (entry.name === 'Employed' && (entry.absorbedCount || 0) > 0) {
-                  return (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={entry.fill}
-                      stroke={selectedBar === entry.name ? '#374151' : 'none'}
-                      strokeWidth={selectedBar === entry.name ? 2 : 0}
-                      style={{ 
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        transform: selectedBar === entry.name ? 'scale(1.05)' : 'scale(1)',
-                        background: `linear-gradient(to right, ${entry.fill} 0%, ${entry.fill} 70%, #7161EF 70%, #7161EF 100%)`,
-                      }}
-                    />
-                  );
-                }
-                
-                // Regular bars
-                return (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={entry.fill}
-                    stroke={selectedBar === entry.name ? '#374151' : 'none'}
-                    strokeWidth={selectedBar === entry.name ? 2 : 0}
-                    style={{ 
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      transform: selectedBar === entry.name ? 'scale(1.05)' : 'scale(1)',
-                    }}
-                  />
-                );
-              })}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+      {/* Company Table */}
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        padding: '32px',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+        border: '1px solid #e2e8f0'
+      }}>
+        <div style={{
+          marginBottom: '24px'
+        }}>
+          <h3 style={{
+            margin: '0',
+            fontSize: '20px',
+            fontWeight: '700',
+            color: '#1e293b'
+          }}>
+            Companies Directory
+          </h3>
       </div>
 
-      {/* Dynamic Summary Cards */}
-      <div className="summary-cards">
-        {data.map((entry, index) => (
-          <div 
-            key={entry.name} 
-            className="summary-card"
-            style={{
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              ...(selectedBar === entry.name ? {
-                backgroundColor: '#f3f4f6',
-                borderColor: '#3b82f6',
-                borderWidth: '2px',
-                transform: 'translateY(-2px)',
-                boxShadow: '0 8px 20px rgba(59, 130, 246, 0.15)',
-              } : {}),
-            }}
-            onClick={() => handleBarClick({ name: entry.name })}
-            onMouseEnter={(e) => {
-              if (selectedBar !== entry.name) {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.12)';
+        {companies.length === 0 ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '60px 20px',
+            backgroundColor: '#f8fafc',
+            borderRadius: '16px'
+          }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              backgroundColor: '#fef3c7',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}>
+              <span style={{ fontSize: '24px' }}>🔍</span>
+            </div>
+            <p style={{
+              fontSize: '16px',
+              color: '#64748b',
+              margin: '0',
+              fontWeight: '500'
+            }}>
+              No company data found.
+            </p>
+          </div>
+        ) : (
+          <div style={{
+            maxHeight: '500px',
+            overflowY: 'auto',
+            overflowX: 'auto',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0'
+          }}>
+            <style>{`
+              div::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
               }
+              div::-webkit-scrollbar-track {
+                background: #f1f5f9;
+                border-radius: 10px;
+              }
+              div::-webkit-scrollbar-thumb {
+                background: #cbd5e1;
+                border-radius: 10px;
+              }
+              div::-webkit-scrollbar-thumb:hover {
+                background: #94a3b8;
+              }
+            `}</style>
+            <table style={{
+              width: '100%',
+              borderCollapse: 'separate',
+              borderSpacing: '0'
+            }}>
+              <thead style={{
+                position: 'sticky',
+                top: '0',
+                zIndex: 10,
+                backgroundColor: 'white'
+              }}>
+                <tr style={{
+                  backgroundColor: '#f8fafc',
+                  borderBottom: '2px solid #e2e8f0'
+                }}>
+                  <th style={{
+                    padding: '16px 20px',
+                    textAlign: 'left',
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    color: '#1e293b',
+                    width: '100px'
+                  }}>
+                    No.
+                  </th>
+                  <th style={{
+                    padding: '16px 20px',
+                    textAlign: 'left',
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    color: '#1e293b'
+                  }}>
+                    Company Name
+                  </th>
+                  <th style={{
+                    padding: '16px 20px',
+                    textAlign: 'center',
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    color: '#1e293b',
+                    width: '180px'
+                  }}>
+                    OJT Students
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {companies.map((company, index) => (
+                  <tr
+                    key={index}
+            style={{
+                      borderBottom: index < companies.length - 1 ? '1px solid #f1f5f9' : 'none',
+                      transition: 'background-color 0.2s ease'
+                    }}
+            onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f8fafc';
             }}
             onMouseLeave={(e) => {
-              if (selectedBar !== entry.name) {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
-              }
-            }}
-          >
-            <div 
-              className="summary-indicator"
-              style={{ 
-                backgroundColor: entry.fill,
-                transform: selectedBar === entry.name ? 'scale(1.2)' : 'scale(1)',
-                transition: 'transform 0.2s ease',
-              }}
-            />
-            <div className="summary-content">
-              <div className="summary-number">{entry.value.toLocaleString()}</div>
-              <div 
-                className="summary-label"
-                style={{ fontWeight: selectedBar === entry.name ? '600' : '400' }}
-              >
-                {entry.name}
+                      e.currentTarget.style.backgroundColor = 'white';
+                    }}
+                  >
+                    <td style={{
+                      padding: '20px',
+                      fontSize: '14px',
+                      color: '#64748b',
+                      fontWeight: '600'
+                    }}>
+                      {index + 1}
+                    </td>
+                    <td style={{
+                      padding: '20px',
+                      fontSize: '15px',
+                      color: '#1e293b',
+                      fontWeight: '600'
+                    }}>
+                      {company.company_name}
+                    </td>
+                    <td style={{
+                      padding: '20px',
+                      textAlign: 'center'
+                    }}>
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '6px 16px',
+                        backgroundColor: '#dbeafe',
+                        color: '#1e40af',
+                        borderRadius: '20px',
+                        fontSize: '14px',
+                        fontWeight: '700'
+                      }}>
+                        {company.count}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
               </div>
-            </div>
-          </div>
-        ))}
+        )}
       </div>
     </div>
   );

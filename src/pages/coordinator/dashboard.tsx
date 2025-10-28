@@ -3,14 +3,15 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
-import { fetchOJTStatistics, importOJT, setSendDate } from '../../services/api';
+import { fetchOJTStatistics, importOJT, setSendDate, getSendDates, checkAllSentStatus } from '../../services/api';
+import logoLogin from '../../images/logo_login.png';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [selectedCard, setSelectedCard] = useState<{ year: number; section?: string } | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [program, setProgram] = useState('BSIT');
   // Generate years from 2000 to 2025 (descending order)
@@ -24,6 +25,9 @@ export default function Dashboard() {
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
   const [showDateModal, setShowDateModal] = useState(false);
   const [sendDate, setSendDateState] = useState('');
+  const [existingSendDates, setExistingSendDates] = useState<any[]>([]);
+  const [allDataSent, setAllDataSent] = useState(false);
+  const [completedCount, setCompletedCount] = useState(0);
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -61,38 +65,94 @@ export default function Dashboard() {
   }, [coordinatorUsername]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      const filesArray = Array.from(e.target.files);
+      setSelectedFiles(filesArray);
     } else {
-      setSelectedFile(null);
+      setSelectedFiles([]);
     }
   };
 
+  const removeFile = (indexToRemove: number) => {
+    setSelectedFiles(prevFiles => prevFiles.filter((_, index) => index !== indexToRemove));
+  };
+
   const handleImport = async () => {
-    if (!selectedFile || !selectedYear) {
-      alert('Please select a file and choose a graduation year');
+    if (selectedFiles.length === 0 || !selectedYear) {
+      alert('Please select at least one file and choose a graduation year');
       return;
     }
 
     setImportLoading(true);
     try {
-      const result = await importOJT(selectedFile, selectedYear.toString(), program, coordinatorUsername);
+      console.log(`Starting OJT import for ${selectedFiles.length} file(s)...`);
+      
+      let totalCreated = 0;
+      let allPasswords: any[] = [];
+      let allSections: string[] = [];
+      let failedFiles: string[] = [];
+      
+      // Import each file sequentially
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        console.log(`Importing file ${i + 1}/${selectedFiles.length}: ${file.name}`);
+        
+        try {
+          const result = await importOJT(file, selectedYear.toString(), program, coordinatorUsername);
+          console.log(`Import result for ${file.name}:`, result);
+          
       if (result.success) {
-        alert(`OJT import successful! Found ${result.sections?.length || 0} sections.`);
-        
-        // Handle password download if passwords were generated
-        if (result.passwords && result.passwords.length > 0) {
-          downloadPasswords(result.passwords);
+            totalCreated += result.created_count || 0;
+            if (result.passwords && Array.isArray(result.passwords)) {
+              allPasswords = [...allPasswords, ...result.passwords];
+            }
+            if (result.sections && Array.isArray(result.sections)) {
+              result.sections.forEach((section: string) => {
+                if (!allSections.includes(section)) {
+                  allSections.push(section);
+                }
+              });
+            }
+          } else {
+            failedFiles.push(file.name);
+          }
+        } catch (error) {
+          console.error(`Error importing ${file.name}:`, error);
+          failedFiles.push(file.name);
         }
-        
-        setShowModal(false);
-        await refreshOJTData();
-      } else {
-        alert(result.message || 'OJT import failed');
       }
-    } catch (error) {
+      
+      // Show summary message
+      let summaryMessage = `✅ Import completed!\n\n`;
+      summaryMessage += `Files processed: ${selectedFiles.length}\n`;
+      summaryMessage += `Total students created: ${totalCreated}\n`;
+      if (allSections.length > 0) {
+        summaryMessage += `Sections: ${allSections.join(', ')}\n`;
+      }
+      if (failedFiles.length > 0) {
+        summaryMessage += `\n⚠️ Failed files: ${failedFiles.join(', ')}`;
+      }
+      alert(summaryMessage);
+      
+      // Download all passwords if any exist
+      if (allPasswords.length > 0) {
+        console.log('Downloading passwords for', allPasswords.length, 'students');
+        downloadPasswords(allPasswords);
+        alert(`📥 Password file has been downloaded with ${allPasswords.length} student passwords!`);
+      } else {
+        console.log('No passwords to download');
+      }
+      
+      // Close modal and refresh data
+      setShowModal(false);
+      setSelectedFiles([]);
+      setSelectedYear(null);
+      
+      // Refresh the OJT data to update cards
+      await refreshOJTData();
+    } catch (error: any) {
       console.error('OJT import error:', error);
-      alert('OJT import failed. Please try again.');
+      alert(`❌ Import failed: ${error?.message || 'Please try again.'}`);
     } finally {
       setImportLoading(false);
     }
@@ -205,7 +265,10 @@ export default function Dashboard() {
     logoImage: {
       width: '80px',
       height: '80px',
-      borderRadius: '50%',
+      borderRadius: '8px',
+      background: 'white',
+      padding: '8px',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
     },
     logoText: {
       fontSize: '14px',
@@ -399,8 +462,8 @@ export default function Dashboard() {
   };
 
   const links = [
-    { to: `/coordinator/dashboard/${coordinatorUsername}`, label: 'Dashboard' },
     { to: '/coordinator/imports', label: 'Imports' },
+    { to: '/coordinator/statistics', label: 'Statistics' },
   ];
 
   return (
@@ -409,7 +472,7 @@ export default function Dashboard() {
       <div style={styles.sidebar}>
         <div style={styles.topSection}>
           <div style={styles.logo}>
-            <img src="/logo192.png" alt="Logo" style={styles.logoImage} />
+            <img src={logoLogin} alt="Logo" style={styles.logoImage} />
             <h1 style={styles.logoText}>WhereNa You</h1>
           </div>
 
@@ -425,14 +488,22 @@ export default function Dashboard() {
                     ...(link.label === 'Dashboard' && activePage === 'dashboard'
                       ? styles.activeNavItem
                       : {}),
+                    ...(link.label === 'Statistics' && activePage === 'statistics'
+                      ? styles.activeNavItem
+                      : {}),
                   }}
                   onClick={() => {
                     if (link.label === 'Dashboard') {
                       setActivePage('dashboard');
                       setSelectedCard(null);
+                      setShowStats(false);
                     } else if (link.label === 'Imports') {
                       setActivePage('imports');
+                      setShowStats(false);
                       refreshOJTData();
+                    } else if (link.label === 'Statistics') {
+                      setActivePage('statistics');
+                      setShowStats(true);
                     }
                   }}
                 >
@@ -666,7 +737,39 @@ export default function Dashboard() {
                     transition: 'all 0.2s ease',
                     boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)'
                   }}
-                  onClick={() => setShowDateModal(true)}
+                  onClick={async () => {
+                    // Fetch existing send dates before showing modal
+                    try {
+                      const result = await getSendDates(coordinatorUsername);
+                      console.log('📅 Get Send Dates Result:', result);
+                      if (result.success && result.scheduled_dates) {
+                        console.log('📋 Scheduled dates found:', result.scheduled_dates.length, result.scheduled_dates);
+                        setExistingSendDates(result.scheduled_dates);
+                      } else {
+                        console.log('ℹ️ No scheduled dates found');
+                        setExistingSendDates([]);
+                      }
+                    } catch (error) {
+                      console.error('❌ Error fetching send dates:', error);
+                      setExistingSendDates([]);
+                    }
+                    
+                    // Check if all completed students are already sent to admin for this specific batch
+                    try {
+                      const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
+                      console.log('🔍 All Sent Status:', statusResult);
+                      if (statusResult.success) {
+                        setAllDataSent(statusResult.all_sent);
+                        setCompletedCount(statusResult.total_completed || 0);
+                        console.log(`✅ Batch ${selectedBatchFilter} - All data sent: ${statusResult.all_sent}, Completed: ${statusResult.total_completed}, Sent: ${statusResult.completed_sent}, Not Sent: ${statusResult.completed_not_sent}`);
+                      }
+                    } catch (error) {
+                      console.error('❌ Error checking sent status:', error);
+                      setAllDataSent(false);
+                    }
+                    
+                    setShowDateModal(true);
+                  }}
                   onMouseEnter={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
                     target.style.backgroundColor = '#059669';
@@ -865,25 +968,6 @@ export default function Dashboard() {
                           </span>
                         </div>
                       </div>
-                      
-                      <div style={{
-                        marginTop: '16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '8px',
-                        backgroundColor: '#f0f9ff',
-                        borderRadius: '8px',
-                        border: '1px solid #bae6fd'
-                      }}>
-                        <span style={{
-                          fontSize: '12px',
-                          color: '#0369a1',
-                          fontWeight: '600'
-                        }}>
-                          Click to view details →
-                        </span>
-                      </div>
                     </div>
                   </div>
                 ))
@@ -952,7 +1036,7 @@ export default function Dashboard() {
               <button
                 onClick={() => {
                   setShowModal(false);
-                  setSelectedFile(null);
+                  setSelectedFiles([]);
                   setSelectedYear(null);
                 }}
                 style={{
@@ -1109,6 +1193,7 @@ export default function Dashboard() {
                   >
               <input
                 type="file"
+                multiple
                 onChange={handleFileChange}
                       style={{
                         position: 'absolute',
@@ -1139,7 +1224,7 @@ export default function Dashboard() {
                       color: '#374151',
                       margin: '0 0 4px 0'
                     }}>
-                      {selectedFile ? selectedFile.name : 'Choose Excel File'}
+                      {selectedFiles.length > 0 ? `${selectedFiles.length} file(s) selected` : 'Choose Excel Files'}
                     </p>
                     <p style={{
                       fontSize: '14px',
@@ -1153,10 +1238,77 @@ export default function Dashboard() {
                       color: '#9ca3af',
                       margin: '8px 0 0 0'
                     }}>
-                      Supports .xlsx and .xls files
+                      Supports .xlsx and .xls files (multiple selection)
                     </p>
                   </div>
                 </div>
+
+                {/* Selected Files List */}
+                {selectedFiles.length > 0 && (
+                  <div style={{ marginTop: '16px' }}>
+                    <p style={{ 
+                      fontSize: '13px', 
+                      fontWeight: '600', 
+                      color: '#374151',
+                      marginBottom: '8px'
+                    }}>
+                      Selected Files:
+                    </p>
+                    <div style={{ 
+                      maxHeight: '150px', 
+                      overflowY: 'auto',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      padding: '8px'
+                    }}>
+                      {selectedFiles.map((file, index) => (
+                        <div key={index} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          backgroundColor: index % 2 === 0 ? '#f9fafb' : 'white',
+                          borderRadius: '6px',
+                          marginBottom: '4px'
+                        }}>
+                          <span style={{
+                            fontSize: '13px',
+                            color: '#374151',
+                            flex: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            📄 {file.name}
+                          </span>
+                          <button
+                            onClick={() => removeFile(index)}
+                            style={{
+                              marginLeft: '8px',
+                              padding: '4px 8px',
+                              backgroundColor: '#fee2e2',
+                              color: '#dc2626',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#fecaca';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#fee2e2';
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}
@@ -1168,7 +1320,7 @@ export default function Dashboard() {
               <button
                 onClick={() => {
                   setShowModal(false);
-                  setSelectedFile(null);
+                  setSelectedFiles([]);
                   setSelectedYear(null);
                 }}
                 disabled={importLoading}
@@ -1205,16 +1357,16 @@ export default function Dashboard() {
               </button>
                 <button
                   onClick={handleImport}
-                  disabled={importLoading || !selectedFile || !selectedYear}
+                  disabled={importLoading || selectedFiles.length === 0 || !selectedYear}
                   style={{
                     padding: '14px 28px',
                     border: '2px solid #e5e7eb',
                     borderRadius: '12px',
-                    background: importLoading || !selectedFile || !selectedYear 
+                    background: importLoading || selectedFiles.length === 0 || !selectedYear 
                       ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)'
                       : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                     color: 'white',
-                    cursor: importLoading || !selectedFile || !selectedYear ? 'not-allowed' : 'pointer',
+                    cursor: importLoading || selectedFiles.length === 0 || !selectedYear ? 'not-allowed' : 'pointer',
                     fontWeight: '700',
                     fontSize: '15px',
                     transition: 'all 0.3s ease',
@@ -1224,14 +1376,14 @@ export default function Dashboard() {
                     gap: '8px'
                   }}
                   onMouseEnter={(e) => {
-                    if (!importLoading && selectedFile && selectedYear) {
+                    if (!importLoading && selectedFiles.length > 0 && selectedYear) {
                       const target = e.currentTarget as HTMLButtonElement;
                       target.style.transform = 'translateY(-2px)';
                       target.style.boxShadow = '0 8px 16px -4px rgba(245, 158, 11, 0.4)';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!importLoading && selectedFile && selectedYear) {
+                    if (!importLoading && selectedFiles.length > 0 && selectedYear) {
                       const target = e.currentTarget as HTMLButtonElement;
                       target.style.transform = 'translateY(0)';
                       target.style.boxShadow = '0 4px 6px -1px rgba(245, 158, 11, 0.3)';
@@ -1276,58 +1428,19 @@ export default function Dashboard() {
             padding: '0',
             boxShadow: '0 32px 64px -12px rgba(0, 0, 0, 0.35)',
             width: '520px',
-            maxWidth: '95vw',
+            maxWidth: '85vw',
             border: '1px solid rgba(226, 232, 240, 0.8)',
             position: 'relative',
-            animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-            overflow: 'hidden'
+            animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
           }}>
             {/* Gradient Header */}
             <div style={{
               background: 'white',
-              padding: '32px 32px 24px 32px',
+              padding: '24px 36px 18px 36px',
               color: '#1f2937',
               position: 'relative',
               borderBottom: '2px solid #e5e7eb'
             }}>
-              {/* Close button */}
-              <button
-                onClick={() => {
-                  setShowDateModal(false);
-                  setSendDateState('');
-                }}
-                style={{
-                  position: 'absolute',
-                  top: '20px',
-                  right: '20px',
-                  background: '#f3f4f6',
-                  border: '2px solid #e5e7eb',
-                  fontSize: '20px',
-                  color: '#6b7280',
-                  cursor: 'pointer',
-                  padding: '8px',
-            borderRadius: '12px',
-                  transition: 'all 0.2s ease',
-                  backdropFilter: 'blur(10px)'
-                }}
-                onMouseEnter={(e) => {
-                  const target = e.currentTarget as HTMLButtonElement;
-                  target.style.backgroundColor = '#e5e7eb';
-                  target.style.borderColor = '#d1d5db';
-                    target.style.color = 'white';
-                  target.style.transform = 'scale(1.1)';
-                }}
-                onMouseLeave={(e) => {
-                  const target = e.currentTarget as HTMLButtonElement;
-                  target.style.backgroundColor = '#f3f4f6';
-                  target.style.borderColor = '#e5e7eb';
-                  target.style.color = '#6b7280';
-                  target.style.transform = 'scale(1)';
-                }}
-              >
-                ✕
-              </button>
-
               {/* Header Content */}
               <div style={{ 
                 marginBottom: '16px'
@@ -1354,36 +1467,121 @@ export default function Dashboard() {
             </div>
 
             {/* Content Area */}
-            <div style={{ padding: '32px' }}>
+            <div style={{ padding: '20px 36px 32px 36px' }}>
+              {/* No Data Warning - for testing */}
+              {ojtYears.length === 0 && (
+                <div style={{
+                  backgroundColor: '#e0f2fe',
+                  border: '2px solid #0ea5e9',
+                  borderRadius: '12px',
+                  padding: '16px 20px',
+                  marginBottom: '24px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px'
+                }}>
+                  <span style={{ fontSize: '24px', flexShrink: 0 }}>ℹ️</span>
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ color: '#075985', fontSize: '15px', display: 'block', marginBottom: '8px' }}>
+                      No OJT Data Available
+                    </strong>
+                    <div style={{ color: '#0c4a6e', fontSize: '14px', lineHeight: '1.6' }}>
+                      Please import OJT students first before scheduling automatic processing.
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* All Data Already Sent Warning */}
+              {allDataSent && (
+                <div style={{
+                  backgroundColor: '#dcfce7',
+                  border: '2px solid #22c55e',
+                  borderRadius: '12px',
+                  padding: '14px 18px',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px'
+                }}>
+                  <span style={{ fontSize: '22px', flexShrink: 0 }}>✅</span>
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ color: '#166534', fontSize: '14px', display: 'block', marginBottom: '6px' }}>
+                      All Completed OJT Data Already Sent to Admin
+                    </strong>
+                    <div style={{ color: '#15803d', fontSize: '13px', lineHeight: '1.5' }}>
+                      All {completedCount} completed OJT students have been successfully sent to admin for approval.
+                    </div>
+                    <div style={{ marginTop: '6px', fontSize: '12px', color: '#166534', fontStyle: 'italic' }}>
+                      ℹ️ Note: Scheduling is not needed as all data has already been processed.
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Existing Schedule Warning */}
+              {existingSendDates.length > 0 && !allDataSent && (
+                <div style={{
+                  backgroundColor: '#fef3c7',
+                  border: '2px solid #fbbf24',
+                  borderRadius: '12px',
+                  padding: '16px 20px',
+                  marginBottom: '24px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px'
+                }}>
+                  <span style={{ fontSize: '24px', flexShrink: 0 }}>⚠️</span>
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ color: '#92400e', fontSize: '15px', display: 'block', marginBottom: '8px' }}>
+                      Existing Scheduled Dates Found
+                    </strong>
+                    <div style={{ color: '#78350f', fontSize: '14px', lineHeight: '1.6' }}>
+                      {existingSendDates.map((sd, idx) => (
+                        <div key={idx} style={{ marginBottom: '4px' }}>
+                          • <strong>Batch {sd.batch_year}</strong>{sd.section && ` (Section ${sd.section})`}: {new Date(sd.send_date).toLocaleDateString()} 
+                          <span style={{ fontSize: '12px', marginLeft: '8px', opacity: 0.8 }}>
+                            (Set on {new Date(sd.created_at).toLocaleDateString()})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: '8px', fontSize: '13px', color: '#92400e', fontStyle: 'italic' }}>
+                      Setting a new date will update the existing schedule.
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Process Overview Card */}
               <div style={{
                 backgroundColor: '#f8fafc',
                 border: '1px solid #e2e8f0',
-                borderRadius: '16px',
-                padding: '24px',
-                marginBottom: '28px',
+                borderRadius: '14px',
+                padding: '20px 28px',
+                marginBottom: '20px',
                 position: 'relative',
                 overflow: 'hidden'
               }}>
                 
                 <div style={{ 
-                  marginBottom: '16px' 
+                  marginBottom: '12px' 
                 }}>
                   <span style={{ 
                     fontWeight: '700', 
                     color: '#1e293b',
-                    fontSize: '16px'
+                    fontSize: '15px'
                   }}>
                     Processing Actions
                   </span>
                 </div>
                 
-                <div style={{ paddingLeft: '52px' }}>
+                <div style={{ paddingLeft: '8px' }}>
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
-                    marginBottom: '12px',
-                    fontSize: '15px',
+                    marginBottom: '10px',
+                    fontSize: '14px',
                     color: '#475569'
                   }}>
                     <div style={{
@@ -1392,6 +1590,8 @@ export default function Dashboard() {
                       backgroundColor: '#10b981',
                       borderRadius: '50%',
                       marginRight: '16px',
+                      marginLeft: '4px',
+                      flexShrink: 0,
                       boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)'
                     }}></div>
                     <span><strong style={{ color: '#059669' }}>Completed</strong> students → Sent to admin</span>
@@ -1399,8 +1599,8 @@ export default function Dashboard() {
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
-                    marginBottom: '12px',
-                    fontSize: '15px',
+                    marginBottom: '10px',
+                    fontSize: '14px',
                     color: '#475569'
                   }}>
                     <div style={{
@@ -1409,6 +1609,8 @@ export default function Dashboard() {
                       backgroundColor: '#f59e0b',
                       borderRadius: '50%',
                       marginRight: '16px',
+                      marginLeft: '4px',
+                      flexShrink: 0,
                       boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.2)'
                     }}></div>
                     <span><strong style={{ color: '#d97706' }}>Ongoing</strong> students → Marked incomplete</span>
@@ -1416,7 +1618,7 @@ export default function Dashboard() {
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center',
-                    fontSize: '15px',
+                    fontSize: '14px',
                     color: '#475569'
                   }}>
                     <div style={{
@@ -1425,6 +1627,8 @@ export default function Dashboard() {
                       backgroundColor: '#8b5cf6',
                       borderRadius: '50%',
                       marginRight: '16px',
+                      marginLeft: '4px',
+                      flexShrink: 0,
                       boxShadow: '0 0 0 3px rgba(139, 92, 246, 0.2)'
                     }}></div>
                     <span>Processes <strong style={{ color: '#7c3aed' }}>ALL sections</strong> in batch {selectedBatchFilter}</span>
@@ -1433,13 +1637,13 @@ export default function Dashboard() {
               </div>
 
               {/* Date Selection */}
-              <div style={{ marginBottom: '32px' }}>
+              <div style={{ marginBottom: '24px' }}>
                 <label style={{ 
                   display: 'block', 
-                  marginBottom: '12px', 
+                  marginBottom: '10px', 
                   fontWeight: '700', 
                   color: '#1e293b',
-                  fontSize: '16px'
+                  fontSize: '15px'
                 }}>
                   Select Processing Date
               </label>
@@ -1450,15 +1654,17 @@ export default function Dashboard() {
                     onChange={(e) => setSendDateState(e.target.value)}
                 style={{
                   width: '100%',
-                      padding: '16px 20px',
+                      padding: '14px',
+                      paddingRight: '14px',
                       border: '2px solid #e2e8f0',
-                      borderRadius: '16px',
-                      fontSize: '16px',
+                      borderRadius: '14px',
+                      fontSize: '15px',
                       color: '#1e293b',
                       backgroundColor: 'white',
                       transition: 'all 0.3s ease',
                       outline: 'none',
-                      fontWeight: '500'
+                      fontWeight: '500',
+                      boxSizing: 'border-box'
                     }}
                     onFocus={(e) => {
                       e.target.style.borderColor = '#3b82f6';
@@ -1484,7 +1690,10 @@ export default function Dashboard() {
               <button
                 onClick={() => {
                   setShowDateModal(false);
-                    setSendDateState('');
+                  setSendDateState('');
+                  setExistingSendDates([]);
+                  setAllDataSent(false);
+                  setCompletedCount(0);
                 }}
                 style={{
                     padding: '14px 28px',
@@ -1516,56 +1725,117 @@ export default function Dashboard() {
               </button>
               <button
                   onClick={async () => {
-                  if (sendDate) {
-                      try {
+                    if (allDataSent) {
+                      alert('✅ All Completed OJT Data Already Sent!\n\nAll completed students have been sent to admin for approval.\nScheduling is not needed at this time.');
+                      return;
+                    }
+                    
+                    if (!sendDate) {
+                      alert('Please select a date first');
+                      return;
+                    }
+                    
+                    try {
+                      // If "ALL" is selected, schedule for all available years
+                      if (selectedBatchFilter === 'ALL') {
+                        let successCount = 0;
+                        let failCount = 0;
+                        
+                        // Get all unique years from the stats
+                        const yearsToProcess = [...new Set(ojtYears.map(y => y.year))];
+                        
+                        if (yearsToProcess.length === 0) {
+                          alert('No OJT batches found to schedule');
+                          return;
+                        }
+                        
+                        for (const year of yearsToProcess) {
+                          try {
+                            const result = await setSendDate(
+                              coordinatorUsername,
+                              year,
+                              null,
+                              sendDate
+                            );
+                            if (result.success) {
+                              successCount++;
+                            } else {
+                              failCount++;
+                            }
+                          } catch (error) {
+                            console.error(`Error scheduling year ${year}:`, error);
+                            failCount++;
+                          }
+                        }
+                        
+                        if (successCount > 0) {
+                          alert(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatches scheduled: ${successCount}\nFailed: ${failCount}\n\nOn this date, ALL completed OJT students from ALL batches will be automatically sent to admin!`);
+                          setShowDateModal(false);
+                          setSendDateState('');
+                          setExistingSendDates([]);
+                        } else {
+                          alert('Failed to schedule any batches. Please try again.');
+                        }
+                      } else {
+                        // Schedule for specific year
+                        const batchYear = parseInt(selectedBatchFilter);
+                        if (isNaN(batchYear)) {
+                          alert('Invalid batch year selected');
+                          return;
+                        }
+                        
                         const result = await setSendDate(
                           coordinatorUsername,
-                          parseInt(selectedBatchFilter),
-                          null, // Always process entire batch
+                          batchYear,
+                          null,
                           sendDate
                         );
                         
                         if (result.success) {
-                          alert(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatch: ${selectedBatchFilter} (ENTIRE BATCH)\n\nOn this date:\n• ALL completed OJT students will be automatically sent to admin\n• ALL ongoing students will be marked as incomplete\n\nThe entire batch will be processed automatically!`);
-                    setShowDateModal(false);
+                          alert(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatch: ${selectedBatchFilter}\n\nOn this date:\n• ALL completed OJT students will be automatically sent to admin\n• ALL ongoing students will be marked as incomplete`);
+                          setShowDateModal(false);
                           setSendDateState('');
-                  } else {
+                          setExistingSendDates([]);
+                        } else {
                           alert(`Error: ${result.message}`);
                         }
-                      } catch (error) {
-                        console.error('Error setting send date:', error);
-                        alert('Failed to set schedule. Please try again.');
                       }
-                    } else {
-                      alert('Please select a date first');
-                  }
-                }}
+                    } catch (error) {
+                      console.error('Error setting send date:', error);
+                      alert('Failed to set schedule. Please try again.');
+                    }
+                  }}
                 style={{
                     padding: '14px 28px',
                   border: '2px solid #e5e7eb',
                     borderRadius: '16px',
-                    background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                    background: allDataSent ? 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
                   color: '#000000',
-                  cursor: 'pointer',
+                  cursor: allDataSent ? 'not-allowed' : 'pointer',
                     fontWeight: '700',
                     fontSize: '15px',
                     transition: 'all 0.3s ease',
-                    boxShadow: '0 8px 16px rgba(59, 130, 246, 0.3)',
+                    boxShadow: allDataSent ? '0 4px 8px rgba(148, 163, 184, 0.2)' : '0 8px 16px rgba(59, 130, 246, 0.3)',
                     position: 'relative',
-                    overflow: 'hidden'
+                    overflow: 'hidden',
+                    opacity: allDataSent ? 0.6 : 1
                   }}
                   onMouseEnter={(e) => {
-                    const target = e.currentTarget as HTMLButtonElement;
-                    target.style.transform = 'translateY(-3px)';
-                    target.style.boxShadow = '0 12px 24px rgba(59, 130, 246, 0.4)';
+                    if (!allDataSent) {
+                      const target = e.currentTarget as HTMLButtonElement;
+                      target.style.transform = 'translateY(-3px)';
+                      target.style.boxShadow = '0 12px 24px rgba(59, 130, 246, 0.4)';
+                    }
                   }}
                   onMouseLeave={(e) => {
-                    const target = e.currentTarget as HTMLButtonElement;
-                    target.style.transform = 'translateY(0)';
-                    target.style.boxShadow = '0 8px 16px rgba(59, 130, 246, 0.3)';
+                    if (!allDataSent) {
+                      const target = e.currentTarget as HTMLButtonElement;
+                      target.style.transform = 'translateY(0)';
+                      target.style.boxShadow = '0 8px 16px rgba(59, 130, 246, 0.3)';
+                    }
                   }}
                 >
-                  Schedule Processing
+                  {allDataSent ? '✅ All Data Already Sent' : 'Schedule Processing'}
               </button>
               </div>
             </div>

@@ -771,7 +771,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
           const userObj = JSON.parse(userStr);
           const userId = userObj.user_id || userObj.id;
           if (userId) {
-            navigate(`/alumni/dashboard/${userId}`);
+            navigate(`/dashboard/${userId}`);
           }
         }
       } else {

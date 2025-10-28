@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { fetchNotifications } from '../../../services/api';
+import { fetchNotifications, api } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from '../../alumni/AlumniTopBar';
 import { useRealTimeNotifications } from '../../../hooks/useRealTimeNotifications';
+import ctulogo from '../../../images/ctulogo.png';
 
 const AdminNotificationPage: React.FC = () => {
   // Use real-time notifications hook
@@ -65,6 +66,90 @@ const AdminNotificationPage: React.FC = () => {
     } else {
       setSelected(filteredNotifications.map((n) => n.id));
     }
+  };
+
+  const ProfilePicComponent = ({ userId, userName, size = '40px' }: { userId?: string, userName?: string, size?: string }) => {
+    const [profilePicUrl, setProfilePicUrl] = React.useState<string | null>(null);
+    const [isLoading, setIsLoading] = React.useState(true);
+    
+    React.useEffect(() => {
+      const loadProfilePic = async () => {
+        try {
+          console.log('Admin ProfilePicComponent - Loading for userId:', userId, 'userName:', userName);
+          
+          if (userId) {
+            // Use the alumni/profile endpoint which works correctly
+            const response = await api.get(`alumni/profile/${userId}/`);
+            console.log('Admin ProfilePicComponent - API response:', response.data);
+            
+            if (response.data && response.data.profile_pic) {
+              const profilePic = response.data.profile_pic;
+              const profilePicUrl = profilePic.startsWith('http') ? profilePic : `http://127.0.0.1:8000${profilePic}`;
+              console.log('Admin ProfilePicComponent - Setting profile pic URL:', profilePicUrl);
+              setProfilePicUrl(profilePicUrl);
+            } else {
+              console.log('Admin ProfilePicComponent - No profile_pic in response');
+            }
+          } else {
+            console.log('Admin ProfilePicComponent - No userId provided');
+          }
+        } catch (error) {
+          console.error('Admin ProfilePicComponent - Error loading profile pic:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
+      loadProfilePic();
+    }, [userId]);
+    
+    if (isLoading) {
+      return (
+        <img
+          src={ctulogo}
+          alt={userName || 'User'}
+          style={{
+            width: size,
+            height: size,
+            objectFit: 'cover',
+            borderRadius: '50%'
+          }}
+        />
+      );
+    }
+    
+    if (profilePicUrl) {
+      return (
+        <img
+          src={profilePicUrl}
+          alt={userName || 'User'}
+          style={{
+            width: size,
+            height: size,
+            objectFit: 'cover',
+            borderRadius: '50%'
+          }}
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.src = ctulogo;
+          }}
+        />
+      );
+    }
+    
+    // Fallback to CTU logo
+    return (
+      <img
+        src={ctulogo}
+        alt={userName || 'User'}
+        style={{
+          width: size,
+          height: size,
+          objectFit: 'cover',
+          borderRadius: '50%'
+        }}
+      />
+    );
   };
 
   function renderMessageWithButton(message: string) {
@@ -288,13 +373,62 @@ const AdminNotificationPage: React.FC = () => {
             >
               ×
             </button>
-            <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 8 }}>
-              {openNotif.subject || 'No Subject'}
+            
+            {/* Header with avatar */}
+            <div style={{
+              background: '#f8f9fa',
+              padding: '20px',
+              borderBottom: '1px solid #e9ecef',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              margin: '-32px -32px 20px -32px'
+            }}>
+              {/* User Profile Picture */}
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                overflow: 'hidden',
+                flexShrink: 0
+              }}>
+                <ProfilePicComponent 
+                  userId={(() => {
+                    const actorIdMatch = openNotif.content?.match(/<!--ACTOR_ID:(\d+)-->/);
+                    const userId = actorIdMatch ? actorIdMatch[1] : undefined;
+                    console.log('Admin Notification - Extracted userId:', userId, 'from content:', openNotif.content);
+                    return userId;
+                  })()}
+                  userName={(() => {
+                    const nameMatch = openNotif.content?.match(/^([^<]+?)\s+(commented|mentioned|liked|reposted|started following)/i);
+                    return nameMatch ? nameMatch[1].trim() : openNotif.type;
+                  })()}
+                  size="40px"
+                />
+              </div>
+
+              {/* Notification Info */}
+              <div style={{ flex: 1 }}>
+                <div style={{ 
+                  fontSize: '16px', 
+                  fontWeight: '600',
+                  color: '#333',
+                  marginBottom: '4px'
+                }}>
+                  {openNotif.subject || 'No Subject'}
+                </div>
+                <div style={{ 
+                  fontSize: '12px',
+                  color: '#666'
+                }}>
+                  {openNotif.date}
+                </div>
+              </div>
             </div>
-            <div style={{ color: '#174f84', fontWeight: 600, marginBottom: 4 }}>
+            
+            <div style={{ color: '#174f84', fontWeight: 600, marginBottom: 12, fontSize: 14 }}>
               {openNotif.type}
             </div>
-            <div style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>{openNotif.date}</div>
             <div style={{ fontSize: 16, whiteSpace: 'pre-line', marginBottom: 24 }}>
               {renderMessageWithButton(openNotif.content)}
             </div>

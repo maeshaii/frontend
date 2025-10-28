@@ -989,10 +989,15 @@ body::-webkit-scrollbar {
   font-size: 14px;
   font-weight: 500;
   transition: all 0.2s ease;
+  min-width: 100px;
 }
 
 .profile-follow-button:hover {
   background: #004499;
+}
+
+.profile-follow-button:active {
+  transform: scale(0.98);
 }
 
 .profile-follow-button:disabled {
@@ -1008,6 +1013,43 @@ body::-webkit-scrollbar {
 
 .profile-follow-button.following:hover {
   background: #e8e8e8;
+}
+
+/* Container for follow and message buttons */
+.profile-other-actions-below-university {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Message button styles */
+.profile-message-button {
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  min-width: 100px;
+}
+
+.profile-message-button:hover {
+  background: #218838;
+}
+
+.profile-message-button:active {
+  transform: scale(0.98);
+}
+
+.profile-message-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 /* Suggested user follow button styles */

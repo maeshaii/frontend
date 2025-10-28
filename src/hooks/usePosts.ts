@@ -17,7 +17,12 @@ interface PostItem {
   post_id: number;
   post_title?: string;
   post_content: string;
-  post_image?: string | null;
+  post_image?: string | null; // Backward compatibility
+  post_images?: Array<{ // Multiple images
+    image_id: number;
+    image_url: string;
+    order: number;
+  }>;
   created_at?: string | null;
   user?: {
     user_id?: number;
@@ -25,7 +30,7 @@ interface PostItem {
     l_name?: string;
     profile_pic?: string;
     name?: string;
-    account_type?: { admin?: boolean; peso?: boolean };
+    account_type?: { admin?: boolean; peso?: boolean; ojt?: boolean; user?: boolean; coordinator?: boolean };
   };
   comments?: any[];
   reposts?: any[];

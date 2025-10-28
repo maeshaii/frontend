@@ -2,7 +2,8 @@ import React, { useRef, useEffect } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
-import { api, getAdminPesoUsers, getUserInfo, fetchNotificationCount } from '../../services/api';
+import wherenayouLogo from '../../images/logo_login.png';
+import { api, getAdminPesoUsers, getUserInfo, fetchNotificationCount, saveRecentSearch, getRecentSearches, deleteRecentSearch } from '../../services/api';
 import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
 import 'primeicons/primeicons.css';
 
@@ -32,6 +33,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   const [searchValue, setSearchValue] = React.useState('');
   const [searchResults, setSearchResults] = React.useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = React.useState(false);
+  const [recentSearches, setRecentSearches] = React.useState<any[]>([]);
+  const [showRecentSearches, setShowRecentSearches] = React.useState(false);
 
   // Use real-time notifications hook
   const { notificationCount, isConnected: notificationConnected } = useRealTimeNotifications({
@@ -62,6 +65,37 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   }, []);
 
   // Real-time notifications are handled by the hook
+
+  // Delete a recent search
+  const handleDeleteRecentSearch = async (searchId: number) => {
+    try {
+      const response = await deleteRecentSearch(searchId);
+      if (response.success) {
+        // Reload recent searches to update the list
+        const updatedSearches = await loadRecentSearches();
+        // Keep the dropdown open if there are still recent searches
+        setShowRecentSearches(updatedSearches.length > 0);
+      }
+    } catch (error) {
+      console.error('Error deleting recent search:', error);
+    }
+  };
+
+  // Load recent searches
+  const loadRecentSearches = React.useCallback(async () => {
+    try {
+      const response = await getRecentSearches();
+      if (response.success) {
+        setRecentSearches(response.recent_searches || []);
+        return response.recent_searches || [];
+      }
+      return [];
+    } catch (error) {
+      console.error('Error loading recent searches:', error);
+      setRecentSearches([]);
+      return [];
+    }
+  }, []);
 
   // Handle click outside to close profile dropdown
   useEffect(() => {
@@ -133,12 +167,31 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   }, [searchValue])
 
 
-  const handleSearchSelect = (userId: number) => {
+  const handleSearchSelect = async (userId: number) => {
     setShowSuggestions(false);
     setSearchValue('');
     if (!userId || Number.isNaN(Number(userId))) return;
-    // Always redirect to alumni profile
-    navigate(`/alumni/profile/${userId}`);
+    
+    // Save the recent search
+    try {
+      await saveRecentSearch(userId);
+    } catch (error) {
+      console.error('Error saving recent search:', error);
+      // Don't prevent navigation if saving fails
+    }
+    
+    // Find the user in search results to determine account type
+    const selectedUser = searchResults.find(user => (user.user_id ?? user.id) === userId);
+    
+    // Navigate based on account type - unified profile route
+    if (selectedUser?.account_type?.peso) {
+      navigate(`/peso/profile/${userId}`);
+    } else if (selectedUser?.account_type?.admin) {
+      navigate(`/ccict/profile/${userId}`);
+    } else {
+      // Unified profile route for alumni, OJT, and other users
+      navigate(`/profile/${userId}`);
+    }
   };
 
   // Refactored admin URLs
@@ -164,13 +217,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     } else if (isPeso) {
       dashboardPath = `/peso/dashboard/${userId}`;
     } else {
-      // Check if user is OJT or alumni based on user data
-      const userRole = user?.role || user?.user_type;
-      if (userRole === 'ojt' || userRole === 'coordinator') {
-        dashboardPath = `/ojt/dashboard/${userId}`;
-      } else {
-        dashboardPath = `/alumni/dashboard/${userId}`;
-      }
+      // Unified dashboard for alumni and OJT users
+      dashboardPath = `/dashboard/${userId}`;
     }
     
     navigate(dashboardPath);
@@ -202,13 +250,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     } else if (isPeso) {
       notificationPath = `/peso/notifications/`;
     } else {
-      // Check if user is OJT or alumni based on user data
-      const userRole = user?.role || user?.user_type;
-      if (userRole === 'ojt' || userRole === 'coordinator') {
-        notificationPath = `/ojt/notifications/`;
-      } else {
-        notificationPath = `/alumni/notifications/`;
-      }
+      // Unified notifications for alumni and OJT users
+      notificationPath = `/notifications`;
     }
     
     navigate(notificationPath);
@@ -226,13 +269,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     } else if (isPeso) {
       profilePath = `/peso/profile/${userId}`;
     } else {
-      // Check if user is OJT or alumni based on user data
-      const userRole = user?.role || user?.user_type;
-      if (userRole === 'ojt' || userRole === 'coordinator') {
-        profilePath = `/ojt/profile/${userId}`;
-      } else {
-        profilePath = `/alumni/profile/${userId}`;
-      }
+      // Unified profile route for alumni and OJT users
+      profilePath = `/profile/${userId}`;
     }
     
     navigate(profilePath);
@@ -260,25 +298,26 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div
             style={{
-              width: 44,
               height: 44,
-              background: 'linear-gradient(135deg, #ffffff 0%, #f0f8ff 100%)',
-              borderRadius: '50%',
+              background: 'white',
+              borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 14,
-              fontWeight: '700',
-              color: '#003366',
-              boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)',
-              transition: 'transform 0.3s ease',
-              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+              overflow: 'hidden',
+              padding: '4px 8px',
             }}
-            onClick={handleHomeClick}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
-            WNY
+            <img 
+              src={wherenayouLogo} 
+              alt="WhereNaYou Logo" 
+              style={{
+                height: '100%',
+                width: 'auto',
+                objectFit: 'contain',
+              }}
+            />
           </div>
         </div>
         <div style={{ position: 'relative' }}>
@@ -286,7 +325,13 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             type="text"
             placeholder="Search users..."
             value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
+            onChange={(e) => {
+              setSearchValue(e.target.value);
+              // Close recent searches dropdown when user starts typing
+              if (e.target.value.trim() !== '') {
+                setShowRecentSearches(false);
+              }
+            }}
             style={{
               borderRadius: 24,
               border: '1px solid rgba(255, 255, 255, 0.2)',
@@ -299,15 +344,27 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               outline: 'none',
               transition: 'all 0.3s ease',
             }}
-            onFocus={(e) => {
-              setShowSuggestions(searchResults.length > 0);
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 102, 204, 0.3)';
-              e.currentTarget.style.border = '1px solid rgba(0, 102, 204, 0.5)';
+            onFocus={async (e) => {
+              if (searchValue.trim() === '') {
+                const recentSearchesData = await loadRecentSearches();
+                setShowRecentSearches(recentSearchesData.length > 0);
+              } else {
+                setShowSuggestions(searchResults.length > 0);
+              }
+              if (e.currentTarget) {
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 102, 204, 0.3)';
+                e.currentTarget.style.border = '1px solid rgba(0, 102, 204, 0.5)';
+              }
             }}
             onBlur={(e) => {
-              setTimeout(() => setShowSuggestions(false), 200);
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
-              e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.2)';
+              setTimeout(() => {
+                setShowSuggestions(false);
+                setShowRecentSearches(false);
+              }, 200);
+              if (e.currentTarget) {
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.2)';
+              }
             }}
           />
           <i 
@@ -353,12 +410,16 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                     borderBottom: '1px solid rgba(0, 0, 0, 0.05)',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(0, 102, 204, 0.05)';
-                    e.currentTarget.style.paddingLeft = '16px';
+                    if (e.currentTarget) {
+                      e.currentTarget.style.background = 'rgba(0, 102, 204, 0.05)';
+                      e.currentTarget.style.paddingLeft = '16px';
+                    }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.paddingLeft = '12px';
+                    if (e.currentTarget) {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.paddingLeft = '12px';
+                    }
                   }}
                 >
                   <img
@@ -379,6 +440,119 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                       fontSize: '14px',
                     }}>{user.name}</div>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {showRecentSearches && recentSearches.length > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 48,
+                left: 0,
+                right: 0,
+                background: 'white',
+                border: '1px solid rgba(0, 0, 0, 0.1)',
+                borderRadius: 12,
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
+                zIndex: 1000,
+                maxHeight: 280,
+                overflowY: 'auto',
+                backdropFilter: 'blur(10px)',
+              }}
+            >
+              <div style={{
+                padding: '8px 12px',
+                fontSize: '12px',
+                fontWeight: '600',
+                color: '#666',
+                borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
+                background: 'rgba(0, 102, 204, 0.05)',
+              }}>
+                Recent Searches
+              </div>
+              {recentSearches.map((search) => (
+                <div
+                  key={search.id}
+                  style={{
+                    padding: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    transition: 'all 0.2s ease',
+                    borderBottom: '1px solid rgba(0, 0, 0, 0.05)',
+                    position: 'relative',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (e.currentTarget) {
+                      e.currentTarget.style.background = 'rgba(0, 102, 204, 0.05)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (e.currentTarget) {
+                      e.currentTarget.style.background = 'transparent';
+                    }
+                  }}
+                >
+                  <img
+                    src={search.searched_user.profile_pic ? (String(search.searched_user.profile_pic).startsWith('http') ? search.searched_user.profile_pic : `http://127.0.0.1:8000${search.searched_user.profile_pic}`) : ctulogo}
+                    alt=""
+                    style={{ 
+                      width: 36, 
+                      height: 36, 
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: '2px solid rgba(0, 102, 204, 0.2)',
+                    }}
+                  />
+                  <div 
+                    style={{ flex: 1, cursor: 'pointer' }}
+                    onMouseDown={() => handleSearchSelect(search.searched_user.user_id)}
+                  >
+                    <div style={{ 
+                      fontWeight: '600',
+                      color: '#003366',
+                      fontSize: '14px',
+                    }}>
+                      {search.searched_user.f_name} {search.searched_user.m_name} {search.searched_user.l_name}
+                    </div>
+
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDeleteRecentSearch(search.id);
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      borderRadius: '4px',
+                      color: '#999',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 0, 0, 0.1)';
+                      e.currentTarget.style.color = '#ff4444';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'none';
+                      e.currentTarget.style.color = '#999';
+                    }}
+                    title="Delete this recent search"
+                  >
+                    <i className="pi pi-times" style={{ fontSize: '12px' }}></i>
+                  </button>
                 </div>
               ))}
             </div>
@@ -529,8 +703,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           </span>
         )}
         {/* WebSocket connection indicator */}
-        {notificationConnected && (
-          <span style={{
+        {/* <span style={{
             position: 'absolute',
             top: -2,
             right: -2,
@@ -540,8 +713,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             borderRadius: '50%',
             border: '2px solid white',
             pointerEvents: 'none'
-          }} title="Real-time notifications connected" />
-        )}
+          }} title="Real-time notifications connected" /> */}
         <span style={{ 
           color: 'white', 
           fontSize: 12, 
@@ -677,7 +849,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                   }} 
                   onClick={() => {
                     setShowProfile(false);
-                    const settingsPath = isAdmin ? '/ccict/settings' : '/alumni/settings';
+                    const settingsPath = isAdmin ? '/ccict/settings' : '/settings';
                     navigate(settingsPath);
                   }}
                   onMouseEnter={(e) => {

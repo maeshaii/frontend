@@ -13,6 +13,7 @@
   gap: 24px;
   padding: 0 24px;
   box-sizing: border-box;
+  min-height: calc(100vh - 140px);
 }
 
 /* Left sidebar */
@@ -185,7 +186,7 @@
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
-  max-height: calc(100vh - 120px); /* Account for navbar and padding */
+  /* Allow content to flow naturally */
   /* Hide scrollbar but keep functionality */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
@@ -391,4 +392,9 @@
 
 .suggested-user-follow-button.following:hover {
   background: #e8e8e8;
+}
+
+/* Hide scrollbar for scrollable feed */
+.scrollable-feed::-webkit-scrollbar {
+  display: none;
 }
