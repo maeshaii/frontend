@@ -210,6 +210,8 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
           markConversationRead(conversation.conversation_id).catch(() => {});
           hasMarkedRef.current = true;
           setHasMarkedAsRead(true);
+          // Optimistically broadcast to parent/other UI that unread is now zero
+          window.dispatchEvent(new CustomEvent('conversationRead', { detail: { conversationId: conversation.conversation_id } }));
         }
       };
 

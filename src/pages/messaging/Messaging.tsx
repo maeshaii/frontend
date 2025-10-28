@@ -65,8 +65,28 @@ const Messaging: React.FC = () => {
     loadConversations();
   }, []);
 
+  // Listen for read events from the chat view to zero-out unread in sidebar instantly
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {};
+      const conversationId: number | undefined = detail.conversationId;
+      if (!conversationId) return;
+      setConversations(prev => prev.map(c => 
+        c.conversation_id === conversationId ? { ...c, unread_count: 0 } : c
+      ));
+    };
+    window.addEventListener('conversationRead', handler as EventListener);
+    return () => window.removeEventListener('conversationRead', handler as EventListener);
+  }, []);
+
   const handleSelectConversation = (conversation: ConversationSummary) => {
     setSelectedConversation(conversation);
+    // Optimistically clear unread count in the sidebar when opening a conversation
+    setConversations(prev => prev.map(c => 
+      c.conversation_id === conversation.conversation_id 
+        ? { ...c, unread_count: 0 } 
+        : c
+    ));
     if (isMobile) {
       // On mobile, we might want to hide the conversation list
       // and show only the chat interface

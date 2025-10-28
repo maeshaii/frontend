@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ConversationSummary, getOnlineUsers } from '../../services/api';
+import { ConversationSummary, getOnlineUsers, createConversation } from '../../services/api';
 import './Messaging.css';
 
 interface ConversationListProps {
@@ -101,6 +101,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
   const [activeFilter, setActiveFilter] = useState<'all' | 'request' | 'online'>('all');
   const [filteredConversations, setFilteredConversations] = useState<ConversationSummary[]>(conversations);
   const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set());
+  const [onlineUsersData, setOnlineUsersData] = useState<any[]>([]);
 
   // Load online users
   useEffect(() => {
@@ -110,6 +111,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
         if (response.success) {
           const onlineUserIds = new Set<number>(response.online_users.map((user: any) => user.user_id));
           setOnlineUsers(onlineUserIds);
+          setOnlineUsersData(response.online_users);
         }
       } catch (error) {
         console.error('Failed to load online users:', error);
@@ -125,7 +127,10 @@ const ConversationList: React.FC<ConversationListProps> = ({
 
   // Filter conversations based on search query and active filter
   useEffect(() => {
-    let filtered = conversations;
+    // Default: All Messages should EXCLUDE message requests
+    let filtered = activeFilter === 'all'
+      ? conversations.filter(conv => !conv.is_message_request)
+      : conversations;
     
     // Apply search filter
     if (searchQuery.trim()) {
@@ -140,15 +145,38 @@ const ConversationList: React.FC<ConversationListProps> = ({
       // Filter for message requests (conversations with is_message_request = true)
       filtered = filtered.filter(conv => conv.is_message_request);
     } else if (activeFilter === 'online') {
-      // Filter for online users (mutual follows who are online)
-      filtered = filtered.filter(conv => {
+      // 1) Existing conversations whose other participant is online
+      const existingOnline = conversations.filter(conv => {
         const otherUserId = conv.other_participant?.user_id;
         return otherUserId && onlineUsers.has(otherUserId);
       });
+
+      // 2) Virtual items for online mutuals without an existing conversation
+      const existingOtherIds = new Set<number>(
+        conversations.map(c => c.other_participant?.user_id).filter(Boolean) as number[]
+      );
+
+      const virtualItems: ConversationSummary[] = onlineUsersData
+        .filter((u: any) => !existingOtherIds.has(u.user_id))
+        .map((u: any) => ({
+          conversation_id: -u.user_id, // sentinel negative id indicates virtual row
+          updated_at: new Date().toISOString(),
+          is_message_request: false,
+          last_message: undefined,
+          unread_count: 0,
+          participants: [],
+          other_participant: {
+            user_id: u.user_id,
+            name: u.name || `${u.f_name || ''} ${u.l_name || ''}`.trim(),
+            avatar_url: u.profile_pic || null,
+          }
+        }));
+
+      filtered = [...existingOnline, ...virtualItems];
     }
     
     setFilteredConversations(filtered);
-  }, [conversations, searchQuery, activeFilter, onlineUsers]);
+  }, [conversations, searchQuery, activeFilter, onlineUsers, onlineUsersData]);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
@@ -156,7 +184,18 @@ const ConversationList: React.FC<ConversationListProps> = ({
     onSearchChange(query);
   }, [onSearchChange]);
 
-  const handleConversationClick = useCallback((conversation: ConversationSummary) => {
+  const handleConversationClick = useCallback(async (conversation: ConversationSummary) => {
+    // If it's a virtual item (negative id), create conversation first
+    if (conversation.conversation_id < 0 && conversation.other_participant?.user_id) {
+      try {
+        const newConv = await createConversation(conversation.other_participant.user_id);
+        onConversationSelect(newConv);
+        return;
+      } catch (e) {
+        console.error('Failed to create conversation from Online tab:', e);
+        return;
+      }
+    }
     onConversationSelect(conversation);
   }, [onConversationSelect]);
 
