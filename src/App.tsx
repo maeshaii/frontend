@@ -31,6 +31,7 @@ import RequestsPage from './pages/admin/pages/RequestsPage';
 import UserManagement from './pages/admin/UserManagement';
 import RequestDetailsPage from './pages/admin/pages/RequestDetailsPage';
 import RewardsPage from './pages/admin/pages/RewardsPage';
+import InventoryPage from './pages/admin/pages/InventoryPage';
 import Messaging from './pages/messaging/Messaging';
 // import other pages like Statistics, Users, etc.
 import { PrivateRoute } from './components/PrivateRoute';
@@ -81,6 +82,14 @@ const App: React.FC = () => {
             element={
               <PrivateRoute roles={['admin']}>
                 <RewardsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/inventory"
+            element={
+              <PrivateRoute roles={['admin']}>
+                <InventoryPage />
               </PrivateRoute>
             }
           />

@@ -1023,5 +1023,88 @@ export const deleteRecentSearch = async (searchId: number) => {
   return response.data;
 };
 
+// -------- Engagement Points API Functions --------
+
+// Get user's points
+export const getUserPoints = async (userId: number) => {
+  const response = await api.get(`engagement/leaderboard/?user_type=all&limit=1000`);
+  const leaderboard = response.data.leaderboard || [];
+  const userPoints = leaderboard.find((item: any) => item.user_id === userId);
+  return userPoints || {
+    total_points: 0,
+    rank: null,
+    points_breakdown: {
+      likes: { points: 0, count: 0 },
+      comments: { points: 0, count: 0 },
+      shares: { points: 0, count: 0 },
+      replies: { points: 0, count: 0 },
+      posts_with_photos: { points: 0, count: 0 },
+      tracker_form: { points: 0, count: 0 }
+    }
+  };
+};
+
+// Get leaderboard
+export const getEngagementLeaderboard = async (limit: number = 50, userType: string = 'all') => {
+  const response = await api.get(`engagement/leaderboard/`, {
+    params: {
+      limit,
+      user_type: userType
+    }
+  });
+  return response.data;
+};
+
+// -------- Inventory Management API Functions --------
+
+// Get all inventory items
+export const getInventoryItems = async () => {
+  const response = await api.get('inventory/');
+  return response.data;
+};
+
+// Add new inventory item
+export const addInventoryItem = async (itemData: {
+  name: string;
+  type: string;
+  quantity: number;
+  value: string;
+}) => {
+  const response = await api.post('inventory/', itemData);
+  return response.data;
+};
+
+// Update inventory item
+export const updateInventoryItem = async (itemId: number, itemData: {
+  name: string;
+  type: string;
+  quantity: number;
+  value: string;
+}) => {
+  const response = await api.put(`inventory/${itemId}/`, itemData);
+  return response.data;
+};
+
+// Delete inventory item
+export const deleteInventoryItem = async (itemId: number) => {
+  const response = await api.delete(`inventory/${itemId}/`);
+  return response.data;
+};
+
+// Give reward to user
+export const giveReward = async (userId: number, rewardId: number) => {
+  const response = await api.post('rewards/give/', {
+    user_id: userId,
+    reward_id: rewardId
+  });
+  return response.data;
+};
+
+// Get reward history
+export const getRewardHistory = async (limit: number = 50) => {
+  const response = await api.get(`rewards/history/?limit=${limit}`);
+  return response.data;
+};
+
 export default api;
 export { publicApi };

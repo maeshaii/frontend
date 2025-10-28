@@ -236,75 +236,6 @@ export default function Statistics() {
             </p>
           </div>
         </div>
-
-        {/* Average Per Company Card */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '20px',
-          padding: '24px',
-          boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.1)',
-          border: '1px solid #e2e8f0',
-          transition: 'all 0.3s ease',
-          position: 'relative',
-          overflow: 'hidden'
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'translateY(-4px)';
-          e.currentTarget.style.boxShadow = '0 16px 32px -8px rgba(0, 0, 0, 0.15)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.boxShadow = '0 8px 16px -4px rgba(0, 0, 0, 0.1)';
-        }}>
-          {/* Decorative gradient circle */}
-          <div style={{
-            position: 'absolute',
-            top: '-20px',
-            right: '-20px',
-            width: '80px',
-            height: '80px',
-            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-            borderRadius: '50%',
-            opacity: '0.1'
-          }}></div>
-          
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              marginBottom: '20px'
-            }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                backgroundColor: '#dbeafe',
-                borderRadius: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '24px'
-              }}>
-                📈
-              </div>
-          </div>
-            <p style={{
-              margin: '0 0 4px 0',
-              fontSize: '14px',
-              color: '#64748b',
-              fontWeight: '500'
-            }}>
-              Average Per Company
-            </p>
-            <p style={{
-              margin: '0',
-              fontSize: '48px',
-              fontWeight: '800',
-              color: '#3b82f6'
-            }}>
-              {totalCompanies > 0 ? Math.round(totalStudents / totalCompanies * 10) / 10 : 0}
-            </p>
-          </div>
-        </div>
       </div>
       
       {/* Company Table */}
@@ -316,9 +247,6 @@ export default function Statistics() {
         border: '1px solid #e2e8f0'
       }}>
         <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
           marginBottom: '24px'
         }}>
           <h3 style={{
@@ -329,16 +257,6 @@ export default function Statistics() {
           }}>
             Companies Directory
           </h3>
-          <div style={{
-            padding: '6px 16px',
-            backgroundColor: '#f0f9ff',
-            borderRadius: '20px',
-            fontSize: '14px',
-                fontWeight: '600',
-            color: '#0369a1'
-          }}>
-            {companies.length} {companies.length === 1 ? 'Company' : 'Companies'}
-          </div>
       </div>
 
         {companies.length === 0 ? (
@@ -417,7 +335,7 @@ export default function Statistics() {
                     color: '#1e293b',
                     width: '100px'
                   }}>
-                    #
+                    No.
                   </th>
                   <th style={{
                     padding: '16px 20px',

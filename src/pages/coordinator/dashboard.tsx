@@ -3,11 +3,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
-<<<<<<< HEAD
-import { fetchOJTStatistics, importOJT, fetchCoordinatorSections, setSendDate, getSendDates } from '../../services/api';
-=======
 import { fetchOJTStatistics, importOJT, setSendDate, getSendDates, checkAllSentStatus } from '../../services/api';
->>>>>>> e1e0bfd4088d8ffee927a762a386577820e37af3
 import logoLogin from '../../images/logo_login.png';
 
 export default function Dashboard() {

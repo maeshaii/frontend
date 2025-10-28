@@ -4,7 +4,7 @@ import AlumniTopBar from './AlumniTopBar';
 import ctulogo from '../../images/ctulogo.png';
 import './profile.css';
 import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api, createConversation } from '../../services/api';
-import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment } from '../../services/api';
+import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment, getUserPoints } from '../../services/api';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
@@ -198,6 +198,8 @@ const AlumniProfile: React.FC = () => {
   const [postLoading, setPostLoading] = useState(false);
   const [repostError, setRepostError] = useState<string | null>(null);
   const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
+  const [userPoints, setUserPoints] = useState<any>(null);
+  const [pointsLoading, setPointsLoading] = useState(false);
   const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
 
   // Get current user ID
@@ -265,6 +267,20 @@ const AlumniProfile: React.FC = () => {
           setUser(userData);
           setEditBio(profileData.profile_bio || '');
           
+          // Fetch engagement points (only for Alumni)
+          const isAlumni = profileData.account_type?.user;
+          if (isAlumni && profileData.user_id) {
+            setPointsLoading(true);
+            try {
+              const points = await getUserPoints(profileData.user_id);
+              setUserPoints(points);
+            } catch (error) {
+              console.error('Error fetching points:', error);
+              setUserPoints(null);
+            } finally {
+              setPointsLoading(false);
+            }
+          }
           
           // Update localStorage only if viewing own profile
           if (Number(userId) === Number(currentUserId)) {
@@ -1252,6 +1268,203 @@ getPosts()
               </div>
             )}
           </div>
+
+          {/* Engagement Points - Only for Alumni */}
+          {user && user.account_type?.user && (
+            <div className="profile-card" style={{ marginTop: '16px' }}>
+              <div className="profile-intro-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🏆</span>
+                <span>Engagement Points</span>
+              </div>
+              
+              {pointsLoading ? (
+                <div style={{ padding: '20px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '14px', color: '#666' }}>Loading points...</div>
+                </div>
+              ) : userPoints ? (
+                <div>
+                  {/* Total Points */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    color: 'white',
+                    marginBottom: '16px',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>Total Points</div>
+                    <div style={{ fontSize: '36px', fontWeight: 'bold' }}>{userPoints.total_points || 0}</div>
+                    {userPoints.rank && (
+                      <div style={{ fontSize: '13px', opacity: 0.85, marginTop: '8px' }}>
+                        🎯 Rank #{userPoints.rank}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Points Breakdown */}
+                  <div style={{ fontSize: '14px', color: '#333' }}>
+                    <div style={{ fontWeight: '600', marginBottom: '12px', color: '#174f84' }}>Points Breakdown</div>
+                    
+                    {/* Likes */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 0',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>👍</span>
+                        <span>Likes</span>
+                        <span style={{ fontSize: '12px', color: '#999' }}>
+                          ({userPoints.points_breakdown?.likes?.count || 0})
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: '600', color: '#667eea' }}>
+                        +{userPoints.points_breakdown?.likes?.points || 0}
+                      </div>
+                    </div>
+
+                    {/* Comments */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 0',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>💬</span>
+                        <span>Comments</span>
+                        <span style={{ fontSize: '12px', color: '#999' }}>
+                          ({userPoints.points_breakdown?.comments?.count || 0})
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: '600', color: '#667eea' }}>
+                        +{userPoints.points_breakdown?.comments?.points || 0}
+                      </div>
+                    </div>
+
+                    {/* Shares */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 0',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>🔄</span>
+                        <span>Shares</span>
+                        <span style={{ fontSize: '12px', color: '#999' }}>
+                          ({userPoints.points_breakdown?.shares?.count || 0})
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: '600', color: '#667eea' }}>
+                        +{userPoints.points_breakdown?.shares?.points || 0}
+                      </div>
+                    </div>
+
+                    {/* Replies */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 0',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>↩️</span>
+                        <span>Replies</span>
+                        <span style={{ fontSize: '12px', color: '#999' }}>
+                          ({userPoints.points_breakdown?.replies?.count || 0})
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: '600', color: '#667eea' }}>
+                        +{userPoints.points_breakdown?.replies?.points || 0}
+                      </div>
+                    </div>
+
+                    {/* Posts with Photos */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 0',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>📸</span>
+                        <span>Posts w/ Photos</span>
+                        <span style={{ fontSize: '12px', color: '#999' }}>
+                          ({userPoints.points_breakdown?.posts_with_photos?.count || 0})
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: '600', color: '#667eea' }}>
+                        +{userPoints.points_breakdown?.posts_with_photos?.points || 0}
+                      </div>
+                    </div>
+
+                    {/* Tracker Form */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 0'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>📝</span>
+                        <span>Tracker Form</span>
+                        <span style={{ fontSize: '12px', color: '#999' }}>
+                          ({userPoints.points_breakdown?.tracker_form?.count || 0})
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: '600', color: '#667eea' }}>
+                        +{userPoints.points_breakdown?.tracker_form?.points || 0}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* View Leaderboard Button */}
+                  <button
+                    onClick={() => navigate('/rewards')}
+                    style={{
+                      width: '100%',
+                      marginTop: '16px',
+                      padding: '12px',
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'transform 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                  >
+                    View Leaderboard 🏅
+                  </button>
+                </div>
+              ) : (
+                <div style={{
+                  padding: '20px',
+                  textAlign: 'center',
+                  background: '#f5f7fa',
+                  borderRadius: '8px'
+                }}>
+                  <div style={{ fontSize: '24px', marginBottom: '8px' }}>🎮</div>
+                  <div style={{ fontSize: '14px', color: '#666' }}>
+                    Start engaging to earn points!
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
+                    Like, comment, share, and post to level up
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Followers - Hide for admin and PESO accounts */}
           {!user?.account_type?.peso && (!user?.account_type?.admin || isOwnProfile) && (!user?.account_type?.ccict || isOwnProfile) && (
