@@ -22,7 +22,8 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
     const user = localStorage.getItem('user');
     if (user) {
       const userData = JSON.parse(user);
-      setCoordinatorUsername(userData.name || '');
+      // Use username instead of full name for coordinator
+      setCoordinatorUsername(userData.username || userData.name || '');
     }
 
     const loadOJTData = async () => {
@@ -384,9 +385,9 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
       if (statusFilter === 'approved') return ojt.is_alumni;
       if (statusFilter === 'pending') return isUserSentToAdmin(ojt);
       if (statusFilter === 'not_started') return !ojt.ojt_start_date;
-      if (statusFilter === 'incomplete') return isOverdue(ojt);
-      if (statusFilter === 'ongoing') return !ojt.is_alumni && !isUserSentToAdmin(ojt) && !isOverdue(ojt) && (ojt.ojt_status || 'Ongoing') === 'Ongoing';
-      if (statusFilter === 'completed') return !ojt.is_alumni && !isUserSentToAdmin(ojt) && (ojt.ojt_status || 'Ongoing') === 'Completed';
+      if (statusFilter === 'incomplete') return ojt.ojt_status === 'Incomplete' || isOverdue(ojt);
+      if (statusFilter === 'ongoing') return !ojt.is_alumni && !isUserSentToAdmin(ojt) && ojt.ojt_status !== 'Incomplete' && !isOverdue(ojt) && (ojt.ojt_status || 'Ongoing') === 'Ongoing';
+      if (statusFilter === 'completed') return !ojt.is_alumni && !isUserSentToAdmin(ojt) && ojt.ojt_status !== 'Incomplete' && (ojt.ojt_status || 'Ongoing') === 'Completed';
       return true;
     })();
     
@@ -423,7 +424,7 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
             fontWeight: '700',
             color: '#1f2937'
           }}>
-            Class of {selectedYear}
+            Class of {selectedYear ? `${selectedYear - 1}-${selectedYear}` : 'N/A'}
           </h2>
           <p style={{ 
             margin: '0', 
@@ -561,13 +562,13 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
                       >
                         NOT STARTED
                       </span>
-                    ) : isOverdue(ojt) ? (
-                      // OVERDUE = Past end date but still ongoing
+                    ) : (ojt.ojt_status === 'Incomplete' || isOverdue(ojt)) ? (
+                      // INCOMPLETE = Either marked as Incomplete OR past end date but still ongoing
                       <span style={{
                         ...styles.statusText,
                         ...styles.statusIncomplete
                       }}
-                      title="OJT is overdue - past the end date but still ongoing"
+                      title={ojt.ojt_status === 'Incomplete' ? 'Student marked as Incomplete' : 'OJT is overdue - past the end date but still ongoing'}
                       >
                         INCOMPLETE
                       </span>
@@ -731,10 +732,6 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
                     <div style={styles.modalLabel}>Address</div>
                     <div style={styles.modalValue}>{selected.address || 'Not specified'}</div>
                   </div>
-                  <div style={styles.modalField}>
-                    <div style={styles.modalLabel}>Password</div>
-                    <div style={styles.modalValue}>{selected.password || 'Not specified'}</div>
-                  </div>
                 </div>
 
                 {/* Company Information Section */}
@@ -792,12 +789,12 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
                     <div style={{
                       ...styles.modalValue,
                       background: !selected.ojt_start_date ? '#f3f4f6' :
-                                 isOverdue(selected) ? '#fee2e2' :
+                                 (selected.ojt_status === 'Incomplete' || isOverdue(selected)) ? '#fee2e2' :
                                  selected.ojt_status === 'Approved' ? '#dbeafe' : 
                                  selected.ojt_status === 'Pending' ? '#fef3c7' : 
                                  selected.ojt_status === 'Completed' ? '#d1fae5' : '#f3f4f6',
                       color: !selected.ojt_start_date ? '#6b7280' :
-                             isOverdue(selected) ? '#dc2626' :
+                             (selected.ojt_status === 'Incomplete' || isOverdue(selected)) ? '#dc2626' :
                              selected.ojt_status === 'Approved' ? '#1e40af' : 
                              selected.ojt_status === 'Pending' ? '#d97706' : 
                              selected.ojt_status === 'Completed' ? '#065f46' : '#6b7280',
@@ -806,10 +803,10 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
                       justifyContent: 'center'
                     }}
                     title={!selected.ojt_start_date ? 'Status is locked until second import with company info' : 
-                           isOverdue(selected) ? 'OJT is overdue - past the end date but still ongoing' : ''}
+                           (selected.ojt_status === 'Incomplete' || isOverdue(selected)) ? 'Student marked as Incomplete or overdue' : ''}
                     >
                       {!selected.ojt_start_date ? 'NOT STARTED' : 
-                       isOverdue(selected) ? 'INCOMPLETE' : 
+                       (selected.ojt_status === 'Incomplete' || isOverdue(selected)) ? 'INCOMPLETE' : 
                        (selected.ojt_status || 'Ongoing')}
                     </div>
                   </div>

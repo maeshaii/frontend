@@ -319,7 +319,8 @@ export const importOJT = async (
   try {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('batch_year', batchYear);
+    // batch_year is optional for second imports (auto-detected from CTU_ID)
+    formData.append('batch_year', batchYear || '');
     formData.append('program', course);
     formData.append('coordinator_username', coordinatorUsername);
 
@@ -365,6 +366,16 @@ export const fetchOJTCompanyStatistics = async (coordinatorUsername?: string) =>
   const path = coordinatorUsername
     ? `ojt/company-statistics/?coordinator=${coordinatorUsername}`
     : 'ojt/company-statistics/';
+  const response = await api.get(path);
+  return response.data;
+};
+
+// Fetch students by company name
+export const fetchStudentsByCompany = async (companyName: string, coordinatorUsername?: string) => {
+  let path = `ojt/students-by-company/?company=${encodeURIComponent(companyName)}`;
+  if (coordinatorUsername) {
+    path += `&coordinator=${coordinatorUsername}`;
+  }
   const response = await api.get(path);
   return response.data;
 };
@@ -425,6 +436,17 @@ export const setSendDate = async (coordinatorUsername: string, batchYear: number
     batch_year: batchYear,
     section: section,
     send_date: sendDate
+  });
+  return response.data;
+};
+
+// Delete/remove send date for OJT batch
+export const deleteSendDate = async (coordinatorUsername: string, batchYear: number) => {
+  const response = await api.delete('ojt/delete-send-date/', {
+    data: {
+      coordinator_username: coordinatorUsername,
+      batch_year: batchYear
+    }
   });
   return response.data;
 };
