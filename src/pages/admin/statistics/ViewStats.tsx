@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
 import GenerateStatsModal from '../../../components/GenerateStatsModal';
 import { fetchAlumniStatistics } from '../../../services/api';
@@ -7,6 +7,7 @@ import { FaChartBar, FaDownload, FaUpload, FaGraduationCap, FaUsers, FaCalendarA
 
 const ViewStats: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation() as any;
   const [showModal, setShowModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [years, setYears] = useState<{ year: number; count: number }[]>([]);
@@ -28,6 +29,17 @@ const ViewStats: React.FC = () => {
     };
     loadStats();
   }, []);
+
+  // If navigated from Dashboard with a request to open the modal, honor it once.
+  useEffect(() => {
+    if (location?.state?.openGenerate) {
+      setShowModal(true);
+      // Clear the state so refreshing/back won't re-open unintentionally
+      try {
+        window.history.replaceState({}, document.title, '/ViewStats');
+      } catch {}
+    }
+  }, [location?.state]);
 
   const handleGenerateClick = () => setShowModal(true);
   const handleCloseModal = () => setShowModal(false);
