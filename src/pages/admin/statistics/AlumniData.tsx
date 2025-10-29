@@ -158,6 +158,31 @@ const AlumniData: React.FC = () => {
     return sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />;
   };
 
+  // Format salary range: "5001_10000" -> "5,001 - 10,000"
+  const formatSalaryRange = (salary: string | undefined | null): string => {
+    if (!salary || typeof salary !== 'string') return salary || '';
+    
+    // Check if it contains underscore (range format)
+    if (salary.includes('_')) {
+      const parts = salary.split('_');
+      if (parts.length === 2) {
+        const start = parseInt(parts[0], 10);
+        const end = parseInt(parts[1], 10);
+        if (!isNaN(start) && !isNaN(end)) {
+          return `${start.toLocaleString()} - ${end.toLocaleString()}`;
+        }
+      }
+    }
+    
+    // If not a range, try to format as number if possible
+    const num = parseFloat(salary.replace(/[^\d.]/g, ''));
+    if (!isNaN(num)) {
+      return num.toLocaleString();
+    }
+    
+    return salary;
+  };
+
   const openModal = async (alumni: any) => {
     // Fetch the latest alumni data from the backend
     let latestAlumni = alumni;
@@ -409,7 +434,10 @@ const AlumniData: React.FC = () => {
                                              (alumni.employment_status || alumni.status || alumni.Status || alumni.user_status) === 'Unemployed' ? '#ef4444' :
                                              (alumni.employment_status || alumni.status || alumni.Status || alumni.user_status) === 'Pending' ? '#f59e0b' : '#6b7280'
                             }}>
-                              {alumni.employment_status || alumni.status || alumni.Status || alumni.user_status || 'Unknown'}
+                              {(() => {
+                                const status = alumni.employment_status || alumni.status || alumni.Status || alumni.user_status || 'Unknown';
+                                return status === 'Pending' ? 'Untracked' : status;
+                              })()}
                             </span>
                           </td>
                           <td style={styles.tableCell}>
@@ -439,9 +467,11 @@ const AlumniData: React.FC = () => {
                               <div style={styles.salaryContainer}>
                                 <span style={{ fontSize: '14px', fontWeight: 'bold', marginRight: '6px' }}>₱</span>
                                 <span>
-                                  {alumni.salary_current ||
+                                  {formatSalaryRange(
+                                    alumni.salary_current ||
                                     trackerAnswersMap[alumni.id]?.salary_current ||
-                                    trackerAnswersMap[alumni.user_id]?.salary_current}
+                                    trackerAnswersMap[alumni.user_id]?.salary_current
+                                  )}
                                 </span>
                               </div>
                             ) : (
@@ -551,7 +581,7 @@ const AlumniData: React.FC = () => {
                     'Position': modalAlumni.position_current || modalAlumni['Position current'] || getTrackerAnswerByLabel('current position'),
                     'Sector': modalAlumni.sector_current || modalAlumni['Sector current'] || getTrackerAnswerByLabel('sector'),
                     'Employment Duration': modalAlumni.employment_duration_current || modalAlumni['Employment duration current'] || modalAlumni.employment_duration || getTrackerAnswerByLabel('employment duration') || getTrackerAnswerByLabel('how long') || getTrackerAnswerByLabel('duration'),
-                    'Salary': modalAlumni.salary_current || modalAlumni['Salary current'] || modalAlumni.salary || getTrackerAnswerByLabel('salary'),
+                    'Salary': formatSalaryRange(modalAlumni.salary_current || modalAlumni['Salary current'] || modalAlumni.salary || getTrackerAnswerByLabel('salary')),
                     'Supporting Document': modalAlumni.supporting_document_current || modalAlumni['Supporting document current'] || getTrackerAnswerByLabel('supporting document'),
                     'Awards': modalAlumni.awards_recognition_current || modalAlumni['Awards recognition current'] || getTrackerAnswerByLabel('awards'),
                     'Unemployment Reason': modalAlumni.unemployment_reason || modalAlumni['Unemployment reason'] || getTrackerAnswerByLabel('unemployment'),
