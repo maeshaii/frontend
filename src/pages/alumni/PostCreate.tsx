@@ -103,20 +103,28 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
         const isPeso = !!(storedUser && storedUser.account_type && storedUser.account_type.peso);
         const determinedPostType = isAdmin ? 'admin' : (isPeso ? 'peso' : 'personal');
 
-        console.log('Creating post with data:', {
+        // Prepare post data - only send post_images if we have images, don't send empty post_image
+        const postData: any = {
           post_content: postContent,
-          post_image: postImage, // Backward compatibility
-          post_images: postImages, // Multiple images
-          post_images_count: postImages.length, // Debug: count of images
           type: determinedPostType
+        };
+        
+        // Only add post_images if we have images
+        if (postImages.length > 0) {
+          postData.post_images = postImages;
+        } else if (postImage) {
+          // Fallback to single image for backward compatibility
+          postData.post_image = postImage;
+        }
+        
+        console.log('Creating post with data:', {
+          post_content: postData.post_content,
+          post_images_count: postImages.length,
+          post_image_present: !!postImage,
+          type: postData.type
         });
         
-        const result = await createPost({
-          post_content: postContent,
-          post_image: postImage, // Backward compatibility
-          post_images: postImages, // Multiple images
-          type: determinedPostType
-        });
+        const result = await createPost(postData);
         
         console.log('Post creation result:', result);
       }

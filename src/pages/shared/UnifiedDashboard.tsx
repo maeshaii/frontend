@@ -82,6 +82,7 @@ interface PostItem {
   user?: {
     user_id?: number;
     f_name?: string;
+    m_name?: string;
     l_name?: string;
     profile_pic?: string;
     name?: string;
@@ -106,6 +107,7 @@ interface RepostFeedItem {
   user: {
     user_id: number;
     f_name: string;
+    m_name?: string;
     l_name: string;
     profile_pic?: string;
   };
@@ -249,6 +251,11 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [showRepostNotificationModal, setShowRepostNotificationModal] = useState(false);
   const [repostNotificationModalData, setRepostNotificationModalData] = useState<{repostId: string; reposterName?: string; commentId?: string} | null>(null);
   const [showPhotoGalleryModal, setShowPhotoGalleryModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startY, setStartY] = useState(0);
+  const isRefreshingRef = React.useRef(false);
   const navigate = useNavigate();
 
   // Determine user type from localStorage instead of props
@@ -461,8 +468,21 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     // Fetch admin and PESO user IDs
     fetchAdminPesoUsers();
     
+    // Function to refresh posts
+    const refreshPosts = async () => {
+      try {
+        const fetchedPosts = await getPosts();
+        console.log('🔄 Auto-refreshing feed...');
+        console.log('🔍 Posts response:', fetchedPosts?.length, 'posts');
+        return fetchedPosts;
+      } catch (error) {
+        console.error('Error refreshing posts:', error);
+        return [];
+      }
+    };
+    
     // Fetch posts from backend (backend already includes followed + PESO + admin)
-    getPosts().then((fetchedPosts) => {
+    refreshPosts().then((fetchedPosts) => {
       console.log('🔍 OJT DEBUG: Posts response:', fetchedPosts);
       console.log('🔍 OJT DEBUG: Posts type:', typeof fetchedPosts);
       console.log('🔍 OJT DEBUG: Posts length:', fetchedPosts?.length);
@@ -696,6 +716,65 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     });
   }, [navigate]);
 
+  // Handle pull-to-refresh
+  const handlePullToRefresh = async () => {
+    if (isRefreshingRef.current || isRefreshing) return;
+    
+    isRefreshingRef.current = true;
+    setIsRefreshing(true);
+    try {
+      const updatedPosts = await getPosts();
+      setPosts(updatedPosts || []);
+      
+      // Update likedPosts state
+      const currentUserId = getCurrentUserId(user);
+      const liked: { [key: number]: boolean } = {};
+      (updatedPosts || []).forEach((post: any) => {
+        if (post.item_type === 'post') {
+          liked[post.post_id] = getIsLiked(post, currentUserId);
+        } else if (post.item_type === 'repost') {
+          liked[post.repost_id] = getIsLiked(post, currentUserId);
+        }
+      });
+      setLikedPosts(liked);
+      
+      // Update repostedPosts state
+      const reposted: { [key: number]: boolean } = {};
+      (updatedPosts || []).forEach((post: any) => {
+        if (post.reposts && Array.isArray(post.reposts)) {
+          reposted[post.post_id] = post.reposts.some((repost: any) => repost.user.user_id === currentUserId);
+        }
+      });
+      setRepostedPosts(reposted);
+      
+      console.log('✅ Feed refreshed via pull-to-refresh');
+    } catch (error) {
+      console.error('❌ Error refreshing feed:', error);
+    } finally {
+      isRefreshingRef.current = false;
+      setIsRefreshing(false);
+      setPullDistance(0);
+    }
+  };
+
+  // Reset pull distance when not refreshing with smooth animation
+  useEffect(() => {
+    if (!isRefreshing && pullDistance > 0) {
+      // Gradually decrease pull distance for smooth return animation
+      const interval = setInterval(() => {
+        setPullDistance(prev => {
+          if (prev <= 0) {
+            clearInterval(interval);
+            return 0;
+          }
+          return Math.max(prev - 3, 0);
+        });
+      }, 16); // ~60fps animation
+      
+      return () => clearInterval(interval);
+    }
+  }, [isRefreshing, pullDistance]);
+
   // Donation feature removed: no donationRequests sync
 
   // Listen for user data updates from Settings
@@ -753,8 +832,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         console.log('Found pending repost comment view:', pendingRepostCommentId);
         localStorage.removeItem('pendingRepostCommentId');
       }
+      // Set the modal data with repostId (which will be used to fetch the repost data)
       setRepostNotificationModalData({ repostId: pendingRepostId, commentId: pendingRepostCommentId || undefined });
       setShowRepostNotificationModal(true);
+      console.log('Opening repost notification modal for repost:', pendingRepostId);
     }
 
     const pendingProfilePic = localStorage.getItem('pendingProfilePic');
@@ -1282,6 +1363,49 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
               user={user ?? { name: '', profile_pic: undefined }}
             />
           )}
+          {/* Pull-to-Refresh Indicator */}
+          {pullDistance > 0 && (
+            <div style={{
+              textAlign: 'center',
+              padding: `${Math.min(pullDistance * 0.15, 15)}px 8px`,
+              background: 'linear-gradient(180deg, #e3f2fd 0%, #f8f9fa 100%)',
+              transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)',
+              opacity: Math.min(pullDistance / 40, 1),
+              transform: `scale(${Math.min(0.8 + pullDistance / 200, 1)})`,
+              borderBottom: pullDistance >= 50 ? '2px solid #1e3a8a' : '2px solid #e0e0e0',
+              boxShadow: pullDistance >= 50 ? '0 2px 8px rgba(30, 58, 138, 0.15)' : 'none'
+            }}>
+              {isRefreshing ? (
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}>
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    border: '2px solid #e0e0e0',
+                    borderTopColor: '#1e3a8a',
+                    borderRadius: '50%',
+                    animation: 'spin 0.6s linear infinite'
+                  }}></div>
+                  <span style={{ color: '#1e3a8a', fontSize: '14px', fontWeight: '500' }}>
+                    Refreshing...
+                  </span>
+                </div>
+              ) : pullDistance >= 50 ? (
+                <span style={{ color: '#1e3a8a', fontSize: '14px', fontWeight: '500' }}>
+                  ↓ Release to refresh
+                </span>
+              ) : (
+                <span style={{ color: '#666', fontSize: '14px' }}>
+                  ↓ Pull down to refresh
+                </span>
+              )}
+            </div>
+          )}
+          
           {/* Scrollable Feed Container */}
           <div 
             className="scrollable-feed"
@@ -1291,7 +1415,39 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
               overflowX: 'hidden',
               paddingRight: '8px',
               scrollbarWidth: 'none', /* Firefox */
-              msOverflowStyle: 'none'  /* IE and Edge */
+              msOverflowStyle: 'none',  /* IE and Edge */
+              transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.4, 70)}px)` : 'translateY(0)',
+              transition: isRefreshing 
+                ? 'transform 0.4s cubic-bezier(0.4, 0.0, 0.2, 1)' 
+                : 'transform 0.15s cubic-bezier(0.4, 0.0, 0.2, 1)',
+              willChange: 'transform'
+            }}
+            onWheel={(e) => {
+              const scrollableFeed = e.currentTarget;
+              // Prevent action during refresh
+              if (isRefreshingRef.current || isRefreshing) return;
+              
+              // Only trigger pull-to-refresh when at the top and scrolling up
+              if (scrollableFeed.scrollTop === 0 && e.deltaY < 0) {
+                setPullDistance(prev => {
+                  // Balanced sensitivity
+                  const newDistance = Math.min(prev + Math.abs(e.deltaY) * 0.8, 100);
+                  // Only trigger once when crossing threshold
+                  if (newDistance >= 50 && prev < 50 && !isRefreshingRef.current) {
+                    // Small delay to prevent glitches
+                    setTimeout(() => handlePullToRefresh(), 50);
+                  }
+                  return newDistance;
+                });
+              } else if (scrollableFeed.scrollTop > 0 && pullDistance > 0) {
+                setPullDistance(0);
+              }
+            }}
+            onScroll={(e) => {
+              const scrollableFeed = e.currentTarget;
+              if (scrollableFeed.scrollTop > 0) {
+                setPullDistance(0);
+              }
             }}
           >
           <div className="post-start" onClick={() => setShowComposer(true)} style={{ cursor: 'pointer', marginBottom: '16px' }}>
@@ -1752,7 +1908,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           repost_id: r.repost_id,
                           repost_date: r.repost_date,
                           repost_caption: r.repost_caption,
-                          user: { user_id: r.user?.user_id || 0, f_name: r.user?.f_name, l_name: r.user?.l_name, profile_pic: r.user?.profile_pic },
+                          user: { user_id: r.user?.user_id || 0, f_name: r.user?.f_name, m_name: r.user?.m_name, l_name: r.user?.l_name, profile_pic: r.user?.profile_pic },
                           likes: r.likes || [],
                           likes_count: r.likes_count || 0,
                           comments: r.comments || [],
@@ -1765,6 +1921,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                             user: {
                               user_id: r.original_post?.user?.user_id || 0,
                               f_name: r.original_post?.user?.f_name,
+                              m_name: r.original_post?.user?.m_name,
                               l_name: r.original_post?.user?.l_name,
                               profile_pic: r.original_post?.user?.profile_pic
                             },
@@ -1880,7 +2037,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         repost_id: r.repost_id,
                         repost_date: r.repost_date,
                         repost_caption: r.repost_caption,
-                        user: { user_id: r.user?.user_id || 0, f_name: r.user?.f_name, l_name: r.user?.l_name, profile_pic: r.user?.profile_pic },
+                        user: { user_id: r.user?.user_id || 0, f_name: r.user?.f_name, m_name: r.user?.m_name, l_name: r.user?.l_name, profile_pic: r.user?.profile_pic },
                         likes: r.likes || [],
                         likes_count: r.likes_count || 0,
                         comments: r.comments || [],
@@ -1890,7 +2047,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           created_at: r.original_post.created_at,
                           post_content: r.original_post.post_content,
                           post_images: r.original_post.post_images || (r.original_post.post_image ? [{ image_id: 0, image_url: r.original_post.post_image, order: 0 }] : undefined),
-                          user: r.original_post.user ? { user_id: r.original_post.user.user_id || 0, f_name: r.original_post.user.f_name, l_name: r.original_post.user.l_name, profile_pic: r.original_post.user.profile_pic } : undefined
+                          user: r.original_post.user ? { user_id: r.original_post.user.user_id || 0, f_name: r.original_post.user.f_name, m_name: r.original_post.user.m_name, l_name: r.original_post.user.l_name, profile_pic: r.original_post.user.profile_pic } : undefined
                         } : undefined
                       }}
                       currentUserId={currentUserId}
@@ -2471,6 +2628,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         }}
         repostId={repostNotificationModalData?.repostId || ''}
         reposterName={repostNotificationModalData?.reposterName}
+        commentId={repostNotificationModalData?.commentId}
       />
     </div>
   );

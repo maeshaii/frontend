@@ -93,10 +93,14 @@ const getImagesFromPost = (post: PostItemLite): string[] => {
     images.push((post as any).post_image);
   }
   
-  console.log('Final images array:', images);
+  // Remove duplicate URLs while preserving order
+  const uniqueImages = Array.from(new Set(images));
+  
+  console.log('Final images array (before dedup):', images);
+  console.log('Final images array (after dedup):', uniqueImages);
   console.log('=== END REPOST CARD IMAGE DEBUG ===');
   
-  return images;
+  return uniqueImages;
 };
 
 const RepostCard: React.FC<RepostCardProps> = ({ 
@@ -112,11 +116,19 @@ const RepostCard: React.FC<RepostCardProps> = ({
   editRepostContent = {},
   setEditRepostContent
 }) => {
-  const reposterName = `${repost.user.f_name || ''} ${repost.user.m_name || ''} ${repost.user.l_name || ''}`.trim();
+  // Render name: {f_name} {m_name} {l_name} if m_name exists, else {f_name} {l_name}
+  const renderName = (obj: { f_name: string; m_name?: string; l_name: string }) =>
+    `${obj.f_name} ${obj.m_name || ''} ${obj.l_name}`.trim();
+
+  const reposterName = repost.user?.f_name && repost.user?.l_name
+    ? renderName({ f_name: repost.user.f_name, m_name: repost.user.m_name, l_name: repost.user.l_name })
+    : `${repost.user?.f_name || ''} ${repost.user?.m_name || ''} ${repost.user?.l_name || ''}`.trim();
   const reposterAvatar = getProfilePicUrl(repost.user.profile_pic);
 
   const original = repost.original_post || {};
-  const originalPosterName = `${original.user?.f_name || ''} ${original.user?.l_name || ''}`.trim();
+  const originalPosterName = original.user?.f_name && original.user?.l_name
+    ? renderName({ f_name: original.user.f_name, m_name: original.user.m_name, l_name: original.user.l_name })
+    : `${original.user?.f_name || ''} ${original.user?.m_name || ''} ${original.user?.l_name || ''}`.trim();
   const originalPosterAvatar = getProfilePicUrl(original.user?.profile_pic);
 
   const [liked, setLiked] = useState<boolean>(!!repost.likes?.some(l => l.user_id === currentUserId));
@@ -1157,6 +1169,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
               user: {
                 user_id: original.user?.user_id || 0,
                 f_name: original.user?.f_name || '',
+                m_name: original.user?.m_name || '',
                 l_name: original.user?.l_name || '',
                 profile_pic: original.user?.profile_pic
               },

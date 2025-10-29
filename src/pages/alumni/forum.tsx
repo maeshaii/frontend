@@ -754,7 +754,7 @@ const ForumPage: React.FC = () => {
                 posts.map((item: any) => {
                   // Handle both posts and reposts as separate items
                   const isOwn = Number(item.user?.user_id) === Number(currentUserId);
-                  const displayName = item.user?.name || `${item.user?.f_name || ''} ${item.user?.l_name || ''}`.trim() || 'Unknown User';
+                  const displayName = item.user?.name || `${item.user?.f_name || ''} ${item.user?.m_name || ''} ${item.user?.l_name || ''}`.trim() || 'Unknown User';
                   const displayAvatar = getProfilePicUrl(item.user?.profile_pic);
                   
                   // Render as repost if item_type is 'repost'
@@ -1302,7 +1302,7 @@ const ForumPage: React.FC = () => {
                 post={originalPostModalData}
                 currentUserId={currentUserId}
                 isOwn={currentUserId === originalPostModalData.user?.user_id}
-                displayName={originalPostModalData.user?.name || `${originalPostModalData.user?.f_name || ''} ${originalPostModalData.user?.l_name || ''}`.trim() || 'Unknown User'}
+                displayName={originalPostModalData.user?.name || `${originalPostModalData.user?.f_name || ''} ${originalPostModalData.user?.m_name || ''} ${originalPostModalData.user?.l_name || ''}`.trim() || 'Unknown User'}
                 displayAvatar={getProfilePicUrl(originalPostModalData.user?.profile_pic)}
                 formatTime={formatTime}
                 onViewOriginalPost={handleViewOriginalPost}

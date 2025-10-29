@@ -3,7 +3,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
-import { fetchOJTStatistics, importOJT, setSendDate, getSendDates, checkAllSentStatus } from '../../services/api';
+import { fetchOJTStatistics, importOJT, setSendDate, getSendDates, checkAllSentStatus, deleteSendDate } from '../../services/api';
 import logoLogin from '../../images/logo_login.png';
 
 export default function Dashboard() {
@@ -34,7 +34,8 @@ export default function Dashboard() {
     const user = localStorage.getItem('user');
     if (user) {
       const userData = JSON.parse(user);
-      setCoordinatorUsername(userData.name || '');
+      // Use username instead of full name for coordinator
+      setCoordinatorUsername(userData.username || userData.name || '');
     }
   }, []);
 
@@ -78,8 +79,8 @@ export default function Dashboard() {
   };
 
   const handleImport = async () => {
-    if (selectedFiles.length === 0 || !selectedYear) {
-      alert('Please select at least one file and choose a graduation year');
+    if (selectedFiles.length === 0) {
+      alert('Please select at least one file');
       return;
     }
 
@@ -98,7 +99,8 @@ export default function Dashboard() {
         console.log(`Importing file ${i + 1}/${selectedFiles.length}: ${file.name}`);
         
         try {
-          const result = await importOJT(file, selectedYear.toString(), program, coordinatorUsername);
+          // Year is auto-detected: from existing users or from Excel "Batch_Year" column
+          const result = await importOJT(file, '', program, coordinatorUsername);
           console.log(`Import result for ${file.name}:`, result);
           
       if (result.success) {
@@ -926,7 +928,7 @@ export default function Dashboard() {
                             margin: '0 0 4px 0',
                             letterSpacing: '-0.025em'
                           }}>
-                            CLASS OF {yearData.year}
+                            CLASS OF {yearData.year - 1}-{yearData.year}
                           </h3>
                           {yearData.section && (
                             <p style={{
@@ -1100,62 +1102,24 @@ export default function Dashboard() {
             <div style={{ padding: '32px 40px 32px 28px' }}>
               {/* Form Fields */}
               <div style={{ marginBottom: '32px' }}>
-                {/* Graduation Year Dropdown */}
-                <div style={{ marginBottom: '24px' }}>
-                  <label style={{ 
-                    display: 'block', 
-                    marginBottom: '8px', 
-                    fontWeight: '600', 
-                    color: '#374151',
-                    fontSize: '14px'
-                  }}>
-                    Select Graduation Year:
-                  </label>
-                  <select
-                    value={selectedYear || ''}
-                    onChange={(e) => setSelectedYear(e.target.value ? parseInt(e.target.value) : null)}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      border: '2px solid #d1d5db',
-                      borderRadius: '8px',
-                      fontSize: '15px',
-                      color: '#374151',
-                      backgroundColor: 'white',
-                      transition: 'all 0.2s ease',
-                      outline: 'none',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      appearance: 'none',
-                      backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                      backgroundRepeat: 'no-repeat',
-                      backgroundPosition: 'right 12px center',
-                      backgroundSize: '16px',
-                      paddingRight: '40px'
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#3b82f6';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#d1d5db';
-                      e.target.style.boxShadow = 'none';
-                    }}
-                  >
-                    <option value="" style={{ color: '#9ca3af' }}>Select graduation year</option>
-                    {availableYears.map((year) => (
-                      <option key={year} value={year} style={{ color: '#374151' }}>
-                        {year}
-                      </option>
-                    ))}
-                  </select>
+                {/* Info Message - Year Auto-Detection */}
+                <div style={{ 
+                  marginBottom: '24px',
+                  padding: '16px',
+                  backgroundColor: '#eff6ff',
+                  borderLeft: '4px solid #3b82f6',
+                  borderRadius: '8px'
+                }}>
                   <p style={{ 
-                    margin: '8px 0 0 0', 
-                    fontSize: '12px', 
-                    color: '#64748b',
-                    fontStyle: 'italic'
+                    margin: '0', 
+                    fontSize: '13px', 
+                    color: '#1e40af',
+                    lineHeight: '1.6'
                   }}>
-                    Sections will be automatically detected from the Excel file
+                    💡 <strong>Smart Year Detection:</strong><br/>
+                    • <strong>New students:</strong> Auto-calculated as next year (e.g., import in 2025 = batch 2026)<br/>
+                    • <strong>Existing students:</strong> Year auto-detected from CTU_ID<br/>
+                    • <strong>Optional:</strong> Add "Batch_Year" column to Excel to override
                   </p>
                 </div>
 
@@ -1357,16 +1321,16 @@ export default function Dashboard() {
               </button>
                 <button
                   onClick={handleImport}
-                  disabled={importLoading || selectedFiles.length === 0 || !selectedYear}
+                  disabled={importLoading || selectedFiles.length === 0}
                   style={{
                     padding: '14px 28px',
                     border: '2px solid #e5e7eb',
                     borderRadius: '12px',
-                    background: importLoading || selectedFiles.length === 0 || !selectedYear 
+                    background: importLoading || selectedFiles.length === 0 
                       ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)'
                       : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                     color: 'white',
-                    cursor: importLoading || selectedFiles.length === 0 || !selectedYear ? 'not-allowed' : 'pointer',
+                    cursor: importLoading || selectedFiles.length === 0 ? 'not-allowed' : 'pointer',
                     fontWeight: '700',
                     fontSize: '15px',
                     transition: 'all 0.3s ease',
@@ -1376,14 +1340,14 @@ export default function Dashboard() {
                     gap: '8px'
                   }}
                   onMouseEnter={(e) => {
-                    if (!importLoading && selectedFiles.length > 0 && selectedYear) {
+                    if (!importLoading && selectedFiles.length > 0) {
                       const target = e.currentTarget as HTMLButtonElement;
                       target.style.transform = 'translateY(-2px)';
                       target.style.boxShadow = '0 8px 16px -4px rgba(245, 158, 11, 0.4)';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!importLoading && selectedFiles.length > 0 && selectedYear) {
+                    if (!importLoading && selectedFiles.length > 0) {
                       const target = e.currentTarget as HTMLButtonElement;
                       target.style.transform = 'translateY(0)';
                       target.style.boxShadow = '0 4px 6px -1px rgba(245, 158, 11, 0.3)';
@@ -1527,27 +1491,166 @@ export default function Dashboard() {
                   borderRadius: '12px',
                   padding: '16px 20px',
                   marginBottom: '24px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '12px'
+                  position: 'relative'
                 }}>
-                  <span style={{ fontSize: '24px', flexShrink: 0 }}>⚠️</span>
-                  <div style={{ flex: 1 }}>
-                    <strong style={{ color: '#92400e', fontSize: '15px', display: 'block', marginBottom: '8px' }}>
-                      Existing Scheduled Dates Found
-                    </strong>
-                    <div style={{ color: '#78350f', fontSize: '14px', lineHeight: '1.6' }}>
-                      {existingSendDates.map((sd, idx) => (
-                        <div key={idx} style={{ marginBottom: '4px' }}>
-                          • <strong>Batch {sd.batch_year}</strong>{sd.section && ` (Section ${sd.section})`}: {new Date(sd.send_date).toLocaleDateString()} 
-                          <span style={{ fontSize: '12px', marginLeft: '8px', opacity: 0.8 }}>
-                            (Set on {new Date(sd.created_at).toLocaleDateString()})
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ marginTop: '8px', fontSize: '13px', color: '#92400e', fontStyle: 'italic' }}>
-                      Setting a new date will update the existing schedule.
+                  {/* X Button to Remove Schedule */}
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm('Are you sure you want to remove the scheduled send dates? This action cannot be undone.')) {
+                        return;
+                      }
+
+                      try {
+                        // If "ALL" is selected, remove schedules for all batches
+                        if (selectedBatchFilter === 'ALL') {
+                          let successCount = 0;
+                          let failCount = 0;
+                          const errors: string[] = [];
+
+                          // Get all unique years from existing send dates
+                          const yearsToRemove = [...new Set(existingSendDates.map(sd => sd.batch_year))];
+
+                          for (const year of yearsToRemove) {
+                            try {
+                              const result = await deleteSendDate(coordinatorUsername, year);
+                              if (result.success) {
+                                successCount++;
+                                console.log(`✅ Removed schedule for batch ${year}`);
+                              } else {
+                                failCount++;
+                                errors.push(`Batch ${year}: ${result.message}`);
+                              }
+                            } catch (error: any) {
+                              console.error(`Error removing schedule for year ${year}:`, error);
+                              failCount++;
+                              errors.push(`Batch ${year}: ${error.message || 'Unknown error'}`);
+                            }
+                          }
+
+                          // Refresh the send dates list
+                          try {
+                            const result = await getSendDates(coordinatorUsername);
+                            if (result.success && result.scheduled_dates) {
+                              setExistingSendDates(result.scheduled_dates);
+                            } else {
+                              setExistingSendDates([]);
+                            }
+                          } catch (error) {
+                            console.error('Error refreshing send dates:', error);
+                            setExistingSendDates([]);
+                          }
+
+                          if (successCount > 0) {
+                            const message = failCount > 0 
+                              ? `Schedules Removed!\n\n✓ Removed: ${successCount}\n✗ Failed: ${failCount}\n\n${errors.slice(0, 3).join('\n')}`
+                              : `All ${successCount} schedule(s) removed successfully!`;
+                            alert(message);
+                          } else {
+                            alert(`Failed to remove schedules.\n\n${errors.slice(0, 3).join('\n')}`);
+                          }
+                        } else {
+                          // Remove schedule for specific year
+                          const batchYear = parseInt(selectedBatchFilter);
+                          if (isNaN(batchYear)) {
+                            alert('Invalid batch year selected');
+                            return;
+                          }
+
+                          const result = await deleteSendDate(coordinatorUsername, batchYear);
+
+                          // Refresh the send dates list after removal
+                          try {
+                            const refreshResult = await getSendDates(coordinatorUsername);
+                            if (refreshResult.success && refreshResult.scheduled_dates) {
+                              setExistingSendDates(refreshResult.scheduled_dates);
+                            } else {
+                              setExistingSendDates([]);
+                            }
+                          } catch (error) {
+                            console.error('Error refreshing send dates:', error);
+                            setExistingSendDates([]);
+                          }
+
+                          if (result.success) {
+                            const message = result.deleted_count > 0
+                              ? `Schedule removed successfully for batch ${selectedBatchFilter}!`
+                              : `No active schedule found for batch ${selectedBatchFilter} (already removed or never existed)`;
+                            alert(message);
+                          } else {
+                            alert(`Error: ${result.message}`);
+                          }
+                        }
+                      } catch (error: any) {
+                        console.error('Error removing schedule:', error);
+                        alert(`Failed to remove schedule: ${error.message || 'Please try again.'}`);
+                        
+                        // Still try to refresh the list
+                        try {
+                          const result = await getSendDates(coordinatorUsername);
+                          if (result.success && result.scheduled_dates) {
+                            setExistingSendDates(result.scheduled_dates);
+                          } else {
+                            setExistingSendDates([]);
+                          }
+                        } catch (refreshError) {
+                          console.error('Error refreshing send dates:', refreshError);
+                        }
+                      }
+                    }}
+                    title="Remove scheduled send date"
+                    style={{
+                      position: 'absolute',
+                      top: '12px',
+                      right: '12px',
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      border: 'none',
+                      backgroundColor: '#dc2626',
+                      color: 'white',
+                      fontSize: '16px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      padding: '0',
+                      lineHeight: '1'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#b91c1c';
+                      e.currentTarget.style.transform = 'scale(1.1)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 38, 38, 0.4)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#dc2626';
+                      e.currentTarget.style.transform = 'scale(1)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    ✕
+                  </button>
+
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <span style={{ fontSize: '24px', flexShrink: 0 }}>⚠️</span>
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ color: '#92400e', fontSize: '15px', display: 'block', marginBottom: '8px' }}>
+                        Existing Scheduled Dates Found
+                      </strong>
+                      <div style={{ color: '#78350f', fontSize: '14px', lineHeight: '1.6' }}>
+                        {existingSendDates.map((sd, idx) => (
+                          <div key={idx} style={{ marginBottom: '4px' }}>
+                            • <strong>Batch {sd.batch_year}</strong>{sd.section && ` (Section ${sd.section})`}: {new Date(sd.send_date).toLocaleDateString()} 
+                            <span style={{ fontSize: '12px', marginLeft: '8px', opacity: 0.8 }}>
+                              (Set on {new Date(sd.created_at).toLocaleDateString()})
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '13px', color: '#92400e', fontStyle: 'italic' }}>
+                        💡 Set a new date below to update the existing schedule
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1724,7 +1827,14 @@ export default function Dashboard() {
                 Cancel
               </button>
               <button
+                  disabled={existingSendDates.length > 0 && !allDataSent}
                   onClick={async () => {
+                    // Prevent action if there's an existing schedule
+                    if (existingSendDates.length > 0 && !allDataSent) {
+                      alert('⚠️ Existing Schedule Found!\n\nPlease remove the existing scheduled date first by clicking the ✕ button above.');
+                      return;
+                    }
+                    
                     if (allDataSent) {
                       alert('✅ All Completed OJT Data Already Sent!\n\nAll completed students have been sent to admin for approval.\nScheduling is not needed at this time.');
                       return;
@@ -1809,33 +1919,39 @@ export default function Dashboard() {
                     padding: '14px 28px',
                   border: '2px solid #e5e7eb',
                     borderRadius: '16px',
-                    background: allDataSent ? 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                    background: (allDataSent || (existingSendDates.length > 0 && !allDataSent)) 
+                      ? 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)' 
+                      : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
                   color: '#000000',
-                  cursor: allDataSent ? 'not-allowed' : 'pointer',
+                  cursor: (allDataSent || (existingSendDates.length > 0 && !allDataSent)) ? 'not-allowed' : 'pointer',
                     fontWeight: '700',
                     fontSize: '15px',
                     transition: 'all 0.3s ease',
-                    boxShadow: allDataSent ? '0 4px 8px rgba(148, 163, 184, 0.2)' : '0 8px 16px rgba(59, 130, 246, 0.3)',
+                    boxShadow: (allDataSent || (existingSendDates.length > 0 && !allDataSent)) 
+                      ? '0 4px 8px rgba(148, 163, 184, 0.2)' 
+                      : '0 8px 16px rgba(59, 130, 246, 0.3)',
                     position: 'relative',
                     overflow: 'hidden',
-                    opacity: allDataSent ? 0.6 : 1
+                    opacity: (allDataSent || (existingSendDates.length > 0 && !allDataSent)) ? 0.6 : 1
                   }}
                   onMouseEnter={(e) => {
-                    if (!allDataSent) {
+                    if (!allDataSent && !(existingSendDates.length > 0)) {
                       const target = e.currentTarget as HTMLButtonElement;
                       target.style.transform = 'translateY(-3px)';
                       target.style.boxShadow = '0 12px 24px rgba(59, 130, 246, 0.4)';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!allDataSent) {
+                    if (!allDataSent && !(existingSendDates.length > 0)) {
                       const target = e.currentTarget as HTMLButtonElement;
                       target.style.transform = 'translateY(0)';
                       target.style.boxShadow = '0 8px 16px rgba(59, 130, 246, 0.3)';
                     }
                   }}
                 >
-                  {allDataSent ? '✅ All Data Already Sent' : 'Schedule Processing'}
+                  {allDataSent ? '✅ All Data Already Sent' : 
+                   (existingSendDates.length > 0 && !allDataSent) ? '🔒 Remove Existing Schedule First' : 
+                   'Schedule Processing'}
               </button>
               </div>
             </div>
