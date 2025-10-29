@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginUser, fetchAlumniDetails } from '../../../services/api';
+import PasswordVisibilityIcon from '../../../components/PasswordVisibilityIcon';
 import './Login.css';
 const background = require('../../../images/ctu.jpg');
 const alumniLogo = require('../../../images/ctu alumni logo.jpg');
@@ -140,6 +141,7 @@ const Login = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   style={{
                     ...styles.input,
+                    ...styles.passwordInput,
                     paddingRight: '3rem',
                   }}
                   className="login-input"
@@ -151,7 +153,7 @@ const Login = () => {
                   className="login-password-toggle"
                   aria-label={show ? 'Hide password' : 'Show password'}
                 >
-                  {show ? '👁️' : '👁️‍🗨️'}
+                  <PasswordVisibilityIcon show={show} size={20} color="#000000" />
                 </button>
               </div>
             </div>
@@ -387,6 +389,11 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     width: '100%',
     boxSizing: 'border-box',
+  },
+  passwordInput: {
+    background: '#ffffff',
+    border: '1px solid rgba(0, 0, 0, 0.1)',
+    color: '#000000',
   },
   passwordContainer: {
     position: 'relative',

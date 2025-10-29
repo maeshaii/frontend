@@ -60,7 +60,7 @@ const RequestsPage: React.FC = () => {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8fafc' }}>
       <Sidebar />
-      <div style={{ flex: 1, padding: '32px 40px', marginLeft: 240 }}>
+      <div className="admin-content-page" style={{ flex: 1, padding: '32px 40px' }}>
         {/* Header Section */}
         <div style={{ marginBottom: '32px' }}>
           <h1 style={{ 

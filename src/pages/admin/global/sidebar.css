@@ -1,0 +1,17 @@
+/* Responsive sidebar styles */
+:root {
+  --sidebar-width: 220px;
+}
+
+/* Admin content pages should adjust margin based on sidebar */
+.admin-content-page {
+  margin-left: var(--sidebar-width, 220px);
+  transition: margin-left 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .admin-content-page {
+    margin-left: 0 !important;
+  }
+}
+

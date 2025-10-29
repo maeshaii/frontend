@@ -263,7 +263,7 @@ const AlumniData: React.FC = () => {
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
       <Sidebar />
 
-      <div style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f8fafc', marginLeft: '220px' }}>
+      <div className="admin-content-page" style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f8fafc' }}>
         {/* Enhanced Header */}
         <div style={styles.header}>
           <div style={styles.headerContent}>

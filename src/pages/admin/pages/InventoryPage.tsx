@@ -180,7 +180,8 @@ const InventoryPage: React.FC = () => {
     mainContent: {
       flex: 1,
       padding: '0',
-      marginLeft: 240,
+      marginLeft: 'var(--sidebar-width, 220px)',
+      transition: 'margin-left 0.3s ease',
       backgroundColor: '#f0f4f8'
     },
     pageHeader: {

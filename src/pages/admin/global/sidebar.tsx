@@ -1,27 +1,158 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { 
+  FaBars,
+  FaTimes, 
+  FaChartLine, 
+  FaChartBar, 
+  FaUsers, 
+  FaCog, 
+  FaUser, 
+  FaClipboard, 
+  FaEnvelope, 
+  FaStar, 
+  FaSignOutAlt
+} from 'react-icons/fa';
 import logoLogin from '../../../images/logo_login.png';
 import ConfirmModal from '../../../components/ConfirmModal';
+import './sidebar.css';
 
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  // Responsive state - initialize based on current window width
+  const initialWidth = window.innerWidth;
+  const initialSmall = initialWidth < 768;
+  const initialDesktop = initialWidth >= 1280;
+  const STORAGE_KEY = 'adminSidebarMobileOpen';
+  // On small screens, read persisted open state so it doesn't auto-close on navigation
+  const readPersistedOpen = () => {
+    try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch { return false; }
+  };
+  // On small screens, sidebar starts based on persisted preference; otherwise closed
+  // CRITICAL: On small screens, ALWAYS start collapsed (icon-only). On medium, start collapsed. On desktop, start expanded.
+  const [isCollapsed, setIsCollapsed] = useState(initialSmall ? true : (!initialDesktop ? true : false)); 
+  const [isMobileSmall, setIsMobileSmall] = useState(initialSmall); // off-canvas mode
+  const [isDesktopExpanded, setIsDesktopExpanded] = useState(initialDesktop);
+  // On small screens, start CLOSED (hamburger state)
+  const [mobileOpen, setMobileOpen] = useState(initialSmall ? false : false);
+  // Use ref to persist mobileOpen state across route changes
+  const mobileOpenRef = useRef(false);
+  const prevScreenSizeRef = useRef({ isSmall: initialSmall, isDesktop: initialDesktop });
+  // Ref to lock collapsed state on small screens - prevents Dashboard/Statistics from expanding
+  const smallScreenLockRef = useRef(initialSmall);
+  
+  // Sync ref with state
+  useEffect(() => {
+    mobileOpenRef.current = mobileOpen;
+  }, [mobileOpen]);
+
+  // CRITICAL: On small screens, NEVER allow isCollapsed to be false - force it to true always
+  // This prevents Dashboard/Statistics routes from expanding the sidebar
+  useEffect(() => {
+    // Update ref whenever screen size changes
+      smallScreenLockRef.current = isMobileSmall;
+    
+    // If on small screen and somehow collapsed is false, force it to true immediately
+    if (isMobileSmall && !isCollapsed) {
+      setIsCollapsed(true);
+    }
+  }, [isMobileSmall, isCollapsed]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const small = window.innerWidth < 768;
+      const desktop = window.innerWidth >= 1280;
+      const prevSmall = prevScreenSizeRef.current.isSmall;
+      
+      setIsMobileSmall(small);
+      setIsDesktopExpanded(desktop);
+      prevScreenSizeRef.current = { isSmall: small, isDesktop: desktop };
+
+      if (small) {
+        setIsCollapsed(true); // icons only when visible
+        // Force hamburger state when entering small screens
+        setMobileOpen(false);
+        mobileOpenRef.current = false;
+      } else if (!desktop) {
+        setIsCollapsed(true); // tablet collapsed (icons only)
+      } else {
+        setIsCollapsed(false); // full labels only on larger screens
+      }
+
+      // Update CSS var for content margin
+      const sidebarWidthVar = small ? '0px' : (desktop ? '220px' : '70px');
+      document.documentElement.style.setProperty('--sidebar-width', sidebarWidthVar);
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Preserve mobileOpen state across route changes - keep sidebar open if it was open
+  // Use useLayoutEffect to run synchronously before paint, ensuring state is set immediately
+  useLayoutEffect(() => {
+    // On route change, keep icon-only lock on small but DO NOT change open/closed state
+    const isOnSmallScreen = isMobileSmall || smallScreenLockRef.current;
+    if (isOnSmallScreen) {
+      setIsCollapsed(true);
+      smallScreenLockRef.current = true;
+      mobileOpenRef.current = mobileOpen;
+    }
+  }, [location.pathname, isMobileSmall, mobileOpen]);
+
+  const toggleMobile = () => {
+    setMobileOpen((v) => {
+      const next = !v;
+      try { localStorage.setItem(STORAGE_KEY, String(next)); } catch {}
+      return next;
+    });
+  };
+
+  const closeSidebarOnMobile = () => {
+    if (isMobileSmall) {
+      setMobileOpen(false);
+      try { localStorage.setItem(STORAGE_KEY, 'false'); } catch {}
+    }
+  };
+
+  const sidebarWidth = isMobileSmall ? (mobileOpen ? '70px' : '0px') : (isCollapsed ? '70px' : '220px');
+  const isHidden = isMobileSmall && !mobileOpen;
 
   const styles = {
     sidebar: {
-      width: '220px',
+      width: sidebarWidth,
       height: '100vh',
-      backgroundColor: '#1e4c7a',
+      backgroundColor: '#1C4E80',
       display: 'flex',
       flexDirection: 'column' as const,
       justifyContent: 'space-between',
-      color: 'white',
+      color: '#ffffff',
       padding: '20px 10px',
       position: 'fixed' as const,
       top: 0,
-      left: 0,
+      left: isHidden ? '-220px' : '0',
       zIndex: 1000,
+      transition: 'all 0.3s ease',
+      borderRight: '1px solid #e5e7eb',
+      boxShadow: isCollapsed && !isMobileSmall ? 'none' : '2px 0 8px rgba(0, 0, 0, 0.1)',
+    },
+    hamburgerButton: {
+      position: 'fixed' as const,
+      top: '20px',
+      left: '20px',
+      zIndex: 3000,
+      backgroundColor: '#1C4E80',
+      border: '1px solid rgba(255,255,255,0.25)',
+      borderRadius: '10px',
+      padding: '10px 12px',
+      cursor: 'pointer',
+      display: isMobileSmall ? 'flex' : 'none',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#ffffff'
     },
     topSection: {
       display: 'flex',
@@ -32,20 +163,30 @@ const Sidebar = () => {
       flexDirection: 'column' as const,
       alignItems: 'center',
       marginBottom: '20px',
+      opacity: 1,
+      transition: 'opacity 0.3s ease',
+      overflow: 'hidden',
+      whiteSpace: 'nowrap' as const,
     },
     logoImage: {
-      width: '80px',
-      height: '80px',
+      width: isCollapsed ? '50px' : '80px',
+      height: isCollapsed ? '50px' : '80px',
       borderRadius: '8px',
       background: 'white',
       padding: '8px',
       boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+      transition: 'all 0.3s ease',
     },
     logoText: {
       fontSize: '14px',
       marginTop: '8px',
       textAlign: 'center' as const,
       fontWeight: 'bold' as const,
+      color: '#ffffff',
+      // Always show brand text; it will wrap within 70px on small
+      width: '100%',
+      overflow: 'hidden',
+      transition: 'width 0.3s ease',
     },
     navList: {
       listStyleType: 'none' as const,
@@ -59,31 +200,85 @@ const Sidebar = () => {
       margin: '8px 0',
       cursor: 'pointer',
       borderRadius: '8px',
-      transition: 'background 0.3s',
+      transition: 'all 0.3s ease',
       textDecoration: 'none',
-      color: 'white',
+      color: '#ffffff',
+      // On small screens, always center (icon-only). On larger screens, center if collapsed
+      justifyContent: (isMobileSmall || isCollapsed) ? 'center' : 'flex-start',
+      position: 'relative' as const,
     },
     activeNavItem: {
-      backgroundColor: '#406b94',
+      backgroundColor: 'rgba(255,255,255,0.18)',
+      color: '#ffffff',
+    },
+    navItemHover: {
+      backgroundColor: 'rgba(255,255,255,0.10)',
     },
     icon: {
-      marginRight: '12px',
+      // On small screens, no margin. On larger screens, no margin if collapsed
+      marginRight: (isMobileSmall || isCollapsed) ? '0' : '12px',
       fontSize: '18px',
+      color: 'currentColor',
+      flexShrink: 0,
+      transition: 'margin 0.3s ease',
+    },
+    navItemText: {
+      // On small screens, hide text. On larger screens, hide text if collapsed
+      opacity: (isMobileSmall || isCollapsed) ? 0 : 1,
+      width: (isMobileSmall || isCollapsed) ? '0' : 'auto',
+      overflow: 'hidden',
+      whiteSpace: 'nowrap' as const,
+      transition: 'opacity 0.3s ease',
+    },
+    tooltip: {
+      position: 'absolute' as const,
+      left: '100%',
+      marginLeft: '10px',
+      backgroundColor: '#0f2f5f',
+      color: 'white',
+      padding: '8px 12px',
+      borderRadius: '6px',
+      fontSize: '14px',
+      whiteSpace: 'nowrap' as const,
+      opacity: (isCollapsed || isMobileSmall) ? 1 : 0,
+      pointerEvents: ((isCollapsed || isMobileSmall) ? 'auto' : 'none') as React.CSSProperties['pointerEvents'],
+      transition: 'opacity 0.2s ease',
+      zIndex: 1002,
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+      visibility: (isCollapsed || isMobileSmall) ? 'visible' as const : 'hidden' as const,
     },
     logout: {
       display: 'flex',
       alignItems: 'center',
-      padding: '32px 32px',
+      padding: '12px 16px',
       cursor: 'pointer',
       textDecoration: 'none',
-      color: 'white',
+      color: '#ffffff',
       marginBottom: '24px',
+      borderRadius: '8px',
+      transition: 'all 0.3s ease',
+      justifyContent: (isCollapsed && !isMobileSmall) ? 'center' : 'flex-start',
+      position: 'relative' as const,
     },
+  };
+
+  const getIcon = (path: string) => {
+    switch (path) {
+      case '/dashboard': return <FaChartLine style={styles.icon} />;
+      case '/statistics': return <FaChartBar style={styles.icon} />;
+      case '/users': return <FaUsers style={styles.icon} />;
+      case '/user-management': return <FaCog style={styles.icon} />;
+      case '/ccict/profile': return <FaUser style={styles.icon} />;
+      case '/tracker': return <FaClipboard style={styles.icon} />;
+      case '/requests': return <FaEnvelope style={styles.icon} />;
+      case '/rewards': return <FaStar style={styles.icon} />;
+      default: return null;
+    }
   };
 
   const links = [
     { to: '/dashboard', label: 'Dashboard' },
-    { to: '/statistics', label: 'Statistics' },
+    { to: '/statistics', label: 'Statistics', childRoutes: ['/ViewStats'] },
     { to: '/users', label: 'Users' },
     { to: '/user-management', label: 'User Management' },
     { to: '/ccict/profile', label: 'Profile' },
@@ -92,66 +287,165 @@ const Sidebar = () => {
     { to: '/rewards', label: 'Rewards' },
   ];
 
+  // Check if a link is active (either exact match or starts with, or is a child route)
+  const isActive = (link: { to: string; childRoutes?: string[] }) => {
+    const currentPath = location.pathname;
+    // Exact match
+    if (currentPath === link.to) return true;
+    // Starts with (for sub-routes like /tracker/questions)
+    if (currentPath.startsWith(link.to + '/')) return true;
+    // Child routes (like /ViewStats for /statistics)
+    if (link.childRoutes && link.childRoutes.some(child => currentPath === child || currentPath.startsWith(child))) return true;
+    return false;
+  };
+
   return (
-    <div style={styles.sidebar}>
-      <div style={styles.topSection}>
-        <div style={styles.logo}>
-          <img src={logoLogin} alt="Logo" style={styles.logoImage} />
-          <h1 style={styles.logoText}>WhereNa You</h1>
-        </div>
+    <>
+      {/* Mobile hamburger */}
+      {isMobileSmall && (
+        <button
+          type="button"
+          aria-label={mobileOpen ? 'Close sidebar' : 'Open sidebar'}
+          style={styles.hamburgerButton}
+          onClick={toggleMobile}
+        >
+          {mobileOpen ? <FaTimes /> : <FaBars />}
+        </button>
+      )}
 
-        <ul style={styles.navList}>
-          {links.map((link) => (
-            <li key={link.to}>
-              <Link
-                to={link.to}
-                style={{
-                  ...styles.navItem,
-                  ...(location.pathname === link.to ? styles.activeNavItem : {}),
-                }}
-              >
-                {link.to === '/dashboard' && <span style={styles.icon}>📊</span>}
-                {link.to === '/statistics' && <span style={styles.icon}>📈</span>}
-                {link.to === '/users' && <span style={styles.icon}>👥</span>}
-                {link.to === '/user-management' && <span style={styles.icon}>⚙️</span>}
-                {link.to === '/ccict/profile' && <span style={styles.icon}>👤</span>}
-                {link.to === '/tracker' && <span style={styles.icon}>📍</span>}
-                {link.to === '/requests' && <span style={styles.icon}>📨</span>}
-                {link.to === '/rewards' && <span style={styles.icon}>🎁</span>}
-                {link.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {isMobileSmall && mobileOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 999,
+          }}
+          onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+            // Only close if clicking directly on overlay backdrop
+            // Check that the click target is the overlay div itself, not any child
+            const target = e.target as HTMLElement;
+            const overlay = e.currentTarget as HTMLElement;
+            
+            // Make absolutely sure we're clicking the overlay, not the sidebar
+            if (target === overlay || target.parentElement === overlay) {
+              // Additional check: ensure sidebar container is not in the path
+              const sidebarContainer = document.querySelector('[data-sidebar-container]');
+              if (!sidebarContainer || !sidebarContainer.contains(target)) {
+                closeSidebarOnMobile();
+              }
+            }
+          }}
+        />
+      )}
 
-      <a
-        href="#"
-        style={styles.logout}
+      <div 
+        data-sidebar-container
+        style={{
+          ...styles.sidebar,
+          pointerEvents: 'auto' as const, // Ensure sidebar can receive clicks
+        }}
         onClick={(e) => {
-          e.preventDefault();
-          setShowLogoutConfirm(true);
+          // Prevent clicks inside sidebar from bubbling to overlay
+          e.stopPropagation();
+        }}
+        onMouseDown={(e) => {
+          // Stop propagation on mousedown as well (before click event)
+          e.stopPropagation();
         }}
       >
-        <span style={styles.icon}>🚪</span> Logout
-      </a>
+        <div style={styles.topSection}>
+          <div style={styles.logo}>
+            <img src={logoLogin} alt="Logo" style={styles.logoImage} />
+            <h1 style={styles.logoText}>WhereNa You</h1>
+          </div>
 
-      <ConfirmModal
-        open={showLogoutConfirm}
-        title="Log out"
-        message="Are you sure you want to log out?"
-        confirmText="Yes"
-        cancelText="Cancel"
-        onConfirm={() => {
-          setShowLogoutConfirm(false);
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          localStorage.removeItem('user');
-          navigate('/login');
-        }}
-        onCancel={() => setShowLogoutConfirm(false)}
-      />
-    </div>
+          <ul style={styles.navList}>
+            {links.map((link) => {
+              const active = isActive(link);
+              return (
+              <li key={link.to}>
+                <Link
+                  to={link.to}
+                  style={{
+                    ...styles.navItem,
+                    ...(active ? styles.activeNavItem : {}),
+                  }}
+                  title={(isCollapsed || isMobileSmall) ? link.label : undefined}
+                  onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                    // Prevent sidebar from closing on mobile when clicking links
+                    e.stopPropagation();
+                    // Persist open state IMMEDIATELY before navigation happens
+                    if (isMobileSmall || smallScreenLockRef.current) {
+                      // CRITICAL: Force icon-only mode - NEVER allow expansion on small screens
+                      // Use both state and ref check to ensure it's locked
+                      setIsCollapsed(true);
+                      mobileOpenRef.current = true;
+                      setMobileOpen(true);
+                      try { localStorage.setItem(STORAGE_KEY, 'true'); } catch {}
+                    }
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) {
+                      (e.currentTarget as HTMLAnchorElement).style.backgroundColor = 'rgba(255,255,255,0.10)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) {
+                      (e.currentTarget as HTMLAnchorElement).style.backgroundColor = 'transparent';
+                    }
+                  }}
+                >
+                  {getIcon(link.to)}
+                  {/* Only show inline text when expanded (desktop). Never show on small screens. */}
+                  {!isCollapsed && !isMobileSmall && (
+                    <span style={styles.navItemText}>{link.label}</span>
+                  )}
+                </Link>
+              </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <button
+          type="button"
+          style={{ ...styles.logout, background: 'transparent', border: 'none', width: '100%', textAlign: 'left' as const }}
+          onClick={() => setShowLogoutConfirm(true)}
+          title={(isCollapsed || isMobileSmall) ? 'Logout' : undefined}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.10)';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
+          }}
+        >
+          <FaSignOutAlt style={styles.icon} />
+          {!isCollapsed && !isMobileSmall && (
+            <span style={styles.navItemText}>Logout</span>
+          )}
+        </button>
+
+        <ConfirmModal
+          open={showLogoutConfirm}
+          title="Log out"
+          message="Are you sure you want to log out?"
+          confirmText="Yes"
+          cancelText="Cancel"
+          onConfirm={() => {
+            setShowLogoutConfirm(false);
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('user');
+            navigate('/login');
+          }}
+          onCancel={() => setShowLogoutConfirm(false)}
+        />
+      </div>
+    </>
   );
 };
 

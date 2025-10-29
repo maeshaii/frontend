@@ -21,23 +21,32 @@
   }
 }
 
+@media (max-width: 992px) {
+  .login-left-section {
+    display: none !important;
+  }
+  
+  .login-right-section {
+    width: 100% !important;
+  }
+}
+
 @media (max-width: 768px) {
   .login-container {
     flex-direction: column !important;
   }
   
   .login-left-section {
-    width: 100% !important;
-    height: 40vh !important;
+    display: none !important;
   }
   
   .login-right-section {
     width: 100% !important;
-    height: 60vh !important;
+    height: 100vh !important;
   }
   
   .login-background-image {
-    height: 40vh !important;
+    display: none !important;
   }
   
   .login-form-container {
@@ -105,12 +114,28 @@
 /* Input focus styles */
 .login-input:focus {
   border: 1px solid rgba(0, 102, 204, 0.6) !important;
-  background: rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.2) !important;
+}
+
+/* Password input specific styles */
+#password.login-input {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  color: #000000 !important;
+}
+
+#password.login-input:focus {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 102, 204, 0.6) !important;
   box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.2) !important;
 }
 
 .login-input::placeholder {
   color: rgba(255, 255, 255, 0.6) !important;
+}
+
+#password.login-input::placeholder {
+  color: rgba(0, 0, 0, 0.5) !important;
 }
 
 /* Button hover effects */

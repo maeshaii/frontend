@@ -125,10 +125,26 @@ const Dashboard = () => {
     flex: 1,
     padding: '24px 32px',
     backgroundColor: '#f5f6fa',
-    marginLeft: 240, // space for fixed sidebar
+    marginLeft: 'var(--sidebar-width, 220px)',
     height: '100vh',
     overflowY: 'auto',
+    transition: 'margin-left 0.3s ease',
   };
+
+  // For mobile, adjust margin dynamically
+  useEffect(() => {
+    const updateMargin = () => {
+      const sidebarWidth = getComputedStyle(document.documentElement)
+        .getPropertyValue('--sidebar-width') || '220px';
+      const content = document.querySelector('[data-dashboard-content]') as HTMLElement;
+      if (content) {
+        content.style.marginLeft = window.innerWidth < 768 ? '0' : sidebarWidth;
+      }
+    };
+    window.addEventListener('resize', updateMargin);
+    updateMargin();
+    return () => window.removeEventListener('resize', updateMargin);
+  }, []);
 
   // Top banner (light blue strip)
   const bannerStyle: React.CSSProperties = {
@@ -232,7 +248,7 @@ const Dashboard = () => {
   return (
     <div style={layoutStyle}>
       <Sidebar />
-      <div style={contentStyle}>
+      <div style={contentStyle} data-dashboard-content>
         {/* Left column: Banner on top, cards below | Right column: Calendar spanning both rows */}
         <div style={topGridStyle}>
           {/* Left column container */}

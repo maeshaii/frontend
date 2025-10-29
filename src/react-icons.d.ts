@@ -23,5 +23,13 @@ declare module 'react-icons/fa' {
   export const FaChartBar: FC<IconBaseProps>;
   export const FaCog: FC<IconBaseProps>;
   export const FaCalendarAlt: FC<IconBaseProps>;
+
+  // Added for sidebar usage
+  export const FaBars: FC<IconBaseProps>;
+  export const FaMapMarkerAlt: FC<IconBaseProps>;
+  export const FaClipboard: FC<IconBaseProps>;
+  export const FaEnvelope: FC<IconBaseProps>;
+  export const FaStar: FC<IconBaseProps>;
+  export const FaSignOutAlt: FC<IconBaseProps>;
 }
 

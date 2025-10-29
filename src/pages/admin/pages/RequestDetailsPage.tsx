@@ -162,7 +162,7 @@ const RequestDetailsPage: React.FC = () => {
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar />
-      <div style={{ flex: 1, padding: '24px 32px', backgroundColor: '#f5f6fa', marginLeft: 240 }}>
+      <div className="admin-content-page" style={{ flex: 1, padding: '24px 32px', backgroundColor: '#f5f6fa' }}>
         <h2 style={{ margin: 0, color: '#0b2a55' }}>Class of {year} - OJT Details</h2>
         
         {/* Search and Course Info */}
