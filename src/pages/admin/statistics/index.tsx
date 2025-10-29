@@ -27,14 +27,14 @@ type EmploymentData = {
 const courseOptions = ['ALL', 'BSIT', 'BSIS', 'BIT-CT'];
 
 const initialData: EmploymentData[] = [
-  { category: 'Pending', count: 0 },
+  { category: 'Untracked', count: 0 },
   { category: 'Employed', count: 0 },
   { category: 'Unemployed', count: 0 },
   { category: 'Absorb', count: 0 },
 ];
 
 const barColors: Record<string, string> = {
-  Pending: '#DEC0F1',
+  Untracked: '#DEC0F1',
   Employed: '#B79CED',  // Light purple for employed
   Unemployed: '#957FEF',
   // Removed 'Absorb' - now shown as indicator on 'Employed'
@@ -145,7 +145,7 @@ export default function Statistics() {
     console.log('🔍 DEBUG: Absorbed_Count:', counts.Absorbed_Count);
     
     return [
-      { category: 'Pending', count: counts.Pending },
+      { category: 'Untracked', count: counts.Pending },
       { category: 'Employed', count: counts.Employed, absorbedCount: counts.Absorbed_Count || 0 },
       { category: 'Unemployed', count: counts.Unemployed },
       // Removed 'Absorb' as separate category - now combined with 'Employed'
@@ -535,7 +535,7 @@ export default function Statistics() {
                     }}
                   >
                     {entry.category === 'Employed' && <FaBriefcase />}
-                    {entry.category === 'Pending' && <FaClock />}
+                    {entry.category === 'Untracked' && <FaClock />}
                     {entry.category === 'Unemployed' && <FaTimes />}
                     {entry.category === 'Absorb' && <FaBullseye />}
                   </div>

@@ -244,7 +244,7 @@ export const User: React.FC<Props> = ({ users, type, onBack }) => {
                   textDecoration: 'underline',
                 }}
               >
-                {user.status}
+                {user.status === 'Pending' ? 'Untracked' : user.status}
               </td>
             </tr>
           ))}
