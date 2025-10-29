@@ -1,10 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import './statistics.css';
-import { fetchOJTCompanyStatistics } from '../../services/api';
+import { fetchOJTCompanyStatistics, fetchStudentsByCompany } from '../../services/api';
 
 interface CompanyData {
   company_name: string;
   count: number;
+}
+
+interface StudentData {
+  ctu_id: string;
+  first_name: string;
+  last_name: string;
+  company: string;
+  company_address?: string;
+  company_email?: string;
+  company_contact?: string;
+  contact_person?: string;
+  position?: string;
+  status: string;
 }
 
 export default function Statistics() {
@@ -13,13 +26,18 @@ export default function Statistics() {
   const [totalCompanies, setTotalCompanies] = useState(0);
   const [totalStudents, setTotalStudents] = useState(0);
   const [coordinatorUsername, setCoordinatorUsername] = useState('');
+  const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null);
+  const [companyStudents, setCompanyStudents] = useState<StudentData[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     // Get coordinator username from localStorage
     const user = localStorage.getItem('user');
     if (user) {
       const userData = JSON.parse(user);
-      setCoordinatorUsername(userData.name || '');
+      // Use username instead of full name for coordinator
+      setCoordinatorUsername(userData.username || userData.name || '');
     }
   }, []);
 
@@ -46,6 +64,30 @@ export default function Statistics() {
       loadCompanyStatistics();
     }
   }, [coordinatorUsername]);
+
+  const handleCompanyClick = async (company: CompanyData) => {
+    setSelectedCompany(company);
+    setShowModal(true);
+    setLoadingStudents(true);
+    
+    try {
+      const response = await fetchStudentsByCompany(company.company_name, coordinatorUsername);
+      if (response.success) {
+        setCompanyStudents(response.students || []);
+      }
+    } catch (error) {
+      console.error('Error loading company students:', error);
+      setCompanyStudents([]);
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setSelectedCompany(null);
+    setCompanyStudents([]);
+  };
 
   if (loading) {
     return (
@@ -364,8 +406,10 @@ export default function Statistics() {
                     key={index}
             style={{
                       borderBottom: index < companies.length - 1 ? '1px solid #f1f5f9' : 'none',
-                      transition: 'background-color 0.2s ease'
+                      transition: 'background-color 0.2s ease',
+                      cursor: 'pointer'
                     }}
+            onClick={() => handleCompanyClick(company)}
             onMouseEnter={(e) => {
                       e.currentTarget.style.backgroundColor = '#f8fafc';
             }}
@@ -412,6 +456,147 @@ export default function Statistics() {
               </div>
         )}
       </div>
+
+      {/* Company Details Modal */}
+      {showModal && selectedCompany && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}
+          onClick={closeModal}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              padding: '32px',
+              maxWidth: '900px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+              <div>
+                <h2 style={{
+                  margin: '0 0 8px 0',
+                  fontSize: '24px',
+                  fontWeight: '700',
+                  color: '#1e293b'
+                }}>
+                  {selectedCompany.company_name}
+                </h2>
+                <p style={{
+                  margin: 0,
+                  fontSize: '14px',
+                  color: '#64748b'
+                }}>
+                  Company Profile & OJT Students
+                </p>
+              </div>
+              <button
+                onClick={closeModal}
+                style={{
+                  backgroundColor: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '8px',
+                  width: '36px',
+                  height: '36px',
+                  cursor: 'pointer',
+                  fontSize: '18px',
+                  color: '#64748b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#e2e8f0';
+                  e.currentTarget.style.color = '#1e293b';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f1f5f9';
+                  e.currentTarget.style.color = '#64748b';
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Company Info Summary */}
+            <div style={{
+              backgroundColor: '#f8fafc',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '24px',
+              display: 'flex',
+              gap: '32px'
+            }}>
+              <div>
+                <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Total Students</div>
+                <div style={{ fontSize: '32px', fontWeight: '700', color: '#3b82f6' }}>{selectedCompany.count}</div>
+              </div>
+              {companyStudents.length > 0 && companyStudents[0].company_address && (
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Address</div>
+                  <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyStudents[0].company_address}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Company Contact Info */}
+            {companyStudents.length > 0 && (companyStudents[0].company_email || companyStudents[0].company_contact || companyStudents[0].contact_person) && (
+              <div style={{
+                backgroundColor: '#eff6ff',
+                borderRadius: '12px',
+                padding: '20px',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#1e293b' }}>
+                  Contact Information
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                  {companyStudents[0].company_email && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Email</div>
+                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyStudents[0].company_email}</div>
+                    </div>
+                  )}
+                  {companyStudents[0].company_contact && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Phone</div>
+                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyStudents[0].company_contact}</div>
+                    </div>
+                  )}
+                  {companyStudents[0].contact_person && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Contact Person</div>
+                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>
+                        {companyStudents[0].contact_person}
+                        {companyStudents[0].position && ` (${companyStudents[0].position})`}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
