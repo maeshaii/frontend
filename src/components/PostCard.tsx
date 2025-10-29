@@ -340,10 +340,14 @@ const PostCard: React.FC<PostCardProps> = ({
       images.push(post.post_image);
     }
     
-    console.log('Final images array:', images);
+    // Remove duplicate URLs while preserving order
+    const uniqueImages = Array.from(new Set(images));
+    
+    console.log('Final images array (before dedup):', images);
+    console.log('Final images array (after dedup):', uniqueImages);
     console.log('=== END WEB POST CARD IMAGE DEBUG ===');
     
-    return images;
+    return uniqueImages;
   };
 
   const handleImageClick = (index: number) => {

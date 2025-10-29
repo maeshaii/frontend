@@ -708,6 +708,32 @@ const NotificationPage: React.FC = () => {
       
       // Fallback for non-post-related notifications (follow, system, etc.)
       console.log('Non-post-related notification, using fallback logic');
+      
+      // Handle follow/following notifications - redirect to user's profile
+      const isFollowNotification = notif.type.toLowerCase().includes('follow');
+      if (isFollowNotification) {
+        console.log('Follow notification detected - attempting to extract user ID');
+        // Extract user ID from notification content (format: "Name|user_id started following you")
+        const userIdMatch = notif.content.match(/\|(\d+)\s/);
+        if (userIdMatch) {
+          const userId = userIdMatch[1];
+          console.log('Found user ID in follow notification:', userId);
+          
+          // Redirect to the user's profile
+          const currentPath = window.location.pathname;
+          if (currentPath.startsWith('/peso')) {
+            window.location.href = `/peso/profile/${userId}`;
+          } else if (currentPath.startsWith('/ccict')) {
+            window.location.href = `/ccict/profile/${userId}`;
+          } else {
+            window.location.href = `/profile/${userId}`;
+          }
+          return;
+        } else {
+          console.log('No user ID found in follow notification content');
+        }
+      }
+      
       const visibleIdMatch = notif.content.match(/Post ID:\s*(\d+)/i);
       
       if (visibleIdMatch) {
@@ -728,8 +754,11 @@ const NotificationPage: React.FC = () => {
         return;
       } else {
         console.log('No post ID found in notification content');
-        // Old notification format without Post ID
-        alert('This notification is from an older version. Please check the dashboard to view recent posts.');
+        // Only show alert for notifications that aren't follow notifications
+        if (!isFollowNotification) {
+          // Old notification format without Post ID
+          alert('This notification is from an older version. Please check the dashboard to view recent posts.');
+        }
         const userStr = localStorage.getItem('user');
         const user = userStr ? JSON.parse(userStr) : null;
         const userId = user?.user_id || user?.id;

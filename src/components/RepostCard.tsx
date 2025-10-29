@@ -93,10 +93,14 @@ const getImagesFromPost = (post: PostItemLite): string[] => {
     images.push((post as any).post_image);
   }
   
-  console.log('Final images array:', images);
+  // Remove duplicate URLs while preserving order
+  const uniqueImages = Array.from(new Set(images));
+  
+  console.log('Final images array (before dedup):', images);
+  console.log('Final images array (after dedup):', uniqueImages);
   console.log('=== END REPOST CARD IMAGE DEBUG ===');
   
-  return images;
+  return uniqueImages;
 };
 
 const RepostCard: React.FC<RepostCardProps> = ({ 

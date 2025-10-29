@@ -47,6 +47,9 @@ const RepostButton: React.FC<RepostButtonProps> = ({
   const [showRepostModal, setShowRepostModal] = useState(false);
 
   const handleRepostClick = () => {
+    console.log('RepostButton - Opening modal with originalPost:', originalPost);
+    console.log('RepostButton - post_images:', originalPost.post_images);
+    console.log('RepostButton - post_image:', originalPost.post_image);
     setShowRepostModal(true);
   };
 
