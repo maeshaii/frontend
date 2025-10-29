@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-  import ctulogo from '../images/ctulogo.png';
+import ReactDOM from 'react-dom';
+import ctulogo from '../images/ctulogo.png';
 interface RepostModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -63,6 +64,19 @@ const RepostModal: React.FC<RepostModalProps> = ({
     };
   }, []);
 
+  // Lock body scroll when modal is open
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   const handleSubmit = () => {
     // Caption is optional, so we can proceed with or without it
     onRepost(caption || ''); // Pass empty string if no caption
@@ -77,21 +91,25 @@ const RepostModal: React.FC<RepostModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  const modalContent = (
     <div
       style={{
         position: 'fixed',
         top: 0,
         left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        backdropFilter: 'blur(4px)',
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 9999,
         animation: 'fadeIn 0.2s ease-out',
+        margin: 0,
+        padding: 0,
+        overflow: 'auto'
       }}
       onClick={onClose}
     >
@@ -277,7 +295,9 @@ const RepostModal: React.FC<RepostModalProps> = ({
               />
               <div>
                 <div style={{ fontWeight: '600', fontSize: 13, color: '#1f2937', marginBottom: 1 }}>
-                  {originalPost.user?.f_name} {originalPost.user?.m_name} {originalPost.user?.l_name}
+                  {originalPost.user?.f_name && originalPost.user?.l_name
+                    ? `${originalPost.user.f_name} ${originalPost.user.m_name || ''} ${originalPost.user.l_name}`.trim()
+                    : originalPost.user?.f_name || 'User'}
                 </div>
                 <div style={{ fontSize: 10, color: '#6b7280' }}>
                   {formatTime(originalPost.created_at)}
@@ -370,6 +390,9 @@ const RepostModal: React.FC<RepostModalProps> = ({
       </div>
     </div>
   );
+
+  // Render modal using portal to ensure it's outside any parent container constraints
+  return ReactDOM.createPortal(modalContent, document.body);
 };
 
 export default RepostModal;

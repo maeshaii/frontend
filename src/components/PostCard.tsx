@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost, getPostLikes, getRepostLikes } from '../services/api';
 import { 
   commentOnForumPost, 
@@ -168,6 +169,7 @@ const PostCard: React.FC<PostCardProps> = ({
   const repostedPosts: { [key: number]: boolean } = {};
   const [showPhotoGallery, setShowPhotoGallery] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [inlineImageIndex, setInlineImageIndex] = useState<{ [key: number]: number }>({}); // For inline carousel display per post
   const [showLikesModal, setShowLikesModal] = useState(false);
   // Repost likes modals removed on web
   const [fetchedLikes, setFetchedLikes] = useState<any[]>([]);
@@ -1109,7 +1111,9 @@ const PostCard: React.FC<PostCardProps> = ({
 
   const repostDisplayName = isRepostPost
     ? renderName({ f_name: repostData.user.f_name, m_name: repostData.user.m_name, l_name: repostData.user.l_name })
-    : displayName;
+    : (post.user?.f_name && post.user?.l_name 
+        ? renderName({ f_name: post.user.f_name, m_name: post.user.m_name, l_name: post.user.l_name })
+        : displayName);
   const repostDisplayAvatar = isRepostPost 
     ? getProfilePicUrl(repostData.user.profile_pic)
     : displayAvatar;
@@ -1443,7 +1447,13 @@ const PostCard: React.FC<PostCardProps> = ({
                         }
                       }}
                     >
-                      {repostData.original_post.user?.f_name} {repostData.original_post.user?.m_name} {repostData.original_post.user?.l_name}
+                      {repostData.original_post.user?.f_name && repostData.original_post.user?.l_name
+                        ? renderName({ 
+                            f_name: repostData.original_post.user.f_name, 
+                            m_name: repostData.original_post.user.m_name, 
+                            l_name: repostData.original_post.user.l_name 
+                          })
+                        : repostData.original_post.user?.f_name || 'Original Post'}
                     </div>
                       <div className="profile-repost-original-author-details">
                       <span>{formatTime(repostData.original_post.created_at)}</span>
@@ -1465,7 +1475,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 if (originalImages.length === 0) return null;
 
                 return (
-                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'center' }}>
+                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'center', width: '100%' }}>
                     {originalImages.length === 1 ? (
                       // Single image
                       <img
@@ -1641,10 +1651,26 @@ const PostCard: React.FC<PostCardProps> = ({
                     }}
                   >👍
                     {repostData.likes.length === 1 
-                      ? `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ' liked this'
+                      ? renderName({ 
+                          f_name: repostData.likes[0].f_name || '', 
+                          m_name: repostData.likes[0].m_name, 
+                          l_name: repostData.likes[0].l_name || '' 
+                        }) + ' liked this'
                       : repostData.likes.length === 2
-                      ? `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ` and ${repostData.likes[1].f_name || ''} ${repostData.likes[1].l_name || ''}`.trim() + ' liked this'
-                      : `${repostData.likes[0].f_name || ''} ${repostData.likes[0].l_name || ''}`.trim() + ` and ${repostData.likes.length - 1} others liked this`
+                      ? renderName({ 
+                          f_name: repostData.likes[0].f_name || '', 
+                          m_name: repostData.likes[0].m_name, 
+                          l_name: repostData.likes[0].l_name || '' 
+                        }) + ` and ${renderName({ 
+                          f_name: repostData.likes[1].f_name || '', 
+                          m_name: repostData.likes[1].m_name, 
+                          l_name: repostData.likes[1].l_name || '' 
+                        })} liked this`
+                      : renderName({ 
+                          f_name: repostData.likes[0].f_name || '', 
+                          m_name: repostData.likes[0].m_name, 
+                          l_name: repostData.likes[0].l_name || '' 
+                        }) + ` and ${repostData.likes.length - 1} others liked this`
                     }
                   </span>
                 ) : null}
@@ -2215,7 +2241,7 @@ const PostCard: React.FC<PostCardProps> = ({
         if (images.length === 0) return null;
 
         return (
-        <div style={{ marginTop: 8, display: 'flex', justifyContent: 'center' }}>
+        <div style={{ marginTop: 8, display: 'flex', justifyContent: 'center', width: '100%' }}>
             {images.length === 1 ? (
               // Single image
           <img
@@ -2225,7 +2251,7 @@ const PostCard: React.FC<PostCardProps> = ({
                   width: 'auto',
                   height: 'auto',
                   maxWidth: '100%', 
-                  maxHeight: '40vh',
+                  maxHeight: '85vh',
                   borderRadius: 8, 
                   objectFit: 'contain',
                   cursor: 'pointer'
@@ -2259,11 +2285,11 @@ const PostCard: React.FC<PostCardProps> = ({
             }}
               />
             ) : (
-              // Multiple images grid - Facebook style
+              // Multiple images - Facebook-style grid layout (like forum posts)
               <div style={{
                 display: 'grid',
                 gap: 2,
-                borderRadius: 12,
+                borderRadius: 8,
                 overflow: 'hidden',
                 ...(images.length === 2 ? {
                   gridTemplateColumns: '1fr 1fr',
@@ -2285,7 +2311,6 @@ const PostCard: React.FC<PostCardProps> = ({
                 {images.slice(0, images.length <= 6 ? images.length : 6).map((image, index) => {
                   let gridArea = '';
                   if (images.length === 3) {
-                    // Facebook 3-image layout: large left, two stacked right
                     gridArea = index === 0 ? '1 / 1 / 3 / 2' : `1 / 2 / 2 / 3`;
                     if (index === 2) gridArea = '2 / 2 / 3 / 3';
                   }
@@ -2294,8 +2319,11 @@ const PostCard: React.FC<PostCardProps> = ({
                     <div key={index} style={{ 
                       position: 'relative',
                       gridArea: gridArea,
-                      overflow: 'hidden'
-                    }}>
+                      overflow: 'hidden',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => handleImageClick(index)}
+                    >
                       <img
                         src={getImageUrl(image)}
                         alt={`post ${index + 1}`}
@@ -2303,12 +2331,10 @@ const PostCard: React.FC<PostCardProps> = ({
                           width: '100%',
                           height: '100%',
                           minHeight: '120px',
-                          objectFit: 'contain',
-                          cursor: 'pointer',
+                          objectFit: 'cover',
                           transition: 'transform 0.2s ease',
                           backgroundColor: '#f8f9fa'
                         }}
-                        onClick={() => handleImageClick(index)}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.transform = 'scale(1.02)';
                         }}
@@ -2321,7 +2347,6 @@ const PostCard: React.FC<PostCardProps> = ({
                           console.error('Failed to load post image:', image);
                         }}
                       />
-                      {/* Show "+X more" overlay for the 6th image if there are more than 6 */}
                       {index === 5 && images.length > 6 && (
                         <div
                           style={{
@@ -2335,16 +2360,16 @@ const PostCard: React.FC<PostCardProps> = ({
                             alignItems: 'center',
                             justifyContent: 'center',
                             color: 'white',
-                            fontSize: 20,
+                            fontSize: 14,
                             fontWeight: 'bold',
                             cursor: 'pointer',
-                            borderRadius: 8
+                            borderRadius: 6
                           }}
                           onClick={() => handleImageClick(5)}
                         >
                           +{images.length - 6}
-        </div>
-      )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -2857,7 +2882,7 @@ const PostCard: React.FC<PostCardProps> = ({
 
 
       {/* Likes Modal */}
-      {showLikesModal && (
+      {showLikesModal && ReactDOM.createPortal(
         <div
           style={{
             position: 'fixed',
@@ -2865,13 +2890,17 @@ const PostCard: React.FC<PostCardProps> = ({
             left: 0,
             width: '100vw',
             height: '100vh',
-            background: 'rgba(0,0,0,0.6)',
-            backdropFilter: 'blur(4px)',
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 9999,
             animation: 'fadeIn 0.2s ease-out',
+            margin: 0,
+            padding: 0,
+            overflow: 'auto'
           }}
           onClick={() => setShowLikesModal(false)}
         >
@@ -3016,11 +3045,12 @@ const PostCard: React.FC<PostCardProps> = ({
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Repost Likes Modal */}
-      {showRepostLikesModal && repostData && repostData.original_post && (
+      {showRepostLikesModal && repostData && repostData.original_post && ReactDOM.createPortal(
         <div
           style={{
             position: 'fixed',
@@ -3028,13 +3058,17 @@ const PostCard: React.FC<PostCardProps> = ({
             left: 0,
             width: '100vw',
             height: '100vh',
-            background: 'rgba(0,0,0,0.6)',
-            backdropFilter: 'blur(4px)',
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 9999,
             animation: 'fadeIn 0.2s ease-out',
+            margin: 0,
+            padding: 0,
+            overflow: 'auto'
           }}
           onClick={() => setShowRepostLikesModal(false)}
         >
@@ -3170,11 +3204,12 @@ const PostCard: React.FC<PostCardProps> = ({
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Donation Repost Likes Modal */}
-      {showDonationRepostLikesModal && repostData && repostData.original_post && (
+      {showDonationRepostLikesModal && repostData && repostData.original_post && ReactDOM.createPortal((
         <div
           style={{
             position: 'fixed',
@@ -3182,13 +3217,17 @@ const PostCard: React.FC<PostCardProps> = ({
             left: 0,
             width: '100vw',
             height: '100vh',
-            background: 'rgba(0,0,0,0.6)',
-            backdropFilter: 'blur(4px)',
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 9999,
             animation: 'fadeIn 0.2s ease-out',
+            margin: 0,
+            padding: 0,
+            overflow: 'auto'
           }}
           onClick={() => setShowDonationRepostLikesModal(false)}
         >
@@ -3324,7 +3363,8 @@ const PostCard: React.FC<PostCardProps> = ({
               )}
             </div>
           </div>
-        </div>
+        </div>),
+        document.body
       )}
 
 
@@ -3343,3 +3383,4 @@ const PostCard: React.FC<PostCardProps> = ({
 };
 
 export default PostCard;
+

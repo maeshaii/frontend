@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import ReactDOM from 'react-dom';
 
 interface PhotoGalleryModalProps {
   isOpen: boolean;
@@ -53,7 +54,7 @@ const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({
 
   const currentImage = images[currentIndex];
 
-  return (
+  const modalContent = (
     <div
       style={{
         position: 'fixed',
@@ -61,12 +62,15 @@ const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({
         left: 0,
         width: '100vw',
         height: '100vh',
-        background: 'rgba(0, 0, 0, 0.9)',
+        background: 'rgba(0, 0, 0, 0.95)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 3000,
-        cursor: 'pointer'
+        zIndex: 9999,
+        cursor: 'pointer',
+        margin: 0,
+        padding: 0,
+        overflow: 'auto'
       }}
       onClick={handleOverlayClick}
     >
@@ -160,12 +164,13 @@ const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({
       {/* Main Image */}
       <div
         style={{
-          maxWidth: '95vw',
-          maxHeight: '95vh',
+          width: '100vw',
+          height: '100vh',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '20px',
+          padding: '40px',
+          boxSizing: 'border-box'
         }}
         onClick={(e) => {
           e.stopPropagation();
@@ -190,7 +195,7 @@ const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({
             height: 'auto',
             objectFit: 'contain',
             borderRadius: 8,
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
           }}
           onLoad={(e) => {
             // Ensure the image displays at its natural size within constraints
@@ -283,6 +288,9 @@ const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({
       )}
     </div>
   );
+
+  // Render modal using portal to ensure it's outside any parent container constraints
+  return ReactDOM.createPortal(modalContent, document.body);
 };
 
 export default PhotoGalleryModal;

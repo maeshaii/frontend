@@ -82,6 +82,7 @@ interface PostItem {
   user?: {
     user_id?: number;
     f_name?: string;
+    m_name?: string;
     l_name?: string;
     profile_pic?: string;
     name?: string;
@@ -106,6 +107,7 @@ interface RepostFeedItem {
   user: {
     user_id: number;
     f_name: string;
+    m_name?: string;
     l_name: string;
     profile_pic?: string;
   };
@@ -1906,7 +1908,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           repost_id: r.repost_id,
                           repost_date: r.repost_date,
                           repost_caption: r.repost_caption,
-                          user: { user_id: r.user?.user_id || 0, f_name: r.user?.f_name, l_name: r.user?.l_name, profile_pic: r.user?.profile_pic },
+                          user: { user_id: r.user?.user_id || 0, f_name: r.user?.f_name, m_name: r.user?.m_name, l_name: r.user?.l_name, profile_pic: r.user?.profile_pic },
                           likes: r.likes || [],
                           likes_count: r.likes_count || 0,
                           comments: r.comments || [],
@@ -1919,6 +1921,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                             user: {
                               user_id: r.original_post?.user?.user_id || 0,
                               f_name: r.original_post?.user?.f_name,
+                              m_name: r.original_post?.user?.m_name,
                               l_name: r.original_post?.user?.l_name,
                               profile_pic: r.original_post?.user?.profile_pic
                             },
@@ -2034,7 +2037,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         repost_id: r.repost_id,
                         repost_date: r.repost_date,
                         repost_caption: r.repost_caption,
-                        user: { user_id: r.user?.user_id || 0, f_name: r.user?.f_name, l_name: r.user?.l_name, profile_pic: r.user?.profile_pic },
+                        user: { user_id: r.user?.user_id || 0, f_name: r.user?.f_name, m_name: r.user?.m_name, l_name: r.user?.l_name, profile_pic: r.user?.profile_pic },
                         likes: r.likes || [],
                         likes_count: r.likes_count || 0,
                         comments: r.comments || [],
@@ -2044,7 +2047,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           created_at: r.original_post.created_at,
                           post_content: r.original_post.post_content,
                           post_images: r.original_post.post_images || (r.original_post.post_image ? [{ image_id: 0, image_url: r.original_post.post_image, order: 0 }] : undefined),
-                          user: r.original_post.user ? { user_id: r.original_post.user.user_id || 0, f_name: r.original_post.user.f_name, l_name: r.original_post.user.l_name, profile_pic: r.original_post.user.profile_pic } : undefined
+                          user: r.original_post.user ? { user_id: r.original_post.user.user_id || 0, f_name: r.original_post.user.f_name, m_name: r.original_post.user.m_name, l_name: r.original_post.user.l_name, profile_pic: r.original_post.user.profile_pic } : undefined
                         } : undefined
                       }}
                       currentUserId={currentUserId}

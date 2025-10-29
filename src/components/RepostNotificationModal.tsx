@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { api, getCommentReplies } from '../services/api';
 import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
 import ReplyInput from './ReplyInput';
@@ -275,9 +276,22 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
     }
   };
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  return (
+  const modalContent = (
     <>
       {/* Add CSS styles for repost card */}
       <style>
@@ -430,13 +444,18 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
         position: 'fixed',
         top: 0,
         left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 1000
+        zIndex: 9999,
+        margin: 0,
+        padding: 0,
+        overflow: 'auto'
       }}>
         <div style={{
           backgroundColor: 'white',
@@ -723,10 +742,10 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
                         color: '#6b7280'
                       }}>
                         👍 {repost.likes.length === 1 
-                          ? `${repost.likes[0].f_name || ''} ${repost.likes[0].l_name || ''}`.trim() + ' liked this'
+                          ? renderName(repost.likes[0]) + ' liked this'
                           : repost.likes.length === 2
-                          ? `${repost.likes[0].f_name || ''} ${repost.likes[0].l_name || ''}`.trim() + ` and ${repost.likes[1].f_name || ''} ${repost.likes[1].l_name || ''}`.trim() + ' liked this'
-                          : `${repost.likes[0].f_name || ''} ${repost.likes[0].l_name || ''}`.trim() + ` and ${repost.likes.length - 1} others liked this`
+                          ? renderName(repost.likes[0]) + ` and ${renderName(repost.likes[1])} liked this`
+                          : renderName(repost.likes[0]) + ` and ${repost.likes.length - 1} others liked this`
                         }
                       </span>
                     ) : (
@@ -979,6 +998,9 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
       </div>
     </>
   );
+
+  // Render modal using portal to ensure it's outside any parent container constraints
+  return ReactDOM.createPortal(modalContent, document.body);
 };
 
 export default RepostNotificationModal;

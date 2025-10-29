@@ -1725,6 +1725,7 @@ getPosts()
                       user: repostItem.original_post.user ? { 
                         user_id: repostItem.original_post.user.user_id || 0, 
                         f_name: repostItem.original_post.user.f_name, 
+                        m_name: repostItem.original_post.user.m_name,
                         l_name: repostItem.original_post.user.l_name, 
                         profile_pic: repostItem.original_post.user.profile_pic 
                       } : undefined

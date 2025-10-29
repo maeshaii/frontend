@@ -15,6 +15,7 @@ interface RepostButtonProps {
     user: {
       user_id: number;
       f_name: string;
+      m_name?: string;
       l_name: string;
       profile_pic?: string;
     };
