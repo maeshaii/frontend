@@ -2818,7 +2818,16 @@ const PostCard: React.FC<PostCardProps> = ({
                               commentId={comment.comment_id}
                               currentUserId={currentUserId || undefined}
                               displayName={displayName}
-                              displayAvatar={displayAvatar}
+                              displayAvatar={(() => {
+                                try {
+                                  const raw = localStorage.getItem('user');
+                                  if (raw) {
+                                    const u = JSON.parse(raw);
+                                    return getProfilePicUrl(u?.profile_pic) || displayAvatar;
+                                  }
+                                } catch (_) {}
+                                return displayAvatar;
+                              })()}
                               onReplyAdded={() => handleReplyAdded(comment.comment_id)}
                               commentAuthor={{
                                 user_id: comment.user.user_id,
