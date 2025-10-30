@@ -268,6 +268,55 @@ const DonationPage: React.FC = () => {
     setShowOriginalDonationModal(true);
   };
 
+  // Handle viewing a donation repost by repost ID (for notifications)
+  const handleViewRepostById = async (repostId: string) => {
+    console.log('🔍 Donation handleViewRepostById called with repostId:', repostId);
+    setDonationLoading(true);
+    try {
+      const { api } = await import('../../services/api');
+      console.log('🔍 Fetching repost with ID:', repostId);
+      const response = await api.get(`reposts/${repostId}/detail/`);
+      console.log('🔍 Repost API response:', response.data);
+      if (response.data) {
+        const repostData = response.data;
+        const original = repostData.original;
+        
+        // Build a transformed structure compatible with the donation modal
+        const transformedData = {
+          donation_id: original.donation_id || original.post_id,
+          post_id: original.donation_id || original.post_id,
+          description: original.description || original.post_content,
+          post_content: original.description || original.post_content,
+          images: original.images || original.post_images || [],
+          post_images: original.images || original.post_images || [],
+          user: original.user,
+          created_at: repostData.repost_date,
+          likes: repostData.likes || [],
+          comments: repostData.comments || [],
+          likes_count: repostData.likes_count || 0,
+          comments_count: repostData.comments_count || 0,
+          reposts: [],
+          repostData: {
+            repost_id: repostData.repost_id,
+            repost_date: repostData.repost_date,
+            repost_caption: repostData.caption,
+            user: repostData.user,
+            original_post: original
+          }
+        } as any;
+        
+        setOriginalDonationModalData(transformedData);
+        setShowOriginalDonationModal(true);
+        console.log('✅ Donation repost modal opened for notification');
+      }
+    } catch (error: any) {
+      console.error('❌ Error fetching donation repost by ID:', error);
+      alert('Unable to load the repost. It may have been deleted.');
+    } finally {
+      setDonationLoading(false);
+    }
+  };
+
   // Handle viewing a donation post by ID (for notifications)
   const handleViewDonationPostById = async (donationId: string) => {
     console.log('🔍 handleViewDonationPostById called with donationId:', donationId);
@@ -328,9 +377,19 @@ const DonationPage: React.FC = () => {
     }
   };
 
-  // Check for pending donation post view from notification
+  // Check for pending donation post/repost view from notification
   useEffect(() => {
     console.log('🔍 useEffect for pendingDonationPostView running...');
+    // Prefer repost view first if present
+    const pendingRepostId = localStorage.getItem('pendingRepostId');
+    if (pendingRepostId) {
+      console.log('🔍 Found pending donation repost ID:', pendingRepostId);
+      localStorage.removeItem('pendingRepostId');
+      setTimeout(() => {
+        handleViewRepostById(pendingRepostId);
+      }, 500);
+      return;
+    }
     const pendingDonationPostId = localStorage.getItem('pendingDonationPostView');
     console.log('🔍 Raw localStorage value:', pendingDonationPostId);
     if (pendingDonationPostId) {

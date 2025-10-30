@@ -263,13 +263,11 @@ export function useRealTimeNotifications(
 
     // Setup new interval
     pollingIntervalRef.current = window.setInterval(async () => {
-      // Only poll if WebSocket is not connected
-      if (!isConnected) {
-        await Promise.all([fetchNotificationsData(), fetchCountData()]);
-      }
+      // Always poll to ensure badge stays updated even if WebSocket misses events
+      await Promise.all([fetchNotificationsData(), fetchCountData()]);
     }, pollingInterval);
 
-  }, [enablePolling, pollingInterval, isConnected, fetchNotificationsData, fetchCountData]);
+  }, [enablePolling, pollingInterval, fetchNotificationsData, fetchCountData]);
 
   // Initialize
   useEffect(() => {
@@ -304,8 +302,21 @@ export function useRealTimeNotifications(
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [autoConnect, setupWebSocket, setupPolling, fetchNotificationsData, fetchCountData]);
+
+  // Refresh when tab becomes visible
+  const handleVisibilityChange = useCallback(() => {
+    if (document.visibilityState === 'visible') {
+      Promise.all([fetchNotificationsData(), fetchCountData()]);
+    }
+  }, [fetchNotificationsData, fetchCountData]);
+
+  useEffect(() => {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [handleVisibilityChange]);
 
   // Listen for custom events from other components
   useEffect(() => {

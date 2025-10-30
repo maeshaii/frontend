@@ -792,10 +792,27 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     };
   }, []);
 
-  // Check for pending post view when component mounts or navigates here
+  // Check for pending views when component mounts or navigates here
   useEffect(() => {
+    // PRIORITIZE REPOSTS FIRST
+    const pendingRepostId = localStorage.getItem('pendingRepostView');
+    const pendingRepostCommentId = localStorage.getItem('pendingRepostCommentId');
+    if (pendingRepostId) {
+      console.log('Found pending repost view:', pendingRepostId);
+      localStorage.removeItem('pendingRepostView');
+      if (pendingRepostCommentId) {
+        console.log('Found pending repost comment view:', pendingRepostCommentId);
+        localStorage.removeItem('pendingRepostCommentId');
+      }
+      // Set the modal data with repostId (which will be used to fetch the repost data)
+      setRepostNotificationModalData({ repostId: pendingRepostId, commentId: pendingRepostCommentId || undefined });
+      setShowRepostNotificationModal(true);
+      console.log('Opening repost notification modal for repost:', pendingRepostId);
+    }
+
+    // Then handle original post modal if any
     const pendingPostId = localStorage.getItem('pendingPostView');
-    if (pendingPostId) {
+    if (pendingPostId && !pendingRepostId) {
       console.log('Found pending post view:', pendingPostId);
       localStorage.removeItem('pendingPostView');
       
@@ -821,21 +838,6 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
       } else {
         handleViewPost(pendingPostId);
       }
-    }
-
-    const pendingRepostId = localStorage.getItem('pendingRepostView');
-    const pendingRepostCommentId = localStorage.getItem('pendingRepostCommentId');
-    if (pendingRepostId) {
-      console.log('Found pending repost view:', pendingRepostId);
-      localStorage.removeItem('pendingRepostView');
-      if (pendingRepostCommentId) {
-        console.log('Found pending repost comment view:', pendingRepostCommentId);
-        localStorage.removeItem('pendingRepostCommentId');
-      }
-      // Set the modal data with repostId (which will be used to fetch the repost data)
-      setRepostNotificationModalData({ repostId: pendingRepostId, commentId: pendingRepostCommentId || undefined });
-      setShowRepostNotificationModal(true);
-      console.log('Opening repost notification modal for repost:', pendingRepostId);
     }
 
     const pendingProfilePic = localStorage.getItem('pendingProfilePic');
@@ -1219,7 +1221,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         }}
         isAdmin={isAdmin}
         isPeso={isPeso}
-        onTrackerClick={isAdmin ? () => navigate('/tracker') : undefined}
+        onTrackerClick={isAdmin ? () => navigate('/tracker/questions') : undefined}
       />
       <div className="main-content">
         {/* Left Sidebar */}
@@ -1227,6 +1229,10 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
           <div
             className="profile-card"
             onClick={() => {
+              if (isAdmin) {
+                navigate('/ccict/profile');
+                return;
+              }
               if (user && (user as any).account_type) {
                 if ((user as any).account_type.peso) {
                   navigate('/peso/profile');
