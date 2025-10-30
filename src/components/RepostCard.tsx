@@ -58,6 +58,7 @@ interface RepostCardProps {
   setEditingRepost?: (fn: (prev: { [key: string | number]: boolean }) => { [key: string | number]: boolean }) => void;
   editRepostContent?: { [key: string | number]: string };
   setEditRepostContent?: (fn: (prev: { [key: string | number]: string }) => { [key: string | number]: string }) => void;
+  onViewOriginalPost?: (original: PostItemLite) => void;
 }
 
 // Photo gallery helpers - same as PostCard
@@ -114,7 +115,8 @@ const RepostCard: React.FC<RepostCardProps> = ({
   editingRepost = {},
   setEditingRepost,
   editRepostContent = {},
-  setEditRepostContent
+  setEditRepostContent,
+  onViewOriginalPost
 }) => {
   // Render name: {f_name} {m_name} {l_name} if m_name exists, else {f_name} {l_name}
   const renderName = (obj: { f_name: string; m_name?: string; l_name: string }) =>
@@ -782,7 +784,16 @@ const RepostCard: React.FC<RepostCardProps> = ({
       <div className="post-content" style={{ background: '#fff' }}>
         <div
           role="button"
-          onClick={goToOriginal}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (onViewOriginalPost && original) {
+              onViewOriginalPost(original);
+            } else {
+              goToOriginal();
+            }
+          }}
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
           style={{
             border: '1px solid #e9ecef',
             borderRadius: 12,

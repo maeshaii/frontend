@@ -50,7 +50,15 @@ const NotificationPage: React.FC = () => {
   const [showProfile, setShowProfile] = useState(false);
   const [openNotif, setOpenNotif] = useState<any | null>(null);
   const [postLoading, setPostLoading] = useState(false);
-  const [userProfilePics, setUserProfilePics] = useState<{[key: string]: string}>({});
+  // Persist profile pic cache across sessions so avatars remain after logout/login
+  const [userProfilePics, setUserProfilePics] = useState<{[key: string]: string}>(() => {
+    try {
+      const stored = localStorage.getItem('notifUserProfilePics');
+      return stored ? JSON.parse(stored) : {};
+    } catch (_) {
+      return {};
+    }
+  });
   const [profilePicUpdateTrigger, setProfilePicUpdateTrigger] = useState(0);
   const [loadingProfilePics, setLoadingProfilePics] = useState<Set<string>>(new Set());
   const [lastApiCall, setLastApiCall] = useState<number>(0);
@@ -60,6 +68,10 @@ const NotificationPage: React.FC = () => {
   // Debug profile picture updates
   React.useEffect(() => {
     console.log('Profile pictures updated:', userProfilePics);
+    // Persist to localStorage so we keep avatars after logout/login
+    try {
+      localStorage.setItem('notifUserProfilePics', JSON.stringify(userProfilePics));
+    } catch (_) {}
   }, [userProfilePics]);
 
   // Load profile pictures for notifications
@@ -858,8 +870,8 @@ const NotificationPage: React.FC = () => {
       const response = await api.get(`alumni/profile/${userId}/`);
       console.log('🔍 Profile API response for user', userId, ':', response.data);
       if (response.data && response.data.profile_pic) {
-        const profilePic = response.data.profile_pic;
-        const profilePicUrl = profilePic.startsWith('http') ? profilePic : `http://127.0.0.1:8000${profilePic}`;
+        const baseUrl = getProfilePicUrl(response.data.profile_pic);
+        const profilePicUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}cb=${Date.now()}`;
         console.log('🔍 Setting profile pic URL:', profilePicUrl);
         setUserProfilePics(prev => {
           const newPics = { ...prev, [userId]: profilePicUrl };
@@ -1023,11 +1035,9 @@ const NotificationPage: React.FC = () => {
     // Search for user by name and get their profile picture
     const userData = await searchUserByName(userName);
     if (userData) {
-      const profilePicUrl = userData.profile_pic && userData.profile_pic.startsWith('http') 
-        ? userData.profile_pic 
-        : userData.profile_pic 
-          ? `http://127.0.0.1:8000${userData.profile_pic}`
-          : null;
+      const profilePicUrl = userData.profile_pic 
+        ? getProfilePicUrl(userData.profile_pic)
+        : null;
       
       if (profilePicUrl) {
         return (
@@ -1076,9 +1086,13 @@ const NotificationPage: React.FC = () => {
           
           // If we have a direct profile picture URL, use it immediately
           if (directPicUrl) {
-            const profilePicUrl = getProfilePicUrl(directPicUrl);
-            console.log('Using direct profile pic URL:', profilePicUrl);
-            setProfilePicUrl(profilePicUrl);
+            const normalizedUrl = getProfilePicUrl(directPicUrl);
+            console.log('Using direct profile pic URL:', normalizedUrl);
+            // Persist mapping by userId when available so list items reuse it by ID
+            if (userId) {
+              setUserProfilePics(prev => ({ ...prev, [userId]: normalizedUrl }));
+            }
+            setProfilePicUrl(normalizedUrl);
             setIsLoading(false);
             return;
           }
@@ -1098,11 +1112,11 @@ const NotificationPage: React.FC = () => {
             console.log('API response for user:', userId, response.data);
             
             if (response.data && response.data.profile_pic) {
-              const profilePic = response.data.profile_pic;
-              const profilePicUrl = profilePic.startsWith('http') ? profilePic : `http://127.0.0.1:8000${profilePic}`;
-              console.log('Setting profile pic URL:', profilePicUrl);
-              setUserProfilePics(prev => ({ ...prev, [userId]: profilePicUrl }));
-              setProfilePicUrl(profilePicUrl);
+              const baseUrl = getProfilePicUrl(response.data.profile_pic);
+              const withBust = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}cb=${Date.now()}`;
+              console.log('Setting profile pic URL:', withBust);
+              setUserProfilePics(prev => ({ ...prev, [userId]: withBust }));
+              setProfilePicUrl(withBust);
             } else {
               console.log('No profile pic found for user:', userId);
             }
@@ -1113,11 +1127,13 @@ const NotificationPage: React.FC = () => {
             console.log('Search result:', userData);
             
             if (userData && userData.profile_pic) {
-              const profilePicUrl = userData.profile_pic.startsWith('http') 
-                ? userData.profile_pic 
-                : `http://127.0.0.1:8000${userData.profile_pic}`;
-              console.log('Setting profile pic URL from search:', profilePicUrl);
-              setProfilePicUrl(profilePicUrl);
+              const normalizedUrl = getProfilePicUrl(userData.profile_pic);
+              console.log('Setting profile pic URL from search:', normalizedUrl);
+              // Bind to actual user id from search for future lookups by ID
+              if (userData.user_id) {
+                setUserProfilePics(prev => ({ ...prev, [String(userData.user_id)]: normalizedUrl }));
+              }
+              setProfilePicUrl(normalizedUrl);
             } else {
               console.log('No profile pic found for user name:', userName);
             }
@@ -1987,8 +2003,8 @@ const NotificationPage: React.FC = () => {
                         overflow: 'hidden',
                         flexShrink: 0
                       }}>
-                        <ProfilePicComponent 
-                          userId={(() => {
+                      <ProfilePicComponent 
+                        userId={(() => {
                             const originalPosterMatch = openNotif.content.match(/<!--ORIGINAL_POSTER_ID:(\d+)-->/);
                             return originalPosterMatch ? originalPosterMatch[1] : undefined;
                           })()}
@@ -1997,6 +2013,10 @@ const NotificationPage: React.FC = () => {
                             return originalPosterMatch ? originalPosterMatch[1] : 'Original Poster';
                           })()}
                           size="32px"
+                          directPicUrl={(() => {
+                            const picMatch = openNotif.content.match(/<!--ORIGINAL_POSTER_PIC:([^>]+)-->/);
+                            return picMatch ? picMatch[1] : undefined;
+                          })()}
                         />
                       </div>
                       

@@ -5,6 +5,9 @@ import AlumniTopBar from '../../alumni/AlumniTopBar';
 import { useRealTimeNotifications } from '../../../hooks/useRealTimeNotifications';
 import ctulogo from '../../../images/ctulogo.png';
 
+// Simple in-memory cache to prevent refetch/flicker of profile pics
+const profilePicCache: { [userId: string]: string } = {};
+
 const AdminNotificationPage: React.FC = () => {
   // Use real-time notifications hook
   const { 
@@ -23,6 +26,10 @@ const AdminNotificationPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [showProfile, setShowProfile] = useState(false);
   const [openNotif, setOpenNotif] = useState<any | null>(null);
+  const [postModalOpen, setPostModalOpen] = useState(false);
+  const [postModalData, setPostModalData] = useState<any | null>(null);
+  const [postModalLoading, setPostModalLoading] = useState(false);
+  const [postModalError, setPostModalError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -71,84 +78,73 @@ const AdminNotificationPage: React.FC = () => {
   const ProfilePicComponent = ({ userId, userName, size = '40px' }: { userId?: string, userName?: string, size?: string }) => {
     const [profilePicUrl, setProfilePicUrl] = React.useState<string | null>(null);
     const [isLoading, setIsLoading] = React.useState(true);
-    
+    const [imgLoaded, setImgLoaded] = React.useState(false);
+
     React.useEffect(() => {
+      let mounted = true;
       const loadProfilePic = async () => {
         try {
-          console.log('Admin ProfilePicComponent - Loading for userId:', userId, 'userName:', userName);
-          
-          if (userId) {
-            // Use the alumni/profile endpoint which works correctly
-            const response = await api.get(`alumni/profile/${userId}/`);
-            console.log('Admin ProfilePicComponent - API response:', response.data);
-            
-            if (response.data && response.data.profile_pic) {
-              const profilePic = response.data.profile_pic;
-              const profilePicUrl = profilePic.startsWith('http') ? profilePic : `http://127.0.0.1:8000${profilePic}`;
-              console.log('Admin ProfilePicComponent - Setting profile pic URL:', profilePicUrl);
-              setProfilePicUrl(profilePicUrl);
-            } else {
-              console.log('Admin ProfilePicComponent - No profile_pic in response');
-            }
-          } else {
-            console.log('Admin ProfilePicComponent - No userId provided');
+          if (!userId) {
+            setIsLoading(false);
+            return;
           }
-        } catch (error) {
-          console.error('Admin ProfilePicComponent - Error loading profile pic:', error);
+          // Show cached immediately if present to avoid flicker, but still refresh in background
+          const cached = profilePicCache[userId];
+          if (cached && mounted) {
+            setProfilePicUrl(cached);
+            setIsLoading(false);
+          }
+          // Always fetch latest profile pic
+          const response = await api.get(`alumni/profile/${userId}/`);
+          const raw = response?.data?.profile_pic as string | undefined;
+          const baseUrl = raw ? (raw.startsWith('http') ? raw : `http://127.0.0.1:8000${raw}`) : '';
+          if (!baseUrl) {
+            return;
+          }
+          // Add cache-busting query to ensure we show the current picture
+          const resolvedUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}cb=${Date.now()}`;
+          // Preload image before swapping
+          await new Promise<void>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+            img.src = resolvedUrl;
+          });
+          if (!mounted) return;
+          profilePicCache[userId] = resolvedUrl;
+          setProfilePicUrl(resolvedUrl);
+        } catch {
+          // ignore; cached/fallback will be used
         } finally {
-          setIsLoading(false);
+          if (mounted) setIsLoading(false);
         }
       };
-      
       loadProfilePic();
+      return () => { mounted = false; };
     }, [userId]);
-    
-    if (isLoading) {
-      return (
+
+    const displaySrc = profilePicUrl || ctulogo;
+    return (
+      <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', background: '#eef2f7' }}>
         <img
-          src={ctulogo}
+          src={displaySrc}
           alt={userName || 'User'}
           style={{
-            width: size,
-            height: size,
+            width: '100%',
+            height: '100%',
             objectFit: 'cover',
-            borderRadius: '50%'
+            borderRadius: '50%',
+            transition: 'opacity 150ms ease',
+            opacity: imgLoaded ? 1 : 0
           }}
-        />
-      );
-    }
-    
-    if (profilePicUrl) {
-      return (
-        <img
-          src={profilePicUrl}
-          alt={userName || 'User'}
-          style={{
-            width: size,
-            height: size,
-            objectFit: 'cover',
-            borderRadius: '50%'
-          }}
+          onLoad={() => setImgLoaded(true)}
           onError={(e) => {
             const target = e.target as HTMLImageElement;
             target.src = ctulogo;
+            setImgLoaded(true);
           }}
         />
-      );
-    }
-    
-    // Fallback to CTU logo
-    return (
-      <img
-        src={ctulogo}
-        alt={userName || 'User'}
-        style={{
-          width: size,
-          height: size,
-          objectFit: 'cover',
-          borderRadius: '50%'
-        }}
-      />
+      </div>
     );
   };
 
@@ -184,6 +180,37 @@ const AdminNotificationPage: React.FC = () => {
     return <span style={{ whiteSpace: 'pre-line' }}>{message}</span>;
   }
 
+  const extractOriginalIds = (content: string) => {
+    const postIdMatch = content.match(/<!--POST_ID:(\d+)-->/);
+    const repostIdMatch = content.match(/<!--REPOST_ID:(\d+)-->/);
+    const forumIdMatch = content.match(/<!--FORUM_ID:(\d+)-->/);
+    const donationIdMatch = content.match(/<!--DONATION_ID:(\d+)-->/);
+    return {
+      postId: postIdMatch ? postIdMatch[1] : null,
+      repostId: repostIdMatch ? repostIdMatch[1] : null,
+      forumId: forumIdMatch ? forumIdMatch[1] : null,
+      donationId: donationIdMatch ? donationIdMatch[1] : null,
+    };
+  };
+
+  const openOriginalPost = async (content: string) => {
+    const { postId, repostId, forumId, donationId } = extractOriginalIds(content);
+    // Only handle regular posts here; forum/donation can be handled separately if needed
+    const targetId = postId || repostId;
+    if (!targetId) return;
+    try {
+      setPostModalLoading(true);
+      setPostModalError(null);
+      const response = await api.get(`posts/${targetId}/detail/`);
+      setPostModalData(response.data);
+      setPostModalOpen(true);
+    } catch (e: any) {
+      setPostModalError('Unable to load the original post.');
+    } finally {
+      setPostModalLoading(false);
+    }
+  };
+
   return (
     <div style={{ background: '#f5f7fa', minHeight: '100vh', fontFamily: 'Arial, sans-serif' }}>
       <AlumniTopBar
@@ -203,7 +230,8 @@ const AdminNotificationPage: React.FC = () => {
           padding: 24,
         }}
       >
-        <button
+          <button
+            type="button"
           onClick={() => {
             const userStr = localStorage.getItem('user');
             if (userStr) {
@@ -241,6 +269,7 @@ const AdminNotificationPage: React.FC = () => {
             }}
           />
           <button
+            type="button"
             style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 8 }}
             onClick={selectAll}
             title="Select All"
@@ -299,6 +328,7 @@ const AdminNotificationPage: React.FC = () => {
                     </td>
                     <td>
                       <button
+                        type="button"
                         style={{ background: 'none', border: 'none', cursor: 'pointer' }}
                         title="Expand"
                         onClick={(e) => {
@@ -356,6 +386,7 @@ const AdminNotificationPage: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <button
+              type="button"
               onClick={() => setOpenNotif(null)}
               style={{
                 position: 'absolute',
@@ -430,6 +461,113 @@ const AdminNotificationPage: React.FC = () => {
             <div style={{ fontSize: 16, whiteSpace: 'pre-line', marginBottom: 24 }}>
               {renderMessageWithButton(openNotif.content)}
             </div>
+
+            {/* Original Post inline card for repost-related notifications */}
+            {(() => {
+              const { postId, repostId, forumId, donationId } = extractOriginalIds(openNotif.content || '');
+              const isRepostContext = !!repostId || /repost(ed)?/i.test(openNotif.type || '') || /repost(ed)?/i.test(openNotif.content || '');
+              // Only show for regular posts (skip forum/donation here)
+              if ((postId || repostId) && !forumId && !donationId && isRepostContext) {
+                return (
+                  <div
+                    role="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openOriginalPost(openNotif.content); }}
+                    onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    style={{
+                      border: '1px solid #e5e7eb',
+                      borderRadius: 10,
+                      padding: 14,
+                      background: '#fafbfc',
+                      cursor: 'pointer',
+                      transition: 'background 0.2s ease',
+                      marginBottom: 8
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#f2f5f8'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#fafbfc'; }}
+                 >
+                    <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>Original post</div>
+                    <div style={{
+                      fontSize: 14,
+                      color: '#333',
+                      overflow: 'hidden',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 3 as any,
+                      WebkitBoxOrient: 'vertical' as any
+                    }}>
+                      {(openNotif.content || '').replace(/<!--[^>]+-->/g, '').replace(/^[^:]+:\s*/, '').trim() || 'View original content'}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+          </div>
+        </div>
+      )}
+      {postModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1001,
+          }}
+          onClick={() => setPostModalOpen(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              boxShadow: '0 2px 16px rgba(0,0,0,0.18)',
+              padding: 24,
+              minWidth: 360,
+              maxWidth: 720,
+              width: '92%',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setPostModalOpen(false)}
+              style={{
+                position: 'absolute',
+                top: 12,
+                right: 12,
+                background: 'none',
+                border: 'none',
+                fontSize: 20,
+                cursor: 'pointer',
+                color: '#888',
+              }}
+              title="Close"
+            >
+              ×
+            </button>
+
+            <h3 style={{ marginTop: 0, marginBottom: 12 }}>Original Post</h3>
+            {postModalLoading && (
+              <div style={{ padding: 12 }}>Loading...</div>
+            )}
+            {postModalError && (
+              <div style={{ padding: 12, color: '#b00020' }}>{postModalError}</div>
+            )}
+            {!postModalLoading && !postModalError && postModalData && (
+              <div>
+                <div style={{ fontSize: 14, color: '#555', marginBottom: 8 }}>
+                  {postModalData.author_name || postModalData.author || 'User'} • {postModalData.created_at || ''}
+                </div>
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: 16, color: '#222' }}>
+                  {postModalData.content || postModalData.text || 'No content'}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

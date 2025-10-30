@@ -12,6 +12,7 @@ import { getPosts, followUser, getAdminPesoUsers, api, getDonationRequests } fro
 import { trackerApi } from '../../services/trackerApi';
 import RepostNotificationModal from '../../components/RepostNotificationModal';
 import RepostModal from '../../components/RepostModal';
+import { getProfilePicUrl } from '../../utils/profilePicUtils';
 
 interface UnifiedDashboardProps {
   userType: 'alumni' | 'peso' | 'admin' | 'ojt';
@@ -1679,6 +1680,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           }}
                           currentUserId={currentUserId}
                           formatTime={formatHybrid}
+                          onViewOriginalPost={handleViewOriginalPost}
                           context="donation"
                           onRefresh={() => {
                             // Refresh donations
@@ -1937,6 +1939,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         formatTime={formatHybrid}
                         onRefresh={() => getPosts().then(setPosts)}
                         context={'post'}
+                        onViewOriginalPost={handleViewOriginalPost}
                       />
                     );
                     return acc;
@@ -2267,7 +2270,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 currentUserId={getCurrentUserId(user)}
                 isOwn={getCurrentUserId(user) === modalPost.user?.user_id}
                 displayName={formatDisplayName(modalPost.user, getCurrentUserId(user) === modalPost.user?.user_id, user)}
-                displayAvatar={modalPost.user?.profile_pic || '/default-avatar.png'}
+                displayAvatar={getProfilePicUrl(modalPost.user?.profile_pic) || '/default-avatar.png'}
                 formatTime={formatHybrid}
                 onViewOriginalPost={handleViewOriginalPost}
                 onPostUpdate={() => {
@@ -2546,7 +2549,14 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 currentUserId={getCurrentUserId(user)}
                 isOwn={getCurrentUserId(user) === originalPostModalData.user?.user_id}
                 displayName={formatDisplayName(originalPostModalData.user, getCurrentUserId(user) === originalPostModalData.user?.user_id, user)}
-                displayAvatar={originalPostModalData.user?.profile_pic ? (String(originalPostModalData.user.profile_pic).startsWith('http') ? originalPostModalData.user.profile_pic : `http://127.0.0.1:8000${originalPostModalData.user.profile_pic}`) : ctulogo}
+                displayAvatar={(() => {
+                  // Normalize via util and add cache-buster if we have a real pic
+                  const raw = originalPostModalData.user?.profile_pic;
+                  const normalized = getProfilePicUrl(raw, ctulogo);
+                  if (!raw) return normalized; // fallback image, no bust
+                  const sep = normalized.includes('?') ? '&' : '?';
+                  return `${normalized}${sep}cb=${Date.now()}`;
+                })()}
                 formatTime={formatHybrid}
                 onViewOriginalPost={handleViewOriginalPost}
                 onPostUpdate={() => {

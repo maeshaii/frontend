@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import ctulogo from '../images/ctulogo.png';
+import { getProfilePicUrl } from '../utils/profilePicUtils';
 interface RepostModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -34,6 +35,20 @@ const RepostModal: React.FC<RepostModalProps> = ({
   formatTime
 }) => {
   const [caption, setCaption] = useState('');
+
+  // Resolve the actual logged-in user from localStorage to ensure correctness
+  const effectiveCurrentUser = React.useMemo(() => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (raw) {
+        const u = JSON.parse(raw);
+        const fullName = [u.f_name, u.m_name, u.l_name].filter(Boolean).join(' ').trim() || (u.name || currentUser.name);
+        const avatar = getProfilePicUrl(u.profile_pic || currentUser.profile_pic);
+        return { name: fullName, profile_pic: avatar };
+      }
+    } catch (_) {}
+    return { name: currentUser.name, profile_pic: getProfilePicUrl(currentUser.profile_pic) };
+  }, [currentUser]);
 
   // Add CSS animations and scrollbar styling
   React.useEffect(() => {
@@ -183,7 +198,7 @@ const RepostModal: React.FC<RepostModalProps> = ({
           border: '1px solid rgba(59, 130, 246, 0.1)',
         }}>
           <img
-            src={currentUser.profile_pic ? (String(currentUser.profile_pic).startsWith('http') ? currentUser.profile_pic : `http://127.0.0.1:8000${currentUser.profile_pic}`) : ctulogo}
+            src={effectiveCurrentUser.profile_pic || ctulogo}
             alt="Profile"
             style={{
               width: 36,
@@ -202,7 +217,7 @@ const RepostModal: React.FC<RepostModalProps> = ({
           />
           <div>
             <div style={{ fontWeight: '600', fontSize: 15, color: '#1e40af', marginBottom: 1 }}>
-              {currentUser.name}
+              {effectiveCurrentUser.name}
             </div>
             <div style={{ fontSize: 11, color: '#64748b' }}>
               is reposting
