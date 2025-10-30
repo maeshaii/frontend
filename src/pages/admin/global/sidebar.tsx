@@ -263,26 +263,48 @@ const Sidebar = () => {
   };
 
   const getIcon = (path: string) => {
-    switch (path) {
+    // Normalize dynamic paths to their base route for icon resolution
+    const basePath = path.startsWith('/ccict/dashboard') ? '/ccict/dashboard' : path;
+    switch (basePath) {
       case '/dashboard': return <FaChartLine style={styles.icon} />;
       case '/statistics': return <FaChartBar style={styles.icon} />;
       case '/users': return <FaUsers style={styles.icon} />;
       case '/user-management': return <FaCog style={styles.icon} />;
-      case '/ccict/profile': return <FaUser style={styles.icon} />;
-      case '/tracker': return <FaClipboard style={styles.icon} />;
+      case '/ccict/profile':
+      case '/ccict/dashboard': return <FaUser style={styles.icon} />;
+      case '/tracker':
+      case '/tracker/questions': return <FaClipboard style={styles.icon} />;
       case '/requests': return <FaEnvelope style={styles.icon} />;
       case '/rewards': return <FaStar style={styles.icon} />;
       default: return null;
     }
   };
 
+  // Build dynamic profile link with user ID if available
+  const getStoredUserId = (): string | null => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return null;
+      const parsed: any = JSON.parse(raw);
+      const id = parsed?.id ?? parsed?.user_id ?? parsed?.user?.id ?? parsed?.user?.user_id ?? null;
+      return id != null ? String(id) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const profileLink = (() => {
+    const id = getStoredUserId();
+    return id ? `/ccict/dashboard/${id}` : '/ccict/dashboard';
+  })();
+
   const links = [
     { to: '/dashboard', label: 'Dashboard' },
     { to: '/statistics', label: 'Statistics', childRoutes: ['/ViewStats'] },
     { to: '/users', label: 'Users' },
     { to: '/user-management', label: 'User Management' },
-    { to: '/ccict/profile', label: 'Profile' },
-    { to: '/tracker', label: 'Tracker' },
+    { to: profileLink, label: 'Profile' },
+    { to: '/tracker/questions', label: 'Tracker' },
     { to: '/requests', label: 'Requests' },
     { to: '/rewards', label: 'Rewards' },
   ];

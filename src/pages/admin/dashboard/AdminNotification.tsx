@@ -306,9 +306,7 @@ const AdminNotificationPage: React.FC = () => {
                           setOpenNotif(notif);
                         }}
                       >
-                        <span role="img" aria-label="expand">
-                          ▾
-                        </span>
+                        <span role="img" aria-label="expand">▾</span>
                       </button>
                     </td>
                     <td style={{ fontWeight: 600, color: '#174f84' }}>{notif.type}</td>

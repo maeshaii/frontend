@@ -1526,6 +1526,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         gap: 2,
                         borderRadius: 8,
                         overflow: 'hidden',
+                        width: '100%',
                         ...(originalImages.length === 2 ? {
                           gridTemplateColumns: '1fr 1fr',
                           height: '300px'
@@ -1567,7 +1568,7 @@ const PostCard: React.FC<PostCardProps> = ({
                                   objectFit: 'contain',
                                   cursor: 'pointer',
                                   transition: 'transform 0.2s ease',
-                                  backgroundColor: '#f8f9fa'
+                                  backgroundColor: '#ffffff'
                                 }}
                                 onClick={() => handleImageClick(index)}
                                 onMouseEnter={(e) => {
@@ -2291,6 +2292,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 gap: 2,
                 borderRadius: 8,
                 overflow: 'hidden',
+                width: '100%',
                 ...(images.length === 2 ? {
                   gridTemplateColumns: '1fr 1fr',
                   height: '300px'
@@ -2331,9 +2333,9 @@ const PostCard: React.FC<PostCardProps> = ({
                           width: '100%',
                           height: '100%',
                           minHeight: '120px',
-                          objectFit: 'cover',
+                          objectFit: 'contain',
                           transition: 'transform 0.2s ease',
-                          backgroundColor: '#f8f9fa'
+                          backgroundColor: '#ffffff'
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.transform = 'scale(1.02)';

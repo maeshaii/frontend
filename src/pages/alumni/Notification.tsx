@@ -651,12 +651,15 @@ const NotificationPage: React.FC = () => {
             localStorage.removeItem('pendingPostView');
             localStorage.removeItem('pendingRepostView');
             
-            // Store the post ID for the dashboard to open
-            localStorage.setItem('pendingPostView', postId);
-            
-            // Store repost ID if this is a repost notification
+            const typeStr = (notif.type || '').toLowerCase();
+            const contentStr = (notif.content || '').toLowerCase();
+            const isRepostContext = !!repostId || typeStr.includes('repost') || contentStr.includes('your repost') || contentStr.includes('reposted');
             if (repostId) {
-              localStorage.setItem('pendingRepostId', repostId);
+              // Open the repost modal directly when we have a valid repost ID
+              localStorage.setItem('pendingRepostView', repostId);
+            } else {
+              // Otherwise open the original post modal
+              localStorage.setItem('pendingPostView', postId);
             }
             
             // Store profile picture information from notification for peso posts
@@ -2126,16 +2129,22 @@ const NotificationPage: React.FC = () => {
                       e.currentTarget.style.background = '#0066cc';
                     }}
                     onClick={async () => {
-                      // Extract repost ID and navigate to the post
+                      // Extract repost ID and/or original post ID
                       const repostIdMatch = openNotif.content.match(/<!--REPOST_ID:(\d+)-->/);
                       const postIdMatch = openNotif.content.match(/<!--POST_ID:(\d+)-->/);
                       
                       if (repostIdMatch || postIdMatch) {
-                        const postId = repostIdMatch?.[1] || postIdMatch?.[1];
+                        const repostId = repostIdMatch?.[1] || null;
+                        const postId = postIdMatch?.[1] || null;
+                        // Detect repost context even if REPOST_ID isn't embedded
+                        const typeStr = (openNotif.type || '').toLowerCase();
+                        const contentStr = (openNotif.content || '').toLowerCase();
+                        const isRepostContext = !!repostId || typeStr.includes('repost') || contentStr.includes('your repost') || contentStr.includes('reposted');
                         setPostLoading(true);
                         
                         try {
-                          const response = await api.get(`posts/${postId}/detail/`);
+                          // If we have a repost ID, prioritize showing the repost UI
+                          const response = await api.get(`posts/${(postId || repostId)}/detail/`);
                           if (response.data) {
                             setOpenNotif(null);
                             const userStr = localStorage.getItem('user');
@@ -2158,7 +2167,14 @@ const NotificationPage: React.FC = () => {
                                 dashboardPath = `/dashboard/${userId}`;
                               }
                               
-                              localStorage.setItem('pendingRepostView', postId);
+                              // Clear previous pending keys to avoid double-opening
+                              localStorage.removeItem('pendingPostView');
+                              localStorage.removeItem('pendingRepostView');
+                              if (repostId) {
+                                localStorage.setItem('pendingRepostView', repostId);
+                              } else if (postId) {
+                                localStorage.setItem('pendingPostView', postId);
+                              }
                               navigate(dashboardPath);
                             }
                           }
@@ -2207,8 +2223,9 @@ const NotificationPage: React.FC = () => {
                       e.currentTarget.style.background = '#0066cc';
                     }}
                     onClick={async () => {
-                      // Try to extract post ID from notification content first
+                      // Try to extract IDs from notification content first
                       const postIdMatch = openNotif.content.match(/<!--POST_ID:(\d+)-->/);
+                      const repostIdMatch = openNotif.content.match(/<!--REPOST_ID:(\d+)-->/);
                       const forumIdMatch = openNotif.content.match(/<!--FORUM_ID:(\d+)-->/);
                       const donationIdMatch = openNotif.content.match(/<!--DONATION_ID:(\d+)-->/);
                       const visibleIdMatch = openNotif.content.match(/Post ID:\s*(\d+)/i);
@@ -2246,6 +2263,7 @@ const NotificationPage: React.FC = () => {
                       
                       if (matchResult) {
                         const postId = matchResult[1];
+                        const repostId = repostIdMatch?.[1] || null;
                         setPostLoading(true);
                         
                         try {
@@ -2291,8 +2309,12 @@ const NotificationPage: React.FC = () => {
                                 dashboardPath = `/dashboard/${userId}`;
                               }
                               
-                              // Store post ID (forum/donation already handled above)
-                              localStorage.setItem('pendingPostView', postId);
+                              // Store repost or post ID for dashboard to open
+                              if (repostId) {
+                                localStorage.setItem('pendingRepostView', repostId);
+                              } else if (postId) {
+                                localStorage.setItem('pendingPostView', postId);
+                              }
                               navigate(dashboardPath);
                             }
                           }
