@@ -875,4 +875,3 @@ const InventoryPage: React.FC = () => {
 };
 
 export default InventoryPage;
-

@@ -4,6 +4,7 @@ import { changePassword } from '../../../services/api';
 import PasswordVisibilityIcon from '../../../components/PasswordVisibilityIcon';
 import { validatePassword } from '../../../utils/passwordValidator';
 import './FirstLoginChangePassword.css';
+import '../authAnimations.css';
 
 const FirstLoginChangePassword: React.FC = () => {
   const navigate = useNavigate();
@@ -93,9 +94,13 @@ const FirstLoginChangePassword: React.FC = () => {
 
   return (
     <div style={styles.container} className="first-login-container">
-      <div style={styles.leftSection} className="first-login-left-section">
-        <div style={styles.card} className="first-login-card">
-        <div style={styles.headerRow}><button onClick={() => navigate('/login')} style={styles.backBtn}>←</button><h1 style={styles.title} className="first-login-title">First Time Log In</h1></div>
+      {/* Left form card */}
+      <div style={styles.formSection} className="first-login-left-section">
+        <div 
+          style={styles.card} 
+          className={`first-login-card ${location.state && (location.state as any).animate === 'right' ? 'slide-in-right' : ''}`}
+        >
+        <div style={styles.headerRow}><button onClick={() => navigate('/login', { state: { animate: 'right', animateHero: 'left' } })} style={styles.backBtn}>←</button><h1 style={styles.title} className="first-login-title">First Time Log In</h1></div>
         <p style={styles.subtitle} className="first-login-subtitle">Please change your temporary password to continue.</p>
         <form onSubmit={onSubmit} style={styles.form} className="first-login-form">
           <label style={styles.label}>Old Password</label>
@@ -161,8 +166,37 @@ const FirstLoginChangePassword: React.FC = () => {
         </form>
         </div>
       </div>
-      <div style={styles.rightSection} className="first-login-right-section">
+
+      {/* Right hero section to match Login */}
+      <div 
+        style={styles.heroSection}
+        className={`first-login-hero ${location.state && (location.state as any).animateHero === 'right' ? 'slide-in-right' : (location.state as any)?.animateHero === 'left' ? 'slide-in-left' : ''}`}
+      >
+        <div style={styles.backgroundOverlay}></div>
         <img src={require('../../../images/ctu.jpg')} alt="CTU" style={styles.backgroundImage} />
+        <div style={styles.heroContent}>
+          <div style={{ marginTop: '-10rem' }}>
+            <h2 style={styles.brandTitle}>WHERENAYOU : Connecting OJT's & Alumni Journeys</h2>
+            <p style={styles.brandSubtitle}>Excellence in Technology Education</p>
+          </div>
+          <div style={styles.collaborationContainer}>
+            <h3 style={styles.collaborationTitle}>IN COLLABORATION WITH</h3>
+            <div style={styles.partnersContainer}>
+              <div style={styles.partnerItem}>
+                <div style={styles.partnerLogo}>
+                  <img src={require('../../../images/ccict.png')} alt="CCICT Logo" style={styles.partnerLogoImage} />
+                </div>
+                <p style={styles.partnerName}>College of Computer, Information and Communications Technology</p>
+              </div>
+              <div style={styles.partnerItem}>
+                <div style={styles.partnerLogo}>
+                  <img src={require('../../../images/ctu alumni logo.jpg')} alt="CTU MC Alumni Association Logo" style={styles.partnerLogoImage} />
+                </div>
+                <p style={styles.partnerName}>CTU - MC Alumni Association</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -173,29 +207,57 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex', 
     height: '100vh', 
     fontFamily: 'Arial, sans-serif',
-    flexDirection: 'column',
+    overflow: 'hidden',
   },
-  leftSection: { 
-    width: '100%',
-    flex: 1,
-    backgroundColor: '#1e3a8a', 
-    color: 'white', 
-    display: 'flex', 
-    flexDirection: 'column', 
-    justifyContent: 'center', 
-    padding: 24, 
+  heroSection: {
+    width: '50%',
+    position: 'relative',
+    display: 'flex',
     alignItems: 'center',
-    overflowY: 'auto',
+    justifyContent: 'center',
   },
-  rightSection: { 
-    display: 'none',
+  backgroundImage: { 
+    width: '100%', height: '100vh', objectFit: 'cover', position: 'absolute', top: 0, left: 0, zIndex: 1 
   },
-  backgroundImage: { width: '100%', height: '100vh', objectFit: 'cover' },
+  backgroundOverlay: {
+    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+    background: 'linear-gradient(135deg, rgba(0, 51, 102, 0.8) 0%, rgba(0, 102, 204, 0.6) 100%)', zIndex: 2
+  },
+  heroContent: {
+    position: 'relative', zIndex: 3, textAlign: 'center', color: 'white', padding: '2rem', paddingTop: '3rem'
+  },
+  brandTitle: {
+    fontSize: '2.5rem', fontWeight: '700', margin: '0 0 0.5rem 0', textShadow: '0 4px 8px rgba(0, 0, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.6)', letterSpacing: '-0.02em', color: '#ffffff', background: 'rgba(0, 0, 0, 0.3)', padding: '0.5rem 1rem', borderRadius: '8px', backdropFilter: 'blur(10px)', opacity: 0.7
+  },
+  brandSubtitle: {
+    fontSize: '1.1rem', fontWeight: '400', margin: 0, opacity: 0.9, textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)'
+  },
+  collaborationContainer: {
+    position: 'absolute', bottom: '-130px', left: '50%', transform: 'translateX(-50%)', padding: '0.3rem 1rem 0.5rem 1rem', background: 'transparent', border: 'none', width: '90%'
+  },
+  collaborationTitle: {
+    fontSize: '0.65rem', fontWeight: '500', margin: '0 0 0.6rem 0', color: 'rgba(255, 255, 255, 0.85)', textAlign: 'center', textShadow: '0 1px 3px rgba(0, 0, 0, 0.8)', letterSpacing: '0.5px', textTransform: 'uppercase'
+  },
+  partnersContainer: { display: 'flex', justifyContent: 'space-around', alignItems: 'center', gap: '1.5rem' },
+  partnerItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' },
+  partnerLogo: { width: '35px', height: '35px', borderRadius: '50%', background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  partnerLogoImage: { width: '24px', height: '24px', objectFit: 'contain', opacity: 0.9, filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))' },
+  partnerName: { fontSize: '0.6rem', fontWeight: '400', margin: 0, color: 'rgba(255, 255, 255, 0.8)', textAlign: 'center', textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)', lineHeight: '1.1' },
+
+  formSection: {
+    width: '50%',
+    background: 'linear-gradient(135deg, #003366 0%, #0066cc 100%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    boxSizing: 'border-box',
+  },
   card: { width: '100%', maxWidth: 560, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: 24, boxShadow: '0 8px 24px rgba(0,0,0,0.25)', backdropFilter: 'blur(6px)' },
   headerRow: { display: 'flex', alignItems: 'center', marginBottom: 12 },
   backBtn: { background: 'none', border: 'none', color: 'white', fontSize: '1.5rem', cursor: 'pointer', marginRight: 12, padding: 5 },
-  title: { fontSize: '1.5rem', fontWeight: 'bold', margin: 0 },
-  subtitle: { fontSize: '0.95rem', marginBottom: 16, opacity: 0.95, lineHeight: 1.5 },
+  title: { fontSize: '1.5rem', fontWeight: 'bold', margin: 0, color: '#ffffff' },
+  subtitle: { fontSize: '0.95rem', marginBottom: 16, lineHeight: 1.5, color: 'rgba(255, 255, 255, 0.8)' },
   form: { width: '100%', display: 'flex', flexDirection: 'column', gap: 8 },
   label: { marginBottom: 5, color: '#ffffff', fontWeight: 700 },
   inputWrap: { position: 'relative' },
@@ -212,8 +274,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '16px', // Prevent zoom on iOS
   },
   eyeBtn: { position: 'absolute', right: 8, top: 8, background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 },
-  hint: { fontSize: 12, opacity: 0.9, marginBottom: 8 },
-  strength: { fontSize: 12, marginBottom: 10 },
+  hint: { fontSize: 12, marginBottom: 8, color: 'rgba(255, 255, 255, 0.8)' },
+  strength: { fontSize: 12, marginBottom: 10, color: 'rgba(255, 255, 255, 0.8)' },
   button: { 
     backgroundColor: '#ffffff', 
     color: '#1e3a8a', 
@@ -240,5 +302,4 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 export default FirstLoginChangePassword;
-
 

@@ -17,12 +17,21 @@ const Dashboard = () => {
   const [totalAlumni, setTotalAlumni] = useState(0);
   const [today, setToday] = useState(new Date());
   const [coordinatorReqCount, setCoordinatorReqCount] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [timeAgo, setTimeAgo] = useState('');
+  const [prevSnapshot, setPrevSnapshot] = useState<{ employed: number; absorb: number; unemployed: number; untracked: number; requests: number } | null>(null);
+  const [selectedYear, setSelectedYear] = useState<string>(() => {
+    try { return localStorage.getItem('dashYear') || 'ALL'; } catch { return 'ALL'; }
+  });
+  const [selectedProgram, setSelectedProgram] = useState<string>(() => {
+    try { return localStorage.getItem('dashProgram') || 'ALL'; } catch { return 'ALL'; }
+  });
 
   useEffect(() => {
     const fetchUntrackedCount = async () => {
       try {
         // Use the working alumni statistics endpoint directly to avoid 500 errors
-        const data = await fetchAlumniEmploymentStats('ALL', 'ALL');
+        const data = await fetchAlumniEmploymentStats(selectedYear || 'ALL', selectedProgram || 'ALL');
         // Get the pending count which represents untracked alumni
         const untracked = Number(data?.status_counts?.Pending) || 0;
         setUntrackedCount(untracked);
@@ -42,15 +51,19 @@ const Dashboard = () => {
         const counts = data?.status_counts || data?.statusCounts || {};
         const employed = Number(counts.Employed) || 0;
         const unemployed = Number(counts.Unemployed) || 0;
-        const absorb = Number(counts.Absorb) || 0;
+        const absorb =
+          Number(counts.Absorb) ||
+          Number((counts as any).Absorbed) ||
+          Number((counts as any).Absorbed_Count) || 0;
         const pending = Number(counts.Pending) || 0;
-        const total = employed + unemployed + absorb + pending;
-        setEmployedCount(employed);
+        const employedPure = Math.max(employed - absorb, 0);
+        const total = employedPure + absorb + unemployed + pending;
+        setEmployedCount(employedPure);
         setUnemployedCount(unemployed);
         setAbsorbedCount(absorb);
         setTotalAlumni(total);
         const denom = total > 0 ? total : 1;
-        setEmployedPct((employed / denom) * 100);
+        setEmployedPct((employedPure / denom) * 100);
         setUnemployedPct((unemployed / denom) * 100);
         setAbsorbedPct((absorb / denom) * 100);
       } catch (e) {
@@ -74,7 +87,9 @@ const Dashboard = () => {
     const loadCoordinatorReq = async () => {
       try {
         const res = await fetchCoordinatorRequestsCount();
-        setCoordinatorReqCount(Number(res?.count) || 0);
+        const c = Number(res?.count) || 0;
+        setCoordinatorReqCount(c);
+        try { localStorage.setItem('coordinatorReqCount', String(c)); } catch {}
       } catch (e) {
         console.error('Error fetching coordinator requests count:', e);
       }
@@ -92,17 +107,27 @@ const Dashboard = () => {
         const counts = data?.status_counts || data?.statusCounts || {};
         const employed = Number(counts.Employed) || 0;
         const unemployed = Number(counts.Unemployed) || 0;
-        const absorb = Number(counts.Absorb) || 0;
+        const absorb =
+          Number(counts.Absorb) ||
+          Number((counts as any).Absorbed) ||
+          Number((counts as any).Absorbed_Count) || 0;
         const pending = Number(counts.Pending) || 0;
-        const total = employed + unemployed + absorb + pending;
-        setEmployedCount(employed);
+        const employedPure = Math.max(employed - absorb, 0);
+        const total = employedPure + absorb + unemployed + pending;
+        // Store snapshot for delta calculation on next tick
+        const nextSnapshot = { employed: employedPure, absorb, unemployed, untracked: pending, requests: coordinatorReqCount };
+        setPrevSnapshot((prev) => prev ?? { employed: employedCount, absorb: absorbedCount, unemployed: unemployedCount, untracked: untrackedCount, requests: coordinatorReqCount });
+        setEmployedCount(employedPure);
         setUnemployedCount(unemployed);
         setAbsorbedCount(absorb);
         setTotalAlumni(total);
         const denom = total > 0 ? total : 1;
-        setEmployedPct((employed / denom) * 100);
+        setEmployedPct((employedPure / denom) * 100);
         setUnemployedPct((unemployed / denom) * 100);
         setAbsorbedPct((absorb / denom) * 100);
+        setLastUpdated(new Date());
+        // After state updates, set snapshot to current for next comparison
+        setTimeout(() => setPrevSnapshot(nextSnapshot), 0);
       } catch (e) {
         console.error('Error fetching alumni stats:', e);
       } finally {
@@ -111,7 +136,35 @@ const Dashboard = () => {
     };
 
     fetchStats();
-  }, []);
+    const id = setInterval(fetchStats, 60000);
+    return () => clearInterval(id);
+  }, [selectedYear, selectedProgram]);
+
+  // Update "updated ago" clock every second
+  useEffect(() => {
+    const tick = () => {
+      if (!lastUpdated) return setTimeAgo('');
+      const diff = Math.floor((Date.now() - lastUpdated.getTime()) / 1000);
+      if (diff < 0) return setTimeAgo('');
+      setTimeAgo(diff < 60 ? `${diff}s ago` : `${Math.floor(diff / 60)}m ago`);
+    };
+    const t = setInterval(tick, 1000);
+    tick();
+    return () => clearInterval(t);
+  }, [lastUpdated]);
+
+  // Small helper to render delta badge
+  const Delta = ({ current, prev, suffix }: { current: number; prev?: number; suffix?: string }) => {
+    if (prev === undefined || prev === null) return null as any;
+    const diff = current - prev;
+    if (diff === 0) return null as any;
+    const up = diff > 0;
+    const color = up ? '#16a34a' : '#dc2626';
+    const arrow = up ? '▲' : '▼';
+    return (
+      <div style={{ fontSize: 12, color, marginTop: 4 }}>{arrow} {Math.abs(diff)}{suffix || ''}</div>
+    ) as any;
+  };
 
   const handleUntrackedClick = () => {
     navigate('/tracker/settings');
@@ -227,6 +280,109 @@ const Dashboard = () => {
     gap: '24px',
   };
 
+  // Unified color mapping across widgets
+  const COLORS = {
+    employed: '#7c8cff',
+    absorb: '#9db5ff',
+    unemployed: '#9de1a5',
+  } as const;
+
+  // Quick filters removed from toolbar
+
+  // Verse of the Day: fetch from APIs with daily cache and graceful fallback
+  const BIBLE_VERSES = [
+    { ref: 'Psalm 23:1', text: 'The Lord is my shepherd; I shall not want.' },
+    { ref: 'Philippians 4:13', text: 'I can do all things through Christ who strengthens me.' },
+    { ref: 'Jeremiah 29:11', text: 'For I know the plans I have for you, declares the Lord...' },
+    { ref: 'Proverbs 3:5-6', text: 'Trust in the Lord with all your heart and lean not on your own understanding.' },
+    { ref: 'Isaiah 41:10', text: 'Fear not, for I am with you; be not dismayed, for I am your God.' },
+    { ref: 'Matthew 11:28', text: 'Come to me, all who labor and are heavy laden, and I will give you rest.' },
+    { ref: 'Romans 8:28', text: 'And we know that in all things God works for the good of those who love him.' },
+    { ref: 'Joshua 1:9', text: 'Be strong and courageous... for the Lord your God is with you wherever you go.' },
+    { ref: 'Psalm 46:1', text: 'God is our refuge and strength, a very present help in trouble.' },
+    { ref: 'John 14:27', text: 'Peace I leave with you; my peace I give to you.' },
+    { ref: 'Lamentations 3:22-23', text: 'His mercies never come to an end; they are new every morning.' },
+    { ref: 'Psalm 121:1-2', text: 'I lift up my eyes to the hills—from where does my help come?' }
+  ];
+  const todayKey = `${new Date().getFullYear()}-${new Date().getMonth()}-${new Date().getDate()}`;
+  const [verse, setVerse] = useState<{ text: string; ref: string; source?: string } | null>(null);
+  const [verseLoading, setVerseLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const seededFallback = () => {
+      const idx = Math.abs(Array.from(todayKey).reduce((a, c) => a + c.charCodeAt(0), 0)) % BIBLE_VERSES.length;
+      return BIBLE_VERSES[idx];
+    };
+
+    const fetchWithTimeout = async (url: string, timeoutMs = 6000) => {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        return res;
+      } finally {
+        clearTimeout(id);
+      }
+    };
+
+    const loadVerse = async () => {
+      setVerseLoading(true);
+      try {
+        const cached = localStorage.getItem(`votd::${todayKey}`);
+        if (cached) {
+          setVerse(JSON.parse(cached));
+          setVerseLoading(false);
+          return;
+        }
+
+        // 1) OurManna random verse
+        try {
+          const res = await fetchWithTimeout('https://beta.ourmanna.com/api/v1/get/?format=json&order=random');
+          if (res.ok) {
+            const data = await res.json();
+            const text = data?.verse?.details?.text?.trim();
+            const ref = data?.verse?.details?.reference?.trim();
+            if (text && ref) {
+              const payload = { text, ref, source: 'ourmanna' };
+              setVerse(payload);
+              try { localStorage.setItem(`votd::${todayKey}`, JSON.stringify(payload)); } catch {}
+              setVerseLoading(false);
+              return;
+            }
+          }
+        } catch {}
+
+        // 2) labs.bible.org random verse
+        try {
+          const res2 = await fetchWithTimeout('https://labs.bible.org/api/?passage=random&type=json');
+          if (res2.ok) {
+            const arr = await res2.json();
+            const v = Array.isArray(arr) && arr[0] ? arr[0] : null;
+            const text = v?.text?.trim();
+            const ref = v ? `${v.bookname} ${v.chapter}:${v.verse}` : '';
+            if (text && ref) {
+              const payload = { text, ref, source: 'labs.bible' };
+              setVerse(payload);
+              try { localStorage.setItem(`votd::${todayKey}`, JSON.stringify(payload)); } catch {}
+              setVerseLoading(false);
+              return;
+            }
+          }
+        } catch {}
+
+        // 3) Seeded local fallback
+        const fb = seededFallback();
+        const payload = { text: fb.text, ref: fb.ref, source: 'local' };
+        setVerse(payload);
+        try { localStorage.setItem(`votd::${todayKey}`, JSON.stringify(payload)); } catch {}
+      } finally {
+        setVerseLoading(false);
+      }
+    };
+
+    loadVerse();
+  }, [todayKey]);
+
   const pieChartStyle: React.CSSProperties = {
     flex: 1,
     backgroundColor: '#ffffff',
@@ -249,10 +405,10 @@ const Dashboard = () => {
     <div style={layoutStyle}>
       <Sidebar />
       <div style={contentStyle} data-dashboard-content>
-        {/* Left column: Banner on top, cards below | Right column: Calendar spanning both rows */}
+        {/* Left column: Banner on top, quick filters + actions, cards below | Right column: Calendar spanning both rows */}
         <div style={topGridStyle}>
           {/* Left column container */}
-          <div style={{ display: 'grid', gridTemplateRows: 'auto 1fr', gap: 16, gridColumn: 1 }}>
+          <div style={{ display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: 16, gridColumn: 1 }}>
             {/* Banner (left only) */}
             <div style={bannerStyle}>
               <div style={bannerLeftStyle}>
@@ -260,10 +416,17 @@ const Dashboard = () => {
                 <div style={{ fontSize: 12, color: '#2b6cb0' }}>Welcome, Admin</div>
               </div>
               <div style={todoTitleStyle}>To Do's</div>
-              <div style={{ width: 160 }} />
+              <div style={{ fontSize: 12, color: '#0b2a55' }}>{lastUpdated ? `Updated ${timeAgo}` : 'Loading…'}</div>
             </div>
 
-            {/* Cards under banner */}
+            {/* Quick Actions (filters and extra buttons removed) */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {/* Keep only the Generate Statistics entry point via the card below */}
+              </div>
+            </div>
+
+            {/* Cards under banner with skeleton support */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
               <div
                 style={untrackedCardStyle}
@@ -278,7 +441,9 @@ const Dashboard = () => {
                 }}
               >
                 <div style={{ fontSize: 16, opacity: 0.9 }}>Untracked</div>
-                <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>{loading ? '…' : `${untrackedCount}/${totalAlumni}`}</div>
+                <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>
+                  {loading ? <div style={{ height: 28, borderRadius: 8, background: '#e5e7eb', width: 80, margin: '0 auto' }} /> : `${untrackedCount}/${totalAlumni}`}
+                </div>
               </div>
 
               <div
@@ -294,7 +459,9 @@ const Dashboard = () => {
                 }}
               >
                 <div style={{ fontSize: 16, opacity: 0.9 }}>OJT Submissions</div>
-                <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>{coordinatorReqCount}</div>
+                <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>
+                  {statsLoading ? <div style={{ height: 28, borderRadius: 8, background: '#e5e7eb', width: 40, margin: '0 auto' }} /> : coordinatorReqCount}
+                </div>
               </div>
 
               <div
@@ -303,13 +470,20 @@ const Dashboard = () => {
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-2px)';
                   e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                  const arrow = e.currentTarget.querySelector('[data-arrow]') as HTMLElement | null;
+                  if (arrow) arrow.style.transform = 'translateX(4px)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = 'translateY(0)';
                   e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                  const arrow = e.currentTarget.querySelector('[data-arrow]') as HTMLElement | null;
+                  if (arrow) arrow.style.transform = 'translateX(0)';
                 }}
               >
-                <div style={{ fontSize: 18, fontWeight: 700 }}>Generate Statistics</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 18, fontWeight: 700 }}>
+                  <span>Generate Statistics</span>
+                  <span data-arrow aria-hidden="true" style={{ display: 'inline-block', transition: 'transform 0.2s ease' }}>→</span>
+                </div>
               </div>
             </div>
           </div>
@@ -387,8 +561,9 @@ const Dashboard = () => {
                        a 15.9155 15.9155 0 0 1 0 31.831
                        a 15.9155 15.9155 0 0 1 0 -31.831"
                     fill="none"
-                    stroke="#7c8cff"
+                    stroke={COLORS.employed}
                     strokeWidth="3.8"
+                    style={{ transition: 'stroke-dasharray 0.6s ease' }}
                     strokeDasharray={`${Math.round(employedPct)}, 100`}
                   />
                   {/* absorbed sits after employed */}
@@ -397,8 +572,9 @@ const Dashboard = () => {
                        a 15.9155 15.9155 0 0 1 0 31.831
                        a 15.9155 15.9155 0 0 1 0 -31.831"
                     fill="none"
-                    stroke="#9db5ff"
+                    stroke={COLORS.absorb}
                     strokeWidth="3.8"
+                    style={{ transition: 'stroke-dasharray 0.6s ease' }}
                     strokeDasharray={`${Math.round(absorbedPct)}, 100`}
                     strokeDashoffset={-Math.round(employedPct)}
                   />
@@ -408,8 +584,9 @@ const Dashboard = () => {
                        a 15.9155 15.9155 0 0 1 0 31.831
                        a 15.9155 15.9155 0 0 1 0 -31.831"
                     fill="none"
-                    stroke="#9de1a5"
+                    stroke={COLORS.unemployed}
                     strokeWidth="3.8"
+                    style={{ transition: 'stroke-dasharray 0.6s ease' }}
                     strokeDasharray={`${Math.round(unemployedPct)}, 100`}
                     strokeDashoffset={-(Math.round(employedPct + absorbedPct))}
                   />
@@ -422,42 +599,74 @@ const Dashboard = () => {
               </div>
             </div>
             {/* Legend */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 12, fontSize: 12, color: '#374151' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: '#7c8cff', borderRadius: 2 }}></span>Employed ({Math.round(employedPct)}%)</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: '#9db5ff', borderRadius: 2 }}></span>Absorb ({Math.round(absorbedPct)}%)</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: '#9de1a5', borderRadius: 2 }}></span>Unemployed ({Math.round(unemployedPct)}%)</div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 12, fontSize: 12, color: '#374151' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: COLORS.employed, borderRadius: 2 }}></span>Employed ({Math.round(employedPct)}%)</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: COLORS.absorb, borderRadius: 2 }}></span>Absorbed ({Math.round(absorbedPct)}%)</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: COLORS.unemployed, borderRadius: 2 }}></span>Unemployed ({Math.round(unemployedPct)}%)</div>
+            </div>
+
+            {/* Verse of the Day (moved below the pie chart) */}
+            <div style={{ marginTop: 16, background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb' }}>
+              <div style={{ color: '#0b2a55', fontWeight: 700, marginBottom: 6 }}>Verse of the Day</div>
+              <div style={{ color: '#374151', fontSize: 13, lineHeight: 1.5 }}>{verseLoading ? 'Loading…' : (verse?.text || '')}</div>
+              <div style={{ color: '#1c4e80', fontSize: 12, marginTop: 6, fontWeight: 600 }}>{verseLoading ? '' : (verse?.ref || '')}</div>
             </div>
           </div>
 
-          {/* Right Side: Small stats cards mimicking legend */}
+          {/* Right Side: Small stats cards + Insights */}
           <div style={barChartStyle}>
             <h3 style={{ margin: '0 0 16px 0', color: '#374151' }}>Statistics Overview</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb' }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb', cursor: 'pointer', transition: 'background 0.2s ease' }}
+                onClick={() => navigate('/statistics')}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#eef2ff'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#f8fafc'; }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#7c8cff' }} />
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: COLORS.employed }} />
                   <div style={{ color: '#374151', fontWeight: 600 }}>Employed</div>
                 </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                 <div style={{ color: '#374151', fontSize: 12 }}>{statsLoading ? '…' : `${employedCount} (${Math.round(employedPct)}%)`}</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#9db5ff' }} />
-                  <div style={{ color: '#374151', fontWeight: 600 }}>Absorb</div>
+                  {prevSnapshot && (<Delta current={employedCount} prev={prevSnapshot.employed} />)}
                 </div>
-                <div style={{ color: '#374151', fontSize: 12 }}>{statsLoading ? '…' : `${absorbedCount} (${Math.round(absorbedPct)}%)`}</div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb' }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb', cursor: 'pointer', transition: 'background 0.2s ease' }}
+                onClick={() => navigate('/statistics')}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#eef2ff'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#f8fafc'; }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#9de1a5' }} />
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: COLORS.absorb }} />
+                  <div style={{ color: '#374151', fontWeight: 600 }}>Absorbed</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <div style={{ color: '#374151', fontSize: 12 }}>{statsLoading ? '…' : `${absorbedCount} (${Math.round(absorbedPct)}%)`}</div>
+                  {prevSnapshot && (<Delta current={absorbedCount} prev={prevSnapshot.absorb} />)}
+                </div>
+              </div>
+              <div
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb', cursor: 'pointer', transition: 'background 0.2s ease' }}
+                onClick={() => navigate('/statistics')}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#eef2ff'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#f8fafc'; }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: COLORS.unemployed }} />
                   <div style={{ color: '#374151', fontWeight: 600 }}>Unemployed</div>
                 </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                 <div style={{ color: '#374151', fontSize: 12 }}>{statsLoading ? '…' : `${unemployedCount} (${Math.round(unemployedPct)}%)`}</div>
+                  {prevSnapshot && (<Delta current={unemployedCount} prev={prevSnapshot.unemployed} />)}
+                </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb' }}>
                 <div style={{ color: '#374151', fontWeight: 700 }}>Total Alumni</div>
                 <div style={{ color: '#374151', fontSize: 12 }}>{statsLoading ? '…' : totalAlumni}</div>
               </div>
+              {/* Insights removed; verse displayed under pie chart */}
             </div>
           </div>
         </div>

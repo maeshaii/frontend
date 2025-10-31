@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { loginUser, fetchAlumniDetails } from '../../../services/api';
 import PasswordVisibilityIcon from '../../../components/PasswordVisibilityIcon';
 import './Login.css';
+import '../authAnimations.css';
 const background = require('../../../images/ctu.jpg');
 const alumniLogo = require('../../../images/ctu alumni logo.jpg');
 const ccictLogo = require('../../../images/ccict.png');
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [acc_username, setUsername] = useState('');
   const [acc_password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -33,7 +35,7 @@ const Login = () => {
         localStorage.setItem('user', JSON.stringify(data.user));
         if (data.must_change_password) {
           // Redirect to change password screen for first-time login
-          navigate('/first-login-change-password', { state: { acc_username } });
+          navigate('/first-login-change-password', { state: { acc_username, animate: 'right', animateHero: 'right' } });
           return;
         }
         if (data.user && data.user.account_type) {
@@ -74,7 +76,10 @@ const Login = () => {
 
   return (
     <div style={styles.container} className="login-container">
-      <div style={styles.leftSection} className="login-left-section">
+      <div 
+        style={styles.leftSection} 
+        className={`login-left-section ${location.state?.animateHero === 'right' ? 'slide-in-right' : location.state?.animateHero === 'left' ? 'slide-in-left' : ''}`}
+      >
         <div style={styles.backgroundOverlay}></div>
         <img src={background} alt="CTU Administration Building" style={styles.backgroundImage} className="login-background-image" />
         <div style={styles.leftContent}>
@@ -102,7 +107,10 @@ const Login = () => {
         </div>
       </div>
       <div style={styles.rightSection} className="login-right-section">
-        <div style={styles.formContainer} className="login-form-container">
+        <div 
+          style={styles.formContainer} 
+          className={`login-form-container ${location.state?.animate === 'right' ? 'slide-in-right' : location.state?.animate === 'left' ? 'slide-in-left' : ''}`}
+        >
           <div style={styles.welcomeSection}>
             <h2 style={styles.h2}>Welcome</h2>
             <h1 style={styles.h1} className="login-main-title">Technologist</h1>
@@ -178,7 +186,7 @@ const Login = () => {
             <div style={styles.forgotPasswordContainer}>
               <button 
                 type="button" 
-                onClick={() => navigate('/forgot-password')}
+                onClick={() => navigate('/forgot-password', { state: { animate: 'left', animateHero: 'right' } })}
                 style={styles.forgotPasswordLink}
                 className="login-forgot-password"
               >

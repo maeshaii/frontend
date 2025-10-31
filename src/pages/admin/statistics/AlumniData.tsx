@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
 import {
@@ -15,6 +15,7 @@ const AlumniData: React.FC = () => {
 
   const [selectedProgram, setSelectedProgram] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [alumniList, setAlumniList] = useState<any[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalAlumni, setModalAlumni] = useState<any | null>(null);
@@ -88,16 +89,37 @@ const AlumniData: React.FC = () => {
     loadAlumni();
   }, [year]);
 
+  // Keyboard shortcuts: '/' focuses search, Esc closes modal
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }
+      if (e.key === 'Escape' && modalOpen) {
+        setModalOpen(false);
+        setModalAlumni(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [modalOpen]);
+
+  // Debounce search for smoother typing
+  const debouncedSearchTerm = useMemo(() => searchTerm, [searchTerm]);
+
   // Enhanced filtering and sorting
   const filteredAlumni = alumniList.filter((alumni) => {
     const matchProgram = selectedProgram === 'All' || 
       alumni.program === selectedProgram ||
       (alumni.program && alumni.program.toLowerCase() === selectedProgram.toLowerCase());
     const matchSearch = 
-      (alumni.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (alumni.f_name || alumni.First_Name || alumni.first_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (alumni.l_name || alumni.Last_Name || alumni.last_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (alumni.m_name || alumni.Middle_Name || alumni.middle_name || '').toLowerCase().includes(searchTerm.toLowerCase());
+      (alumni.name || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      (alumni.f_name || alumni.First_Name || alumni.first_name || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      (alumni.l_name || alumni.Last_Name || alumni.last_name || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      (alumni.m_name || alumni.Middle_Name || alumni.middle_name || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase());
     return matchProgram && matchSearch;
   });
 
@@ -263,7 +285,7 @@ const AlumniData: React.FC = () => {
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
       <Sidebar />
 
-      <div className="admin-content-page" style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f8fafc' }}>
+      <div className="admin-content-page" style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f8fafc', marginLeft: 'var(--sidebar-width, 220px)', transition: 'margin-left 0.3s ease' }}>
         {/* Enhanced Header */}
         <div style={styles.header}>
           <div style={styles.headerContent}>
@@ -292,6 +314,7 @@ const AlumniData: React.FC = () => {
                 placeholder="Search alumni by name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                ref={searchInputRef}
                 style={styles.searchInput}
               />
             </div>
@@ -304,9 +327,9 @@ const AlumniData: React.FC = () => {
                 style={styles.courseSelect}
               >
                 <option value="All">All Programs</option>
-                <option value="BSIT">BSIT</option>
-                <option value="BSIS">BSIS</option>
-                <option value="BIT-CT">BIT-CT</option>
+                {Array.from(new Set(alumniList.map((a) => a.program || a.Program_Name || a.course).filter(Boolean))).map((p: any) => (
+                  <option key={String(p)} value={String(p)}>{String(p)}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -324,7 +347,7 @@ const AlumniData: React.FC = () => {
               <div style={styles.tableWrapper}>
                 <table style={styles.table}>
                   <thead>
-                    <tr style={styles.tableHeader}>
+                    <tr style={{...styles.tableHeader, position: 'sticky', top: 0, zIndex: 2}}>
                       <th style={styles.sortableHeader} onClick={() => handleSort('program')}>
                         <div style={styles.headerContent}>
                           <FaGraduationCap style={styles.headerIcon} />
@@ -388,7 +411,10 @@ const AlumniData: React.FC = () => {
                       currentAlumni.map((alumni, index) => (
                         <tr
                           key={index}
-                          style={styles.tableRow}
+                          style={{
+                            ...styles.tableRow,
+                            backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafbff'
+                          }}
                           onClick={() => openModal(alumni)}
                         >
                           <td style={styles.tableCell}>
@@ -641,7 +667,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     transition: 'all 0.2s ease',
     position: 'absolute',
-    left: '-64px',
+    left: '0',
+    zIndex: 1,
     fontSize: '24px',
   },
   titleSection: {

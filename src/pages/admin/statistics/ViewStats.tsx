@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
 import GenerateStatsModal from '../../../components/GenerateStatsModal';
 import { fetchAlumniStatistics } from '../../../services/api';
-import { FaChartBar, FaDownload, FaUpload, FaGraduationCap, FaUsers, FaCalendarAlt, FaFilter, FaCog, FaArrowLeft } from 'react-icons/fa';
+import { FaChartBar, FaUpload, FaGraduationCap, FaUsers, FaCalendarAlt, FaFilter, FaCog, FaArrowLeft } from 'react-icons/fa';
 
 const ViewStats: React.FC = () => {
   const navigate = useNavigate();
@@ -14,6 +14,7 @@ const ViewStats: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [selectedBatchYear, setSelectedBatchYear] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     const loadStats = async () => {
@@ -100,31 +101,55 @@ const ViewStats: React.FC = () => {
     } catch { alert('Import failed!'); }
   };
 
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
+      setImportFile(file);
+    } else {
+      alert('Please drop an Excel file (.xlsx or .xls).');
+    }
+  };
+
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleTemplateDownload = async () => {
+    try {
+      const resp = await fetch('http://localhost:8000/api/import-alumni/template/');
+      if (!resp.ok) throw new Error('Failed');
+      const blob = await resp.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'alumni_import_template.xlsx';
+      document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+    } catch {
+      alert('Template download is not configured on the server.');
+    }
+  };
+
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
       <Sidebar />
       
-      <div className="admin-content-page" style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f8fafc' }}>
-        {/* Enhanced Header */}
-        <div style={styles.header}>
-          <div style={styles.headerContent}>
-            <button onClick={() => navigate(-1)} style={styles.backButton}>
-              <FaArrowLeft style={{ marginRight: '8px' }} />
-              
-            </button>
-            
-            <div style={styles.titleSection}>
-              <h1 style={styles.title}>
-                <FaChartBar style={{ marginRight: '12px', color: 'white' }} />
-                View Users
-              </h1>
-            </div>
-
+      <div className="admin-content-page" style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f8fafc', marginLeft: 'var(--sidebar-width, 220px)', transition: 'margin-left 0.3s ease' }}>
+        {/* Slim toolbar (no heavy header) */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '36px 48px 12px 48px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#0b2a55' }}>Alumni Users</div>
           </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div style={styles.actionButtonsContainer}>
+          <div style={{ display: 'flex', gap: 12 }}>
           <button style={styles.actionButton} onClick={() => setShowExportModal(true)}>
             <FaUpload style={{ marginRight: '8px', color: 'white' }} />
             Import/Export
@@ -133,7 +158,10 @@ const ViewStats: React.FC = () => {
             <FaCog style={{ marginRight: '8px', color: 'white' }} />
             Generate Statistics
           </button>
+          </div>
         </div>
+
+        {/* Overview removed per request */}
 
         {/* Alumni Cards Grid */}
         <div style={styles.cardsContainer}>
@@ -171,12 +199,12 @@ const ViewStats: React.FC = () => {
                   onClick={() => handleCardClick(grad.year)}
                   style={styles.yearCard}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-4px)';
-                    e.currentTarget.style.boxShadow = '0 12px 24px rgba(0, 0, 0, 0.15)';
+                    e.currentTarget.style.transform = 'translateY(-6px)';
+                    e.currentTarget.style.boxShadow = '0 18px 28px rgba(16, 24, 40, 0.16)';
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                    e.currentTarget.style.boxShadow = '0 8px 16px rgba(16, 24, 40, 0.10)';
                   }}
                 >
                   <div style={styles.cardHeader}>
@@ -194,7 +222,8 @@ const ViewStats: React.FC = () => {
                       </div>
                     </div>
                     <div style={styles.cardFooter}>
-                      
+                      <span style={styles.viewText}>Open details</span>
+                      <span style={{ marginLeft: 8, transition: 'transform .2s ease' }}>→</span>
                     </div>
                   </div>
                 </div>
@@ -208,58 +237,71 @@ const ViewStats: React.FC = () => {
 
         {showExportModal && (
           <div style={styles.modalOverlay}>
-            <div style={styles.modalContent}>
+            <div style={{ ...styles.modalContent, maxWidth: 640, paddingBottom: 8 }}>
               <div style={styles.modalHeader}>
-                <h2 style={styles.modalTitle}>
-                  <FaDownload style={{ marginRight: '12px', color: '#6C63FF' }} />
-                  Import & Export Alumni Data
-                </h2>
-                <button onClick={() => setShowExportModal(false)} style={styles.modalCloseButton}>
-                  ×
-                </button>
+                <h2 style={styles.modalTitle}>Import Alumni Data</h2>
+                <button onClick={() => setShowExportModal(false)} style={styles.modalCloseButton}>×</button>
               </div>
-              
+
               <div style={styles.modalBody}>
+                {/* Upload */}
+                <div
+                  style={{
+                    border: '2px dashed #d1d5db',
+                    borderRadius: 12,
+                    padding: 28,
+                    textAlign: 'center',
+                    background: isDragging ? '#f8fafc' : 'white',
+                    transition: 'background 0.15s ease',
+                    marginBottom: 16,
+                  }}
+                  onDrop={onDrop}
+                  onDragOver={onDragOver}
+                  onDragLeave={onDragLeave}
+                >
+                  <input
+                    id="alumni-import-file"
+                    type="file"
+                    accept=".xlsx,.xls"
+                    style={{ display: 'none' }}
+                    onChange={(e) => setImportFile(e.target.files ? e.target.files[0] : null)}
+                  />
+                  <label htmlFor="alumni-import-file" style={{ cursor: 'pointer', display: 'inline-block' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', marginBottom: 6 }}>
+                      {importFile ? importFile.name : 'Choose Excel File'}
+                    </div>
+                    <div style={{ color: '#6b7280' }}>Click to browse or drag and drop</div>
+                    <div style={{ color: '#9ca3af', marginTop: 6, fontSize: 13 }}>Supports .xlsx and .xls files</div>
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                  <button style={styles.importButton} onClick={handleExportedImport}>Import Alumni</button>
+                </div>
+
+                <div style={{ height: 1, background: '#e5e7eb', margin: '20px 0' }} />
+
+                {/* Export section */}
                 <div style={styles.modalSection}>
-                  <h3 style={styles.sectionTitle}>Export Data</h3>
-                  <p style={styles.sectionDescription}>Download alumni data for a specific batch year</p>
+                  <h3 style={styles.sectionTitle}>Export Alumni Data</h3>
+                  <p style={styles.sectionDescription}>Download alumni data for a specific batch year.</p>
                   <div style={styles.inputGroup}>
                     <label style={styles.inputLabel}>Select Batch Year</label>
-                    <select 
-                      style={styles.selectInput} 
-                      value={selectedBatchYear} 
-                      onChange={e => setSelectedBatchYear(e.target.value)}
+                    <select
+                      style={styles.selectInput}
+                      value={selectedBatchYear}
+                      onChange={(e) => setSelectedBatchYear(e.target.value)}
                     >
                       <option value="">Choose a graduation year...</option>
-                      {years.map(y => (
+                      {years.map((y) => (
                         <option key={y.year} value={y.year}>Class of {y.year} ({y.count} alumni)</option>
                       ))}
                     </select>
                   </div>
-                  <button style={styles.exportButton} onClick={handleExport}>
-                    <FaDownload style={{ marginRight: '8px' }} />
-                    Export to Excel
-                  </button>
-                </div>
-
-                <div style={styles.modalDivider}></div>
-
-                <div style={styles.modalSection}>
-                  <h3 style={styles.sectionTitle}>Import Data</h3>
-                  <p style={styles.sectionDescription}>Upload Excel file to import alumni data</p>
-                  <div style={styles.inputGroup}>
-                    <label style={styles.inputLabel}>Select Excel File</label>
-                    <input 
-                      type="file" 
-                      accept=".xlsx,.xls" 
-                      style={styles.fileInput}
-                      onChange={e => setImportFile(e.target.files ? e.target.files[0] : null)} 
-                    />
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button style={{ ...styles.importButton, background: '#e5e7eb', color: '#111827' }} onClick={() => setShowExportModal(false)}>Cancel</button>
+                    <button style={{ ...styles.importButton }} onClick={handleExport}>Export to Excel</button>
                   </div>
-                  <button style={styles.importButton} onClick={handleExportedImport}>
-                    <FaUpload style={{ marginRight: '8px' }} />
-                    Import Data
-                  </button>
                 </div>
               </div>
             </div>
@@ -271,59 +313,7 @@ const ViewStats: React.FC = () => {
 };
 
 const styles: { [key: string]: React.CSSProperties } = {
-  // Header styles
-  header: {
-    background: '#1c4e80',
-    color: 'white',
-    padding: '24px 32px 24px 0px',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-  },
-  headerContent: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    maxWidth: '1200px',
-    margin: '0 auto',
-    position: 'relative',
-  },
-  backButton: {
-    background: 'transparent',
-    border: 'none',
-    color: 'white',
-    padding: '0',
-    cursor: 'pointer',
-    fontWeight: '600',
-    display: 'flex',
-    alignItems: 'center',
-    transition: 'all 0.2s ease',
-    position: 'absolute',
-    left: '-64px',
-    fontSize: '24px',
-  },
-  titleSection: {
-    textAlign: 'center',
-    flex: 1,
-  },
-  title: {
-    margin: '0',
-    fontSize: '28px',
-    fontWeight: '700',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  subtitle: {
-    margin: '8px 0 0 0',
-    fontSize: '16px',
-    opacity: 0.9,
-  },
-  actionButtonsContainer: {
-    display: 'flex',
-    gap: '12px',
-    justifyContent: 'flex-end',
-    padding: '16px 32px',
-    backgroundColor: 'transparent',
-  },
+  // Deprecated header styles removed
   headerActions: {
     display: 'flex',
     gap: '12px',
@@ -404,7 +394,7 @@ const styles: { [key: string]: React.CSSProperties } = {
 
   // Cards container
   cardsContainer: {
-    padding: '32px 32px 32px 32px',
+    padding: '8px 32px 32px 32px',
     display: 'flex',
     justifyContent: 'flex-start',
   },
@@ -428,8 +418,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   cardsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '24px',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+    gap: '20px',
     maxWidth: '1200px',
     margin: '0',
   },
@@ -439,15 +429,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: 'white',
     borderRadius: '16px',
     overflow: 'hidden',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+    boxShadow: '0 8px 16px rgba(16, 24, 40, 0.10)',
     cursor: 'pointer',
-    transition: 'all 0.3s ease',
+    transition: 'all 0.2s ease',
     border: '1px solid #e5e7eb',
   },
   cardHeader: {
-    background: '#1C4E80',
+    background: 'linear-gradient(90deg, #1C4E80 0%, #275f9b 100%)',
     color: 'white',
-    padding: '20px',
+    padding: '18px',
     display: 'flex',
     alignItems: 'center',
     gap: '16px',
@@ -457,20 +447,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '48px',
-    height: '48px',
-    background: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: '12px',
+    width: '42px',
+    height: '42px',
+    background: 'rgba(255, 255, 255, 0.18)',
+    borderRadius: '10px',
   },
   cardYear: {
     fontSize: '16px',
     fontWeight: '600',
   },
   cardContent: {
-    padding: '20px',
+    padding: '16px',
   },
   cardStats: {
-    marginBottom: '16px',
+    marginBottom: '8px',
   },
   statItem: {
     display: 'flex',
@@ -478,25 +468,28 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '8px',
   },
   statIcon: {
-    fontSize: '16px',
+    fontSize: '14px',
     color: '#6b7280',
   },
   statNumber: {
-    fontSize: '18px',
+    fontSize: '16px',
     fontWeight: '700',
     color: '#1f2937',
   },
   statLabel: {
-    fontSize: '14px',
+    fontSize: '12px',
     color: '#6b7280',
   },
   cardFooter: {
-    textAlign: 'center',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    color: '#1c4e80',
   },
   viewText: {
     fontSize: '12px',
-    color: '#4A47E0',
-    fontWeight: '600',
+    color: '#1c4e80',
+    fontWeight: '700',
   },
 
   // Loading and empty states
@@ -666,9 +659,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
   },
   exportButton: {
-    background: '#4A47E0',
+    background: '#1C4E80',
+    border: '2px solid #1C4E80',
     color: 'white',
-    border: 'none',
     padding: '12px 20px',
     borderRadius: '8px',
     cursor: 'pointer',
@@ -678,9 +671,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
   },
   importButton: {
-    background: '#6C63FF',
+    background: '#1C4E80',
+    border: '2px solid #1C4E80',
     color: 'white',
-    border: 'none',
     padding: '12px 20px',
     borderRadius: '8px',
     cursor: 'pointer',
