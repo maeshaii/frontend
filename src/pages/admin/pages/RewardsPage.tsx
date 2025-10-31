@@ -1372,4 +1372,3 @@ const RewardsPage: React.FC = () => {
 
 export default RewardsPage;
 
-

@@ -13,6 +13,7 @@ import {
   FaStar, 
   FaSignOutAlt
 } from 'react-icons/fa';
+import { MdSettingsSuggest } from 'react-icons/md';
 import logoLogin from '../../../images/logo_login.png';
 import ConfirmModal from '../../../components/ConfirmModal';
 import './sidebar.css';
@@ -35,6 +36,21 @@ const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(initialSmall ? true : (!initialDesktop ? true : false)); 
   const [isMobileSmall, setIsMobileSmall] = useState(initialSmall); // off-canvas mode
   const [isDesktopExpanded, setIsDesktopExpanded] = useState(initialDesktop);
+  const [pendingRequests, setPendingRequests] = useState<number>(() => {
+    try { return Number(localStorage.getItem('coordinatorReqCount')) || 0; } catch { return 0; }
+  });
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'coordinatorReqCount') {
+        setPendingRequests(Number(e.newValue) || 0);
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    // Initialize once
+    try { setPendingRequests(Number(localStorage.getItem('coordinatorReqCount')) || 0); } catch {}
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
   // On small screens, start CLOSED (hamburger state)
   const [mobileOpen, setMobileOpen] = useState(initialSmall ? false : false);
   // Use ref to persist mobileOpen state across route changes
@@ -260,6 +276,27 @@ const Sidebar = () => {
       justifyContent: (isCollapsed && !isMobileSmall) ? 'center' : 'flex-start',
       position: 'relative' as const,
     },
+    requestsBadge: {
+      position: 'absolute' as const,
+      right: 12,
+      top: 10,
+      background: '#ef4444',
+      color: 'white',
+      borderRadius: 9999,
+      fontSize: 10,
+      padding: '2px 6px',
+      display: (isMobileSmall || isCollapsed) ? 'none' : 'inline-block',
+    },
+    requestsDot: {
+      position: 'absolute' as const,
+      right: 18,
+      top: 14,
+      width: 8,
+      height: 8,
+      background: '#ef4444',
+      borderRadius: '50%',
+      display: (isMobileSmall || isCollapsed) ? 'inline-block' : 'none',
+    },
   };
 
   const getIcon = (path: string) => {
@@ -268,7 +305,8 @@ const Sidebar = () => {
     switch (basePath) {
       case '/dashboard': return <FaChartLine style={styles.icon} />;
       case '/statistics': return <FaChartBar style={styles.icon} />;
-      case '/users': return <FaUsers style={styles.icon} />;
+      case '/users':
+      case '/ViewStats': return <FaUsers style={styles.icon} />;
       case '/user-management': return <FaCog style={styles.icon} />;
       case '/ccict/profile':
       case '/ccict/dashboard': return <FaUser style={styles.icon} />;
@@ -276,6 +314,7 @@ const Sidebar = () => {
       case '/tracker/questions': return <FaClipboard style={styles.icon} />;
       case '/requests': return <FaEnvelope style={styles.icon} />;
       case '/rewards': return <FaStar style={styles.icon} />;
+      case '/report-settings': return <MdSettingsSuggest style={styles.icon} />;
       default: return null;
     }
   };
@@ -300,13 +339,14 @@ const Sidebar = () => {
 
   const links = [
     { to: '/dashboard', label: 'Dashboard' },
-    { to: '/statistics', label: 'Statistics', childRoutes: ['/ViewStats'] },
-    { to: '/users', label: 'Users' },
+    { to: '/statistics', label: 'Statistics' },
+    { to: '/ViewStats', label: 'Alumni Users', childRoutes: ['/AlumniData'] },
     { to: '/user-management', label: 'User Management' },
     { to: profileLink, label: 'Profile' },
     { to: '/tracker/questions', label: 'Tracker' },
     { to: '/requests', label: 'Requests' },
     { to: '/rewards', label: 'Rewards' },
+    { to: '/report-settings', label: 'Report Settings' },
   ];
 
   // Check if a link is active (either exact match or starts with, or is a child route)
@@ -388,6 +428,7 @@ const Sidebar = () => {
           <ul style={styles.navList}>
             {links.map((link) => {
               const active = isActive(link);
+              const isRequests = link.to === '/requests';
               return (
               <li key={link.to}>
                 <Link
@@ -425,6 +466,12 @@ const Sidebar = () => {
                   {/* Only show inline text when expanded (desktop). Never show on small screens. */}
                   {!isCollapsed && !isMobileSmall && (
                     <span style={styles.navItemText}>{link.label}</span>
+                  )}
+                  {isRequests && pendingRequests > 0 && (
+                    <>
+                      <span style={styles.requestsBadge}>{pendingRequests}</span>
+                      <span style={styles.requestsDot} />
+                    </>
                   )}
                 </Link>
               </li>

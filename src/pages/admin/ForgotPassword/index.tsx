@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '../../../services/api';
 import './ForgotPassword.css';
+import '../authAnimations.css';
 
 const background = require('../../../images/ctu.jpg');
-const logo = require('../../../images/ctulogo.png');
+const ccictLogo = require('../../../images/ccict.png');
+const alumniLogo = require('../../../images/ctu alumni logo.jpg');
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState({
     ctu_id: '',
     email: '',
@@ -64,20 +67,15 @@ const ForgotPassword = () => {
 
   return (
     <div style={styles.container} className="forgot-password-container">
-      <div style={styles.leftSection} className="forgot-password-left-section">
-        <div style={styles.backgroundOverlay}></div>
-        <img src={background} alt="CTU Administration Building" style={styles.backgroundImage} className="forgot-password-background-image" />
-        <div style={styles.leftContent}>
-          <img src={logo} alt="CTU Logo" style={styles.logo} className="forgot-password-logo" />
-          <h2 style={styles.brandTitle} className="forgot-password-brand-title">Cebu Technological University</h2>
-          <p style={styles.brandSubtitle}>Excellence in Technology Education</p>
-        </div>
-      </div>
-      <div style={styles.rightSection} className="forgot-password-right-section">
-        <div style={styles.formContainer} className="forgot-password-form-container">
+      {/* Swapped positions: form on the left, hero on the right */}
+      <div style={styles.rightSection} className="forgot-password-left-section">
+        <div 
+          style={styles.formContainer} 
+          className={`forgot-password-form-container ${location.state?.animate === 'left' ? 'slide-in-left' : location.state?.animate === 'right' ? 'slide-in-right' : 'slide-in-left'}`}
+        >
           <div style={styles.header}>
             <button 
-              onClick={() => navigate('/login')}
+              onClick={() => navigate('/login', { state: { animate: 'right', animateHero: 'left' } })}
               style={styles.backButton}
               className="forgot-password-back-button"
             >
@@ -197,6 +195,33 @@ const ForgotPassword = () => {
           </form>
         </div>
       </div>
+      <div style={styles.leftSection} className={`forgot-password-right-section ${location.state?.animateHero === 'right' ? 'slide-in-right' : location.state?.animateHero === 'left' ? 'slide-in-left' : ''}`}>
+        <div style={styles.backgroundOverlay}></div>
+        <img src={background} alt="CTU Administration Building" style={styles.backgroundImage} className="forgot-password-background-image" />
+        <div style={styles.leftContent}>
+          <div style={{ marginTop: '-10rem' }}>
+            <h2 style={styles.brandTitle} className="forgot-password-brand-title">WHERENAYOU : Connecting OJT's & Alumni Journeys</h2>
+            <p style={styles.brandSubtitle}>Excellence in Technology Education</p>
+          </div>
+          <div style={styles.collaborationContainer} className="forgot-password-collaboration-container">
+            <h3 style={styles.collaborationTitle} className="forgot-password-collaboration-title">IN COLLABORATION WITH</h3>
+            <div style={styles.partnersContainer} className="forgot-password-partners-container">
+              <div style={styles.partnerItem}>
+                <div style={styles.partnerLogo} className="forgot-password-partner-logo">
+                  <img src={ccictLogo} alt="CCICT Logo" style={styles.partnerLogoImage} className="forgot-password-partner-logo-image" />
+                </div>
+                <p style={styles.partnerName} className="forgot-password-partner-name">College of Computer, Information and Communications Technology</p>
+              </div>
+              <div style={styles.partnerItem}>
+                <div style={styles.partnerLogo} className="forgot-password-partner-logo">
+                  <img src={alumniLogo} alt="CTU MC Alumni Association Logo" style={styles.partnerLogoImage} className="forgot-password-partner-logo-image" />
+                </div>
+                <p style={styles.partnerName} className="forgot-password-partner-name">CTU - MC Alumni Association</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
@@ -239,13 +264,9 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     color: 'white',
     padding: '2rem',
+    paddingTop: '3rem',
   },
-  logo: {
-    width: '120px',
-    height: '120px',
-    marginBottom: '1.5rem',
-    filter: 'drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3))',
-  },
+  // No standalone logo for this hero; using same heading layout as Login
   brandTitle: {
     fontSize: '2.5rem',
     fontWeight: '700',
@@ -257,6 +278,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0.5rem 1rem',
     borderRadius: '8px',
     backdropFilter: 'blur(10px)',
+    opacity: 0.7,
   },
   brandSubtitle: {
     fontSize: '1.1rem',
@@ -264,6 +286,69 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     opacity: 0.9,
     textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+  },
+  collaborationContainer: {
+    position: 'absolute',
+    bottom: '-130px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    padding: '0.3rem 1rem 0.5rem 1rem',
+    background: 'transparent',
+    backdropFilter: 'none',
+    borderRadius: '0',
+    border: 'none',
+    boxShadow: 'none',
+    width: '90%',
+  },
+  collaborationTitle: {
+    fontSize: '0.65rem',
+    fontWeight: '500',
+    margin: '0 0 0.6rem 0',
+    color: 'rgba(255, 255, 255, 0.85)',
+    textAlign: 'center',
+    textShadow: '0 1px 3px rgba(0, 0, 0, 0.8)',
+    letterSpacing: '0.5px',
+    textTransform: 'uppercase',
+  },
+  partnersContainer: {
+    display: 'flex',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    gap: '1.5rem',
+  },
+  partnerItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '0.4rem',
+  },
+  partnerLogo: {
+    width: '35px',
+    height: '35px',
+    borderRadius: '50%',
+    background: 'transparent',
+    backdropFilter: 'none',
+    border: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: 'none',
+  },
+  partnerLogoImage: {
+    width: '24px',
+    height: '24px',
+    objectFit: 'contain',
+    opacity: 0.9,
+    filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
+  },
+  partnerName: {
+    fontSize: '0.6rem',
+    fontWeight: '400',
+    margin: 0,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)',
+    lineHeight: '1.1',
   },
   rightSection: {
     width: '50%',
@@ -273,7 +358,6 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     padding: '1rem',
     position: 'relative',
-    overflowY: 'auto',
     boxSizing: 'border-box',
   },
   formContainer: {
@@ -339,12 +423,11 @@ const styles: Record<string, React.CSSProperties> = {
   input: {
     padding: '0.6rem',
     borderRadius: '8px',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
-    background: 'rgba(255, 255, 255, 0.1)',
-    color: 'white',
+    border: '1px solid rgba(0, 0, 0, 0.1)',
+    background: '#ffffff',
+    color: '#000000',
     fontSize: '0.85rem',
     transition: 'all 0.3s ease',
-    backdropFilter: 'blur(10px)',
     outline: 'none',
     width: '100%',
     boxSizing: 'border-box',

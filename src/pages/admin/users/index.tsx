@@ -71,7 +71,7 @@ const UsersIndex: React.FC = () => {
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar />
-      <div className="admin-content-page" style={{ flexGrow: 1, padding: '20px 40px 40px', backgroundColor: '#f5f7fa', overflowY: 'auto' }}>
+      <div className="admin-content-page" style={{ flexGrow: 1, padding: '20px 40px 40px', backgroundColor: '#f5f7fa', overflowY: 'auto', marginLeft: 'var(--sidebar-width, 220px)' }}>
         {/* Header: Only show in batch card view */}
         {!selectedBatch && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '25px' }}>

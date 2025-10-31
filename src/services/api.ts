@@ -73,9 +73,7 @@ api.interceptors.response.use(
             const newAccess = response.data?.access;
             if (!newAccess) throw new Error('No access token in refresh response');
             localStorage.setItem('accessToken', newAccess);
-            (originalRequest.headers as any) = (originalRequest.headers as any) || {};
-            (originalRequest.headers as any).Authorization = `Bearer ${newAccess}`;
-            return api(originalRequest);
+            return newAccess;
           } catch (refreshError) {
             console.error('Token refresh failed:', refreshError);
             localStorage.removeItem('accessToken');
@@ -90,7 +88,20 @@ api.interceptors.response.use(
           }
         })();
       }
-      return refreshing;
+      
+      // Wait for token refresh, then retry the original request
+      const newAccessToken = await refreshing;
+      (originalRequest.headers as any) = (originalRequest.headers as any) || {};
+      (originalRequest.headers as any).Authorization = `Bearer ${newAccessToken}`;
+      // Silently retry - don't log the 401 error since it's being handled
+      return api(originalRequest);
+    }
+    // Only log other errors in development
+    if (process.env.NODE_ENV === 'development' && error.response?.status !== 401) {
+      console.error(`API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
+        status: error.response?.status,
+        data: error.response?.data
+      });
     }
     return Promise.reject(error);
   }

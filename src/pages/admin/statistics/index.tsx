@@ -321,7 +321,7 @@ export default function Statistics() {
     <div style={{ display: 'flex', height: '100vh', position: 'relative' }}>
       <Sidebar />
 
-      <div className="admin-content-page" style={{ padding: '32px 48px', fontFamily: 'Arial, sans-serif', flex: 1, position: 'relative', overflowY: 'auto' }}>
+      <div className="admin-content-page" style={{ padding: '32px 48px', fontFamily: 'Arial, sans-serif', flex: 1, position: 'relative', overflowY: 'auto', marginLeft: 'var(--sidebar-width, 220px)' }}>
         <h2 style={{ fontSize: '22px', marginBottom: '16px' }}>Statistics</h2>
 
         {/* Filters */}
@@ -376,10 +376,6 @@ export default function Statistics() {
             <button className="action-button" onClick={() => setShowModal(true)}>
               <FaUpload style={{ marginRight: '8px' }} />
               Import Alumni
-            </button>
-            <button className="action-button" onClick={() => navigate('/ViewStats')}>
-              <FaDownload style={{ marginRight: '8px' }} />
-              View Users
             </button>
           </div>
         </div>

@@ -32,4 +32,3 @@ declare module 'react-icons/fa' {
   export const FaStar: FC<IconBaseProps>;
   export const FaSignOutAlt: FC<IconBaseProps>;
 }
-

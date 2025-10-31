@@ -12,7 +12,7 @@ import ForgotPassword from './pages/admin/ForgotPassword/index';
 import TemporaryPassword from './pages/admin/TemporaryPassword/index';
 import FirstLoginChangePassword from './pages/admin/TemporaryPassword/FirstLoginChangePassword';
 import Tracker from './pages/admin/tracker/index';
-import Users from './pages/admin/users/index';
+// Legacy Users route now redirects to View Users
 import Logout from './pages/admin/Logout/index';
 import AlumniDashboard from './pages/alumni/Dashboard';
 import PesoDashboard from './pages/peso/Dashboard';
@@ -33,6 +33,7 @@ import RequestDetailsPage from './pages/admin/pages/RequestDetailsPage';
 import RewardsPage from './pages/admin/pages/RewardsPage';
 import InventoryPage from './pages/admin/pages/InventoryPage';
 import Messaging from './pages/messaging/Messaging';
+import ReportSettingsPage from './pages/admin/report-settings/index';
 // import other pages like Statistics, Users, etc.
 import { PrivateRoute } from './components/PrivateRoute';
 import AlumniProfile from './pages/alumni/Profile';
@@ -86,6 +87,14 @@ const App: React.FC = () => {
             }
           />
           <Route
+            path="/report-settings"
+            element={
+              <PrivateRoute roles={['admin']}>
+                <ReportSettingsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/inventory"
             element={
               <PrivateRoute roles={['admin']}>
@@ -135,11 +144,7 @@ const App: React.FC = () => {
           />
           <Route
             path="/users"
-            element={
-              <PrivateRoute roles={['admin']}>
-                <Users />
-              </PrivateRoute>
-            }
+            element={<Navigate to="/ViewStats" replace />}
           />
           {/* Unified dashboard for alumni and OJT users */}
           <Route
