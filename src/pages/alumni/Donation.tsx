@@ -207,7 +207,9 @@ const DonationPage: React.FC = () => {
                     created_at: donation.created_at,
                     user: donation.user,
                     likes: donation.likes || [],
-                    likes_count: donation.likes_count || 0
+                    likes_count: donation.likes_count || 0,
+                    comments: donation.comments || [],
+                    comments_count: donation.comments_count || 0
                   }
                 }
               });
@@ -263,9 +265,52 @@ const DonationPage: React.FC = () => {
   };
 
   // Handle view original donation
-  const handleViewOriginalDonation = (originalDonation: any) => {
-    setOriginalDonationModalData(originalDonation);
-    setShowOriginalDonationModal(true);
+  const handleViewOriginalDonation = async (originalPost: any) => {
+    console.log('handleViewOriginalPost called with original post:', originalPost);
+    setDonationLoading(true);
+    try {
+      // Check if this is a donation post
+      const donationId = originalPost.donation_id || originalPost.post_id;
+      
+      if (!donationId) {
+        console.error('No valid donation ID found:', originalPost);
+        alert('Cannot load donation: Invalid donation ID');
+        setDonationLoading(false);
+        return;
+      }
+
+      // For donation posts, fetch full data including comments and likes
+      const { api } = await import('../../services/api');
+      const response = await api.get(`donations/${donationId}/`);
+      console.log('Original donation API response:', response.data);
+      if (response.data) {
+        const donationData = response.data;
+        // Build a transformed structure compatible with the donation modal
+        const donationModalData = {
+          donation_id: donationData.donation_id,
+          post_id: donationData.donation_id,
+          description: donationData.description,
+          post_content: donationData.description,
+          images: donationData.images || [],
+          post_images: donationData.images || [],
+          created_at: donationData.created_at,
+          user: donationData.user,
+          likes: donationData.likes || [],
+          comments: donationData.comments || [],
+          likes_count: donationData.likes_count || 0,
+          comments_count: donationData.comments_count || 0,
+          reposts_count: donationData.reposts_count || 0,
+        };
+        console.log('Setting donation modal data:', donationModalData);
+        setOriginalDonationModalData(donationModalData);
+        setShowOriginalDonationModal(true);
+      }
+    } catch (error) {
+      console.error('Error fetching original donation:', error);
+      alert('Failed to load original donation.');
+    } finally {
+      setDonationLoading(false);
+    }
   };
 
   // Handle viewing a donation repost by repost ID (for notifications)
@@ -583,12 +628,17 @@ const DonationPage: React.FC = () => {
                           post_content: item.repostData.original_post.post_content,
                           post_images: item.repostData.original_post.post_images,
                           created_at: item.repostData.original_post.created_at,
-                          user: item.repostData.original_post.user
+                          user: item.repostData.original_post.user,
+                          likes: item.repostData.original_post.likes || [],
+                          likes_count: item.repostData.original_post.likes_count || 0,
+                          comments: item.repostData.original_post.comments || [],
+                          comments_count: item.repostData.original_post.comments_count || 0
                         } : undefined
                       }}
                       currentUserId={currentUserId}
                       formatTime={formatTime}
                       context="donation"
+                      onViewOriginalPost={handleViewOriginalDonation}
                       onRefresh={() => {
                         fetchDonationPosts(false);
                       }}

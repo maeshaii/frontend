@@ -783,6 +783,7 @@ const ForumPage: React.FC = () => {
                         currentUserId={currentUserId}
                         formatTime={formatTime}
                         context="forum"
+                        onViewOriginalPost={handleViewOriginalPost}
                         onRefresh={() => {
                           // Immediate update without page refresh - similar to UnifiedDashboard
                           getForums().then((forumsData) => {

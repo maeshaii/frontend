@@ -1178,19 +1178,31 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         return;
       }
 
-      // For donation posts, we can display the data directly without fetching
+      // For donation posts, fetch full data (likes, comments, etc.) for consistency
       if (originalPost.donation_id) {
-        // This is a donation post, display it directly
-        console.log('Displaying donation post directly:', originalPost);
-        // Ensure post_id is set for the PostCard component
-        const donationModalData = {
-          ...originalPost,
-          post_id: originalPost.donation_id,
-          post_content: originalPost.description || originalPost.post_content
-        };
-        console.log('Setting donation modal data:', donationModalData);
-        setOriginalPostModalData(donationModalData);
-        setShowOriginalPostModal(true);
+        console.log('Fetching donation detail for modal:', originalPost.donation_id);
+        const response = await api.get(`donations/${postId}/`);
+        console.log('Original donation API response:', response.data);
+        if (response.data) {
+          const d = response.data;
+          const donationModalData = {
+            donation_id: d.donation_id,
+            post_id: d.donation_id,
+            description: d.description,
+            post_content: d.description || originalPost.post_content,
+            images: d.images || [],
+            post_images: d.images || [],
+            created_at: d.created_at,
+            user: d.user,
+            likes: d.likes || [],
+            comments: d.comments || [],
+            likes_count: d.likes_count || 0,
+            comments_count: d.comments_count || 0,
+            reposts_count: d.reposts_count || 0,
+          } as any;
+          setOriginalPostModalData(donationModalData);
+          setShowOriginalPostModal(true);
+        }
       } else {
         // This is a regular post, fetch from API
         const response = await api.get(`posts/${postId}/detail/`);
