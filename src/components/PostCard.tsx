@@ -176,6 +176,9 @@ const PostCard: React.FC<PostCardProps> = ({
   const [likesLoading, setLikesLoading] = useState(false);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
 
+  // If this item represents a reposted donation (original_post embedded), render a clickable inner card
+  const originalEmbedded: any = (post as any).original_post;
+
   // Debug useEffect for showLikesModal
   useEffect(() => {
     console.log('showLikesModal state changed:', showLikesModal);
@@ -1652,26 +1655,36 @@ const PostCard: React.FC<PostCardProps> = ({
                     }}
                   >👍
                     {repostData.likes.length === 1 
-                      ? renderName({ 
-                          f_name: repostData.likes[0].f_name || '', 
-                          m_name: repostData.likes[0].m_name, 
-                          l_name: repostData.likes[0].l_name || '' 
-                        }) + ' liked this'
+                      ? (() => {
+                          const likeUser = repostData.likes[0].user || repostData.likes[0];
+                          return renderName({ 
+                            f_name: likeUser.f_name || '', 
+                            m_name: likeUser.m_name, 
+                            l_name: likeUser.l_name || '' 
+                          }) + ' liked this';
+                        })()
                       : repostData.likes.length === 2
-                      ? renderName({ 
-                          f_name: repostData.likes[0].f_name || '', 
-                          m_name: repostData.likes[0].m_name, 
-                          l_name: repostData.likes[0].l_name || '' 
-                        }) + ` and ${renderName({ 
-                          f_name: repostData.likes[1].f_name || '', 
-                          m_name: repostData.likes[1].m_name, 
-                          l_name: repostData.likes[1].l_name || '' 
-                        })} liked this`
-                      : renderName({ 
-                          f_name: repostData.likes[0].f_name || '', 
-                          m_name: repostData.likes[0].m_name, 
-                          l_name: repostData.likes[0].l_name || '' 
-                        }) + ` and ${repostData.likes.length - 1} others liked this`
+                      ? (() => {
+                          const likeUser0 = repostData.likes[0].user || repostData.likes[0];
+                          const likeUser1 = repostData.likes[1].user || repostData.likes[1];
+                          return renderName({ 
+                            f_name: likeUser0.f_name || '', 
+                            m_name: likeUser0.m_name, 
+                            l_name: likeUser0.l_name || '' 
+                          }) + ` and ${renderName({ 
+                            f_name: likeUser1.f_name || '', 
+                            m_name: likeUser1.m_name, 
+                            l_name: likeUser1.l_name || '' 
+                          })} liked this`;
+                        })()
+                      : (() => {
+                          const likeUser = repostData.likes[0].user || repostData.likes[0];
+                          return renderName({ 
+                            f_name: likeUser.f_name || '', 
+                            m_name: likeUser.m_name, 
+                            l_name: likeUser.l_name || '' 
+                          }) + ` and ${repostData.likes.length - 1} others liked this`;
+                        })()
                     }
                   </span>
                 ) : null}
@@ -2381,6 +2394,108 @@ const PostCard: React.FC<PostCardProps> = ({
         );
       })()}
 
+      {/* Inner Card for Donation Repost (clickable) */}
+      {originalEmbedded && (
+        <div 
+          className="profile-repost-original"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onViewOriginalPost && originalEmbedded) {
+              onViewOriginalPost(originalEmbedded);
+            }
+          }}
+          style={{ cursor: 'pointer', marginTop: 8 }}
+        >
+          {/* Original donation header */}
+          <div className="profile-repost-original-header">
+            <div className="profile-repost-original-header-left">
+              <img
+                src={getProfilePicUrl(originalEmbedded.user?.profile_pic)}
+                alt="Profile"
+                className="profile-repost-original-profile-image"
+                onClick={() => {
+                  if (originalEmbedded?.user?.user_id) {
+                    const currentPath = window.location.pathname;
+                    if (currentPath.startsWith('/peso')) {
+                      window.location.href = `/peso/profile/${originalEmbedded.user.user_id}`;
+                    } else if (currentPath.startsWith('/ccict')) {
+                      window.location.href = `/ccict/profile/${originalEmbedded.user.user_id}`;
+                    } else {
+                      window.location.href = `/profile/${originalEmbedded.user.user_id}`;
+                    }
+                  }
+                }}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.onerror = null;
+                  target.src = ctulogo as unknown as string;
+                }}
+              />
+              <div>
+                <div 
+                  className="profile-repost-original-author-info"
+                  onClick={() => {
+                    if (originalEmbedded?.user?.user_id) {
+                      const currentPath = window.location.pathname;
+                      if (currentPath.startsWith('/peso')) {
+                        window.location.href = `/peso/profile/${originalEmbedded.user.user_id}`;
+                      } else if (currentPath.startsWith('/ccict')) {
+                        window.location.href = `/ccict/profile/${originalEmbedded.user.user_id}`;
+                      } else {
+                        window.location.href = `/profile/${originalEmbedded.user.user_id}`;
+                      }
+                    }
+                  }}
+                >
+                  {originalEmbedded.user?.f_name && originalEmbedded.user?.l_name
+                    ? renderName({ 
+                        f_name: originalEmbedded.user.f_name, 
+                        m_name: originalEmbedded.user.m_name, 
+                        l_name: originalEmbedded.user.l_name 
+                      })
+                    : originalEmbedded.user?.f_name || 'Original Post'}
+                </div>
+                <div className="profile-repost-original-author-details">
+                  <span>{formatTime(originalEmbedded.created_at)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Original donation content */}
+          {originalEmbedded.post_content && (
+            <div className="profile-repost-original-content">
+              {renderTextWithLinks(originalEmbedded.post_content)}
+            </div>
+          )}
+
+          {/* Original donation image preview */}
+          {(() => {
+            const originalImages = getImagesFromPost(originalEmbedded as any);
+            if (!originalImages || originalImages.length === 0) return null;
+            return (
+              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'center', width: '100%' }}>
+                <img
+                  src={getImageUrl(originalImages[0])}
+                  alt="original post"
+                  className="profile-repost-original-image"
+                  style={{ 
+                    cursor: 'pointer',
+                    width: 'auto',
+                    height: 'auto',
+                    maxWidth: '100%',
+                    maxHeight: '40vh',
+                    borderRadius: '8px',
+                    objectFit: 'contain'
+                  }}
+                  onError={handleProfilePicError}
+                />
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Facebook-style likes and comments display */}
       <PostStatsRow
         likes={post.likes}
@@ -2818,7 +2933,16 @@ const PostCard: React.FC<PostCardProps> = ({
                               commentId={comment.comment_id}
                               currentUserId={currentUserId || undefined}
                               displayName={displayName}
-                              displayAvatar={displayAvatar}
+                              displayAvatar={(() => {
+                                try {
+                                  const raw = localStorage.getItem('user');
+                                  if (raw) {
+                                    const u = JSON.parse(raw);
+                                    return getProfilePicUrl(u?.profile_pic) || displayAvatar;
+                                  }
+                                } catch (_) {}
+                                return displayAvatar;
+                              })()}
                               onReplyAdded={() => handleReplyAdded(comment.comment_id)}
                               commentAuthor={{
                                 user_id: comment.user.user_id,

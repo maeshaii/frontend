@@ -427,13 +427,14 @@ const ForumPage: React.FC = () => {
         user: {
           user_id: forum.user.user_id,
           f_name: forum.user.f_name,
+          m_name: forum.user.m_name,
           l_name: forum.user.l_name,
           profile_pic: forum.user.profile_pic ? 
             (String(forum.user.profile_pic).startsWith('http') ? 
               forum.user.profile_pic : 
               `http://127.0.0.1:8000${forum.user.profile_pic}`) : 
             null,
-          name: `${forum.user.f_name} ${forum.user.l_name}`
+          name: `${forum.user.f_name} ${forum.user.m_name || ''} ${forum.user.l_name}`.trim()
         },
         likes: forum.likes || [], // Use actual likes data from backend
         comments: forum.comments || [], // Use actual comments data from backend
@@ -782,6 +783,7 @@ const ForumPage: React.FC = () => {
                         currentUserId={currentUserId}
                         formatTime={formatTime}
                         context="forum"
+                        onViewOriginalPost={handleViewOriginalPost}
                         onRefresh={() => {
                           // Immediate update without page refresh - similar to UnifiedDashboard
                           getForums().then((forumsData) => {

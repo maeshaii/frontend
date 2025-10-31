@@ -12,6 +12,7 @@ import { getPosts, followUser, getAdminPesoUsers, api, getDonationRequests } fro
 import { trackerApi } from '../../services/trackerApi';
 import RepostNotificationModal from '../../components/RepostNotificationModal';
 import RepostModal from '../../components/RepostModal';
+import { getProfilePicUrl } from '../../utils/profilePicUtils';
 
 interface UnifiedDashboardProps {
   userType: 'alumni' | 'peso' | 'admin' | 'ojt';
@@ -1177,19 +1178,31 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         return;
       }
 
-      // For donation posts, we can display the data directly without fetching
+      // For donation posts, fetch full data (likes, comments, etc.) for consistency
       if (originalPost.donation_id) {
-        // This is a donation post, display it directly
-        console.log('Displaying donation post directly:', originalPost);
-        // Ensure post_id is set for the PostCard component
-        const donationModalData = {
-          ...originalPost,
-          post_id: originalPost.donation_id,
-          post_content: originalPost.description || originalPost.post_content
-        };
-        console.log('Setting donation modal data:', donationModalData);
-        setOriginalPostModalData(donationModalData);
-        setShowOriginalPostModal(true);
+        console.log('Fetching donation detail for modal:', originalPost.donation_id);
+        const response = await api.get(`donations/${postId}/`);
+        console.log('Original donation API response:', response.data);
+        if (response.data) {
+          const d = response.data;
+          const donationModalData = {
+            donation_id: d.donation_id,
+            post_id: d.donation_id,
+            description: d.description,
+            post_content: d.description || originalPost.post_content,
+            images: d.images || [],
+            post_images: d.images || [],
+            created_at: d.created_at,
+            user: d.user,
+            likes: d.likes || [],
+            comments: d.comments || [],
+            likes_count: d.likes_count || 0,
+            comments_count: d.comments_count || 0,
+            reposts_count: d.reposts_count || 0,
+          } as any;
+          setOriginalPostModalData(donationModalData);
+          setShowOriginalPostModal(true);
+        }
       } else {
         // This is a regular post, fetch from API
         const response = await api.get(`posts/${postId}/detail/`);
@@ -1679,6 +1692,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           }}
                           currentUserId={currentUserId}
                           formatTime={formatHybrid}
+                          onViewOriginalPost={handleViewOriginalPost}
                           context="donation"
                           onRefresh={() => {
                             // Refresh donations
@@ -1937,6 +1951,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         formatTime={formatHybrid}
                         onRefresh={() => getPosts().then(setPosts)}
                         context={'post'}
+                        onViewOriginalPost={handleViewOriginalPost}
                       />
                     );
                     return acc;
@@ -2267,7 +2282,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 currentUserId={getCurrentUserId(user)}
                 isOwn={getCurrentUserId(user) === modalPost.user?.user_id}
                 displayName={formatDisplayName(modalPost.user, getCurrentUserId(user) === modalPost.user?.user_id, user)}
-                displayAvatar={modalPost.user?.profile_pic || '/default-avatar.png'}
+                displayAvatar={getProfilePicUrl(modalPost.user?.profile_pic) || '/default-avatar.png'}
                 formatTime={formatHybrid}
                 onViewOriginalPost={handleViewOriginalPost}
                 onPostUpdate={() => {
@@ -2546,7 +2561,14 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 currentUserId={getCurrentUserId(user)}
                 isOwn={getCurrentUserId(user) === originalPostModalData.user?.user_id}
                 displayName={formatDisplayName(originalPostModalData.user, getCurrentUserId(user) === originalPostModalData.user?.user_id, user)}
-                displayAvatar={originalPostModalData.user?.profile_pic ? (String(originalPostModalData.user.profile_pic).startsWith('http') ? originalPostModalData.user.profile_pic : `http://127.0.0.1:8000${originalPostModalData.user.profile_pic}`) : ctulogo}
+                displayAvatar={(() => {
+                  // Normalize via util and add cache-buster if we have a real pic
+                  const raw = originalPostModalData.user?.profile_pic;
+                  const normalized = getProfilePicUrl(raw, ctulogo);
+                  if (!raw) return normalized; // fallback image, no bust
+                  const sep = normalized.includes('?') ? '&' : '?';
+                  return `${normalized}${sep}cb=${Date.now()}`;
+                })()}
                 formatTime={formatHybrid}
                 onViewOriginalPost={handleViewOriginalPost}
                 onPostUpdate={() => {

@@ -22,6 +22,11 @@ interface PostItemLite {
   post_content?: string;
   post_images?: Array<{ image_id: number; image_url: string; order: number }>;
   user?: UserLite;
+  // Optional interaction fields for embedded originals
+  likes?: Array<any>;
+  comments?: Array<any>;
+  likes_count?: number;
+  comments_count?: number;
 }
 
 interface CommentLite {
@@ -58,6 +63,7 @@ interface RepostCardProps {
   setEditingRepost?: (fn: (prev: { [key: string | number]: boolean }) => { [key: string | number]: boolean }) => void;
   editRepostContent?: { [key: string | number]: string };
   setEditRepostContent?: (fn: (prev: { [key: string | number]: string }) => { [key: string | number]: string }) => void;
+  onViewOriginalPost?: (original: PostItemLite) => void;
 }
 
 // Photo gallery helpers - same as PostCard
@@ -114,7 +120,8 @@ const RepostCard: React.FC<RepostCardProps> = ({
   editingRepost = {},
   setEditingRepost,
   editRepostContent = {},
-  setEditRepostContent
+  setEditRepostContent,
+  onViewOriginalPost
 }) => {
   // Render name: {f_name} {m_name} {l_name} if m_name exists, else {f_name} {l_name}
   const renderName = (obj: { f_name: string; m_name?: string; l_name: string }) =>
@@ -163,24 +170,51 @@ const RepostCard: React.FC<RepostCardProps> = ({
   // Check if current user owns this repost
   const isOwn = repost.user.user_id === currentUserId;
 
+  // Get current user info from localStorage for optimistic updates
+  const getCurrentUserInfo = () => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const userObj = JSON.parse(userStr);
+        return {
+          user_id: userObj.user_id || userObj.id,
+          f_name: userObj.f_name || '',
+          m_name: userObj.m_name || '',
+          l_name: userObj.l_name || '',
+          profile_pic: userObj.profile_pic || ''
+        };
+      }
+    } catch (e) {
+      console.error('Error getting current user info:', e);
+    }
+    return null;
+  };
+
   const handleLike = async () => {
     if (!currentUserId) {
       console.warn('Cannot like: No current user');
       return;
     }
     
+    // Get current user info for optimistic update
+    const currentUserInfo = getCurrentUserInfo();
+    if (!currentUserInfo) {
+      console.warn('Cannot like: No current user info found');
+      return;
+    }
+    
     try {
-      // Optimistic update
+      // Optimistic update with current user's info (not repost owner's info)
       setLiked(true);
       setLikesCount(c => c + 1);
       setFetchedLikes(prev => [...prev, {
         user_id: currentUserId,
         user: {
-          user_id: currentUserId,
-          f_name: repost.user.f_name,
-          m_name: repost.user.m_name,
-          l_name: repost.user.l_name,
-          profile_pic: repost.user.profile_pic
+          user_id: currentUserInfo.user_id,
+          f_name: currentUserInfo.f_name,
+          m_name: currentUserInfo.m_name,
+          l_name: currentUserInfo.l_name,
+          profile_pic: currentUserInfo.profile_pic
         }
       }]);
       
@@ -204,6 +238,9 @@ const RepostCard: React.FC<RepostCardProps> = ({
       return;
     }
     
+    // Get current user info for optimistic update rollback
+    const currentUserInfo = getCurrentUserInfo();
+    
     try {
       // Optimistic update
       setLiked(false);
@@ -216,19 +253,21 @@ const RepostCard: React.FC<RepostCardProps> = ({
       await unlikeRepost(repost.repost_id);
     } catch (e) {
       console.error('Error unliking repost:', e);
-      // Rollback
+      // Rollback with current user's info (not repost owner's info)
       setLiked(true);
       setLikesCount(c => c + 1);
-      setFetchedLikes(prev => [...prev, {
-        user_id: currentUserId,
-        user: {
+      if (currentUserInfo) {
+        setFetchedLikes(prev => [...prev, {
           user_id: currentUserId,
-          f_name: repost.user.f_name,
-          m_name: repost.user.m_name,
-          l_name: repost.user.l_name,
-          profile_pic: repost.user.profile_pic
-        }
-      }]);
+          user: {
+            user_id: currentUserInfo.user_id,
+            f_name: currentUserInfo.f_name,
+            m_name: currentUserInfo.m_name,
+            l_name: currentUserInfo.l_name,
+            profile_pic: currentUserInfo.profile_pic
+          }
+        }]);
+      }
       alert('Failed to update like. Please try again.');
     }
   };
@@ -782,7 +821,19 @@ const RepostCard: React.FC<RepostCardProps> = ({
       <div className="post-content" style={{ background: '#fff' }}>
         <div
           role="button"
-          onClick={goToOriginal}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!original) return;
+            // If onViewOriginalPost is provided, use it to open modal (same as donation)
+            if (onViewOriginalPost) {
+              onViewOriginalPost(original);
+            } else {
+              // Fallback: navigate to original post (for contexts without modal handler)
+              goToOriginal();
+            }
+          }}
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
           style={{
             border: '1px solid #e9ecef',
             borderRadius: 12,
