@@ -413,6 +413,12 @@ export const clearOJT = async (batchYear: string, program?: string, coordinatorU
   return response.data;
 };
 
+// Clear ALL OJT data (all users, all batches)
+export const clearAllOJT = async () => {
+  const response = await api.post('ojt/clear-all/', {});
+  return response.data;
+};
+
 // Update OJT status for a specific user
 export const updateOJTStatus = async (userId: number, status: string) => {
   const response = await api.post('ojt/status/', { user_id: userId, status });
