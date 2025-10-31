@@ -134,153 +134,7 @@ export default function Statistics() {
       backgroundColor: '#f8fafc',
       minHeight: '100vh'
     }}>
-      {/* Summary Cards Grid - matching CLASS OF cards */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-        gap: '24px',
-        marginBottom: '32px'
-      }}>
-        {/* Total Companies Card */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '20px',
-          padding: '24px',
-          boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.1)',
-          border: '1px solid #e2e8f0',
-          transition: 'all 0.3s ease',
-          position: 'relative',
-          overflow: 'hidden'
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'translateY(-4px)';
-          e.currentTarget.style.boxShadow = '0 16px 32px -8px rgba(0, 0, 0, 0.15)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.boxShadow = '0 8px 16px -4px rgba(0, 0, 0, 0.1)';
-        }}>
-          {/* Decorative gradient circle */}
-          <div style={{
-            position: 'absolute',
-            top: '-20px',
-            right: '-20px',
-            width: '80px',
-            height: '80px',
-            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-            borderRadius: '50%',
-            opacity: '0.1'
-          }}></div>
-          
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              marginBottom: '20px'
-            }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                backgroundColor: '#dbeafe',
-                borderRadius: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '24px'
-              }}>
-                🏢
-              </div>
-            </div>
-            <p style={{
-              margin: '0 0 4px 0',
-              fontSize: '14px',
-              color: '#64748b',
-              fontWeight: '500'
-            }}>
-              Total Companies
-            </p>
-            <p style={{
-              margin: '0',
-              fontSize: '48px',
-              fontWeight: '800',
-              color: '#3b82f6'
-            }}>
-              {totalCompanies}
-            </p>
-          </div>
-        </div>
-
-        {/* Total Students Card */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '20px',
-          padding: '24px',
-          boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.1)',
-          border: '1px solid #e2e8f0',
-          transition: 'all 0.3s ease',
-          position: 'relative',
-          overflow: 'hidden'
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'translateY(-4px)';
-          e.currentTarget.style.boxShadow = '0 16px 32px -8px rgba(0, 0, 0, 0.15)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.boxShadow = '0 8px 16px -4px rgba(0, 0, 0, 0.1)';
-        }}>
-          {/* Decorative gradient circle */}
-          <div style={{
-            position: 'absolute',
-            top: '-20px',
-            right: '-20px',
-            width: '80px',
-            height: '80px',
-            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-            borderRadius: '50%',
-            opacity: '0.1'
-          }}></div>
-          
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              marginBottom: '20px'
-            }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                backgroundColor: '#dbeafe',
-                borderRadius: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '24px'
-              }}>
-                👥
-              </div>
-            </div>
-            <p style={{
-              margin: '0 0 4px 0',
-              fontSize: '14px',
-              color: '#64748b',
-              fontWeight: '500'
-            }}>
-              Total OJT Students
-            </p>
-            <p style={{
-              margin: '0',
-              fontSize: '48px',
-              fontWeight: '800',
-              color: '#3b82f6'
-            }}>
-              {totalStudents}
-            </p>
-          </div>
-        </div>
-      </div>
-      
-      {/* Company Table */}
+      {/* Company Table with Summary */}
       <div style={{
         backgroundColor: 'white',
         borderRadius: '16px',
@@ -289,16 +143,88 @@ export default function Statistics() {
         border: '1px solid #e2e8f0'
       }}>
         <div style={{
-          marginBottom: '24px'
+          marginBottom: '32px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '20px',
+          paddingBottom: '24px',
+          borderBottom: '2px solid #f1f5f9'
         }}>
           <h3 style={{
             margin: '0',
-            fontSize: '20px',
+            fontSize: '24px',
             fontWeight: '700',
-            color: '#1e293b'
+            color: '#1e293b',
+            letterSpacing: '-0.025em'
           }}>
             Companies Directory
           </h3>
+          <div style={{
+            display: 'flex',
+            gap: '16px',
+            alignItems: 'center'
+          }}>
+            <div style={{
+              padding: '8px 16px',
+              backgroundColor: '#eff6ff',
+              borderRadius: '10px',
+              border: '1px solid #dbeafe'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{
+                  fontSize: '12px',
+                  color: '#64748b',
+                  fontWeight: '600',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Total Companies
+                </span>
+                <span style={{
+                  fontSize: '24px',
+                  fontWeight: '800',
+                  color: '#3b82f6'
+                }}>
+                  {totalCompanies}
+                </span>
+              </div>
+            </div>
+            <div style={{
+              padding: '8px 16px',
+              backgroundColor: '#eff6ff',
+              borderRadius: '10px',
+              border: '1px solid #dbeafe'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{
+                  fontSize: '12px',
+                  color: '#64748b',
+                  fontWeight: '600',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Total OJT Students
+                </span>
+                <span style={{
+                  fontSize: '24px',
+                  fontWeight: '800',
+                  color: '#3b82f6'
+                }}>
+                  {totalStudents}
+                </span>
+              </div>
+            </div>
+          </div>
       </div>
 
         {companies.length === 0 ? (
@@ -594,6 +520,118 @@ export default function Statistics() {
               </div>
             )}
 
+            {/* Students List */}
+            <div>
+              <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#1e293b' }}>
+                OJT Students ({companyStudents.length})
+              </h3>
+              {loadingStudents ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                  <p style={{ color: '#64748b', fontSize: '14px' }}>Loading students...</p>
+                </div>
+              ) : companyStudents.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '40px 20px',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: '12px'
+                }}>
+                  <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>No students found</p>
+                </div>
+              ) : (
+                <div style={{
+                  maxHeight: '400px',
+                  overflowY: 'auto',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead style={{
+                      position: 'sticky',
+                      top: 0,
+                      backgroundColor: '#f8fafc',
+                      zIndex: 1
+                    }}>
+                      <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                        <th style={{
+                          padding: '12px 16px',
+                          textAlign: 'left',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          color: '#1e293b',
+                          width: '50px'
+                        }}>No.</th>
+                        <th style={{
+                          padding: '12px 16px',
+                          textAlign: 'left',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          color: '#1e293b'
+                        }}>CTU ID</th>
+                        <th style={{
+                          padding: '12px 16px',
+                          textAlign: 'left',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          color: '#1e293b'
+                        }}>Name</th>
+                        <th style={{
+                          padding: '12px 16px',
+                          textAlign: 'center',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          color: '#1e293b',
+                          width: '120px'
+                        }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {companyStudents.map((student, index) => (
+                        <tr key={index} style={{
+                          borderBottom: index < companyStudents.length - 1 ? '1px solid #f1f5f9' : 'none',
+                          backgroundColor: index % 2 === 0 ? 'white' : '#fafbfc'
+                        }}>
+                          <td style={{
+                            padding: '14px 16px',
+                            fontSize: '13px',
+                            color: '#64748b',
+                            fontWeight: '500'
+                          }}>{index + 1}</td>
+                          <td style={{
+                            padding: '14px 16px',
+                            fontSize: '13px',
+                            color: '#1e293b',
+                            fontWeight: '600'
+                          }}>{student.ctu_id}</td>
+                          <td style={{
+                            padding: '14px 16px',
+                            fontSize: '13px',
+                            color: '#1e293b',
+                            fontWeight: '500'
+                          }}>{student.first_name} {student.last_name}</td>
+                          <td style={{
+                            padding: '14px 16px',
+                            textAlign: 'center'
+                          }}>
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '4px 12px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              backgroundColor: student.status === 'Completed' ? '#dcfce7' : '#fef3c7',
+                              color: student.status === 'Completed' ? '#166534' : '#92400e'
+                            }}>
+                              {student.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

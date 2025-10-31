@@ -5,6 +5,7 @@ import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
 import { fetchOJTStatistics, importOJT, setSendDate, getSendDates, checkAllSentStatus, deleteSendDate } from '../../services/api';
 import logoLogin from '../../images/logo_login.png';
+import { FaUpload, FaChartBar, FaSignOutAlt, FaDownload, FaCalendarAlt, FaUsers } from 'react-icons/fa';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -89,6 +90,7 @@ export default function Dashboard() {
       console.log(`Starting OJT import for ${selectedFiles.length} file(s)...`);
       
       let totalCreated = 0;
+      let totalUpdated = 0;
       let allPasswords: any[] = [];
       let allSections: string[] = [];
       let failedFiles: string[] = [];
@@ -105,6 +107,7 @@ export default function Dashboard() {
           
       if (result.success) {
             totalCreated += result.created_count || 0;
+            totalUpdated += result.updating_count || 0;
             if (result.passwords && Array.isArray(result.passwords)) {
               allPasswords = [...allPasswords, ...result.passwords];
             }
@@ -127,7 +130,12 @@ export default function Dashboard() {
       // Show summary message
       let summaryMessage = `✅ Import completed!\n\n`;
       summaryMessage += `Files processed: ${selectedFiles.length}\n`;
-      summaryMessage += `Total students created: ${totalCreated}\n`;
+      if (totalCreated > 0) {
+        summaryMessage += `Total students created: ${totalCreated}\n`;
+      }
+      if (totalUpdated > 0) {
+        summaryMessage += `Total students updated: ${totalUpdated}\n`;
+      }
       if (allSections.length > 0) {
         summaryMessage += `Sections: ${allSections.join(', ')}\n`;
       }
@@ -199,37 +207,137 @@ export default function Dashboard() {
   };
 
   const downloadOJTTemplate = () => {
-    // Build CSV template with exact columns shown in the screenshot
+    // Template for FIRST IMPORT - Creating new students
+    // Required: CTU_ID, First Name, Last Name, Gender, Section
+    // Optional: Middle Name, Birthdate, Contact No, Email, Address
+    // Company info can be added later via "Update Template"
     const headers = [
       'CTU_ID',
-      'First_Name',
-      'Middle_Name',
-      'Last_Name',
+      'First Name',
+      'Middle Name',
+      'Last Name',
       'Gender',
       'Birthdate',
-      'Contact_No',
+      'Contact No',
       'Email',
       'Address',
-      'Course',
-      'Section',
-      'Company',
-      'Start_Date',
-      'End_Date',
-      'Status',
+      'Section'
     ];
 
-    // Only headers, no sample data rows
-    const csvLines = [headers.join(',')];
-    const csvContent = csvLines.join('\n');
+    const csvContent = headers.join(',');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'ojt_import_template.csv';
+    a.download = 'ojt_first_import_template.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
+  };
+
+  const exportStudentsForUpdate = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch all OJT students for this coordinator
+      let token = localStorage.getItem('token');
+      let response = await fetch(`http://localhost:8000/api/ojt/students/?coordinator=${coordinatorUsername}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      // If unauthorized, try to refresh token
+      if (response.status === 401) {
+        console.log('Token expired, refreshing...');
+        const refreshToken = localStorage.getItem('refreshToken');
+        const refreshResponse = await fetch('http://localhost:8000/api/token/refresh/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ refresh: refreshToken }),
+        });
+
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json();
+          localStorage.setItem('token', refreshData.access);
+          token = refreshData.access;
+
+          // Retry the original request with new token
+          response = await fetch(`http://localhost:8000/api/ojt/students/?coordinator=${coordinatorUsername}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch students');
+      }
+
+      const data = await response.json();
+      const students = data.students || [];
+
+      if (students.length === 0) {
+        alert('No students found. Please import students first.');
+        setLoading(false);
+        return;
+      }
+
+      // Create CSV with student info + empty company fields
+      const headers = [
+        'CTU_ID',
+        'First Name',
+        'Last Name',
+        'Section',
+        'Company',
+        'Company Address',
+        'Company Email',
+        'Company Contact',
+        'Contact Person',
+        'Position',
+        'Status',
+      ];
+
+      const rows = students.map((student: any) => [
+        student.ctu_id || '',
+        student.first_name || '',
+        student.last_name || '',
+        student.section || '',
+        '', // Empty Company
+        '', // Empty Company Address
+        '', // Empty Company Email
+        '', // Empty Company Contact
+        '', // Empty Contact Person
+        '', // Empty Position
+        student.status || 'Ongoing', // Default Status
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map((row: string[]) => row.map((cell: string) => `"${cell}"`).join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ojt_students_update_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      alert(`✅ Exported ${students.length} students! Fill in the company info and re-import.`);
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Failed to export students. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -464,8 +572,8 @@ export default function Dashboard() {
   };
 
   const links = [
-    { to: '/coordinator/imports', label: 'Imports' },
-    { to: '/coordinator/statistics', label: 'Statistics' },
+    { to: '/coordinator/imports', label: 'Imports', icon: <FaUpload /> },
+    { to: '/coordinator/statistics', label: 'Statistics', icon: <FaChartBar /> },
   ];
 
   return (
@@ -509,6 +617,7 @@ export default function Dashboard() {
                     }
                   }}
                 >
+                  <span style={{ marginRight: '10px', fontSize: '18px' }}>{link.icon}</span>
                   {link.label}
                 </div>
               </li>
@@ -517,7 +626,7 @@ export default function Dashboard() {
         </div>
 
         <div style={styles.logout} onClick={handleLogout}>
-          <span style={styles.icon}>🚪</span> Logout
+          <span style={{ marginRight: '10px', fontSize: '18px' }}><FaSignOutAlt /></span> Logout
         </div>
       </div>
 
@@ -525,219 +634,265 @@ export default function Dashboard() {
       <main style={{
         flex: 1,
         padding: '32px',
-        backgroundColor: '#f8fafc',
+        backgroundColor: '#f3f4f6',
         minHeight: '100vh',
         overflowY: 'auto' as const
       }}>
 
-        {/* Modern Filters */}
+        {/* Modern Filters & Actions */}
         {!showStats && !selectedCard && (
           <div style={{
             backgroundColor: 'white',
             borderRadius: '16px',
-            padding: '24px',
+            padding: '28px',
             marginBottom: '32px',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-            border: '1px solid #e2e8f0'
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+            border: '1px solid #e5e7eb'
           }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'flex-start',
-            gap: '24px', 
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'flex-start',
+              gap: '20px', 
               flexWrap: 'wrap'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div>
-              <label style={{ 
-                    fontWeight: '600',
-                    color: '#374151',
-                    fontSize: '14px',
-                    display: 'block',
-                    marginBottom: '4px'
-                  }}>
-                    Filter by Batch
-              </label>
-              <select
-                value={selectedBatchFilter}
-                onChange={(e) => setSelectedBatchFilter(e.target.value)}
-                style={{ 
-                      padding: '12px 16px',
-                  border: '2px solid #e5e7eb',
-                      borderRadius: '12px',
-                      minWidth: '180px',
-                  fontSize: '14px',
-                  backgroundColor: 'white',
-                  color: '#374151',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'all 0.2s ease',
-                      fontWeight: '500'
-                }}
-                onFocus={(e) => {
-                      e.target.style.borderColor = '#3b82f6';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = '#e5e7eb';
-                      e.target.style.boxShadow = 'none';
-                }}
-              >
-                <option value="ALL">All Batches</option>
-                {Array.from(new Set(ojtYears.map(y => y.year))).sort((a, b) => b - a).map(year => (
-                  <option key={year} value={year.toString()}>{year}</option>
-                ))}
-              </select>
-                </div>
-            </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div>
-              <label style={{ 
-                    fontWeight: '600',
-                    color: '#374151',
-                    fontSize: '14px',
-                    display: 'block',
-                    marginBottom: '4px'
-                  }}>
-                    Filter by Section
-              </label>
-              <select
-                value={selectedSectionFilter}
-                onChange={(e) => setSelectedSectionFilter(e.target.value)}
-                style={{ 
-                      padding: '12px 16px',
-                  border: '2px solid #e5e7eb',
-                      borderRadius: '12px',
-                      minWidth: '180px',
-                  fontSize: '14px',
-                  backgroundColor: 'white',
-                  color: '#374151',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'all 0.2s ease',
-                      fontWeight: '500'
-                }}
-                onFocus={(e) => {
-                      e.target.style.borderColor = '#3b82f6';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = '#e5e7eb';
-                      e.target.style.boxShadow = 'none';
-                }}
-              >
-                <option value="ALL">All Sections</option>
-                {Array.from(new Set(ojtYears.map(y => y.section).filter(s => s))).sort().map(section => (
-                  <option key={section} value={section}>{section}</option>
-                ))}
-              </select>
-                </div>
-            </div>
-            
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div>
-                  <label style={{
-                    fontWeight: '600',
-                    color: '#374151',
-              fontSize: '14px',
-                    display: 'block',
-                    marginBottom: '4px'
-                  }}>
-                    Program
-                  </label>
-                  <div style={{
-                    padding: '12px 20px',
-                    backgroundColor: '#f0f9ff',
-                    border: '2px solid #0ea5e9',
-                    borderRadius: '12px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    color: '#0369a1',
-                    minWidth: '100px',
-                    textAlign: 'center'
             }}>
-              BSIT
-                  </div>
+              {/* Program */}
+              <div>
+                <label style={{
+                  fontWeight: '600',
+                  color: '#374151',
+                  fontSize: '14px',
+                  display: 'block',
+                  marginBottom: '8px'
+                }}>
+                  Program
+                </label>
+                <div style={{
+                  padding: '8px 16px',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: 'white',
+                  minWidth: '80px',
+                  textAlign: 'center',
+                  height: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 3px 8px rgba(102, 126, 234, 0.25)',
+                  letterSpacing: '0.5px',
+                  border: 'none'
+                }}>
+                  BSIT
                 </div>
+              </div>
+            
+              {/* Filter by Batch */}
+              <div>
+                <label style={{ 
+                  fontWeight: '600',
+                  color: '#374151',
+                  fontSize: '14px',
+                  display: 'block',
+                  marginBottom: '8px'
+                }}>
+                  Filter by Batch
+                </label>
+                <select
+                  value={selectedBatchFilter}
+                  onChange={(e) => setSelectedBatchFilter(e.target.value)}
+                  style={{ 
+                    padding: '12px 16px',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '12px',
+                    minWidth: '180px',
+                    fontSize: '14px',
+                    backgroundColor: 'white',
+                    color: '#374151',
+                    cursor: 'pointer',
+                    outline: 'none',
+                    transition: 'all 0.2s ease',
+                    fontWeight: '500'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#3b82f6';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                >
+                  <option value="ALL">All Batches</option>
+                  {Array.from(new Set(ojtYears.map(y => y.year))).sort((a, b) => b - a).map(year => (
+                    <option key={year} value={year.toString()}>{year - 1}-{year}</option>
+                  ))}
+                </select>
+              </div>
+            
+              {/* Filter by Section */}
+              <div>
+                <label style={{ 
+                  fontWeight: '600',
+                  color: '#374151',
+                  fontSize: '14px',
+                  display: 'block',
+                  marginBottom: '8px'
+                }}>
+                  Filter by Section
+                </label>
+                <select
+                  value={selectedSectionFilter}
+                  onChange={(e) => setSelectedSectionFilter(e.target.value)}
+                  style={{ 
+                    padding: '12px 16px',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '12px',
+                    minWidth: '180px',
+                    fontSize: '14px',
+                    backgroundColor: 'white',
+                    color: '#374151',
+                    cursor: 'pointer',
+                    outline: 'none',
+                    transition: 'all 0.2s ease',
+                    fontWeight: '500'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#3b82f6';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                >
+                  <option value="ALL">All Sections</option>
+                  {Array.from(new Set(ojtYears.map(y => y.section).filter(s => s))).sort().map(section => (
+                    <option key={section} value={section}>{section}</option>
+                  ))}
+                </select>
               </div>
               
               {/* Action Buttons */}
               <div style={{ 
                 display: 'flex', 
-                alignItems: 'center', 
+                alignItems: 'flex-start', 
                 gap: '12px',
-                marginLeft: 'auto'
+                marginLeft: 'auto',
+                flexWrap: 'wrap',
+                paddingTop: '28px'
               }}>
                 <button 
                   style={{
-                    padding: '12px 24px',
+                    padding: '11px 20px',
                     backgroundColor: '#3b82f6',
                     color: 'white',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '12px',
+                    border: 'none',
+                    borderRadius: '10px',
                     fontSize: '14px',
                     fontWeight: '600',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)'
+                    boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
                   }}
                   onClick={() => setShowModal(true)}
                   onMouseEnter={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
                     target.style.backgroundColor = '#2563eb';
-                    target.style.transform = 'translateY(-1px)';
-                    target.style.boxShadow = '0 6px 8px -1px rgba(59, 130, 246, 0.4)';
+                    target.style.transform = 'translateY(-2px)';
+                    target.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
                   }}
                   onMouseLeave={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
                     target.style.backgroundColor = '#3b82f6';
                     target.style.transform = 'translateY(0)';
-                    target.style.boxShadow = '0 4px 6px -1px rgba(59, 130, 246, 0.3)';
+                    target.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
                   }}
                 >
                   Import OJT
                 </button>
                 <button
                   style={{
-                    padding: '12px 24px',
-                    backgroundColor: '#6366f1',
+                    padding: '11px 20px',
+                    backgroundColor: '#8b5cf6',
                     color: 'white',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '12px',
+                    border: 'none',
+                    borderRadius: '10px',
                     fontSize: '14px',
                     fontWeight: '600',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.3)'
+                    boxShadow: '0 2px 4px rgba(139, 92, 246, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
                   }}
                   onClick={downloadOJTTemplate}
                   onMouseEnter={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
-                    target.style.backgroundColor = '#4f46e5';
-                    target.style.transform = 'translateY(-1px)';
-                    target.style.boxShadow = '0 6px 8px -1px rgba(99, 102, 241, 0.4)';
+                    target.style.backgroundColor = '#7c3aed';
+                    target.style.transform = 'translateY(-2px)';
+                    target.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.4)';
                   }}
                   onMouseLeave={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
-                    target.style.backgroundColor = '#6366f1';
+                    target.style.backgroundColor = '#8b5cf6';
                     target.style.transform = 'translateY(0)';
-                    target.style.boxShadow = '0 4px 6px -1px rgba(99, 102, 241, 0.3)';
+                    target.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.3)';
                   }}
                 >
                   Download Template
                 </button>
                 <button
-                  style={{ 
-                    padding: '12px 24px',
-                    backgroundColor: '#10b981',
+                  style={{
+                    padding: '11px 20px',
+                    backgroundColor: '#f59e0b',
                     color: 'white',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '12px',
+                    border: 'none',
+                    borderRadius: '10px',
                     fontSize: '14px',
                     fontWeight: '600',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)'
+                    boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  onClick={exportStudentsForUpdate}
+                  onMouseEnter={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.backgroundColor = '#d97706';
+                    target.style.transform = 'translateY(-2px)';
+                    target.style.boxShadow = '0 4px 8px rgba(245, 158, 11, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.backgroundColor = '#f59e0b';
+                    target.style.transform = 'translateY(0)';
+                    target.style.boxShadow = '0 2px 4px rgba(245, 158, 11, 0.3)';
+                  }}
+                >
+                  Export Students
+                </button>
+                <button
+                  style={{ 
+                    padding: '11px 20px',
+                    backgroundColor: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
                   }}
                   onClick={async () => {
                     // Fetch existing send dates before showing modal
@@ -746,6 +901,10 @@ export default function Dashboard() {
                       console.log('📅 Get Send Dates Result:', result);
                       if (result.success && result.scheduled_dates) {
                         console.log('📋 Scheduled dates found:', result.scheduled_dates.length, result.scheduled_dates);
+                        const processedCount = result.scheduled_dates.filter((sd: any) => sd.is_processed).length;
+                        const unprocessedCount = result.scheduled_dates.filter((sd: any) => !sd.is_processed).length;
+                        console.log(`   → Processed: ${processedCount}, Unprocessed: ${unprocessedCount}`);
+                        console.log(`   → Selected batch: ${selectedBatchFilter}`);
                         setExistingSendDates(result.scheduled_dates);
                       } else {
                         console.log('ℹ️ No scheduled dates found');
@@ -775,18 +934,18 @@ export default function Dashboard() {
                   onMouseEnter={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
                     target.style.backgroundColor = '#059669';
-                    target.style.transform = 'translateY(-1px)';
-                    target.style.boxShadow = '0 6px 8px -1px rgba(16, 185, 129, 0.4)';
+                    target.style.transform = 'translateY(-2px)';
+                    target.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.4)';
                   }}
                   onMouseLeave={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
                     target.style.backgroundColor = '#10b981';
                     target.style.transform = 'translateY(0)';
-                    target.style.boxShadow = '0 4px 6px -1px rgba(16, 185, 129, 0.3)';
+                    target.style.boxShadow = '0 2px 4px rgba(16, 185, 129, 0.3)';
                   }}
                 >
                   Set Send Date
-            </button>
+                </button>
               </div>
             </div>
           </div>
@@ -901,74 +1060,87 @@ export default function Dashboard() {
                       target.style.boxShadow = '0 8px 16px -4px rgba(0, 0, 0, 0.1)';
                     }}
                   >
-                    {/* Decorative gradient circle */}
+                    {/* Decorative gradient */}
                     <div style={{
                       position: 'absolute',
-                      top: '-20px',
-                      right: '-20px',
-                      width: '80px',
-                      height: '80px',
-                      background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                      borderRadius: '50%',
-                      opacity: '0.1'
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: '4px',
+                      background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+                      borderRadius: '20px 20px 0 0'
                     }}></div>
                     
                     {/* Card content */}
                     <div style={{ position: 'relative', zIndex: 1 }}>
                       <div style={{
                         display: 'flex',
-                        alignItems: 'center',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
                         marginBottom: '20px'
                       }}>
-                        <div>
+                        <div style={{ flex: 1 }}>
                           <h3 style={{
-                            fontSize: '20px',
+                            fontSize: '18px',
                             fontWeight: '700',
                             color: '#1e293b',
-                            margin: '0 0 4px 0',
+                            margin: '0 0 6px 0',
                             letterSpacing: '-0.025em'
                           }}>
                             CLASS OF {yearData.year - 1}-{yearData.year}
                           </h3>
                           {yearData.section && (
-                            <p style={{
-                              fontSize: '14px',
-                              color: '#64748b',
-                              margin: '0',
-                              fontWeight: '500'
+                            <div style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 12px',
+                              backgroundColor: '#dbeafe',
+                              borderRadius: '6px',
+                              fontSize: '13px',
+                              color: '#1e40af',
+                              fontWeight: '600'
                             }}>
                               Section: {yearData.section}
-                            </p>
+                            </div>
                           )}
+                        </div>
+                        <div style={{
+                          width: '48px',
+                          height: '48px',
+                          backgroundColor: '#eff6ff',
+                          borderRadius: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#3b82f6',
+                          fontSize: '20px'
+                        }}>
+                          <FaUsers />
                         </div>
                       </div>
                       
                       <div style={{
-                        backgroundColor: '#f8fafc',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        border: '1px solid #e2e8f0'
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        marginTop: '20px'
                       }}>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between'
+                        <span style={{
+                          fontSize: '14px',
+                          color: '#64748b',
+                          fontWeight: '500'
                         }}>
-                          <span style={{
-                            fontSize: '14px',
-                            color: '#64748b',
-                            fontWeight: '500'
-                          }}>
-                            OJT Students
-                          </span>
-                          <span style={{
-                            fontSize: '24px',
-                            fontWeight: '800',
-                            color: '#3b82f6'
-                          }}>
-                            {yearData.count}
-                          </span>
-                        </div>
+                          OJT Students:
+                        </span>
+                        <span style={{
+                          fontSize: '28px',
+                          fontWeight: '800',
+                          color: '#3b82f6',
+                          lineHeight: '1'
+                        }}>
+                          {yearData.count}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1456,6 +1628,81 @@ export default function Dashboard() {
                 </div>
               )}
               
+              {/* Batch Already Processed Warning */}
+              {(() => {
+                // For specific batch selection
+                if (selectedBatchFilter !== 'ALL') {
+                  const processedBatch = existingSendDates.find(
+                    sd => sd.batch_year.toString() === selectedBatchFilter && sd.is_processed
+                  );
+                  return processedBatch && (
+                    <div style={{
+                      backgroundColor: '#fef2f2',
+                      border: '2px solid #ef4444',
+                      borderRadius: '12px',
+                      padding: '14px 18px',
+                      marginBottom: '20px',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px'
+                    }}>
+                      <span style={{ fontSize: '22px', flexShrink: 0 }}>🔒</span>
+                      <div style={{ flex: 1 }}>
+                        <strong style={{ color: '#991b1b', fontSize: '14px', display: 'block', marginBottom: '6px' }}>
+                          Batch {selectedBatchFilter} Already Processed
+                        </strong>
+                        <div style={{ color: '#b91c1c', fontSize: '13px', lineHeight: '1.5' }}>
+                          This batch was processed on {new Date(processedBatch.processed_at || processedBatch.send_date).toLocaleDateString()}.
+                          The send date cannot be modified for completed batches.
+                        </div>
+                        <div style={{ marginTop: '6px', fontSize: '12px', color: '#991b1b', fontStyle: 'italic' }}>
+                          ⚠️ All completed students have been sent to admin and ongoing students marked as incomplete.
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                // For "ALL" selection - show if any batches are processed
+                if (selectedBatchFilter === 'ALL') {
+                  const processedBatches = existingSendDates.filter(sd => sd.is_processed);
+                  return processedBatches.length > 0 && (
+                    <div style={{
+                      backgroundColor: '#fef3c7',
+                      border: '2px solid #f59e0b',
+                      borderRadius: '12px',
+                      padding: '14px 18px',
+                      marginBottom: '20px',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px'
+                    }}>
+                      <span style={{ fontSize: '22px', flexShrink: 0 }}>⚠️</span>
+                      <div style={{ flex: 1 }}>
+                        <strong style={{ color: '#92400e', fontSize: '14px', display: 'block', marginBottom: '6px' }}>
+                          Some Batches Already Processed
+                        </strong>
+                        <div style={{ color: '#78350f', fontSize: '13px', lineHeight: '1.5', marginBottom: '8px' }}>
+                          The following batches have already been processed and will be skipped:
+                        </div>
+                        <div style={{ color: '#78350f', fontSize: '13px', lineHeight: '1.6' }}>
+                          {processedBatches.map((batch, idx) => (
+                            <div key={idx} style={{ marginBottom: '2px' }}>
+                              • <strong>Batch {batch.batch_year}</strong> (processed on {new Date(batch.processed_at || batch.send_date).toLocaleDateString()})
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ marginTop: '8px', fontSize: '12px', color: '#92400e', fontStyle: 'italic' }}>
+                          💡 Only unprocessed batches will be scheduled.
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                return null;
+              })()}
+              
               {/* All Data Already Sent Warning */}
               {allDataSent && (
                 <div style={{
@@ -1483,8 +1730,8 @@ export default function Dashboard() {
                 </div>
               )}
               
-              {/* Existing Schedule Warning */}
-              {existingSendDates.length > 0 && !allDataSent && (
+              {/* Existing Schedule Warning - Only show unprocessed dates here */}
+              {existingSendDates.filter(sd => !sd.is_processed).length > 0 && !allDataSent && (
                 <div style={{
                   backgroundColor: '#fef3c7',
                   border: '2px solid #fbbf24',
@@ -1507,8 +1754,8 @@ export default function Dashboard() {
                           let failCount = 0;
                           const errors: string[] = [];
 
-                          // Get all unique years from existing send dates
-                          const yearsToRemove = [...new Set(existingSendDates.map(sd => sd.batch_year))];
+                          // Get all unique years from existing UNPROCESSED send dates
+                          const yearsToRemove = [...new Set(existingSendDates.filter(sd => !sd.is_processed).map(sd => sd.batch_year))];
 
                           for (const year of yearsToRemove) {
                             try {
@@ -1639,10 +1886,10 @@ export default function Dashboard() {
                         Existing Scheduled Dates Found
                       </strong>
                       <div style={{ color: '#78350f', fontSize: '14px', lineHeight: '1.6' }}>
-                        {existingSendDates.map((sd, idx) => (
-                          <div key={idx} style={{ marginBottom: '4px' }}>
-                            • <strong>Batch {sd.batch_year}</strong>{sd.section && ` (Section ${sd.section})`}: {new Date(sd.send_date).toLocaleDateString()} 
-                            <span style={{ fontSize: '12px', marginLeft: '8px', opacity: 0.8 }}>
+                        {existingSendDates.filter(sd => !sd.is_processed).map((sd, idx) => (
+                          <div key={idx} style={{ marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>• <strong>Batch {sd.batch_year}</strong>{sd.section && ` (Section ${sd.section})`}: {new Date(sd.send_date).toLocaleDateString()}</span>
+                            <span style={{ fontSize: '12px', marginLeft: 'auto', opacity: 0.8 }}>
                               (Set on {new Date(sd.created_at).toLocaleDateString()})
                             </span>
                           </div>
@@ -1859,6 +2106,7 @@ export default function Dashboard() {
                           return;
                         }
                         
+                        const failedBatches: string[] = [];
                         for (const year of yearsToProcess) {
                           try {
                             const result = await setSendDate(
@@ -1871,20 +2119,46 @@ export default function Dashboard() {
                               successCount++;
                             } else {
                               failCount++;
+                              failedBatches.push(`${year}: ${result.message || 'Unknown error'}`);
                             }
                           } catch (error) {
                             console.error(`Error scheduling year ${year}:`, error);
                             failCount++;
+                            failedBatches.push(`${year}: ${error instanceof Error ? error.message : 'Unknown error'}`);
                           }
                         }
                         
                         if (successCount > 0) {
-                          alert(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatches scheduled: ${successCount}\nFailed: ${failCount}\n\nOn this date, ALL completed OJT students from ALL batches will be automatically sent to admin!`);
+                          let message = `✅ Schedule Set Successfully!\n\nDate: ${sendDate}\nBatches scheduled: ${successCount}\nFailed: ${failCount}`;
+                          if (failedBatches.length > 0) {
+                            const processedBatchErrors = failedBatches.filter(fb => fb.includes('already been processed'));
+                            const otherErrors = failedBatches.filter(fb => !fb.includes('already been processed'));
+                            
+                            if (processedBatchErrors.length > 0) {
+                              message += `\n\n🔒 Already Processed (Skipped):\n${processedBatchErrors.map(fb => fb.split(': ')[0]).join(', ')}`;
+                            }
+                            if (otherErrors.length > 0) {
+                              message += `\n\n❌ Failed:\n${otherErrors.join('\n')}`;
+                            }
+                          }
+                          message += '\n\n📅 On this date, ALL completed OJT students from scheduled batches will be automatically sent to admin!';
+                          alert(message);
                           setShowDateModal(false);
                           setSendDateState('');
                           setExistingSendDates([]);
                         } else {
-                          alert('Failed to schedule any batches. Please try again.');
+                          let errorMessage = '❌ Failed to schedule any batches.\n\n';
+                          const processedBatchErrors = failedBatches.filter(fb => fb.includes('already been processed'));
+                          const otherErrors = failedBatches.filter(fb => !fb.includes('already been processed'));
+                          
+                          if (processedBatchErrors.length > 0) {
+                            errorMessage += `🔒 Already Processed:\n${processedBatchErrors.map(fb => fb.split(': ')[0]).join(', ')}\n\n`;
+                            errorMessage += 'These batches have been completed and cannot be modified.\n\n';
+                          }
+                          if (otherErrors.length > 0) {
+                            errorMessage += `Other Errors:\n${otherErrors.join('\n')}`;
+                          }
+                          alert(errorMessage);
                         }
                       } else {
                         // Schedule for specific year
@@ -1907,7 +2181,12 @@ export default function Dashboard() {
                           setSendDateState('');
                           setExistingSendDates([]);
                         } else {
-                          alert(`Error: ${result.message}`);
+                          // Check if it's a processed batch error
+                          if (result.message && result.message.includes('already been processed')) {
+                            alert(`🔒 Batch Already Processed\n\n${result.message}\n\n💡 Tip: Processed batches cannot be modified. You can only schedule unprocessed batches.`);
+                          } else {
+                            alert(`Error: ${result.message}`);
+                          }
                         }
                       }
                     } catch (error) {

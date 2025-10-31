@@ -1269,8 +1269,8 @@ getPosts()
             )}
           </div>
 
-          {/* Engagement Points - Only for Alumni */}
-          {user && user.account_type?.user && (
+          {/* Engagement Points - Only for Alumni viewing their own profile */}
+          {user && user.account_type?.user && isOwnProfile && (
             <div className="profile-card" style={{ marginTop: '16px' }}>
               <div className="profile-intro-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>🏆</span>
@@ -1294,11 +1294,6 @@ getPosts()
                   }}>
                     <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>Total Points</div>
                     <div style={{ fontSize: '36px', fontWeight: 'bold' }}>{userPoints.total_points || 0}</div>
-                    {userPoints.rank && (
-                      <div style={{ fontSize: '13px', opacity: 0.85, marginTop: '8px' }}>
-                        🎯 Rank #{userPoints.rank}
-                      </div>
-                    )}
                   </div>
 
                   {/* Points Breakdown */}
@@ -1385,6 +1380,26 @@ getPosts()
                       </div>
                     </div>
 
+                    {/* Posts */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 0',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>📝</span>
+                        <span>Posts</span>
+                        <span style={{ fontSize: '12px', color: '#999' }}>
+                          ({userPoints.points_breakdown?.posts?.count || 0})
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: '600', color: '#667eea' }}>
+                        +{userPoints.points_breakdown?.posts?.points || 0}
+                      </div>
+                    </div>
+
                     {/* Posts with Photos */}
                     <div style={{
                       display: 'flex',
@@ -1424,28 +1439,6 @@ getPosts()
                       </div>
                     </div>
                   </div>
-
-                  {/* View Leaderboard Button */}
-                  <button
-                    onClick={() => navigate('/rewards')}
-                    style={{
-                      width: '100%',
-                      marginTop: '16px',
-                      padding: '12px',
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      transition: 'transform 0.2s'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                    onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-                  >
-                    View Leaderboard 🏅
-                  </button>
                 </div>
               ) : (
                 <div style={{

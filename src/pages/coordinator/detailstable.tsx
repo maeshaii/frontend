@@ -382,13 +382,10 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
     // Status filter
     const statusMatch = (() => {
       if (statusFilter === 'all') return true;
-      if (statusFilter === 'approved') return ojt.is_alumni;
-      if (statusFilter === 'pending') return isUserSentToAdmin(ojt);
-      if (statusFilter === 'not_started') return !ojt.ojt_start_date;
       if (statusFilter === 'incomplete') return ojt.ojt_status === 'Incomplete' || isOverdue(ojt);
       if (statusFilter === 'ongoing') return !ojt.is_alumni && !isUserSentToAdmin(ojt) && ojt.ojt_status !== 'Incomplete' && !isOverdue(ojt) && (ojt.ojt_status || 'Ongoing') === 'Ongoing';
       if (statusFilter === 'completed') return !ojt.is_alumni && !isUserSentToAdmin(ojt) && ojt.ojt_status !== 'Incomplete' && (ojt.ojt_status || 'Ongoing') === 'Completed';
-      return true;
+      return true; // 'all' - show everything
     })();
     
     return searchMatch && statusMatch;
@@ -467,12 +464,9 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
             }}
           >
             <option value="all" style={{ color: '#374151' }}>All Students</option>
-            <option value="not_started" style={{ color: '#374151' }}>Not Started</option>
             <option value="ongoing" style={{ color: '#374151' }}>Ongoing</option>
-            <option value="incomplete" style={{ color: '#374151' }}>Incomplete (Overdue)</option>
             <option value="completed" style={{ color: '#374151' }}>Completed</option>
-            <option value="pending" style={{ color: '#374151' }}>Pending</option>
-            <option value="approved" style={{ color: '#374151' }}>Approved</option>
+            <option value="incomplete" style={{ color: '#374151' }}>Incomplete (Overdue)</option>
           </select>
           
           <input
