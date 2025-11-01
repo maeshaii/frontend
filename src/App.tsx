@@ -38,13 +38,15 @@ import ReportSettingsPage from './pages/admin/report-settings/index';
 import { PrivateRoute } from './components/PrivateRoute';
 import AlumniProfile from './pages/alumni/Profile';
 import UnifiedDashboard from './pages/shared/UnifiedDashboard';
+import MobileDetector from './components/MobileDetector';
 
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <Router>
-          <Routes>
+        <MobileDetector>
+          <Router>
+            <Routes>
           {/* Redirect root URL to /login */}
           <Route path="/" element={<Navigate to="/login" replace />} />
 
@@ -346,8 +348,9 @@ const App: React.FC = () => {
         <Route path="/users" element={<Users />} />
         etc.
         */}
-          </Routes>
-        </Router>
+            </Routes>
+          </Router>
+        </MobileDetector>
       </QueryClientProvider>
     </ErrorBoundary>
   );

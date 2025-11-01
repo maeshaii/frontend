@@ -18,3 +18,62 @@ html, body {
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
+
+/* Responsive breakpoints */
+/* Mobile: < 768px (handled by MobileDetector - shows download message) */
+/* Tablet: 768px - 1024px */
+/* Desktop: > 1024px */
+
+/* Tablet responsive styles */
+@media (max-width: 1024px) and (min-width: 768px) {
+  /* Adjust container padding for tablets */
+  body {
+    font-size: 14px;
+  }
+  
+  /* Ensure content doesn't overflow on tablets */
+  * {
+    box-sizing: border-box;
+  }
+}
+
+/* Responsive containers for tablet */
+@media (max-width: 1024px) {
+  /* General container adjustments */
+  .container,
+  [class*="container"] {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  
+  /* Adjust grid layouts for tablets */
+  .grid,
+  [class*="grid"] {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  
+  /* Responsive tables */
+  table {
+    font-size: 14px;
+  }
+  
+  /* Responsive forms */
+  form {
+    max-width: 100%;
+  }
+  
+  /* Responsive modals/dialogs */
+  [class*="modal"],
+  [class*="dialog"] {
+    max-width: 90%;
+    margin: 20px auto;
+  }
+}
+
+/* Ensure minimum width for tablets */
+@media (min-width: 768px) {
+  body {
+    min-width: 768px;
+  }
+}
