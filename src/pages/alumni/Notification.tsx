@@ -528,10 +528,26 @@ const NotificationPage: React.FC = () => {
                 const response = await getPostFromComment(parseInt(commentId));
                 if (response.success && response.post_id) {
                   const resolvedPostId = response.post_id.toString();
-                  console.log('Resolved comment to post ID:', resolvedPostId);
+                  const resolvedPostType = response.post_type;
+                  console.log('Resolved comment to post ID:', resolvedPostId, 'Type:', resolvedPostType);
                   
+                  // Check if this is a repost
+                  if (resolvedPostType === 'repost') {
+                    console.log('Repost comment mention - redirecting to repost modal');
+                    localStorage.setItem('pendingRepostView', resolvedPostId);
+                    
+                    // Redirect to dashboard
+                    const currentPath = window.location.pathname;
+                    if (currentPath.startsWith('/peso')) {
+                      window.location.href = `/peso/dashboard/${resolvedPostId}`;
+                    } else if (currentPath.startsWith('/ccict')) {
+                      window.location.href = `/ccict/dashboard/${resolvedPostId}`;
+                    } else {
+                      window.location.href = `/dashboard/${resolvedPostId}`;
+                    }
+                  }
                   // Check if this is a forum or donation post
-                  if (forumIdMatch) {
+                  else if (forumIdMatch) {
                     console.log('Forum comment mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
                     localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
                     navigate('/forum');
@@ -568,10 +584,26 @@ const NotificationPage: React.FC = () => {
                 const response = await getPostFromComment(parseInt(replyId));
                 if (response.success && response.post_id) {
                   const resolvedPostId = response.post_id.toString();
-                  console.log('Resolved reply to post ID:', resolvedPostId);
+                  const resolvedPostType = response.post_type;
+                  console.log('Resolved reply to post ID:', resolvedPostId, 'Type:', resolvedPostType);
                   
+                  // Check if this is a repost
+                  if (resolvedPostType === 'repost') {
+                    console.log('Repost reply mention - redirecting to repost modal');
+                    localStorage.setItem('pendingRepostView', resolvedPostId);
+                    
+                    // Redirect to dashboard
+                    const currentPath = window.location.pathname;
+                    if (currentPath.startsWith('/peso')) {
+                      window.location.href = `/peso/dashboard/${resolvedPostId}`;
+                    } else if (currentPath.startsWith('/ccict')) {
+                      window.location.href = `/ccict/dashboard/${resolvedPostId}`;
+                    } else {
+                      window.location.href = `/dashboard/${resolvedPostId}`;
+                    }
+                  }
                   // Check if this is a forum or donation post
-                  if (forumIdMatch) {
+                  else if (forumIdMatch) {
                     console.log('Forum reply mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
                     localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
                     navigate('/forum');
@@ -645,8 +677,28 @@ const NotificationPage: React.FC = () => {
                 const commentIdNum = parseInt(commentId!);
                 const response = await getPostFromComment(commentIdNum);
                 if (response.success && response.post_id) {
-                  postId = response.post_id.toString();
-                  console.log('Resolved comment to post ID:', postId);
+                  const resolvedPostId = response.post_id.toString();
+                  const resolvedPostType = response.post_type;
+                  console.log('Resolved comment to post ID:', resolvedPostId, 'Type:', resolvedPostType);
+                  
+                  // Check if this is a repost
+                  if (resolvedPostType === 'repost') {
+                    console.log('Comment is on a repost - redirecting to repost modal');
+                    localStorage.setItem('pendingRepostView', resolvedPostId);
+                    
+                    // Redirect to dashboard
+                    const currentPath = window.location.pathname;
+                    if (currentPath.startsWith('/peso')) {
+                      window.location.href = `/peso/dashboard/${resolvedPostId}`;
+                    } else if (currentPath.startsWith('/ccict')) {
+                      window.location.href = `/ccict/dashboard/${resolvedPostId}`;
+                    } else {
+                      window.location.href = `/dashboard/${resolvedPostId}`;
+                    }
+                    return;
+                  } else {
+                    postId = resolvedPostId;
+                  }
                 } else {
                   console.error('Could not resolve comment to post');
                   alert('Could not find the post for this comment. It may have been deleted.');

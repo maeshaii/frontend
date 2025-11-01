@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { likeRepost, unlikeRepost, commentOnRepost, getRepostLikes, editRepostComment, deleteRepostComment, editRepost, deleteRepost, editPost, deletePost, getCommentReplies } from '../services/api';
 import { getProfilePicUrl, handleProfilePicError, getImageUrl } from '../utils/profilePicUtils';
 import RepostButton from './RepostButton';
@@ -346,7 +346,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
     await loadReplies(commentId);
   };
 
-  const loadReplies = async (commentId: number) => {
+  const loadReplies = useCallback(async (commentId: number) => {
     try {
       const response = await getCommentReplies(commentId);
       if (response && response.replies) {
@@ -356,21 +356,27 @@ const RepostCard: React.FC<RepostCardProps> = ({
       console.error('Error loading replies:', error);
       setCommentReplies(prev => ({ ...prev, [commentId]: [] }));
     }
-  };
+  }, []);
 
   // Auto-load replies for comments that have replies_count > 0
   useEffect(() => {
     if (comments && comments.length > 0) {
-      comments.forEach(comment => {
-        if (comment.replies_count && comment.replies_count > 0) {
-          // Only load if not already loaded
-          if (!commentReplies[comment.comment_id]) {
-            loadReplies(comment.comment_id);
+      (async () => {
+        for (const comment of comments) {
+          if (comment.replies_count && comment.replies_count > 0) {
+            // Only load if not already loaded
+            if (!commentReplies[comment.comment_id]) {
+              await loadReplies(comment.comment_id);
+            }
+            // Auto-show replies by default
+            if (!showReplies[comment.comment_id]) {
+              setShowReplies(prev => ({ ...prev, [comment.comment_id]: true }));
+            }
           }
         }
-      });
+      })();
     }
-  }, [comments]);
+  }, [comments, loadReplies]);
 
   const getProfilePath = (userId: number) => {
     const path = window.location.pathname;
@@ -1264,7 +1270,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
       {(comments && comments.length > 0) || (repost.comments_count && repost.comments_count > 0) ? (
           <div className="comments-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
             {comments && comments.length > 0 ? (
-              (showAllComments ? comments : comments.slice(0, 2)).map((comment) => (
+              (showAllComments ? comments : comments.slice(0, 5)).map((comment) => (
               <div key={comment.comment_id} className="comment-item" style={{ 
                 display: 'flex', 
                 gap: '8px', 
@@ -1541,11 +1547,11 @@ const RepostCard: React.FC<RepostCardProps> = ({
                   {/* Replies */}
                   {commentReplies[comment.comment_id] && commentReplies[comment.comment_id].length > 0 && (
                     <div style={{ marginTop: '8px' }}>
-                      {/* Show all replies if less than 2, otherwise show first 2 with toggle */}
+                      {/* Show all replies if less than 3, otherwise show first 3 with toggle */}
                       {commentReplies[comment.comment_id].slice(0, 
-                        commentReplies[comment.comment_id].length < 2 ? 
+                        commentReplies[comment.comment_id].length < 3 ? 
                           commentReplies[comment.comment_id].length : 
-                          (showReplies[comment.comment_id] ? commentReplies[comment.comment_id].length : 2)
+                          (showReplies[comment.comment_id] ? commentReplies[comment.comment_id].length : 3)
                       ).map((reply) => (
                         <Reply
                           key={reply.reply_id}
@@ -1560,7 +1566,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                       ))}
                       
                       {/* Show more/less replies button */}
-                      {commentReplies[comment.comment_id].length > 2 && (
+                      {commentReplies[comment.comment_id].length > 3 && (
                         <button
                           onClick={() => setShowReplies(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
                           style={{
@@ -1575,7 +1581,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                         >
                           {showReplies[comment.comment_id] 
                             ? 'Hide replies' 
-                            : `View ${commentReplies[comment.comment_id].length - 2} more ${commentReplies[comment.comment_id].length - 2 === 1 ? 'reply' : 'replies'}`
+                            : `View ${commentReplies[comment.comment_id].length - 3} more ${commentReplies[comment.comment_id].length - 3 === 1 ? 'reply' : 'replies'}`
                           }
                         </button>
                       )}
@@ -1605,7 +1611,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                 </button>
               </div>
             )}
-            {comments && comments.length > 2 && !showAllComments && (
+            {comments && comments.length > 5 && !showAllComments && (
               <button
                 className="view-all-comments-btn"
                 style={{ fontSize: '12px', color: '#1C4E80', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px', marginLeft: '8px' }}
@@ -1614,7 +1620,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                 View all comments ({comments.length})
               </button>
             )}
-            {comments && comments.length > 2 && showAllComments && (
+            {comments && comments.length > 5 && showAllComments && (
               <button
                 className="hide-comments-btn"
                 style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px', marginLeft: '8px' }}

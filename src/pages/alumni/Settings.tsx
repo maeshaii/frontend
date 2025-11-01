@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
-import { Box, Paper, Typography, TextField, Button, Select, MenuItem, FormControl, InputLabel, Alert, InputAdornment, IconButton } from '@mui/material';
+import { Box, Paper, Typography, TextField, Button, Select, MenuItem, FormControl, InputLabel, Alert, InputAdornment, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Checkbox, FormControlLabel, FormGroup } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
+import { trackerApi } from '../../services/trackerApi';
 
 interface UserData {
   user_id: number;
@@ -82,10 +83,36 @@ const Settings: React.FC = () => {
     supporting_document_awards_recognition: '',
     unemployment_reason: '',
     created_at: '',
-    updated_at: ''
+    updated_at: '',
+    // Part III: Employment Status fields
+    employment_type: '',
+    current_employment_status: '',
+    current_company_name: '',
+    current_position: '',
+    current_sector: '',
+    current_scope: '',
+    employment_duration: '',
+    salary_range: '',
+    received_awards: '',
+    awards_supporting_doc: '',
+    employment_supporting_doc: '',
+    employment_sector: '',
+    // Part IV: Further Study fields
+    study_start_date: '',
+    post_graduate_degree: '',
+    institution_name: '',
+    units_obtained: ''
   });
 
-  const [isEmployed, setIsEmployed] = useState<boolean | null>(null);
+  // Employment flow state
+  const [accountType, setAccountType] = useState<string>(''); // 'alumni' or 'ojt'
+  const [hasJobInDB, setHasJobInDB] = useState<boolean | null>(null); // Check if user has job in database (for alumni: tracker data, for ojt: employment data)
+  const [isEmployed, setIsEmployed] = useState<boolean | null>(null); // Are you employed? (for new users)
+  const [pursueFurtherStudy, setPursueFurtherStudy] = useState<boolean | null>(null); // Did you pursue further study?
+  
+  // Unemployment tracker questions
+  const [unemploymentQuestions, setUnemploymentQuestions] = useState<any[]>([]);
+  const [unemploymentResponses, setUnemploymentResponses] = useState<Record<string, any>>({});
 
   useEffect(() => {
     fetchUserData();
@@ -172,6 +199,19 @@ const Settings: React.FC = () => {
     }
   };
 
+  // Helper function to normalize dropdown values to match options
+  const normalizeDropdownValue = (value: string, options: string[]): string => {
+    if (!value) return '';
+    const trimmedValue = value.trim();
+    // Exact match
+    if (options.includes(trimmedValue)) return trimmedValue;
+    // Case-insensitive match
+    const matchedOption = options.find(opt => opt.toLowerCase() === trimmedValue.toLowerCase());
+    if (matchedOption) return matchedOption;
+    // Return original value if no match found
+    return trimmedValue;
+  };
+
   const fetchEmploymentData = async (userId: number) => {
     try {
       const accessToken = localStorage.getItem('accessToken');
@@ -184,6 +224,29 @@ const Settings: React.FC = () => {
       
       if (response.ok) {
         const data = await response.json();
+        
+        // Normalize dropdown values to match options
+        const normalizedEmploymentStatus = normalizeDropdownValue(
+          data.current_employment_status || data.employment_status || '', 
+          currentEmploymentStatusOptions
+        );
+        const normalizedSector = normalizeDropdownValue(
+          data.current_sector || data.sector || '', 
+          sectorRadioOptions
+        );
+        const normalizedScope = normalizeDropdownValue(
+          data.current_scope || data.scope_current || '', 
+          scopeOptions
+        );
+        const normalizedAwards = normalizeDropdownValue(
+          data.received_awards || data.awards_recognition_current || '', 
+          awardsOptions
+        );
+        const normalizedEmploymentType = normalizeDropdownValue(
+          data.employment_type || '', 
+          employmentTypeOptions
+        );
+        
         setEmploymentData({
           organization_name: data.organization_name || '',
           date_hired: data.date_hired || '',
@@ -211,35 +274,75 @@ const Settings: React.FC = () => {
           supporting_document_awards_recognition: data.supporting_document_awards_recognition || '',
           unemployment_reason: data.unemployment_reason || '',
           created_at: data.created_at || '',
-          updated_at: data.updated_at || ''
+          updated_at: data.updated_at || '',
+          // Part III fields - map from existing fields where applicable, with normalized values
+          employment_type: normalizedEmploymentType || data.employment_type || '',
+          current_employment_status: normalizedEmploymentStatus,
+          current_company_name: data.current_company_name || data.organization_name || '',
+          current_position: data.current_position || data.position || '',
+          current_sector: normalizedSector,
+          current_scope: normalizedScope,
+          employment_duration: data.employment_duration || data.employment_duration_current || '',
+          salary_range: data.salary_range || data.salary_current || '',
+          received_awards: normalizedAwards,
+          awards_supporting_doc: data.awards_supporting_doc || data.supporting_document_awards_recognition || '',
+          employment_supporting_doc: data.employment_supporting_doc || data.supporting_document_current || '',
+          employment_sector: data.employment_sector || '',
+          // Part IV fields - from academic info if available
+          study_start_date: data.study_start_date || data.q_study_start_date || '',
+          post_graduate_degree: data.post_graduate_degree || data.q_post_graduate_degree || '',
+          institution_name: data.institution_name || data.q_institution_name || '',
+          units_obtained: data.units_obtained || data.q_units_obtained || ''
         });
         
-        // Determine if user is employed based on data
-        const hasEmploymentData = data.organization_name && data.organization_name.trim() !== '';
-        const isUnemployed = data.sector === 'Unemployed' || data.employment_status === 'Unemployed';
+        // Set account type
+        const accType = data.account_type || 'alumni'; // Default to alumni if not specified
+        setAccountType(accType);
         
-        if (hasEmploymentData && !isUnemployed) {
-          setIsEmployed(true);
-        } else if (isUnemployed) {
-          setIsEmployed(false);
+        // For OJT accounts: use has_employment_data
+        if (accType === 'ojt') {
+          const hasEmploymentData = data.has_employment_data || (data.organization_name && data.organization_name.trim() !== '');
+          setHasJobInDB(hasEmploymentData);
+          if (hasEmploymentData) {
+            setIsEditingEmployment(true);
+          }
+          console.log('OJT - hasEmploymentData:', hasEmploymentData);
         } else {
-          // No employment data and not explicitly unemployed - show question
-          setIsEmployed(null);
+          // For Alumni accounts: use has_tracker_data to check if they have tracker data
+          const hasTrackerData = data.has_tracker_data || false;
+          const hasEmploymentData = data.organization_name && data.organization_name.trim() !== '';
+          const isUnemployedInDB = data.sector === 'Unemployed' || data.employment_status === 'Unemployed';
+          
+          // For alumni: if they have tracker data, show pre-populated Part III
+          const hasJob = hasTrackerData && hasEmploymentData && !isUnemployedInDB;
+          setHasJobInDB(hasJob);
+          
+          // If user has tracker data in DB, enable editing mode automatically
+          if (hasJob) {
+            setIsEditingEmployment(true);
+          }
+          
+          // Set pursueFurtherStudy based on existing data
+          if (data.post_graduate_degree || data.q_post_graduate_degree) {
+            setPursueFurtherStudy(true);
+          } else if (hasJob) {
+            setPursueFurtherStudy(false);
+          }
+          
+          console.log('Alumni - hasTrackerData:', hasTrackerData);
+          console.log('Alumni - hasEmploymentData:', hasEmploymentData);
+          console.log('Alumni - isUnemployedInDB:', isUnemployedInDB);
+          console.log('Alumni - hasJobInDB:', hasJob);
         }
         
-        console.log('hasEmploymentData:', hasEmploymentData);
-        console.log('isUnemployed:', isUnemployed);
-        console.log('Final isEmployed:', isEmployed);
-        
         console.log('Employment data loaded:', data);
-        console.log('Is employed:', isEmployed);
       } else {
         console.error('Failed to fetch employment data');
-        setIsEmployed(null);
+        setHasJobInDB(null);
       }
     } catch (error) {
       console.error('Error fetching employment data:', error);
-      setIsEmployed(null);
+      setHasJobInDB(null);
     }
   };
 
@@ -333,6 +436,48 @@ const Settings: React.FC = () => {
   };
 
   const handleEmploymentSave = async () => {
+    // For unemployed alumni, save unemployment responses to TrackerData
+    if (accountType === 'alumni' && isEmployed === false && unemploymentQuestions.length > 0) {
+      try {
+        const userStr = localStorage.getItem('user');
+        if (!userStr) return;
+        
+        const user = JSON.parse(userStr);
+        const userId = user.user_id || user.id;
+        const accessToken = localStorage.getItem('accessToken');
+        
+        // Get the unemployment question ID
+        const unemploymentQuestion = unemploymentQuestions[0];
+        const unemploymentReasons = unemploymentResponses[unemploymentQuestion.id] || [];
+        
+        // Save unemployment reasons to TrackerData via the employment API
+        const response = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${userId}/`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            // Mark as unemployed
+            unemployment_reason: unemploymentReasons,
+            q_unemployment_reason: unemploymentReasons
+          })
+        });
+        
+        if (response.ok) {
+          alert('Unemployment information saved successfully!');
+          setIsEditingEmployment(false);
+        } else {
+          alert('Failed to save unemployment information');
+        }
+      } catch (error) {
+        console.error('Error saving unemployment information:', error);
+        alert('Error saving unemployment information');
+      }
+      return;
+    }
+    
+    // Existing save logic for employed users
     setSaving(true);
     try {
       const userStr = localStorage.getItem('user');
@@ -342,22 +487,14 @@ const Settings: React.FC = () => {
       const userId = user.user_id || user.id;
       const accessToken = localStorage.getItem('accessToken');
       
-      let dataToSend;
-      
+      // If user is unemployed, handle differently
       if (isEmployed === false) {
-        // If unemployed, clear employment details and set status to unemployed
-        dataToSend = {
-          organization_name: '',
-          date_hired: '',
-          position: '',
-          employment_status: 'Unemployed',
-          company_address: '',
-          sector: 'Unemployed'
-        };
-      } else {
-        // If employed, send the employment data
-        dataToSend = employmentData;
+        // Navigate to tracker for unemployment reasons - this shouldn't reach here as we navigate earlier
+        return;
       }
+      
+      // Send employment data (either updating existing or creating new)
+      const dataToSend = employmentData;
       
       const response = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${userId}/`, {
         method: 'PUT',
@@ -413,7 +550,25 @@ const Settings: React.FC = () => {
       supporting_document_awards_recognition: '',
       unemployment_reason: '',
       created_at: '',
-      updated_at: ''
+      updated_at: '',
+      // Part III fields
+      employment_type: '',
+      current_employment_status: '',
+      current_company_name: '',
+      current_position: '',
+      current_sector: '',
+      current_scope: '',
+      employment_duration: '',
+      salary_range: '',
+      received_awards: '',
+      awards_supporting_doc: '',
+      employment_supporting_doc: '',
+      employment_sector: '',
+      // Part IV fields
+      study_start_date: '',
+      post_graduate_degree: '',
+      institution_name: '',
+      units_obtained: ''
     });
     setIsEditingEmployment(false);
   };
@@ -520,6 +675,32 @@ const Settings: React.FC = () => {
     'Private',
     'Government',
     'Unemployed'
+  ];
+
+  const employmentTypeOptions = [
+    'Employed by a company/organization',
+    'Self-employed',
+    'Freelance/Contract-based'
+  ];
+
+  const currentEmploymentStatusOptions = [
+    'Permanent',
+    'Temporary'
+  ];
+
+  const scopeOptions = [
+    'Local',
+    'International'
+  ];
+
+  const sectorRadioOptions = [
+    'Public',
+    'Private'
+  ];
+
+  const awardsOptions = [
+    'Yes',
+    'No'
   ];
 
   if (loading) {
@@ -780,159 +961,451 @@ const Settings: React.FC = () => {
                     <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
                       Employment Details
                     </Typography>
-                    {!isEditingEmployment && isEmployed !== null && (
-                      <Button
-                        variant="contained"
-                        onClick={() => setIsEditingEmployment(true)}
-                        sx={{
-                          backgroundColor: '#174f84',
-                          '&:hover': { backgroundColor: '#0d3a5f' },
-                          px: 3,
-                          py: 1
-                        }}
-                      >
-                        Edit
-                      </Button>
-                    )}
                   </Box>
                   
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    {/* Employment Status Check */}
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-                        Are you still employed?
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 2 }}>
-                        <Button
-                          variant={isEmployed === true ? "contained" : "outlined"}
-                          onClick={() => setIsEmployed(true)}
-                          sx={{
-                            backgroundColor: isEmployed === true ? '#174f84' : 'transparent',
-                            borderColor: '#174f84',
-                            color: isEmployed === true ? 'white' : '#174f84',
-                            '&:hover': {
-                              backgroundColor: isEmployed === true ? '#0d3a5f' : '#f5f5f5'
-                            }
-                          }}
-                        >
-                          Yes, I am employed
-                        </Button>
-                        <Button
-                          variant={isEmployed === false ? "contained" : "outlined"}
-                          onClick={() => setIsEmployed(false)}
-                          sx={{
-                            backgroundColor: isEmployed === false ? '#174f84' : 'transparent',
-                            borderColor: '#174f84',
-                            color: isEmployed === false ? 'white' : '#174f84',
-                            '&:hover': {
-                              backgroundColor: isEmployed === false ? '#0d3a5f' : '#f5f5f5'
-                            }
-                          }}
-                        >
-                          No, I am unemployed
-                        </Button>
+                    {/* Flow Logic */}
+                    {hasJobInDB === null && (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 4 }}>
+                        <Typography>Loading employment data...</Typography>
                       </Box>
-                    </Box>
+                    )}
 
-                    {/* Employment Details Form - Only show after user answers the question */}
-                    {isEmployed !== null && (
+                    {/* OJT Account: Display only EmploymentHistory fields (view-only, no edit) */}
+                    {accountType === 'ojt' && (hasJobInDB === true || hasJobInDB === false) && (
                       <>
+                        {/* Only show fields from EmploymentHistory model - always disabled (view-only) */}
                         <TextField
-                          label="Name of Organization"
+                          label="Company Name"
                           value={employmentData.organization_name}
-                          onChange={(e) => handleEmploymentChange('organization_name', e.target.value)}
                           variant="outlined"
                           fullWidth
-                          disabled={!isEditingEmployment}
+                          disabled={true}
+                          sx={{ mb: 2 }}
                         />
-                    
-                    <Box sx={{ display: 'flex', gap: 2 }}>
-                      <TextField
-                        label="Date Hired"
-                        value={employmentData.date_hired}
-                        onChange={(e) => handleEmploymentChange('date_hired', e.target.value)}
-                        variant="outlined"
-                        type="date"
-                        InputLabelProps={{ shrink: true }}
-                        sx={{ flex: 1 }}
-                        disabled={!isEditingEmployment}
-                      />
-                      <TextField
-                        label="Position"
-                        value={employmentData.position}
-                        onChange={(e) => handleEmploymentChange('position', e.target.value)}
-                        variant="outlined"
-                        sx={{ flex: 1 }}
-                        disabled={!isEditingEmployment}
-                      />
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', gap: 2 }}>
-                      <FormControl variant="outlined" sx={{ flex: 1 }}>
-                        <InputLabel>Status of Employment</InputLabel>
-                        <Select
-                          value={employmentData.employment_status}
-                          onChange={(e) => handleEmploymentChange('employment_status', e.target.value)}
-                          label="Status of Employment"
-                          disabled={!isEditingEmployment}
-                        >
-                          {employmentStatusOptions.map((status) => (
-                            <MenuItem key={status} value={status}>
-                              {status}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                      <FormControl variant="outlined" sx={{ flex: 1 }}>
-                        <InputLabel>Sector</InputLabel>
-                        <Select
-                          value={employmentData.sector}
-                          onChange={(e) => handleEmploymentChange('sector', e.target.value)}
-                          label="Sector"
-                          disabled={!isEditingEmployment}
-                        >
-                          {sectorOptions.map((sector) => (
-                            <MenuItem key={sector} value={sector}>
-                              {sector}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    </Box>
-                    
+                        <TextField
+                          label="Date Started"
+                          value={employmentData.date_hired}
+                          variant="outlined"
+                          type="date"
+                          InputLabelProps={{ shrink: true }}
+                          fullWidth
+                          disabled={true}
+                          sx={{ mb: 2 }}
+                        />
+                        <TextField
+                          label="Position"
+                          value={employmentData.position}
+                          variant="outlined"
+                          fullWidth
+                          disabled={true}
+                          sx={{ mb: 2 }}
+                        />
+                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
+                          <InputLabel>Sector</InputLabel>
+                          <Select
+                            value={employmentData.sector}
+                            label="Sector"
+                            disabled={true}
+                          >
+                            {sectorOptions.map((sector) => (
+                              <MenuItem key={sector} value={sector}>
+                                {sector}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
+                          <InputLabel>Scope</InputLabel>
+                          <Select
+                            value={employmentData.scope_current}
+                            label="Scope"
+                            disabled={true}
+                          >
+                            {scopeOptions.map((scope) => (
+                              <MenuItem key={scope} value={scope}>
+                                {scope}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
                         <TextField
                           label="Company Address"
                           value={employmentData.company_address}
-                          onChange={(e) => handleEmploymentChange('company_address', e.target.value)}
                           variant="outlined"
                           multiline
                           rows={3}
-                          disabled={!isEditingEmployment}
+                          disabled={true}
+                          sx={{ mb: 2 }}
+                        />
+                        <TextField
+                          label="Employment Duration"
+                          value={employmentData.employment_duration_current}
+                          variant="outlined"
+                          fullWidth
+                          disabled={true}
+                          sx={{ mb: 2 }}
+                        />
+                        <TextField
+                          label="Salary"
+                          value={employmentData.salary_current}
+                          variant="outlined"
+                          fullWidth
+                          disabled={true}
+                          sx={{ mb: 2 }}
+                        />
+                        <TextField
+                          label="Company Email"
+                          value={employmentData.company_email}
+                          variant="outlined"
+                          fullWidth
+                          type="email"
+                          disabled={true}
+                          sx={{ mb: 2 }}
+                        />
+                        <TextField
+                          label="Company Contact"
+                          value={employmentData.company_contact}
+                          variant="outlined"
+                          fullWidth
+                          disabled={true}
+                          sx={{ mb: 2 }}
+                        />
+                        <TextField
+                          label="Contact Person"
+                          value={employmentData.contact_person}
+                          variant="outlined"
+                          fullWidth
+                          disabled={true}
+                          sx={{ mb: 2 }}
+                        />
+                        <TextField
+                          label="Awards/Recognition"
+                          value={employmentData.awards_recognition_current}
+                          variant="outlined"
+                          fullWidth
+                          disabled={true}
+                          sx={{ mb: 2 }}
                         />
                       </>
                     )}
 
+                    {/* Alumni Account: Use the flow with Part III/IV */}
+                    {accountType === 'alumni' && (
+                      <>
+                        {/* If user has no tracker data in DB, ask "Are you employed?" */}
+                        {hasJobInDB === false && isEmployed === null && (
+                          <Box sx={{ mb: 3 }}>
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
+                              Are you employed?
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 2 }}>
+                              <Button
+                                variant="outlined"
+                                onClick={() => {
+                                  setIsEmployed(true);
+                                  setIsEditingEmployment(true);
+                                }}
+                                sx={{
+                                  borderColor: '#174f84',
+                                  color: '#174f84',
+                                  '&:hover': { backgroundColor: '#f5f5f5', borderColor: '#174f84' }
+                                }}
+                              >
+                                Yes
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                onClick={async () => {
+                                  setIsEmployed(false);
+                                  setIsEditingEmployment(true);
+                                  // Fetch unemployment questions from tracker
+                                  try {
+                                    const questionsData = await trackerApi.getQuestions();
+                                    const categories = questionsData?.categories || [];
+                                    const unemployedCategory = categories.find((cat: any) => 
+                                      cat.title.toLowerCase().includes('unemployed')
+                                    );
+                                    if (unemployedCategory) {
+                                      setUnemploymentQuestions(unemployedCategory.questions || []);
+                                    }
+                                  } catch (error) {
+                                    console.error('Error fetching unemployment questions:', error);
+                                  }
+                                }}
+                                sx={{
+                                  borderColor: '#174f84',
+                                  color: '#174f84',
+                                  '&:hover': { backgroundColor: '#f5f5f5', borderColor: '#174f84' }
+                                }}
+                              >
+                                No
+                              </Button>
+                            </Box>
+                          </Box>
+                        )}
 
-                    {/* Unemployed Status Display */}
-                    {isEmployed === false && (
-                      <Box sx={{ 
-                        p: 3, 
-                        backgroundColor: '#f5f5f5', 
-                        borderRadius: 2, 
-                        textAlign: 'center',
-                        border: '1px solid #e0e0e0'
-                      }}>
-                        <Typography variant="h6" sx={{ color: '#666', mb: 1 }}>
-                          Employment Status: Unemployed
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#888' }}>
-                          Your employment details have been cleared. You can update your status anytime.
-                        </Typography>
-                      </Box>
+                        {/* If unemployed, show unemployment questions */}
+                        {isEmployed === false && unemploymentQuestions.length > 0 && (
+                          <Box sx={{ mb: 3 }}>
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
+                              IF UNEMPLOYED
+                            </Typography>
+                            {unemploymentQuestions.map((question: any) => (
+                              <Box key={question.id} sx={{ mb: 3 }}>
+                                <Typography variant="body1" sx={{ mb: 1, fontWeight: 'medium' }}>
+                                  {question.text} {question.required && <span style={{ color: 'red' }}>*</span>}
+                                </Typography>
+                                {question.type === 'checkbox' && (
+                                  <FormGroup>
+                                    {question.options?.map((option: string) => (
+                                      <FormControlLabel
+                                        key={option}
+                                        control={
+                                          <Checkbox
+                                            checked={(unemploymentResponses[question.id] || []).includes(option)}
+                                            onChange={(e) => {
+                                              const current = unemploymentResponses[question.id] || [];
+                                              const updated = e.target.checked
+                                                ? [...current, option]
+                                                : current.filter((item: string) => item !== option);
+                                              setUnemploymentResponses({
+                                                ...unemploymentResponses,
+                                                [question.id]: updated
+                                              });
+                                            }}
+                                          />
+                                        }
+                                        label={option}
+                                      />
+                                    ))}
+                                  </FormGroup>
+                                )}
+                              </Box>
+                            ))}
+                          </Box>
+                        )}
+
+                        {/* Part III: Employment Status - Show when user is employed */}
+                        {/* If hasJobInDB: pre-populated, else: empty form */}
+                        {(hasJobInDB === true || isEmployed === true) && (
+                          <>
+                            {/* Part III: Employment Status Questions */}
+                            <Typography variant="h6" sx={{ mt: 3, mb: 2, fontWeight: 'bold' }}>
+                              PART III: EMPLOYMENT STATUS
+                            </Typography>
+
+                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
+                          <InputLabel>Are you employed by a company/organization or are you self employed?</InputLabel>
+                          <Select
+                            value={employmentData.employment_type}
+                            onChange={(e) => handleEmploymentChange('employment_type', e.target.value)}
+                            label="Are you employed by a company/organization or are you self employed?"
+                            disabled={!isEditingEmployment}
+                          >
+                            {employmentTypeOptions.map((option) => (
+                              <MenuItem key={option} value={option}>
+                                {option}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+
+                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
+                          <InputLabel>Status of your current employment</InputLabel>
+                          <Select
+                            value={employmentData.current_employment_status}
+                            onChange={(e) => handleEmploymentChange('current_employment_status', e.target.value)}
+                            label="Status of your current employment"
+                            disabled={!isEditingEmployment}
+                          >
+                            {currentEmploymentStatusOptions.map((option) => (
+                              <MenuItem key={option} value={option}>
+                                {option}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+
+                        <TextField
+                          label="Current Company Name"
+                          value={employmentData.current_company_name}
+                          onChange={(e) => handleEmploymentChange('current_company_name', e.target.value)}
+                          variant="outlined"
+                          fullWidth
+                          disabled={!isEditingEmployment}
+                          sx={{ mb: 2 }}
+                        />
+
+                        <TextField
+                          label="Current Position"
+                          value={employmentData.current_position}
+                          onChange={(e) => handleEmploymentChange('current_position', e.target.value)}
+                          variant="outlined"
+                          fullWidth
+                          disabled={!isEditingEmployment}
+                          sx={{ mb: 2 }}
+                        />
+
+                        <TextField
+                          label="Date Started"
+                          value={employmentData.date_hired}
+                          onChange={(e) => handleEmploymentChange('date_hired', e.target.value)}
+                          variant="outlined"
+                          type="date"
+                          InputLabelProps={{ shrink: true }}
+                          fullWidth
+                          disabled={!isEditingEmployment}
+                          sx={{ mb: 2 }}
+                        />
+
+                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
+                          <InputLabel>Current Sector of your Job</InputLabel>
+                          <Select
+                            value={employmentData.current_sector}
+                            onChange={(e) => handleEmploymentChange('current_sector', e.target.value)}
+                            label="Current Sector of your Job"
+                            disabled={!isEditingEmployment}
+                          >
+                            {sectorRadioOptions.map((option) => (
+                              <MenuItem key={option} value={option}>
+                                {option}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+
+                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
+                          <InputLabel>Current Scope of your Job</InputLabel>
+                          <Select
+                            value={employmentData.current_scope}
+                            onChange={(e) => handleEmploymentChange('current_scope', e.target.value)}
+                            label="Current Scope of your Job"
+                            disabled={!isEditingEmployment}
+                          >
+                            {scopeOptions.map((option) => (
+                              <MenuItem key={option} value={option}>
+                                {option}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+
+                        <TextField
+                          label="How long have you been employed?"
+                          value={employmentData.employment_duration}
+                          onChange={(e) => handleEmploymentChange('employment_duration', e.target.value)}
+                          variant="outlined"
+                          fullWidth
+                          disabled={!isEditingEmployment}
+                          sx={{ mb: 2 }}
+                        />
+
+                        <TextField
+                          label="Current Salary range"
+                          value={employmentData.salary_range}
+                          onChange={(e) => handleEmploymentChange('salary_range', e.target.value)}
+                          variant="outlined"
+                          fullWidth
+                          disabled={!isEditingEmployment}
+                          sx={{ mb: 2 }}
+                        />
+
+                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
+                          <InputLabel>Have you received any awards or recognition during your employment?</InputLabel>
+                          <Select
+                            value={employmentData.received_awards}
+                            onChange={(e) => handleEmploymentChange('received_awards', e.target.value)}
+                            label="Have you received any awards or recognition during your employment?"
+                            disabled={!isEditingEmployment}
+                          >
+                            {awardsOptions.map((option) => (
+                              <MenuItem key={option} value={option}>
+                                {option}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+
+                        {/* Did you pursue further study? - At the end of Part III */}
+                        <FormControl variant="outlined" fullWidth sx={{ mb: 2, mt: 3 }}>
+                          <InputLabel>Did you pursue further study?</InputLabel>
+                          <Select
+                            value={pursueFurtherStudy === true ? 'Yes' : pursueFurtherStudy === false ? 'No' : ''}
+                            onChange={(e) => {
+                              const value = e.target.value === 'Yes';
+                              setPursueFurtherStudy(value);
+                            }}
+                            label="Did you pursue further study?"
+                            disabled={!isEditingEmployment}
+                          >
+                            {awardsOptions.map((option) => (
+                              <MenuItem key={option} value={option}>
+                                {option}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+
+                        {/* Part IV: Further Study Questions - Show only if pursueFurtherStudy is Yes */}
+                        {pursueFurtherStudy === true && (
+                          <>
+                            <Typography variant="h6" sx={{ mt: 3, mb: 2, fontWeight: 'bold' }}>
+                              PART IV: FURTHER STUDY
+                            </Typography>
+
+                            <TextField
+                              label="Date Started"
+                              value={employmentData.study_start_date}
+                              onChange={(e) => handleEmploymentChange('study_start_date', e.target.value)}
+                              variant="outlined"
+                              type="date"
+                              InputLabelProps={{ shrink: true }}
+                              fullWidth
+                              disabled={!isEditingEmployment}
+                              sx={{ mb: 2 }}
+                            />
+
+                            <TextField
+                              label="Please specify post graduate/degree"
+                              value={employmentData.post_graduate_degree}
+                              onChange={(e) => handleEmploymentChange('post_graduate_degree', e.target.value)}
+                              variant="outlined"
+                              fullWidth
+                              disabled={!isEditingEmployment}
+                              sx={{ mb: 2 }}
+                            />
+
+                            <TextField
+                              label="Name of Institution/University"
+                              value={employmentData.institution_name}
+                              onChange={(e) => handleEmploymentChange('institution_name', e.target.value)}
+                              variant="outlined"
+                              fullWidth
+                              disabled={!isEditingEmployment}
+                              sx={{ mb: 2 }}
+                            />
+
+                            <TextField
+                              label="Total number of units obtain"
+                              value={employmentData.units_obtained}
+                              onChange={(e) => handleEmploymentChange('units_obtained', e.target.value)}
+                              variant="outlined"
+                              fullWidth
+                              disabled={!isEditingEmployment}
+                              sx={{ mb: 2 }}
+                            />
+                          </>
+                        )}
+                          </>
+                        )}
+                      </>
                     )}
+
                   </Box>
                   
-                  {isEmployed !== null && isEditingEmployment && (
+                  {/* Save/Cancel buttons - Only show for alumni accounts (OJT is view-only) */}
+                  {accountType === 'alumni' && isEditingEmployment && (
                     <Box sx={{ display: 'flex', gap: 2, mt: 4, justifyContent: 'center' }}>
                       <Button
                         variant="contained"
@@ -952,9 +1425,22 @@ const Settings: React.FC = () => {
                       </Button>
                       <Button
                         variant="outlined"
-                        onClick={() => {
-                          handleEmploymentCancel();
-                          setIsEditingEmployment(false);
+                        onClick={async () => {
+                          // Reset to initial state - reload employment data to show "Are you employed?" question
+                          const userStr = localStorage.getItem('user');
+                          if (userStr) {
+                            const user = JSON.parse(userStr);
+                            const userId = user.user_id || user.id;
+                            
+                            // Reset all state
+                            setIsEditingEmployment(false);
+                            setIsEmployed(null);
+                            setUnemploymentQuestions([]);
+                            setUnemploymentResponses({});
+                            
+                            // Reload employment data to reset to initial state
+                            await fetchEmploymentData(userId);
+                          }
                         }}
                         sx={{
                           borderColor: '#174f84',

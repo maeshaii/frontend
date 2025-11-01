@@ -302,14 +302,20 @@ const PostCard: React.FC<PostCardProps> = ({
   // Auto-load replies for comments that have replies_count > 0
   useEffect(() => {
     if (post.comments && post.comments.length > 0) {
-      post.comments.forEach(comment => {
-        if (comment.replies_count && comment.replies_count > 0) {
-          // Only load if not already loaded
-          if (!commentReplies[comment.comment_id]) {
-            loadReplies(comment.comment_id);
+      (async () => {
+        for (const comment of post.comments!) {
+          if (comment.replies_count && comment.replies_count > 0) {
+            // Only load if not already loaded
+            if (!commentReplies[comment.comment_id]) {
+              await loadReplies(comment.comment_id);
+            }
+            // Auto-show replies by default
+            if (!showReplies[comment.comment_id]) {
+              setShowReplies(prev => ({ ...prev, [comment.comment_id]: true }));
+            }
           }
         }
-      });
+      })();
     }
   }, [post.comments, loadReplies]);
 
@@ -2681,7 +2687,7 @@ const PostCard: React.FC<PostCardProps> = ({
 
       {post.comments && post.comments.length > 0 && (
         <div className="comments-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
-                  {(showAllComments[post.post_id] ? post.comments : post.comments.slice(0, 2)).map((comment) => {
+                  {(showAllComments[post.post_id] ? post.comments : post.comments.slice(0, 5)).map((comment) => {
                     console.log('PostCard comment user_id:', comment.user.user_id);
                     return (
                       <div key={comment.comment_id} className="comment-item" style={{ 
@@ -2957,11 +2963,11 @@ const PostCard: React.FC<PostCardProps> = ({
                           {/* Replies */}
                           {commentReplies[comment.comment_id] && commentReplies[comment.comment_id].length > 0 && (
                             <div style={{ marginTop: '8px' }}>
-                              {/* Show all replies if less than 2, otherwise show first 2 with toggle */}
+                              {/* Show all replies if less than 3, otherwise show first 3 with toggle */}
                               {commentReplies[comment.comment_id].slice(0, 
-                                commentReplies[comment.comment_id].length < 2 ? 
+                                commentReplies[comment.comment_id].length < 3 ? 
                                   commentReplies[comment.comment_id].length : 
-                                  (showReplies[comment.comment_id] ? commentReplies[comment.comment_id].length : 2)
+                                  (showReplies[comment.comment_id] ? commentReplies[comment.comment_id].length : 3)
                               ).map((reply) => (
                                 <Reply
                                   key={reply.reply_id}
@@ -2974,6 +2980,27 @@ const PostCard: React.FC<PostCardProps> = ({
                                   displayAvatar={displayAvatar}
                                 />
                               ))}
+                              
+                              {/* Show more/less replies button */}
+                              {commentReplies[comment.comment_id].length > 3 && (
+                                <button
+                                  onClick={() => setShowReplies(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#007bff',
+                                    cursor: 'pointer',
+                                    fontSize: '11px',
+                                    padding: '4px 0',
+                                    marginTop: '4px'
+                                  }}
+                                >
+                                  {showReplies[comment.comment_id] 
+                                    ? 'Hide replies' 
+                                    : `View ${commentReplies[comment.comment_id].length - 3} more ${commentReplies[comment.comment_id].length - 3 === 1 ? 'reply' : 'replies'}`
+                                  }
+                                </button>
+                              )}
                             </div>
                           )}
                           
@@ -2981,7 +3008,7 @@ const PostCard: React.FC<PostCardProps> = ({
                       </div>
                     );
                   })}
-          {post.comments.length > 2 && !showAllComments[post.post_id] && (
+          {post.comments.length > 5 && !showAllComments[post.post_id] && (
             <button
               className="view-all-comments-btn"
               style={{ fontSize: '12px', color: '#1C4E80', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}
@@ -2990,7 +3017,7 @@ const PostCard: React.FC<PostCardProps> = ({
               View all comments ({post.comments.length})
             </button>
           )}
-          {post.comments.length > 2 && showAllComments[post.post_id] && (
+          {post.comments.length > 5 && showAllComments[post.post_id] && (
             <button
               className="hide-comments-btn"
               style={{ fontSize: '12px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}

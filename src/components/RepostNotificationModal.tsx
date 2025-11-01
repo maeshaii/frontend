@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { api, getCommentReplies } from '../services/api';
+import { api } from '../services/api';
 import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
 import ReplyInput from './ReplyInput';
 import Reply from './Reply';
@@ -126,18 +126,6 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
 
       setRepost(transformed);
       setOriginalPost(transformed.original_post);
-
-      // After fetching repost data, check for comments with existing replies and load them
-      if (repostResponse.data.comments && repostResponse.data.comments.length > 0) {
-        const initialShowReplies: { [key: number]: boolean } = {};
-        repostResponse.data.comments.forEach(async (comment: any) => {
-          if (comment.replies_count > 0) {
-            await loadReplies(comment.comment_id); // Load replies for each comment
-            initialShowReplies[comment.comment_id] = true; // Set to show replies by default
-          }
-        });
-        setShowReplies(prev => ({ ...prev, ...initialShowReplies }));
-      }
     } catch (err: any) {
       console.error('Error fetching repost data:', err);
       setError(err.response?.data?.detail || 'Failed to load repost data');
@@ -212,17 +200,6 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
     return images;
   };
 
-  const loadReplies = async (commentId: number) => {
-    try {
-      const response = await getCommentReplies(commentId);
-      if (response && response.replies) {
-        setCommentReplies(prev => ({ ...prev, [commentId]: response.replies }));
-      }
-    } catch (error) {
-      console.error('Error loading replies:', error);
-      setCommentReplies(prev => ({ ...prev, [commentId]: [] }));
-    }
-  };
 
   const handleLike = async (repostId: number) => {
     try {
