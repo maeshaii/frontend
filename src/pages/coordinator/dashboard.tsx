@@ -26,6 +26,8 @@ export default function Dashboard() {
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
   const [showDateModal, setShowDateModal] = useState(false);
   const [showNoStudentsModal, setShowNoStudentsModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportSection, setExportSection] = useState<string>('ALL');
   const [sendDate, setSendDateState] = useState('');
   const [existingSendDates, setExistingSendDates] = useState<any[]>([]);
   const [allDataSent, setAllDataSent] = useState(false);
@@ -237,13 +239,20 @@ export default function Dashboard() {
     window.URL.revokeObjectURL(url);
   };
 
-  const exportStudentsForUpdate = async () => {
+  const exportStudentsForUpdate = async (selectedSection: string = 'ALL') => {
     try {
       setLoading(true);
+      setShowExportModal(false); // Close modal after selection
       
-      // Fetch all OJT students for this coordinator
-      let token = localStorage.getItem('token');
-      let response = await fetch(`http://localhost:8000/api/ojt/students/?coordinator=${coordinatorUsername}`, {
+      // Build API URL with optional section filter
+      let apiUrl = `http://localhost:8000/api/ojt/students/?coordinator=${coordinatorUsername}`;
+      if (selectedSection && selectedSection !== 'ALL') {
+        apiUrl += `&section=${encodeURIComponent(selectedSection)}`;
+      }
+      
+      // Fetch OJT students for this coordinator (optionally filtered by section)
+      let token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      let response = await fetch(apiUrl, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -263,11 +272,11 @@ export default function Dashboard() {
 
         if (refreshResponse.ok) {
           const refreshData = await refreshResponse.json();
-          localStorage.setItem('token', refreshData.access);
+          localStorage.setItem('accessToken', refreshData.access);
           token = refreshData.access;
 
           // Retry the original request with new token
-          response = await fetch(`http://localhost:8000/api/ojt/students/?coordinator=${coordinatorUsername}`, {
+          response = await fetch(apiUrl, {
             headers: {
               'Authorization': `Bearer ${token}`,
             },
@@ -288,7 +297,15 @@ export default function Dashboard() {
         return;
       }
 
-      // Create CSV with student info + empty company fields
+      // Import ExcelJS dynamically
+      const ExcelJS = (await import('exceljs')).default;
+      const FileSaver = (await import('file-saver')).default;
+
+      // Create Excel workbook with dropdown
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('OJT Students');
+
+      // Define headers
       const headers = [
         'CTU_ID',
         'First Name',
@@ -303,36 +320,64 @@ export default function Dashboard() {
         'Status',
       ];
 
-      const rows = students.map((student: any) => [
-        student.ctu_id || '',
-        student.first_name || '',
-        student.last_name || '',
-        student.section || '',
-        '', // Empty Company
-        '', // Empty Company Address
-        '', // Empty Company Email
-        '', // Empty Company Contact
-        '', // Empty Contact Person
-        '', // Empty Position
-        student.status || 'Ongoing', // Default Status
-      ]);
+      // Add headers
+      worksheet.addRow(headers);
+      
+      // Make header row bold
+      worksheet.getRow(1).font = { bold: true };
 
-      const csvContent = [
-        headers.join(','),
-        ...rows.map((row: string[]) => row.map((cell: string) => `"${cell}"`).join(','))
-      ].join('\n');
+      // Add student data
+      students.forEach((student: any) => {
+        worksheet.addRow([
+          student.ctu_id || '',
+          student.first_name || '',
+          student.last_name || '',
+          student.section || '',
+          '', // Empty Company
+          '', // Empty Company Address
+          '', // Empty Company Email
+          '', // Empty Company Contact
+          '', // Empty Contact Person
+          '', // Empty Position
+          student.status || 'Ongoing', // Default Status
+        ]);
+      });
 
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `ojt_students_update_${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      // Add dropdown validation to Status column (column K = 11)
+      // Apply data validation to each cell in the Status column
+      const statusColumn = worksheet.getColumn(11); // Column K = 11
+      const statusOptions = ['Ongoing', 'Completed'];
+      const statusFormula = `"${statusOptions.join(',')}"`;
+      
+      statusColumn.eachCell((cell, rowNumber) => {
+        if (rowNumber > 1) { // Skip header row
+          cell.dataValidation = {
+            type: 'list',
+            allowBlank: false,
+            formulae: [statusFormula],
+            showErrorMessage: true,
+            errorStyle: 'error',
+            errorTitle: 'Invalid Status',
+            error: "Please select either 'Ongoing' or 'Completed'"
+          };
+        }
+      });
 
-      alert(`✅ Exported ${students.length} students! Fill in the company info and re-import.`);
+      // Auto-size columns
+      worksheet.columns.forEach((column) => {
+        column.width = 15;
+      });
+
+      // Generate file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      const sectionSuffix = selectedSection && selectedSection !== 'ALL' ? `_${selectedSection}` : '_all_sections';
+      const filename = `ojt_students_update_${new Date().toISOString().split('T')[0]}${sectionSuffix}.xlsx`;
+      
+      FileSaver.saveAs(blob, filename);
+
+      alert(`✅ Exported ${students.length} student${students.length !== 1 ? 's' : ''}${selectedSection && selectedSection !== 'ALL' ? ` from section ${selectedSection}` : ' from all sections'}! Status column has dropdown (Ongoing/Completed). Open in Excel desktop app to use dropdown.`);
     } catch (error) {
       console.error('Export error:', error);
       alert('Failed to export students. Please try again.');
@@ -843,7 +888,7 @@ export default function Dashboard() {
                     alignItems: 'center',
                     gap: '8px'
                   }}
-                  onClick={exportStudentsForUpdate}
+                  onClick={() => setShowExportModal(true)}
                   onMouseEnter={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
                     target.style.backgroundColor = '#d97706';
@@ -2297,6 +2342,245 @@ export default function Dashboard() {
               >
                 OK
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Students Modal - Redesigned */}
+      {showExportModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          animation: 'fadeIn 0.2s ease-out'
+        }} onClick={() => setShowExportModal(false)}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '20px',
+            padding: '0',
+            maxWidth: '480px',
+            width: '90%',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            zIndex: 1001,
+            overflow: 'hidden',
+            animation: 'slideUp 0.3s ease-out'
+          }} onClick={(e) => e.stopPropagation()}>
+            {/* Header with gradient */}
+            <div style={{
+              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+              padding: '24px 32px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backdropFilter: 'blur(10px)'
+                }}>
+                  <FaDownload style={{ color: 'white', fontSize: '20px' }} />
+                </div>
+                <h2 style={{
+                  margin: 0,
+                  fontSize: '22px',
+                  fontWeight: '700',
+                  color: 'white',
+                  letterSpacing: '-0.02em'
+                }}>
+                  Export Students
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowExportModal(false)}
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  fontSize: '20px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  padding: '0',
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '10px',
+                  transition: 'all 0.2s',
+                  backdropFilter: 'blur(10px)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+                  e.currentTarget.style.transform = 'rotate(90deg)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                  e.currentTarget.style.transform = 'rotate(0deg)';
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: '32px' }}>
+              <div style={{ marginBottom: '28px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: '#475569',
+                  marginBottom: '10px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Select Section to Export
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <select
+                    value={exportSection}
+                    onChange={(e) => setExportSection(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      paddingRight: '48px',
+                      borderRadius: '12px',
+                      border: '2px solid #e2e8f0',
+                      fontSize: '15px',
+                      color: '#1e293b',
+                      backgroundColor: '#f8fafc',
+                      cursor: 'pointer',
+                      outline: 'none',
+                      transition: 'all 0.2s',
+                      fontWeight: '500',
+                      appearance: 'none',
+                      WebkitAppearance: 'none',
+                      MozAppearance: 'none'
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = '#f59e0b';
+                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(245, 158, 11, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                      e.currentTarget.style.backgroundColor = '#f8fafc';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <option value="ALL">📋 All Sections</option>
+                    {ojtYears
+                      .map(yearData => yearData.section || 'Unknown')
+                      .filter((section, index, self) => self.indexOf(section) === index)
+                      .sort()
+                      .map((section) => (
+                        <option key={section} value={section}>
+                          Section {section}
+                        </option>
+                      ))}
+                  </select>
+                  <div style={{
+                    position: 'absolute',
+                    right: '16px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    pointerEvents: 'none',
+                    color: '#64748b',
+                    fontSize: '18px'
+                  }}>
+                    ▼
+                  </div>
+                </div>
+                <p style={{
+                  margin: '10px 0 0 0',
+                  fontSize: '12px',
+                  color: '#94a3b8',
+                  fontStyle: 'italic'
+                }}>
+                  {exportSection === 'ALL' 
+                    ? 'Export all students from all sections' 
+                    : `Export only students from Section ${exportSection}`}
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '12px',
+                paddingTop: '8px',
+                borderTop: '1px solid #f1f5f9'
+              }}>
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  style={{
+                    padding: '12px 28px',
+                    backgroundColor: 'transparent',
+                    color: '#64748b',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#cbd5e1';
+                    e.currentTarget.style.backgroundColor = '#f8fafc';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => exportStudentsForUpdate(exportSection)}
+                  style={{
+                    padding: '12px 28px',
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(245, 158, 11, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(245, 158, 11, 0.3)';
+                  }}
+                >
+                  <FaDownload style={{ fontSize: '14px' }} />
+                  Export CSV
+                </button>
+              </div>
             </div>
           </div>
         </div>

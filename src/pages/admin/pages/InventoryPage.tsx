@@ -440,7 +440,7 @@ const InventoryPage: React.FC = () => {
 
   const totalItems = inventoryItems.length;
   const totalStock = inventoryItems.reduce((sum, item) => sum + item.quantity, 0);
-  const lowStockItems = inventoryItems.filter(item => item.quantity < 10).length;
+  const lowStockItems = inventoryItems.filter(item => item.quantity < 15).length;
 
   return (
     <div style={styles.container}>
@@ -586,7 +586,7 @@ const InventoryPage: React.FC = () => {
                       <td style={{ ...styles.tableCell, textAlign: 'center' }}>
                         <span style={{
                           ...styles.quantityBadge,
-                          ...(item.quantity < 10 ? styles.lowStockBadge : {})
+                          ...(item.quantity < 15 ? styles.lowStockBadge : {})
                         }}>
                           {item.quantity}
                         </span>
