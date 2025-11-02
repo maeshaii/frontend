@@ -1,7 +1,11 @@
 /* Profile container */
 .profile-container {
   background: #f5f7fa;
-  min-height: 100vh;
+  height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   font-family: Arial, sans-serif;
 }
 
@@ -24,17 +28,25 @@ body::-webkit-scrollbar {
   padding: 24px;
   align-items: flex-start;
   box-sizing: border-box;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
 }
 
 /* Left sidebar */
 .profile-left-sidebar {
   flex: 1;
   max-width: 300px;
-  position: -webkit-sticky;
-  position: sticky;
-  top: 80px;
   align-self: flex-start;
-  height: fit-content;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none; /* Firefox - hide scrollbar */
+  -ms-overflow-style: none; /* IE and Edge - hide scrollbar */
+}
+
+.profile-left-sidebar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera - hide scrollbar */
 }
 
 /* Card style */
@@ -288,7 +300,15 @@ body::-webkit-scrollbar {
 /* Center content */
 .profile-center-content {
   flex: 2;
-  /* Remove overflow and max-height to allow natural scrolling with the page */
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none; /* Firefox - hide scrollbar */
+  -ms-overflow-style: none; /* IE and Edge - hide scrollbar */
+}
+
+.profile-center-content::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera - hide scrollbar */
 }
 
 /* Orange banner */

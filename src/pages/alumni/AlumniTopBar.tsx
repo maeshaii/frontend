@@ -787,13 +787,13 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
-            <i className="pi pi-user" style={{ color: 'white', fontSize: 20 }}></i>
+            <i className="pi pi-bars" style={{ color: 'white', fontSize: 20 }}></i>
             <span style={{ 
               color: 'white', 
               fontSize: 12, 
               fontWeight: '500',
               letterSpacing: '0.2px',
-            }}>Profile ▼</span>
+            }}>Menu ▼</span>
           </div>
           {showProfile && (
             <div
@@ -849,7 +849,12 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                   }} 
                   onClick={() => {
                     setShowProfile(false);
-                    const settingsPath = isAdmin ? '/ccict/settings' : '/settings';
+                    let settingsPath = '/settings';
+                    if (isAdmin) {
+                      settingsPath = '/ccict/settings';
+                    } else if (isPeso) {
+                      settingsPath = '/peso/settings';
+                    }
                     navigate(settingsPath);
                   }}
                   onMouseEnter={(e) => {

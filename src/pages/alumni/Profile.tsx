@@ -1186,7 +1186,7 @@ getPosts()
             </div>
 
             {/* Social Media and Email for Alumni/OJT accounts */}
-            {user && ((!user.account_type?.admin && !user.account_type?.peso && !user.account_type?.ccict) || (isOwnProfile && (user.account_type?.admin || user.account_type?.ccict))) && (
+            {user && ((!user.account_type?.admin && !user.account_type?.peso && !user.account_type?.ccict) || (isOwnProfile && (user.account_type?.admin || user.account_type?.ccict || user.account_type?.peso))) && (
               <div className="profile-contact-info">
                 {/* Social Media */}
                 <div className="profile-contact-item">

@@ -706,6 +706,20 @@ const Settings: React.FC = () => {
     'No'
   ];
 
+  // Get current user info for admin/peso detection
+  const currentUserStr = localStorage.getItem('user');
+  const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
+  const isAdmin = currentUser?.account_type?.admin || currentUser?.account_type?.ccict;
+  const isPeso = currentUser?.account_type?.peso;
+
+  // Redirect peso and admin accounts away from employment section
+  useEffect(() => {
+    if ((isAdmin || isPeso) && activeSection === 'employment') {
+      setActiveSection('personal');
+      localStorage.setItem('settingsActiveSection', 'personal');
+    }
+  }, [isAdmin, isPeso, activeSection]);
+
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -714,14 +728,8 @@ const Settings: React.FC = () => {
     );
   }
 
-  // Get current user info for admin/peso detection
-  const currentUserStr = localStorage.getItem('user');
-  const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
-  const isAdmin = currentUser?.account_type?.admin || currentUser?.account_type?.ccict;
-  const isPeso = currentUser?.account_type?.peso;
-
   return (
-    <div style={{ backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
+    <div style={{ backgroundColor: '#f5f5f5', height: '100vh', width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <AlumniTopBar
         showProfile={showProfile}
         setShowProfile={setShowProfile}
@@ -730,13 +738,13 @@ const Settings: React.FC = () => {
         isPeso={isPeso}
       />
       
-      <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
+      <Box sx={{ py: 3, px: 6, flex: 1, width: '100%', overflow: 'auto', boxSizing: 'border-box' }}>
 
 
-        <Box sx={{ display: 'flex', gap: 3 }}>
+        <Box sx={{ display: 'flex', gap: 3, height: '100%' }}>
           {/* Left Sidebar - Settings Menu */}
-          <Box sx={{ width: 300 }}>
-            <Paper elevation={2} sx={{ p: 2 }}>
+          <Box sx={{ width: 300, flexShrink: 0 }}>
+            <Paper elevation={2} sx={{ p: 2, height: 'fit-content' }}>
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
                 Settings Menu
               </Typography>
@@ -762,25 +770,27 @@ const Settings: React.FC = () => {
                   Personal Details
                 </Button>
                 
-                <Button
-                  variant={activeSection === 'employment' ? 'contained' : 'text'}
-                  onClick={() => {
-                    setActiveSection('employment');
-                    localStorage.setItem('settingsActiveSection', 'employment');
-                  }}
-                  sx={{
-                    justifyContent: 'flex-start',
-                    textTransform: 'none',
-                    fontWeight: 'bold',
-                    backgroundColor: activeSection === 'employment' ? '#174f84' : 'transparent',
-                    color: activeSection === 'employment' ? 'white' : '#333',
-                    '&:hover': {
-                      backgroundColor: activeSection === 'employment' ? '#174f84' : '#f0f0f0'
-                    }
-                  }}
-                >
-                  Employment Details
-                </Button>
+                {!isAdmin && !isPeso && (
+                  <Button
+                    variant={activeSection === 'employment' ? 'contained' : 'text'}
+                    onClick={() => {
+                      setActiveSection('employment');
+                      localStorage.setItem('settingsActiveSection', 'employment');
+                    }}
+                    sx={{
+                      justifyContent: 'flex-start',
+                      textTransform: 'none',
+                      fontWeight: 'bold',
+                      backgroundColor: activeSection === 'employment' ? '#174f84' : 'transparent',
+                      color: activeSection === 'employment' ? 'white' : '#333',
+                      '&:hover': {
+                        backgroundColor: activeSection === 'employment' ? '#174f84' : '#f0f0f0'
+                      }
+                    }}
+                  >
+                    Employment Details
+                  </Button>
+                )}
                 
                 <Button
                   variant={activeSection === 'password' ? 'contained' : 'text'}
@@ -806,7 +816,7 @@ const Settings: React.FC = () => {
           </Box>
 
           {/* Right Content Area */}
-          <Box sx={{ flex: 1 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <Paper elevation={2} sx={{ p: 4 }}>
               {activeSection === 'personal' && (
                 <>
@@ -958,7 +968,7 @@ const Settings: React.FC = () => {
                 </>
               )}
 
-              {activeSection === 'employment' && (
+              {activeSection === 'employment' && !isAdmin && !isPeso && (
                 <>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                     <Typography variant="h5" sx={{ fontWeight: 'bold' }}>

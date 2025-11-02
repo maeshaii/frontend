@@ -201,6 +201,9 @@ const PostCard: React.FC<PostCardProps> = ({
   const [showReplyInput, setShowReplyInput] = useState<{ [key: number]: boolean }>({});
   const [showReplies, setShowReplies] = useState<{ [key: number]: boolean }>({});
   const [commentReplies, setCommentReplies] = useState<{ [key: number]: any[] }>({});
+  
+  // State to control whether comments section is visible (hidden by default)
+  const [showCommentsSection, setShowCommentsSection] = useState<{ [key: number]: boolean }>({});
 
   // @mention functionality for comments
   const [followingUsers, setFollowingUsers] = useState<any[]>([]);
@@ -309,10 +312,7 @@ const PostCard: React.FC<PostCardProps> = ({
             if (!commentReplies[comment.comment_id]) {
               await loadReplies(comment.comment_id);
             }
-            // Auto-show replies by default
-            if (!showReplies[comment.comment_id]) {
-              setShowReplies(prev => ({ ...prev, [comment.comment_id]: true }));
-            }
+            // Replies remain collapsed by default - user must click "View more replies" to expand
           }
         }
       })();
@@ -766,6 +766,8 @@ const PostCard: React.FC<PostCardProps> = ({
         console.log('🔍 DEBUG: Comment submitted successfully for itemId:', itemId);
         setCommentInput(prev => ({ ...prev, [itemId]: '' }));
         setShowCommentInput?.(prev => ({ ...prev, [itemId]: false }));
+        // Automatically show comments section when a comment is added
+        setShowCommentsSection(prev => ({ ...prev, [itemId]: true }));
         onPostUpdate?.();
       }
     } catch (error) {
@@ -1698,7 +1700,10 @@ const PostCard: React.FC<PostCardProps> = ({
                   {/* Comments count */}
                   {post.comments && post.comments.length > 0 && (
                     <span
-                      onClick={() => setShowAllComments?.(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
+                      onClick={() => {
+                        // Toggle comments section visibility
+                        setShowCommentsSection(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }));
+                      }}
                       style={{ 
                         cursor: 'pointer', 
                         fontSize: '12px',
@@ -1942,7 +1947,7 @@ const PostCard: React.FC<PostCardProps> = ({
             )}
 
             {/* Repost Comments Section */}
-            {repostData?.comments && (
+            {repostData?.comments && showCommentsSection[repostData?.repost_id || post.post_id] && (
               <div className="comments-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
                 {(() => {
                   console.log('🔍 DEBUG: Comments display - repostData.comments:', repostData.comments, 'comments_count:', repostData.comments_count, 'showAllComments:', showAllComments[repostData?.repost_id || post.post_id]);
@@ -2559,7 +2564,10 @@ const PostCard: React.FC<PostCardProps> = ({
           console.log('Like summary clicked (regular post), setting showLikesModal to true');
           setShowLikesModal(true);
         }}
-        onCommentsClick={() => setShowAllComments?.(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
+        onCommentsClick={() => {
+          // Toggle comments section visibility
+          setShowCommentsSection(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }));
+        }}
         animate={true}
       />
 
@@ -2783,15 +2791,15 @@ const PostCard: React.FC<PostCardProps> = ({
         </div>
       )}
 
-      {post.comments && post.comments.length > 0 && (
-        <div className="comments-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
+      {post.comments && post.comments.length > 0 && showCommentsSection[post.post_id] && (
+        <div className="comments-section" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #eee' }}>
                   {(showAllComments[post.post_id] ? post.comments : post.comments.slice(0, 5)).map((comment) => {
                     console.log('PostCard comment user_id:', comment.user.user_id);
                     return (
                       <div key={comment.comment_id} className="comment-item" style={{ 
                         display: 'flex', 
                         gap: '8px', 
-                        marginBottom: '12px', 
+                        marginBottom: '6px', 
                         marginLeft: '12px',
                         marginRight: '12px'
                       }}>
@@ -2808,7 +2816,7 @@ const PostCard: React.FC<PostCardProps> = ({
                           <div style={{
                             backgroundColor: '#f0f2f5',
                             borderRadius: '18px',
-                            padding: '8px 12px',
+                            padding: '6px 10px',
                             display: 'inline-block',
                             maxWidth: '100%',
                             position: 'relative'
@@ -2957,7 +2965,7 @@ const PostCard: React.FC<PostCardProps> = ({
                           </div>
                           
                           {/* Actions below bubble */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px', marginLeft: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '1px', marginLeft: '10px' }}>
                             <span style={{ fontSize: '12px', color: '#65676b', fontWeight: '400' }}>
                               {formatTime(comment.date_created)}
                             </span>
@@ -3060,7 +3068,7 @@ const PostCard: React.FC<PostCardProps> = ({
                           
                           {/* Replies */}
                           {commentReplies[comment.comment_id] && commentReplies[comment.comment_id].length > 0 && (
-                            <div style={{ marginTop: '8px' }}>
+                            <div style={{ marginTop: '4px' }}>
                               {/* Show all replies if less than 3, otherwise show first 3 with toggle */}
                               {commentReplies[comment.comment_id].slice(0, 
                                 commentReplies[comment.comment_id].length < 3 ? 
@@ -3089,8 +3097,9 @@ const PostCard: React.FC<PostCardProps> = ({
                                     color: '#007bff',
                                     cursor: 'pointer',
                                     fontSize: '11px',
-                                    padding: '4px 0',
-                                    marginTop: '4px'
+                                    padding: '2px 0',
+                                    marginTop: '2px',
+                                    marginLeft: '42px'
                                   }}
                                 >
                                   {showReplies[comment.comment_id] 

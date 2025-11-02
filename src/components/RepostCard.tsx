@@ -167,6 +167,9 @@ const RepostCard: React.FC<RepostCardProps> = ({
   const [commentReplies, setCommentReplies] = useState<{ [key: number]: any[] }>({});
   const [showReplies, setShowReplies] = useState<{ [key: number]: boolean }>({});
   
+  // State to control whether comments section is visible (hidden by default)
+  const [showCommentsSection, setShowCommentsSection] = useState<boolean>(false);
+  
   const optionsMenuRef = useRef<HTMLDivElement>(null);
   const commentOptionsRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
@@ -287,6 +290,8 @@ const RepostCard: React.FC<RepostCardProps> = ({
       await commentOnRepost(repost.repost_id, commentValue.trim());
       setCommentValue('');
       setShowCommentInput(false);
+      // Automatically show comments section when a comment is added
+      setShowCommentsSection(true);
       // Reload comments
       await loadComments();
       onRefresh?.();
@@ -371,10 +376,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
             if (!commentReplies[comment.comment_id]) {
               await loadReplies(comment.comment_id);
             }
-            // Auto-show replies by default
-            if (!showReplies[comment.comment_id]) {
-              setShowReplies(prev => ({ ...prev, [comment.comment_id]: true }));
-            }
+            // Replies remain collapsed by default - user must click "View more replies" to expand
           }
         }
       })();
@@ -1172,7 +1174,10 @@ const RepostCard: React.FC<RepostCardProps> = ({
         likes={fetchedLikes}
         comments={comments}
         onLikesClick={() => setShowLikesModal(true)}
-        onCommentsClick={() => setShowCommentInput(v => !v)}
+        onCommentsClick={() => {
+          // Toggle comments section visibility
+          setShowCommentsSection(prev => !prev);
+        }}
         animate={true}
       />
 
@@ -1300,14 +1305,14 @@ const RepostCard: React.FC<RepostCardProps> = ({
       )}
 
       {/* Comments section */}
-      {(comments && comments.length > 0) || (repost.comments_count && repost.comments_count > 0) ? (
-          <div className="comments-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
+      {((comments && comments.length > 0) || (repost.comments_count && repost.comments_count > 0)) && showCommentsSection ? (
+          <div className="comments-section" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #eee' }}>
             {comments && comments.length > 0 ? (
               (showAllComments ? comments : comments.slice(0, 5)).map((comment) => (
               <div key={comment.comment_id} className="comment-item" style={{ 
                 display: 'flex', 
                 gap: '8px', 
-                marginBottom: '12px', 
+                marginBottom: '6px', 
                 marginLeft: '12px',
                 marginRight: '12px'
               }}>
@@ -1331,7 +1336,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                   <div style={{
                     backgroundColor: '#f0f2f5',
                     borderRadius: '18px',
-                    padding: '8px 12px',
+                    padding: '6px 10px',
                     display: 'inline-block',
                     maxWidth: '100%',
                     position: 'relative'
@@ -1480,7 +1485,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                   </div>
                   
                   {/* Actions below bubble */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px', marginLeft: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '1px', marginLeft: '10px' }}>
                     <span style={{ fontSize: '12px', color: '#65676b', fontWeight: '400' }}>
                       {formatTime(comment.date_created)}
                     </span>
@@ -1579,7 +1584,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                   
                   {/* Replies */}
                   {commentReplies[comment.comment_id] && commentReplies[comment.comment_id].length > 0 && (
-                    <div style={{ marginTop: '8px' }}>
+                    <div style={{ marginTop: '4px' }}>
                       {/* Show all replies if less than 3, otherwise show first 3 with toggle */}
                       {commentReplies[comment.comment_id].slice(0, 
                         commentReplies[comment.comment_id].length < 3 ? 
@@ -1608,8 +1613,9 @@ const RepostCard: React.FC<RepostCardProps> = ({
                             color: '#007bff',
                             cursor: 'pointer',
                             fontSize: '11px',
-                            padding: '4px 0',
-                            marginTop: '4px'
+                            padding: '2px 0',
+                            marginTop: '2px',
+                            marginLeft: '42px'
                           }}
                         >
                           {showReplies[comment.comment_id] 

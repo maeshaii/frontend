@@ -190,6 +190,14 @@ const App: React.FC = () => {
             }
           />
           <Route
+            path="/peso/settings"
+            element={
+              <PrivateRoute>
+                <Settings />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/ccict/settings"
             element={
               <PrivateRoute>

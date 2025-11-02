@@ -251,7 +251,7 @@ const Reply: React.FC<ReplyProps> = ({
 
   return (
     <div style={{ 
-      marginTop: '6px', 
+      marginTop: '4px', 
       marginLeft: '32px',
       display: 'flex',
       gap: '8px'
@@ -276,7 +276,7 @@ const Reply: React.FC<ReplyProps> = ({
         <div style={{
           backgroundColor: '#f0f2f5',
           borderRadius: '18px',
-          padding: '8px 12px',
+          padding: '6px 10px',
           display: 'inline-block',
           maxWidth: '100%'
         }}>
@@ -439,13 +439,13 @@ const Reply: React.FC<ReplyProps> = ({
         </div>
         
         {/* Actions below the bubble - Time and Reply button */}
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '12px', 
-          marginTop: '2px',
-          marginLeft: '12px'
-        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            marginTop: '1px',
+            marginLeft: '10px'
+          }}>
           <span style={{ 
             fontSize: '12px', 
             color: '#65676b',
@@ -534,7 +534,7 @@ const Reply: React.FC<ReplyProps> = ({
         {/* Reply Input */}
         {showReplyInput && (
           <div style={{ 
-            marginTop: '8px',
+            marginTop: '4px',
             marginLeft: '0'
           }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
@@ -579,9 +579,9 @@ const Reply: React.FC<ReplyProps> = ({
                 />
                 <div style={{ 
                   display: 'flex', 
-                  gap: '12px', 
-                  marginTop: '4px',
-                  marginLeft: '12px'
+                  gap: '8px', 
+                  marginTop: '2px',
+                  marginLeft: '10px'
                 }}>
                   <button
                     onClick={handleReplySubmit}
