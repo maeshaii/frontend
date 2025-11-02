@@ -20,6 +20,15 @@ interface StudentData {
   status: string;
 }
 
+interface CompanyProfile {
+  company_name: string;
+  company_address?: string;
+  company_email?: string;
+  company_contact?: string;
+  contact_person?: string;
+  position?: string;
+}
+
 export default function Statistics() {
   const [companies, setCompanies] = useState<CompanyData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +37,7 @@ export default function Statistics() {
   const [coordinatorUsername, setCoordinatorUsername] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null);
   const [companyStudents, setCompanyStudents] = useState<StudentData[]>([]);
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
@@ -72,12 +82,67 @@ export default function Statistics() {
     
     try {
       const response = await fetchStudentsByCompany(company.company_name, coordinatorUsername);
+      console.log('🔍 Full Company data response:', JSON.stringify(response, null, 2)); // Debug log
+      console.log('🔍 Response keys:', Object.keys(response || {})); // Debug: show what keys exist
+      console.log('🔍 company_profile exists?', 'company_profile' in (response || {})); // Debug: check if key exists
+      console.log('🔍 company_profile value:', response?.company_profile); // Debug: show value
+      
       if (response.success) {
         setCompanyStudents(response.students || []);
+        
+        // Always try to use company_profile from API first
+        let profileToUse = null;
+        
+        if (response.company_profile && response.company_profile !== null) {
+          console.log('✅ Found company_profile in response:', response.company_profile);
+          profileToUse = response.company_profile;
+          // Ensure all fields are strings, not None
+          profileToUse = {
+            company_name: profileToUse.company_name || company.company_name,
+            company_address: profileToUse.company_address || '',
+            company_email: profileToUse.company_email || '',
+            company_contact: profileToUse.company_contact || '',
+            contact_person: profileToUse.contact_person || '',
+            position: profileToUse.position || ''
+          };
+        } else if (response.students && response.students.length > 0) {
+          // Fallback: use first student's company info if available
+          console.log('⚠️ No company_profile in response, using first student info');
+          profileToUse = {
+            company_name: response.students[0].company || company.company_name,
+            company_address: response.students[0].company_address || '',
+            company_email: response.students[0].company_email || '',
+            company_contact: response.students[0].company_contact || '',
+            contact_person: response.students[0].contact_person || '',
+            position: response.students[0].position || ''
+          };
+        } else {
+          // Empty profile as last resort
+          console.log('❌ No company profile or students, using empty profile');
+          profileToUse = {
+            company_name: company.company_name,
+            company_address: '',
+            company_email: '',
+            company_contact: '',
+            contact_person: '',
+            position: ''
+          };
+        }
+        
+        console.log('📝 Final profile being set:', profileToUse);
+        setCompanyProfile(profileToUse);
       }
     } catch (error) {
       console.error('Error loading company students:', error);
       setCompanyStudents([]);
+      setCompanyProfile({
+        company_name: company.company_name,
+        company_address: '',
+        company_email: '',
+        company_contact: '',
+        contact_person: '',
+        position: ''
+      });
     } finally {
       setLoadingStudents(false);
     }
@@ -87,6 +152,7 @@ export default function Statistics() {
     setShowModal(false);
     setSelectedCompany(null);
     setCompanyStudents([]);
+    setCompanyProfile(null);
   };
 
   if (loading) {
@@ -163,66 +229,58 @@ export default function Statistics() {
           </h3>
           <div style={{
             display: 'flex',
-            gap: '16px',
+            gap: '24px',
             alignItems: 'center'
           }}>
             <div style={{
-              padding: '8px 16px',
-              backgroundColor: '#eff6ff',
-              borderRadius: '10px',
-              border: '1px solid #dbeafe'
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
             }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
+              <span style={{
+                fontSize: '13px',
+                color: '#64748b',
+                fontWeight: '600',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
               }}>
-                <span style={{
-                  fontSize: '12px',
-                  color: '#64748b',
-                  fontWeight: '600',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}>
-                  Total Companies
-                </span>
-                <span style={{
-                  fontSize: '24px',
-                  fontWeight: '800',
-                  color: '#3b82f6'
-                }}>
-                  {totalCompanies}
-                </span>
-              </div>
+                Total Companies
+              </span>
+              <span style={{
+                fontSize: '28px',
+                fontWeight: '800',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                {totalCompanies}
+              </span>
             </div>
             <div style={{
-              padding: '8px 16px',
-              backgroundColor: '#eff6ff',
-              borderRadius: '10px',
-              border: '1px solid #dbeafe'
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
             }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
+              <span style={{
+                fontSize: '13px',
+                color: '#64748b',
+                fontWeight: '600',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
               }}>
-                <span style={{
-                  fontSize: '12px',
-                  color: '#64748b',
-                  fontWeight: '600',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}>
-                  Total OJT Students
-                </span>
-                <span style={{
-                  fontSize: '24px',
-                  fontWeight: '800',
-                  color: '#3b82f6'
-                }}>
-                  {totalStudents}
-                </span>
-              </div>
+                Total OJT Students
+              </span>
+              <span style={{
+                fontSize: '28px',
+                fontWeight: '800',
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                {totalStudents}
+              </span>
             </div>
           </div>
       </div>
@@ -234,18 +292,6 @@ export default function Statistics() {
             backgroundColor: '#f8fafc',
             borderRadius: '16px'
           }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              backgroundColor: '#fef3c7',
-              borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px'
-            }}>
-              <span style={{ fontSize: '24px' }}>🔍</span>
-            </div>
             <p style={{
               fontSize: '16px',
               color: '#64748b',
@@ -475,16 +521,16 @@ export default function Statistics() {
                 <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Total Students</div>
                 <div style={{ fontSize: '32px', fontWeight: '700', color: '#3b82f6' }}>{selectedCompany.count}</div>
               </div>
-              {companyStudents.length > 0 && companyStudents[0].company_address && (
+              {companyProfile && companyProfile.company_address && (
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Address</div>
-                  <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyStudents[0].company_address}</div>
+                  <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyProfile.company_address}</div>
                 </div>
               )}
             </div>
 
-            {/* Company Contact Info */}
-            {companyStudents.length > 0 && (companyStudents[0].company_email || companyStudents[0].company_contact || companyStudents[0].contact_person) && (
+            {/* Company Contact Info - Always display if profile exists with any info, even if no students */}
+            {companyProfile && (
               <div style={{
                 backgroundColor: '#eff6ff',
                 borderRadius: '12px',
@@ -493,27 +539,44 @@ export default function Statistics() {
               }}>
                 <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#1e293b' }}>
                   Contact Information
+                  {(!companyProfile.company_address && !companyProfile.company_email && !companyProfile.company_contact && !companyProfile.contact_person) && (
+                    <span style={{ fontSize: '12px', color: '#ef4444', marginLeft: '10px' }}>
+                      (No contact info available)
+                    </span>
+                  )}
                 </h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                  {companyStudents[0].company_email && (
+                  {companyProfile.company_address && (
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Address</div>
+                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyProfile.company_address}</div>
+                    </div>
+                  )}
+                  {companyProfile.company_email && (
                     <div>
                       <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Email</div>
-                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyStudents[0].company_email}</div>
+                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyProfile.company_email}</div>
                     </div>
                   )}
-                  {companyStudents[0].company_contact && (
+                  {companyProfile.company_contact && (
                     <div>
                       <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Phone</div>
-                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyStudents[0].company_contact}</div>
+                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyProfile.company_contact}</div>
                     </div>
                   )}
-                  {companyStudents[0].contact_person && (
+                  {companyProfile.contact_person && (
                     <div>
                       <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Contact Person</div>
                       <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>
-                        {companyStudents[0].contact_person}
-                        {companyStudents[0].position && ` (${companyStudents[0].position})`}
+                        {companyProfile.contact_person}
+                        {companyProfile.position && ` (${companyProfile.position})`}
                       </div>
+                    </div>
+                  )}
+                  {/* Show message if no contact info */}
+                  {!companyProfile.company_address && !companyProfile.company_email && !companyProfile.company_contact && !companyProfile.contact_person && (
+                    <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '20px', color: '#64748b' }}>
+                      No contact information available for this company
                     </div>
                   )}
                 </div>

@@ -49,8 +49,13 @@ body::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera - hide scrollbar */
 }
 
-/* Card style */
-.profile-card {
+/* Unified Card style - Applied automatically via parent containers (no need for className on each card) */
+.profile-left-sidebar > div:first-of-type,
+.profile-left-sidebar > div:nth-of-type(2),
+.profile-left-sidebar > div:nth-of-type(3),
+.profile-left-sidebar > div:nth-of-type(4),
+.profile-center-content > div.profile-start-post-card,
+.profile-info-section > div.profile-info-card {
   background: white;
   border-radius: 12px;
   padding: 20px;
@@ -226,15 +231,7 @@ body::-webkit-scrollbar {
   cursor: pointer;
 }
 
-/* Followers card */
-.profile-followers-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e0e0e0;
-  margin-bottom: 24px;
-}
+/* Followers card - now uses .profile-card */
 
 /* Followers header */
 .profile-followers-header {
@@ -344,14 +341,14 @@ body::-webkit-scrollbar {
   margin-bottom: 24px;
 }
 
-/* Profile info card */
+/* Profile info card - special padding */
 .profile-info-card {
+  padding: 80px 20px 20px 20px;
+  text-align: center;
   background: white;
   border-radius: 12px;
-  padding: 80px 20px 20px 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   border: 1px solid #e0e0e0;
-  text-align: center;
 }
 
 /* Profile image */
@@ -381,15 +378,7 @@ body::-webkit-scrollbar {
   color: #666;
 }
 
-/* Start a post card */
-.profile-start-post-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e0e0e0;
-  margin-bottom: 16px;
-}
+/* Start a post card - now uses .profile-card */
 
 /* Start a post input container */
 .profile-start-post-input-container {
@@ -879,14 +868,7 @@ body::-webkit-scrollbar {
   margin-bottom: 24px;
 }
 
-.profile-info-card {
-  background: white;
-  border-radius: 12px;
-  padding: 60px 20px 20px 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e0e0e0;
-  text-align: center;
-}
+/* Removed - now uses .profile-card */
 
 .profile-image {
   width: 120px;
@@ -912,14 +894,7 @@ body::-webkit-scrollbar {
   color: #666;
 }
 
-.profile-start-post-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e0e0e0;
-  margin-bottom: 16px;
-}
+/* Removed - now uses .profile-card */
 
 .profile-start-post-input-container {
   display: flex;

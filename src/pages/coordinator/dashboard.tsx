@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('ALL');
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
   const [showDateModal, setShowDateModal] = useState(false);
+  const [showNoStudentsModal, setShowNoStudentsModal] = useState(false);
   const [sendDate, setSendDateState] = useState('');
   const [existingSendDates, setExistingSendDates] = useState<any[]>([]);
   const [allDataSent, setAllDataSent] = useState(false);
@@ -282,7 +283,7 @@ export default function Dashboard() {
       const students = data.students || [];
 
       if (students.length === 0) {
-        alert('No students found. Please import students first.');
+        setShowNoStudentsModal(true);
         setLoading(false);
         return;
       }
@@ -649,6 +650,29 @@ export default function Dashboard() {
             boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
             border: '1px solid #e5e7eb'
           }}>
+            {/* Class Year Header - Shows newest batch */}
+            {ojtYears.length > 0 && (
+              <div style={{
+                marginBottom: '24px',
+                paddingBottom: '20px',
+                borderBottom: '2px solid #f1f5f9'
+              }}>
+                <h2 style={{
+                  margin: 0,
+                  fontSize: '24px',
+                  fontWeight: '800',
+                  color: '#1e293b',
+                  letterSpacing: '-0.025em'
+                }}>
+                  CLASS OF {(() => {
+                    // Get the newest/latest batch year from imported data
+                    const latestYear = Math.max(...ojtYears.map(y => y.year));
+                    return latestYear ? `${latestYear - 1}-${latestYear}` : '2025-2026';
+                  })()}
+                </h2>
+              </div>
+            )}
+            
             <div style={{ 
               display: 'flex', 
               alignItems: 'flex-start',
@@ -685,49 +709,6 @@ export default function Dashboard() {
                 }}>
                   BSIT
                 </div>
-              </div>
-            
-              {/* Filter by Batch */}
-              <div>
-                <label style={{ 
-                  fontWeight: '600',
-                  color: '#374151',
-                  fontSize: '14px',
-                  display: 'block',
-                  marginBottom: '8px'
-                }}>
-                  Filter by Batch
-                </label>
-                <select
-                  value={selectedBatchFilter}
-                  onChange={(e) => setSelectedBatchFilter(e.target.value)}
-                  style={{ 
-                    padding: '12px 16px',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '12px',
-                    minWidth: '180px',
-                    fontSize: '14px',
-                    backgroundColor: 'white',
-                    color: '#374151',
-                    cursor: 'pointer',
-                    outline: 'none',
-                    transition: 'all 0.2s ease',
-                    fontWeight: '500'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#3b82f6';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '#e5e7eb';
-                    e.target.style.boxShadow = 'none';
-                  }}
-                >
-                  <option value="ALL">All Batches</option>
-                  {Array.from(new Set(ojtYears.map(y => y.year))).sort((a, b) => b - a).map(year => (
-                    <option key={year} value={year.toString()}>{year - 1}-{year}</option>
-                  ))}
-                </select>
               </div>
             
               {/* Filter by Section */}
@@ -1008,18 +989,6 @@ export default function Dashboard() {
                   borderRadius: '16px',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                 }}>
-                  <div style={{
-                    width: '48px',
-                    height: '48px',
-                    backgroundColor: '#fef3c7',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 16px'
-                  }}>
-                    <span style={{ fontSize: '24px' }}>🔍</span>
-                  </div>
                   <p style={{
                     fontSize: '16px',
                     color: '#64748b',
@@ -1080,15 +1049,6 @@ export default function Dashboard() {
                         marginBottom: '20px'
                       }}>
                         <div style={{ flex: 1 }}>
-                          <h3 style={{
-                            fontSize: '18px',
-                            fontWeight: '700',
-                            color: '#1e293b',
-                            margin: '0 0 6px 0',
-                            letterSpacing: '-0.025em'
-                          }}>
-                            CLASS OF {yearData.year - 1}-{yearData.year}
-                          </h3>
                           {yearData.section && (
                             <div style={{
                               display: 'inline-flex',
@@ -2233,6 +2193,110 @@ export default function Dashboard() {
                    'Schedule Processing'}
               </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No Students Found Modal */}
+      {showNoStudentsModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }} onClick={() => setShowNoStudentsModal(false)}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            zIndex: 1001
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px'
+            }}>
+              <h2 style={{
+                margin: 0,
+                fontSize: '20px',
+                fontWeight: '700',
+                color: '#1e293b'
+              }}>
+                No Students Found
+              </h2>
+              <button
+                onClick={() => setShowNoStudentsModal(false)}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  fontSize: '24px',
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  padding: '0',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '8px',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f1f5f9';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <p style={{
+              margin: '0 0 24px 0',
+              fontSize: '16px',
+              color: '#64748b',
+              lineHeight: '1.5'
+            }}>
+              No students found. Please import students first.
+            </p>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '12px'
+            }}>
+              <button
+                onClick={() => setShowNoStudentsModal(false)}
+                style={{
+                  padding: '10px 24px',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#2563eb';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#3b82f6';
+                }}
+              >
+                OK
+              </button>
             </div>
           </div>
         </div>
