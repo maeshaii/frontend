@@ -40,6 +40,7 @@ export default function Statistics() {
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -155,6 +156,159 @@ export default function Statistics() {
     setCompanyProfile(null);
   };
 
+  const exportAllCompanyDetails = async () => {
+    if (companies.length === 0) {
+      alert('No companies to export');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      // Import ExcelJS dynamically
+      const ExcelJS = (await import('exceljs')).default;
+      const FileSaver = (await import('file-saver')).default;
+
+      // Create a new workbook
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Company Details');
+
+      // Define headers (only company details)
+      const headers = [
+        'Company Name',
+        'Company Address',
+        'Company Email',
+        'Company Contact',
+        'Contact Person',
+        'Position'
+      ];
+
+      // Add headers
+      worksheet.addRow(headers);
+
+      // Style the header row
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true, size: 12 };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF3B82F6' }
+      };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 25;
+
+      // Set column widths
+      worksheet.columns = [
+        { width: 30 }, // Company Name
+        { width: 40 }, // Company Address
+        { width: 25 }, // Company Email
+        { width: 20 }, // Company Contact
+        { width: 25 }, // Contact Person
+        { width: 20 }  // Position
+      ];
+
+      // Iterate through all companies and fetch their details
+      let totalRows = 0;
+      for (let i = 0; i < companies.length; i++) {
+        const company = companies[i];
+        
+        try {
+          // Fetch students and company profile for this company
+          const response = await fetchStudentsByCompany(company.company_name, coordinatorUsername);
+          
+          if (response.success) {
+            const students = response.students || [];
+            const profile = response.company_profile || {
+              company_name: company.company_name,
+              company_address: '',
+              company_email: '',
+              company_contact: '',
+              contact_person: '',
+              position: ''
+            };
+
+            // Add company row (one row per company)
+            worksheet.addRow([
+              profile.company_name || company.company_name,
+              profile.company_address || '',
+              profile.company_email || '',
+              profile.company_contact || '',
+              profile.contact_person || '',
+              profile.position || ''
+            ]);
+            totalRows++;
+          }
+        } catch (error) {
+          console.error(`Error fetching details for company ${company.company_name}:`, error);
+          // Still add the company name even if details fetch fails
+          worksheet.addRow([
+            company.company_name,
+            '',
+            '',
+            '',
+            '',
+            ''
+          ]);
+          totalRows++;
+        }
+
+        // Add small delay to avoid overwhelming the API
+        if (i < companies.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      // Style all data rows
+      for (let i = 2; i <= totalRows + 1; i++) {
+        const row = worksheet.getRow(i);
+        row.alignment = { vertical: 'middle', horizontal: 'left' };
+        row.height = 20;
+        
+        // Alternate row colors for better readability
+        if (i % 2 === 0) {
+          row.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF8FAFC' }
+          };
+        }
+      }
+
+      // Add borders to all cells
+      for (let i = 1; i <= totalRows + 1; i++) {
+        const row = worksheet.getRow(i);
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+        });
+      }
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_');
+      const filename = `Company_Details_Export_${timestamp}.xlsx`;
+
+      // Generate Excel file buffer
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      // Create blob and download
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      
+      FileSaver.saveAs(blob, filename);
+      
+      alert(`Successfully exported ${totalRows} rows of company details!`);
+    } catch (error) {
+      console.error('Error exporting company details:', error);
+      alert('Failed to export company details. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{
@@ -197,40 +351,48 @@ export default function Statistics() {
   return (
     <div style={{
       padding: '32px',
-      backgroundColor: '#f8fafc',
+      backgroundColor: '#f3f4f6',
       minHeight: '100vh'
     }}>
-      {/* Company Table with Summary */}
+      {/* Header Card - Matching Import UI Style */}
       <div style={{
         backgroundColor: 'white',
         borderRadius: '16px',
-        padding: '32px',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-        border: '1px solid #e2e8f0'
+        padding: '28px',
+        marginBottom: '32px',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+        border: '1px solid #e5e7eb'
       }}>
+        {/* Title */}
         <div style={{
-          marginBottom: '32px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '20px',
-          paddingBottom: '24px',
+          marginBottom: '24px',
+          paddingBottom: '20px',
           borderBottom: '2px solid #f1f5f9'
         }}>
-          <h3 style={{
-            margin: '0',
+          <h2 style={{
+            margin: 0,
             fontSize: '24px',
-            fontWeight: '700',
+            fontWeight: '800',
             color: '#1e293b',
             letterSpacing: '-0.025em'
           }}>
-            Companies Directory
-          </h3>
+            COMPANIES DIRECTORY
+          </h2>
+        </div>
+
+        {/* Filters and Action Buttons */}
+        <div style={{ 
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '20px', 
+          flexWrap: 'wrap'
+        }}>
+          {/* Statistics Display */}
           <div style={{
             display: 'flex',
             gap: '24px',
-            alignItems: 'center'
+            alignItems: 'center',
+            flexWrap: 'wrap'
           }}>
             <div style={{
               display: 'flex',
@@ -239,20 +401,17 @@ export default function Statistics() {
             }}>
               <span style={{
                 fontSize: '13px',
-                color: '#64748b',
+                color: '#374151',
                 fontWeight: '600',
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px'
               }}>
-                Total Companies
+                Companies
               </span>
               <span style={{
-                fontSize: '28px',
+                fontSize: '20px',
                 fontWeight: '800',
-                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text'
+                color: '#3b82f6'
               }}>
                 {totalCompanies}
               </span>
@@ -264,37 +423,107 @@ export default function Statistics() {
             }}>
               <span style={{
                 fontSize: '13px',
-                color: '#64748b',
+                color: '#374151',
                 fontWeight: '600',
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px'
               }}>
-                Total OJT Students
+                Students
               </span>
               <span style={{
-                fontSize: '28px',
+                fontSize: '20px',
                 fontWeight: '800',
-                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text'
+                color: '#8b5cf6'
               }}>
                 {totalStudents}
               </span>
             </div>
           </div>
+          
+          {/* Action Button */}
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'flex-start', 
+            gap: '12px',
+            marginLeft: 'auto',
+            flexWrap: 'wrap',
+            paddingTop: '0'
+          }}>
+            <button
+              onClick={exportAllCompanyDetails}
+              disabled={exporting || companies.length === 0}
+              style={{
+                padding: '11px 20px',
+                backgroundColor: exporting || companies.length === 0 ? '#cbd5e1' : '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: exporting || companies.length === 0 ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: exporting || companies.length === 0 ? 'none' : '0 2px 4px rgba(59, 130, 246, 0.3)',
+                opacity: exporting || companies.length === 0 ? 0.6 : 1
+              }}
+              onMouseEnter={(e) => {
+                if (!exporting && companies.length > 0) {
+                  const target = e.currentTarget as HTMLButtonElement;
+                  target.style.backgroundColor = '#2563eb';
+                  target.style.transform = 'translateY(-2px)';
+                  target.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!exporting && companies.length > 0) {
+                  const target = e.currentTarget as HTMLButtonElement;
+                  target.style.backgroundColor = '#3b82f6';
+                  target.style.transform = 'translateY(0)';
+                  target.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
+                }
+              }}
+            >
+              {exporting ? (
+                <span>Exporting...</span>
+              ) : (
+                <span>Export Company Details</span>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
+      
+      {/* Companies Table Card */}
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        padding: '28px',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+        border: '1px solid #e5e7eb'
+      }}>
 
         {companies.length === 0 ? (
           <div style={{
             textAlign: 'center',
             padding: '60px 20px',
-            backgroundColor: '#f8fafc',
-            borderRadius: '16px'
+            backgroundColor: '#f9fafb',
+            borderRadius: '12px',
+            border: '1px solid #e5e7eb'
           }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              backgroundColor: '#f3f4f6',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}>
+              <span style={{ fontSize: '32px' }}>🏢</span>
+            </div>
             <p style={{
               fontSize: '16px',
-              color: '#64748b',
+              color: '#6b7280',
               margin: '0',
               fontWeight: '500'
             }}>

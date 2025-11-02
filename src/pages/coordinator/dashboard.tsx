@@ -97,6 +97,7 @@ export default function Dashboard() {
       let allPasswords: any[] = [];
       let allSections: string[] = [];
       let failedFiles: string[] = [];
+      let batchYear: number | string | null = null;
       
       // Import each file sequentially
       for (let i = 0; i < selectedFiles.length; i++) {
@@ -111,6 +112,10 @@ export default function Dashboard() {
       if (result.success) {
             totalCreated += result.created_count || 0;
             totalUpdated += result.updating_count || 0;
+            // Get batch year from result if available
+            if (result.batch_year && !batchYear) {
+              batchYear = result.batch_year;
+            }
             if (result.passwords && Array.isArray(result.passwords)) {
               allPasswords = [...allPasswords, ...result.passwords];
             }
@@ -150,7 +155,7 @@ export default function Dashboard() {
       // Download all passwords if any exist
       if (allPasswords.length > 0) {
         console.log('Downloading passwords for', allPasswords.length, 'students');
-        downloadPasswords(allPasswords);
+        downloadPasswords(allPasswords, batchYear);
         alert(`📥 Password file has been downloaded with ${allPasswords.length} student passwords!`);
       } else {
         console.log('No passwords to download');
@@ -171,19 +176,22 @@ export default function Dashboard() {
     }
   };
 
-  const downloadPasswords = (passwords: any[]) => {
+  const downloadPasswords = (passwords: any[], batchYear: number | string | null = null) => {
     // Create CSV content
     const csvContent = [
       'CTU_ID,First_Name,Last_Name,Password',
       ...passwords.map(p => `${p.CTU_ID},"${p.First_Name}","${p.Last_Name}","${p.Password}"`)
     ].join('\n');
     
+    // Use batch year from import result, fallback to selectedYear, or use current year
+    const yearForFilename = batchYear || selectedYear || new Date().getFullYear();
+    
     // Create and download file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `ojt_passwords_${selectedYear}.csv`);
+    link.setAttribute('download', `ojt_passwords_${yearForFilename}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
