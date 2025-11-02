@@ -464,7 +464,7 @@ const DonationPage: React.FC = () => {
   }
 
   return (
-    <Box sx={{ bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+    <Box sx={{ bgcolor: '#f0f4f8', minHeight: '100vh' }}>
       <AlumniTopBar 
         showProfile={showProfile}
         setShowProfile={setShowProfile}
@@ -472,30 +472,36 @@ const DonationPage: React.FC = () => {
       />
 
       {/* Main Content */}
-      <Box sx={{ maxWidth: '100%', mx: 0, px: 2, py: 2 }}>
+      <Box sx={{ maxWidth: '1400px', mx: 'auto', px: 2, py: 3 }}>
         {/* Header Section */}
-        <Box sx={{ mb: 3 }}>
+        <Box sx={{ mb: 4 }}>
           <Card
             sx={{
               display: 'flex',
               alignItems: 'center',
-              p: 2,
-              borderRadius: 2,
-              boxShadow: 3,
-              bgcolor: 'white'
+              p: 3,
+              borderRadius: 3,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+              background: 'linear-gradient(135deg, #d32f2f 0%, #f06292 100%)',
+              color: 'white'
             }}
           >
             <Avatar 
               src={ctulogo} 
               sx={{ 
-                width: 60, 
-                height: 60, 
-                mr: 2
+                width: 70, 
+                height: 70, 
+                mr: 2,
+                border: '3px solid rgba(255,255,255,0.3)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
               }} 
             />
             <Box>
-              <Typography variant="h5" component="div" fontWeight="bold">
+              <Typography variant="h4" component="div" fontWeight="bold" sx={{ mb: 0.5 }}>
               DONATIONS
+              </Typography>
+              <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.9)', fontSize: '16px' }}>
+                Together we can make a difference
               </Typography>
             </Box>
           </Card>
@@ -505,50 +511,114 @@ const DonationPage: React.FC = () => {
       <Box sx={{ display: 'flex', gap: 3, px: 3, pb: 3 }}>
         {/* Left Sidebar - About */}
           <Box sx={{ flex: '0 0 300px' }}>
-          <Card sx={{ borderRadius: 2, boxShadow: 3, p: 3, bgcolor: 'white' }}>
-            <Typography variant="h6" component="div" fontWeight="bold" sx={{ mb: 2 }}>
+          <Card sx={{ 
+            borderRadius: 3, 
+            boxShadow: '0 4px 16px rgba(0,0,0,0.06)', 
+            p: 3, 
+            bgcolor: 'white',
+            border: '1px solid rgba(0,0,0,0.05)',
+            background: 'linear-gradient(135deg, #ffffff 0%, #fff5f7 100%)'
+          }}>
+            <Typography variant="h6" component="div" fontWeight="bold" sx={{ 
+              mb: 2,
+              color: '#d32f2f',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              fontSize: '20px'
+            }}>
+              <span style={{ fontSize: '24px' }}>💝</span>
               About Donations
             </Typography>
-            <Typography variant="body2" sx={{ color: '#6c757d', mb: 2, lineHeight: 1.6 }}>
+            <Typography variant="body2" sx={{ color: '#5a6c7d', mb: 2, lineHeight: 1.8, fontSize: '14px' }}>
               Help fellow alumni by supporting their donation requests. Share your needs and connect with your batchmates for mutual support.
             </Typography>
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body2" sx={{ color: '#6c757d', mb: 1 }}>
-                <strong>How it works:</strong>
-              </Typography>
-              <Typography variant="body2" sx={{ color: '#6c757d', mb: 1, fontSize: '0.875rem' }}>
-                • Create donation requests for items you need
-              </Typography>
-              <Typography variant="body2" sx={{ color: '#6c757d', mb: 1, fontSize: '0.875rem' }}>
-                • Browse requests from your batchmates
-                </Typography>
-              <Typography variant="body2" sx={{ color: '#6c757d', mb: 1, fontSize: '0.875rem' }}>
-                • Like and comment to show support
-                </Typography>
-              <Typography variant="body2" sx={{ color: '#6c757d', fontSize: '0.875rem' }}>
-                • Repost to help spread the word
+            <Box sx={{ mt: 2, pt: 2, borderTop: '2px solid rgba(211, 47, 47, 0.1)' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ 
+                  width: 8, 
+                  height: 8, 
+                  borderRadius: '50%', 
+                  bgcolor: '#d32f2f', 
+                  mr: 1.5 
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
+                  Create donation requests for items you need
                 </Typography>
               </Box>
-            <Box sx={{ mt: 3, p: 2, bgcolor: '#f8f9fa', borderRadius: 1 }}>
-              <Typography variant="body2" sx={{ color: '#495057', fontStyle: 'italic' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ 
+                  width: 8, 
+                  height: 8, 
+                  borderRadius: '50%', 
+                  bgcolor: '#d32f2f', 
+                  mr: 1.5 
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
+                  Browse requests from your batchmates
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ 
+                  width: 8, 
+                  height: 8, 
+                  borderRadius: '50%', 
+                  bgcolor: '#d32f2f', 
+                  mr: 1.5 
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
+                  Like and comment to show support
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Box sx={{ 
+                  width: 8, 
+                  height: 8, 
+                  borderRadius: '50%', 
+                  bgcolor: '#d32f2f', 
+                  mr: 1.5 
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
+                  Repost to help spread the word
+                </Typography>
+              </Box>
+            </Box>
+            <Box sx={{ mt: 3, p: 2.5, bgcolor: 'rgba(211, 47, 47, 0.05)', borderRadius: 2, border: '1px solid rgba(211, 47, 47, 0.1)' }}>
+              <Typography variant="body2" sx={{ color: '#d32f2f', fontStyle: 'italic', fontSize: '13px', lineHeight: 1.6 }}>
                 "Together we can make a difference in each other's lives."
-                </Typography>
-              </Box>
-            </Card>
-          </Box>
+              </Typography>
+            </Box>
+          </Card>
+        </Box>
 
           {/* Center Content */}
           <Box sx={{ flex: '1 1 600px' }}>
             {/* Start a post */}
-            <Card sx={{ mb: 3, borderRadius: 2, boxShadow: 3, p: 2 }}>
+            <Card sx={{ 
+              mb: 3, 
+              borderRadius: 3, 
+              boxShadow: '0 4px 16px rgba(0,0,0,0.06)', 
+              p: 3,
+              border: '1px solid rgba(0,0,0,0.05)',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                boxShadow: '0 6px 20px rgba(0,0,0,0.1)',
+                transform: 'translateY(-2px)'
+              }
+            }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Avatar 
-                src={userObj.profile_pic ? 
-                  (String(userObj.profile_pic).startsWith('http') ? 
-                    userObj.profile_pic : 
-                    `http://127.0.0.1:8000${userObj.profile_pic}`) : 
+                  src={userObj.profile_pic ? 
+                    (String(userObj.profile_pic).startsWith('http') ? 
+                      userObj.profile_pic : 
+                      `http://127.0.0.1:8000${userObj.profile_pic}`) : 
                     ctulogo} 
-                  sx={{ width: 40, height: 40 }} 
+                  sx={{ 
+                    width: 48, 
+                    height: 48,
+                    border: '2px solid #e0e0e0',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                  }} 
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     target.onerror = null;
@@ -557,22 +627,31 @@ const DonationPage: React.FC = () => {
                 />
                 <TextField
                   fullWidth
-                placeholder="Start a donation request"
+                  placeholder="Share what you need or how you can help..."
                   variant="outlined"
-                  size="small"
-                onClick={() => setShowPostCreate(true)}
+                  size="medium"
+                  onClick={() => setShowPostCreate(true)}
                   sx={{ 
                     '& .MuiOutlinedInput-root': {
-                      borderRadius: '25px',
-                      bgcolor: '#f0f0f0',
+                      borderRadius: '30px',
+                      bgcolor: '#f5f7fa',
+                      fontSize: '15px',
+                      transition: 'all 0.2s ease',
                       '& fieldset': {
                         borderColor: 'transparent',
+                      },
+                      '&:hover': {
+                        bgcolor: '#eef2f6',
                       },
                       '&:hover fieldset': {
                         borderColor: 'transparent',
                       },
                       '&.Mui-focused fieldset': {
                         borderColor: 'transparent',
+                      },
+                      '&.Mui-focused': {
+                        bgcolor: '#fff',
+                        boxShadow: '0 0 0 3px rgba(211, 47, 47, 0.1)'
                       },
                     }
                   }}
@@ -639,6 +718,7 @@ const DonationPage: React.FC = () => {
                       formatTime={formatTime}
                       context="donation"
                       onViewOriginalPost={handleViewOriginalDonation}
+                      currentUserAvatar={displayAvatar}
                       onRefresh={() => {
                         fetchDonationPosts(false);
                       }}
@@ -690,9 +770,177 @@ const DonationPage: React.FC = () => {
             </Box>
           </Box>
 
-        {/* Right Sidebar - Empty for now */}
+        {/* Right Sidebar - Stats */}
           <Box sx={{ flex: '0 0 300px' }}>
-          {/* Empty right sidebar to match forum layout */}
+          <Card sx={{ 
+            p: 3, 
+            borderRadius: 3, 
+            boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+            border: '1px solid rgba(0,0,0,0.05)',
+            background: 'linear-gradient(135deg, #ffffff 0%, #fff5f7 100%)'
+          }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ 
+              color: '#d32f2f',
+              mb: 3,
+              fontSize: '18px'
+            }}>
+              📊 Quick Stats
+            </Typography>
+            <Box sx={{ mb: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '14px' }}>
+                  Total Requests
+                </Typography>
+                <Typography variant="h6" fontWeight="bold" sx={{ color: '#d32f2f' }}>
+                  {donations.length}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '14px' }}>
+                  Your Requests
+                </Typography>
+                <Typography variant="h6" fontWeight="bold" sx={{ color: '#d32f2f' }}>
+                  {donations.filter((d: any) => Number(d.user?.user_id) === Number(currentUserId)).length}
+                </Typography>
+              </Box>
+            </Box>
+            <Box sx={{ pt: 2, borderTop: '2px solid rgba(211, 47, 47, 0.1)' }}>
+              <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                Help make a positive impact by supporting your batchmates' donation requests.
+              </Typography>
+            </Box>
+          </Card>
+
+          {/* Tips Card */}
+          <Card sx={{ 
+            mt: 3,
+            p: 3, 
+            borderRadius: 3, 
+            boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+            border: '1px solid rgba(0,0,0,0.05)',
+            background: 'linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)'
+          }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ 
+              color: '#1976d2',
+              mb: 2.5,
+              fontSize: '18px'
+            }}>
+              💡 Tips for Effective Requests
+            </Typography>
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                <Box sx={{ 
+                  minWidth: 6, 
+                  height: 6, 
+                  borderRadius: '50%', 
+                  bgcolor: '#1976d2', 
+                  mr: 1.5,
+                  mt: 0.5
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Be specific about what you need
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                <Box sx={{ 
+                  minWidth: 6, 
+                  height: 6, 
+                  borderRadius: '50%', 
+                  bgcolor: '#1976d2', 
+                  mr: 1.5,
+                  mt: 0.5
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Include images when possible
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                <Box sx={{ 
+                  minWidth: 6, 
+                  height: 6, 
+                  borderRadius: '50%', 
+                  bgcolor: '#1976d2', 
+                  mr: 1.5,
+                  mt: 0.5
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Respond promptly to offers
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                <Box sx={{ 
+                  minWidth: 6, 
+                  height: 6, 
+                  borderRadius: '50%', 
+                  bgcolor: '#1976d2', 
+                  mr: 1.5,
+                  mt: 0.5
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Express gratitude for donations
+                </Typography>
+              </Box>
+            </Box>
+          </Card>
+
+          {/* Support Card */}
+          <Card sx={{ 
+            mt: 3,
+            p: 3, 
+            borderRadius: 3, 
+            boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+            border: '1px solid rgba(0,0,0,0.05)',
+            background: 'linear-gradient(135deg, #fff9e6 0%, #fffce8 100%)'
+          }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ 
+              color: '#f57c00',
+              mb: 2,
+              fontSize: '18px'
+            }}>
+              🤝 How to Help
+            </Typography>
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                <Box sx={{ 
+                  minWidth: 6, 
+                  height: 6, 
+                  borderRadius: '50%', 
+                  bgcolor: '#f57c00', 
+                  mr: 1.5,
+                  mt: 0.5
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Like to show your support
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                <Box sx={{ 
+                  minWidth: 6, 
+                  height: 6, 
+                  borderRadius: '50%', 
+                  bgcolor: '#f57c00', 
+                  mr: 1.5,
+                  mt: 0.5
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Comment to offer help
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                <Box sx={{ 
+                  minWidth: 6, 
+                  height: 6, 
+                  borderRadius: '50%', 
+                  bgcolor: '#f57c00', 
+                  mr: 1.5,
+                  mt: 0.5
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Repost to spread the word
+                </Typography>
+              </Box>
+            </Box>
+          </Card>
         </Box>
         </Box>
       </Box>

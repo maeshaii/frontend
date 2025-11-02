@@ -5,6 +5,7 @@ import RepostButton from './RepostButton';
 import ReplyInput from './ReplyInput';
 import Reply from './Reply';
 import PostStatsRow from './PostStatsRow';
+import ctulogo from '../images/ctulogo.png';
 
 // Minimal, reusable types for the repost card
 interface UserLite {
@@ -64,6 +65,7 @@ interface RepostCardProps {
   editRepostContent?: { [key: string | number]: string };
   setEditRepostContent?: (fn: (prev: { [key: string | number]: string }) => { [key: string | number]: string }) => void;
   onViewOriginalPost?: (original: PostItemLite) => void;
+  currentUserAvatar?: string;
 }
 
 // Photo gallery helpers - same as PostCard
@@ -121,7 +123,8 @@ const RepostCard: React.FC<RepostCardProps> = ({
   setEditingRepost,
   editRepostContent = {},
   setEditRepostContent,
-  onViewOriginalPost
+  onViewOriginalPost,
+  currentUserAvatar
 }) => {
   // Render name: {f_name} {m_name} {l_name} if m_name exists, else {f_name} {l_name}
   const renderName = (obj: { f_name: string; m_name?: string; l_name: string }) =>
@@ -1245,7 +1248,19 @@ const RepostCard: React.FC<RepostCardProps> = ({
       {/* Comment input */}
       {showCommentInput && (
           <div style={{ padding: '12px 16px', borderTop: '1px solid #f0f0f0' }}>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <img 
+                src={currentUserAvatar || getProfilePicUrl(null)} 
+                alt="Profile" 
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  border: '2px solid #e0e0e0',
+                  objectFit: 'cover',
+                  flexShrink: 0
+                }}
+              />
               <input
                 type="text"
                 value={commentValue}
@@ -1256,11 +1271,29 @@ const RepostCard: React.FC<RepostCardProps> = ({
                   }
                 }}
                 placeholder="Write a comment..."
-                style={{ flex: 1, padding: '8px 12px', border: '1px solid #ddd', borderRadius: 20, fontSize: 14 }}
+                style={{ flex: 1, padding: '10px 16px', border: '1px solid #ddd', borderRadius: 20, fontSize: 14 }}
                 autoFocus
               />
-              <button onClick={handleCommentSubmit} disabled={!commentValue.trim()} style={{ padding: '8px 16px', borderRadius: 20, border: 'none', color: '#fff', background: commentValue.trim() ? '#007bff' : '#ccc', cursor: commentValue.trim() ? 'pointer' : 'not-allowed' }}>
-                Post
+              <button 
+                onClick={handleCommentSubmit} 
+                disabled={!commentValue.trim()} 
+                style={{ 
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  border: 'none',
+                  color: '#fff',
+                  background: commentValue.trim() ? '#007bff' : '#ccc',
+                  cursor: commentValue.trim() ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  transition: 'background 0.2s',
+                  padding: 0
+                }}
+              >
+                <span style={{ fontSize: '18px', lineHeight: 1 }}>➡️</span>
               </button>
             </div>
           </div>

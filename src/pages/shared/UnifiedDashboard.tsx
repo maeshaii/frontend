@@ -1694,6 +1694,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                           formatTime={formatHybrid}
                           onViewOriginalPost={handleViewOriginalPost}
                           context="donation"
+                          currentUserAvatar={user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo}
                           onRefresh={() => {
                             // Refresh donations
                             getDonationRequests().then((donationResponse) => {
@@ -1952,6 +1953,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                         onRefresh={() => getPosts().then(setPosts)}
                         context={'post'}
                         onViewOriginalPost={handleViewOriginalPost}
+                        currentUserAvatar={user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo}
                       />
                     );
                     return acc;
@@ -2075,6 +2077,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                       formatTime={formatHybrid}
                       onRefresh={() => getPosts().then(setPosts)}
                       context={'post'}
+                      currentUserAvatar={user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo}
                     />
                   );
                   return acc;

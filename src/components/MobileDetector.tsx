@@ -66,3 +66,5 @@ const MobileDetector: React.FC<MobileDetectorProps> = ({ children }) => {
 
 export default MobileDetector;
 
+
+

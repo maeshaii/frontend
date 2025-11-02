@@ -32,6 +32,7 @@ interface PostItem {
   user?: {
     user_id?: number;
     f_name?: string;
+    m_name?: string;
     l_name?: string;
     profile_pic?: string;
     name?: string;
@@ -547,7 +548,7 @@ const ForumPage: React.FC = () => {
 
 
   return (
-    <Box sx={{ bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+    <Box sx={{ bgcolor: '#f0f4f8', minHeight: '100vh' }}>
       {/* Alumni TopBar */}
       <AlumniTopBar 
         showProfile={showProfile}
@@ -557,32 +558,35 @@ const ForumPage: React.FC = () => {
 
 
       {/* Main Content */}
-      <Box sx={{ maxWidth: '100%', mx: 0, px: 2, py: 2 }}>
+      <Box sx={{ maxWidth: '1400px', mx: 'auto', px: 2, py: 3 }}>
         {/* Header Section */}
-        <Box sx={{ mb: 3 }}>
+        <Box sx={{ mb: 4 }}>
           <Card
             sx={{
               display: 'flex',
               alignItems: 'center',
-              p: 2,
-              borderRadius: 2,
-              boxShadow: 3,
-              bgcolor: 'white'
+              p: 3,
+              borderRadius: 3,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+              background: 'linear-gradient(135deg, #174f84 0%, #2d5aa0 100%)',
+              color: 'white'
             }}
           >
             <Avatar 
               src={ctulogo} 
               sx={{ 
-                width: 60, 
-                height: 60, 
-                mr: 2
+                width: 70, 
+                height: 70, 
+                mr: 2,
+                border: '3px solid rgba(255,255,255,0.3)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
               }} 
             />
             <Box>
-              <Typography variant="h5" component="div" fontWeight="bold">
+              <Typography variant="h4" component="div" fontWeight="bold" sx={{ mb: 0.5 }}>
                 FORUM
               </Typography>
-              <Typography variant="body2" sx={{ color: '#6c757d' }}>
+              <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.9)', fontSize: '16px' }}>
                 {getBatchYear()}
               </Typography>
             </Box>
@@ -688,7 +692,18 @@ const ForumPage: React.FC = () => {
           {/* Center Content */}
           <Box sx={{ flex: '1 1 600px' }}>
               {/* Start a post */}
-            <Card sx={{ mb: 3, borderRadius: 2, boxShadow: 3, p: 2 }}>
+            <Card sx={{ 
+              mb: 3, 
+              borderRadius: 3, 
+              boxShadow: '0 4px 16px rgba(0,0,0,0.06)', 
+              p: 3,
+              border: '1px solid rgba(0,0,0,0.05)',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                boxShadow: '0 6px 20px rgba(0,0,0,0.1)',
+                transform: 'translateY(-2px)'
+              }
+            }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Avatar 
                   src={userObj.profile_pic ? 
@@ -696,7 +711,12 @@ const ForumPage: React.FC = () => {
                       userObj.profile_pic : 
                       `http://127.0.0.1:8000${userObj.profile_pic}`) : 
                     ctulogo} 
-                  sx={{ width: 40, height: 40 }} 
+                  sx={{ 
+                    width: 48, 
+                    height: 48,
+                    border: '2px solid #e0e0e0',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                  }} 
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     target.onerror = null;
@@ -705,22 +725,31 @@ const ForumPage: React.FC = () => {
                 />
                 <TextField
                   fullWidth
-                  placeholder="Start a post"
+                  placeholder="Share your thoughts, achievements, or experiences..."
                   variant="outlined"
-                  size="small"
+                  size="medium"
                   onClick={() => setShowPostCreate(true)}
                   sx={{ 
                     '& .MuiOutlinedInput-root': {
-                      borderRadius: '25px',
-                      bgcolor: '#f0f0f0',
+                      borderRadius: '30px',
+                      bgcolor: '#f5f7fa',
+                      fontSize: '15px',
+                      transition: 'all 0.2s ease',
                       '& fieldset': {
                         borderColor: 'transparent',
+                      },
+                      '&:hover': {
+                        bgcolor: '#eef2f6',
                       },
                       '&:hover fieldset': {
                         borderColor: 'transparent',
                       },
                       '&.Mui-focused fieldset': {
                         borderColor: 'transparent',
+                      },
+                      '&.Mui-focused': {
+                        bgcolor: '#fff',
+                        boxShadow: '0 0 0 3px rgba(23, 79, 132, 0.1)'
                       },
                     }
                   }}
@@ -784,6 +813,7 @@ const ForumPage: React.FC = () => {
                         formatTime={formatTime}
                         context="forum"
                         onViewOriginalPost={handleViewOriginalPost}
+                        currentUserAvatar={displayAvatar}
                         onRefresh={() => {
                           // Immediate update without page refresh - similar to UnifiedDashboard
                           getForums().then((forumsData) => {
@@ -1051,13 +1081,72 @@ const ForumPage: React.FC = () => {
 
           {/* Right Sidebar - About */}
           <Box sx={{ flex: '0 0 300px' }}>
-              <Card sx={{ p: 2, borderRadius: 2, boxShadow: 3 }}>
-                <Typography variant="h6" fontWeight="bold" gutterBottom>
-                  About
+              <Card sx={{ 
+                p: 3, 
+                borderRadius: 3, 
+                boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+                border: '1px solid rgba(0,0,0,0.05)',
+                background: 'linear-gradient(135deg, #ffffff 0%, #f8faff 100%)'
+              }}>
+                <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ 
+                  color: '#174f84',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  fontSize: '20px'
+                }}>
+                  <span style={{ fontSize: '24px' }}>💬</span>
+                  About Forum
                 </Typography>
-              <Typography variant="body2" sx={{ color: '#6c757d' }}>
+              <Typography variant="body2" sx={{ 
+                color: '#5a6c7d', 
+                lineHeight: 1.8,
+                fontSize: '14px'
+              }}>
                 Connect with fellow alumni from your batch and share experiences, memories, and updates about your journey after graduation.
                 </Typography>
+                <Box sx={{ 
+                  mt: 3, 
+                  pt: 2.5, 
+                  borderTop: '2px solid rgba(23, 79, 132, 0.1)' 
+                }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Box sx={{ 
+                      width: 8, 
+                      height: 8, 
+                      borderRadius: '50%', 
+                      bgcolor: '#174f84', 
+                      mr: 1.5 
+                    }} />
+                    <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
+                      Share achievements & milestones
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Box sx={{ 
+                      width: 8, 
+                      height: 8, 
+                      borderRadius: '50%', 
+                      bgcolor: '#174f84', 
+                      mr: 1.5 
+                    }} />
+                    <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
+                      Network with your batch
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ 
+                      width: 8, 
+                      height: 8, 
+                      borderRadius: '50%', 
+                      bgcolor: '#174f84', 
+                      mr: 1.5 
+                    }} />
+                    <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
+                      Stay connected & engaged
+                    </Typography>
+                  </Box>
+                </Box>
               </Card>
           </Box>
         </Box>

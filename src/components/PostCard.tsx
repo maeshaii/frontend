@@ -1811,23 +1811,72 @@ const PostCard: React.FC<PostCardProps> = ({
 
             {/* Comment input for repost */}
             {showCommentInput[repostData?.repost_id || post.post_id] && (
-              <div className="comment-input-container" style={{ position: 'relative' }}>
+              <div className="comment-input-container" style={{ position: 'relative', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <img 
+                  src={(() => {
+                    try {
+                      const raw = localStorage.getItem('user');
+                      if (raw) {
+                        const u = JSON.parse(raw);
+                        return getProfilePicUrl(u?.profile_pic) || displayAvatar;
+                      }
+                    } catch (_) {}
+                    return displayAvatar;
+                  })()}
+                  alt="Profile" 
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    border: '2px solid #e0e0e0',
+                    objectFit: 'cover',
+                    flexShrink: 0
+                  }}
+                  onError={(e) => handleProfilePicError(e)}
+                />
                 <input
                   type="text"
                   placeholder="Type your comment..."
                   value={commentInput[repostData?.repost_id || post.post_id] || ''}
                   onChange={(e) => handleCommentInputChange(e, repostData?.repost_id || post.post_id)}
                   onKeyDown={(e) => handleCommentKeyDown(e, repostData?.repost_id || post.post_id)}
+                  style={{
+                    flex: 1,
+                    border: '1px solid #ddd',
+                    borderRadius: '20px',
+                    padding: '10px 16px',
+                    fontSize: '14px'
+                  }}
                 />
-                <button onClick={handleCommentSubmit}>➡️</button>
+                <button 
+                  onClick={handleCommentSubmit}
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    background: '#007bff',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    transition: 'background 0.2s',
+                    padding: 0
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#0056b3'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = '#007bff'; }}
+                >
+                  <span style={{ color: 'white', fontSize: '18px', lineHeight: 1 }}>➡️</span>
+                </button>
                 
                 {/* @mention suggestions dropdown */}
                 {showMentionSuggestions[repostData?.repost_id || post.post_id] && mentionSuggestions[repostData?.repost_id || post.post_id]?.length > 0 && (
                   <div style={{
                     position: 'absolute',
                     top: '100%',
-                    left: 0,
-                    right: 0,
+                    left: '44px',
+                    right: '48px',
                     backgroundColor: 'white',
                     border: '1px solid #e4e6ea',
                     borderRadius: '8px',
@@ -2604,23 +2653,72 @@ const PostCard: React.FC<PostCardProps> = ({
       </div>
 
       {showCommentInput[post.post_id] && (
-        <div className="comment-input-container" style={{ position: 'relative' }}>
+        <div className="comment-input-container" style={{ position: 'relative', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <img 
+            src={(() => {
+              try {
+                const raw = localStorage.getItem('user');
+                if (raw) {
+                  const u = JSON.parse(raw);
+                  return getProfilePicUrl(u?.profile_pic) || displayAvatar;
+                }
+              } catch (_) {}
+              return displayAvatar;
+            })()}
+            alt="Profile" 
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              border: '2px solid #e0e0e0',
+              objectFit: 'cover',
+              flexShrink: 0
+            }}
+            onError={(e) => handleProfilePicError(e)}
+          />
           <input
             type="text"
             placeholder="Type your comment..."
             value={commentInput[post.post_id] || ''}
             onChange={(e) => handleCommentInputChange(e, post.post_id)}
             onKeyDown={(e) => handleCommentKeyDown(e, post.post_id)}
+            style={{
+              flex: 1,
+              border: '1px solid #ddd',
+              borderRadius: '20px',
+              padding: '10px 16px',
+              fontSize: '14px'
+            }}
           />
-          <button onClick={handleCommentSubmit}>➡️</button>
+          <button 
+            onClick={handleCommentSubmit}
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              background: '#007bff',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              transition: 'background 0.2s',
+              padding: 0
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#0056b3'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#007bff'; }}
+          >
+            <span style={{ color: 'white', fontSize: '18px', lineHeight: 1 }}>➡️</span>
+          </button>
           
           {/* @mention suggestions dropdown */}
           {showMentionSuggestions[post.post_id] && mentionSuggestions[post.post_id]?.length > 0 && (
             <div style={{
               position: 'absolute',
               top: '100%',
-              left: 0,
-              right: 0,
+              left: '44px',
+              right: '48px',
               backgroundColor: 'white',
               border: '1px solid #e4e6ea',
               borderRadius: '8px',

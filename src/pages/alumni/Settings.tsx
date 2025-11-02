@@ -70,6 +70,7 @@ const Settings: React.FC = () => {
     company_contact: '',
     contact_person: '',
     position_alt: '',
+    ojt_start_date: '',
     job_alignment_status: '',
     job_alignment_category: '',
     job_alignment_title: '',
@@ -261,6 +262,7 @@ const Settings: React.FC = () => {
           company_contact: data.company_contact || '',
           contact_person: data.contact_person || '',
           position_alt: data.position_alt || '',
+          ojt_start_date: data.ojt_start_date || '',
           job_alignment_status: data.job_alignment_status || '',
           job_alignment_category: data.job_alignment_category || '',
           job_alignment_title: data.job_alignment_title || '',
@@ -537,6 +539,7 @@ const Settings: React.FC = () => {
       company_contact: '',
       contact_person: '',
       position_alt: '',
+      ojt_start_date: '',
       job_alignment_status: '',
       job_alignment_category: '',
       job_alignment_title: '',
@@ -971,12 +974,11 @@ const Settings: React.FC = () => {
                       </Box>
                     )}
 
-                    {/* OJT Account: Display only EmploymentHistory fields (view-only, no edit) */}
+                    {/* OJT Account: Display only specified fields (view-only, no edit) */}
                     {accountType === 'ojt' && (hasJobInDB === true || hasJobInDB === false) && (
                       <>
-                        {/* Only show fields from EmploymentHistory model - always disabled (view-only) */}
                         <TextField
-                          label="Company Name"
+                          label="Company"
                           value={employmentData.organization_name}
                           variant="outlined"
                           fullWidth
@@ -984,73 +986,11 @@ const Settings: React.FC = () => {
                           sx={{ mb: 2 }}
                         />
                         <TextField
-                          label="Date Started"
-                          value={employmentData.date_hired}
-                          variant="outlined"
-                          type="date"
-                          InputLabelProps={{ shrink: true }}
-                          fullWidth
-                          disabled={true}
-                          sx={{ mb: 2 }}
-                        />
-                        <TextField
-                          label="Position"
-                          value={employmentData.position}
-                          variant="outlined"
-                          fullWidth
-                          disabled={true}
-                          sx={{ mb: 2 }}
-                        />
-                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
-                          <InputLabel>Sector</InputLabel>
-                          <Select
-                            value={employmentData.sector}
-                            label="Sector"
-                            disabled={true}
-                          >
-                            {sectorOptions.map((sector) => (
-                              <MenuItem key={sector} value={sector}>
-                                {sector}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
-                          <InputLabel>Scope</InputLabel>
-                          <Select
-                            value={employmentData.scope_current}
-                            label="Scope"
-                            disabled={true}
-                          >
-                            {scopeOptions.map((scope) => (
-                              <MenuItem key={scope} value={scope}>
-                                {scope}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                        <TextField
                           label="Company Address"
                           value={employmentData.company_address}
                           variant="outlined"
                           multiline
                           rows={3}
-                          disabled={true}
-                          sx={{ mb: 2 }}
-                        />
-                        <TextField
-                          label="Employment Duration"
-                          value={employmentData.employment_duration_current}
-                          variant="outlined"
-                          fullWidth
-                          disabled={true}
-                          sx={{ mb: 2 }}
-                        />
-                        <TextField
-                          label="Salary"
-                          value={employmentData.salary_current}
-                          variant="outlined"
-                          fullWidth
                           disabled={true}
                           sx={{ mb: 2 }}
                         />
@@ -1072,7 +1012,7 @@ const Settings: React.FC = () => {
                           sx={{ mb: 2 }}
                         />
                         <TextField
-                          label="Contact Person"
+                          label="Contact Person Name"
                           value={employmentData.contact_person}
                           variant="outlined"
                           fullWidth
@@ -1080,9 +1020,19 @@ const Settings: React.FC = () => {
                           sx={{ mb: 2 }}
                         />
                         <TextField
-                          label="Awards/Recognition"
-                          value={employmentData.awards_recognition_current}
+                          label="Contact Person Position"
+                          value={employmentData.position_alt}
                           variant="outlined"
+                          fullWidth
+                          disabled={true}
+                          sx={{ mb: 2 }}
+                        />
+                        <TextField
+                          label="Start Date"
+                          value={employmentData.ojt_start_date}
+                          variant="outlined"
+                          type="date"
+                          InputLabelProps={{ shrink: true }}
                           fullWidth
                           disabled={true}
                           sx={{ mb: 2 }}
@@ -1586,3 +1536,4 @@ const Settings: React.FC = () => {
 };
 
 export default Settings;
+

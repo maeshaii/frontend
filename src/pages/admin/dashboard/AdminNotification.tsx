@@ -230,30 +230,6 @@ const AdminNotificationPage: React.FC = () => {
           padding: 24,
         }}
       >
-          <button
-            type="button"
-          onClick={() => {
-            const userStr = localStorage.getItem('user');
-            if (userStr) {
-              const userObj = JSON.parse(userStr);
-              const userId = userObj.user_id || userObj.id;
-              if (userId) {
-                navigate(`/ccict/dashboard/${userId}`);
-              }
-            }
-          }}
-          style={{
-            marginBottom: 16,
-            background: '#174f84',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 8,
-            padding: '8px 20px',
-            cursor: 'pointer',
-          }}
-        >
-          ← Back to Dashboard
-        </button>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ flex: 1 }}>Notifications</h2>
           <input

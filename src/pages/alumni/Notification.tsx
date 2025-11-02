@@ -1282,56 +1282,6 @@ const NotificationPage: React.FC = () => {
           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
           border: '1px solid #e9ecef'
         }}>
-        {(() => {
-          const currentUserRaw = localStorage.getItem('user');
-          const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
-          const isAdmin = !!(currentUser && currentUser.account_type && currentUser.account_type.admin);
-          const isPeso = !!(currentUser && currentUser.account_type && currentUser.account_type.peso);
-          const userId = currentUser?.user_id || currentUser?.id;
-          
-          let backPath = '';
-          if (isAdmin) {
-            backPath = `/ccict/dashboard/${userId}`;
-          } else if (isPeso) {
-            backPath = `/peso/dashboard/${userId}`;
-          } else {
-            const userRole = currentUser?.role || currentUser?.user_type;
-            if (userRole === 'ojt' || userRole === 'coordinator') {
-              backPath = `/dashboard/${userId}`;
-            } else {
-              backPath = `/dashboard/${userId}`;
-            }
-          }
-          
-          return (
-            <button
-          onClick={() => navigate(backPath)}
-          style={{
-                  background: '#f8f9fa',
-                  color: '#6c757d',
-                  border: '1px solid #e9ecef',
-                  borderRadius: '8px',
-                  padding: '8px 16px',
-            cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  marginBottom: '16px',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#e9ecef';
-                  e.currentTarget.style.borderColor = '#dee2e6';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = '#f8f9fa';
-                  e.currentTarget.style.borderColor = '#e9ecef';
-          }}
-        >
-          ← Back to Dashboard
-        </button>
-          );
-        })()}
-          
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
             <div>
               <h1 style={{ 
