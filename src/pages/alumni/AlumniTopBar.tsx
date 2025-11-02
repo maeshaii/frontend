@@ -5,6 +5,7 @@ import ctulogo from '../../images/ctulogo.png';
 import wherenayouLogo from '../../images/logo_login.png';
 import { api, getAdminPesoUsers, getUserInfo, fetchNotificationCount, saveRecentSearch, getRecentSearches, deleteRecentSearch } from '../../services/api';
 import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
+import { useRealTimeMessages } from '../../hooks/useRealTimeMessages';
 import 'primeicons/primeicons.css';
 
 interface AlumniTopBarProps {
@@ -40,6 +41,13 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   const { notificationCount, isConnected: notificationConnected } = useRealTimeNotifications({
     enablePolling: true,
     pollingInterval: 30000,
+    autoConnect: true
+  });
+
+  // Use real-time messages hook
+  const { unreadCount: messageUnreadCount } = useRealTimeMessages({
+    enablePolling: true,
+    pollingInterval: 15000, // 15 seconds for faster badge updates
     autoConnect: true
   });
   
@@ -621,6 +629,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               : 'none',
             transform: location.pathname.includes('/message') ? 'scale(1.05)' : 'scale(1)',
             borderBottom: location.pathname.includes('/message') ? '3px solid white' : '3px solid transparent',
+            position: 'relative',
           }}
           onClick={() => navigate('/messages')}
           onMouseEnter={(e) => {
@@ -637,6 +646,29 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           }}
         >
           <i className="pi pi-envelope" style={{ color: 'white', fontSize: 20 }}></i>
+          {messageUnreadCount > 0 && (
+            <span
+              style={{
+                position: 'absolute',
+                top: 4,
+                right: 8,
+                backgroundColor: '#ff3b3b',
+                color: 'white',
+                borderRadius: '12px',
+                padding: '3px 7px',
+                fontSize: 10,
+                fontWeight: '700',
+                minWidth: 18,
+                textAlign: 'center',
+                lineHeight: 1.2,
+                pointerEvents: 'none',
+                userSelect: 'none',
+                boxShadow: '0 2px 6px rgba(255, 0, 0, 0.4)',
+              }}
+            >
+              {messageUnreadCount}
+            </span>
+          )}
           <span style={{ 
             color: 'white', 
             fontSize: 12, 

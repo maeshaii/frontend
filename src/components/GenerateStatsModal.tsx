@@ -5,6 +5,7 @@ import {
   generateSpecificStats,
   exportDetailedAlumniData,
 } from '../services/api';
+import { api } from '../services/api';
 import { useAvailableYears } from '../hooks/useStats';
 import { AnyStats, StatsType } from '../types/stats';
 import { queryClient } from '../services/utils/queryClient';
@@ -50,6 +51,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   const [detailedData, setDetailedData] = useState<Record<string, any[]> | null>(null);
   const [detailedLoading, setDetailedLoading] = useState<Record<string, boolean>>({});
   const [currentChartSection, setCurrentChartSection] = useState<string>('');
+  const [reportSettings, setReportSettings] = useState<any>(null);
 
   // Safe percent helper to avoid NaN when total is 0
   const pct = (part: number, total: number) => {
@@ -75,59 +77,134 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     }
   };
 
+  // Helper to load image from URL or local path
+  const loadImageOrUrl = async (imageUrl: string, fallback: string): Promise<string> => {
+    try {
+      // Check if imageUrl is already an absolute URL
+      if (imageUrl && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
+        return await getImageAsBase64(imageUrl);
+      } else if (imageUrl && imageUrl.startsWith('/')) {
+        // Relative URL from backend, prepend API base URL
+        const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+        return await getImageAsBase64(`${baseUrl}${imageUrl}`);
+      } else if (imageUrl) {
+        // Relative path, try with base URL
+        return await getImageAsBase64(imageUrl);
+      }
+      return await getImageAsBase64(fallback);
+    } catch (error) {
+      console.error('Error loading image from URL or local:', error);
+      return await getImageAsBase64(fallback);
+    }
+  };
+
+  // Helper to convert hex color to RGB for PDF
+  const hexToRgb = (hex: string): [number, number, number] => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? [
+      parseInt(result[1], 16),
+      parseInt(result[2], 16),
+      parseInt(result[3], 16)
+    ] : [0, 0, 0];
+  };
+
+  // Helper to convert hex color to DOCX color format (RGB, no #)
+  // Note: docx library expects RGB format (not BGR)
+  const hexToDocxColor = (hex: string): string => {
+    // Normalize hex: ensure it has # prefix for hexToRgb
+    const normalizedHex = hex.startsWith('#') ? hex : `#${hex}`;
+    const rgb = hexToRgb(normalizedHex);
+    // Return RGB format (Red, Green, Blue) as uppercase hex without #
+    // For #DC143C (RGB 220, 20, 60): returns DC143C
+    return `${rgb[0].toString(16).padStart(2, '0')}${rgb[1].toString(16).padStart(2, '0')}${rgb[2].toString(16).padStart(2, '0')}`.toUpperCase();
+  };
+
+  // Helper to convert ARGB hex to RGB hex for DOCX shading
+  // For docx shading, we need 6 digits (RGB), not 8 (ARGB)
+  const argbToDocxShading = (argbHex: string): string => {
+    // If it's already 6 digits, return as is
+    if (argbHex.length === 6) return argbHex;
+    // If it's 8 digits (ARGB), remove the alpha channel (first 2 chars)
+    if (argbHex.length === 8) return argbHex.substring(2);
+    // If it has # prefix and is 7 digits, remove #
+    if (argbHex.startsWith('#') && argbHex.length === 7) return argbHex.substring(1);
+    // If it has # prefix and is 9 digits (A#RRGGBB), remove # and alpha
+    if (argbHex.startsWith('#') && argbHex.length === 9) return argbHex.substring(3);
+    return argbHex;
+  };
+
   // ========================================
   // PDF HEADER FUNCTION
   // ========================================
   // Utility function to add institutional header to PDF
   const addInstitutionalHeaderToPDF = async (doc: jsPDF, pageWidth: number) => {
     try {
-      // Load images
-      const ctuLogoBase64 = await getImageAsBase64(ctuLogo);
-      const bagongPilipinasBase64 = await getImageAsBase64(bagongPilipinasLogo);
+      const settings = reportSettings || {};
+      
+      // Check if header is enabled
+      if (settings.header_enabled === false) return;
+      
+      // Load images with fallbacks
+      const leftLogoBase64 = settings.left_logo_enabled !== false 
+        ? await loadImageOrUrl(settings.left_logo_url || '', ctuLogo)
+        : '';
+      const rightLogoBase64 = settings.right_logo_enabled !== false
+        ? await loadImageOrUrl(settings.right_logo_url || '', bagongPilipinasLogo)
+        : '';
       
       let yPosition = 15;
       
       // Create a proper 3-column layout like Word document
-      // Left column: CTU Logo - smaller and higher position
-      if (ctuLogoBase64) {
-        doc.addImage(ctuLogoBase64, 'PNG', 60, yPosition + 5, 35, 35); // Smaller (35x35) and higher (yPosition + 5)
+      // Left column: Logo
+      if (leftLogoBase64) {
+        doc.addImage(leftLogoBase64, 'PNG', 60, yPosition + 5, 35, 35);
       }
       
-      // Right column: Bagong Pilipinas Logo - smaller and higher position
-      if (bagongPilipinasBase64) {
-        doc.addImage(bagongPilipinasBase64, 'PNG', pageWidth - 95, yPosition + 5, 35, 35); // Smaller (35x35) and higher (yPosition + 5)
+      // Right column: Logo
+      if (rightLogoBase64) {
+        doc.addImage(rightLogoBase64, 'PNG', pageWidth - 95, yPosition + 5, 35, 35);
       }
 
-      // Center column: Institutional text (positioned between logos with tighter spacing)
+      // Center column: Institutional text
       const centerX = pageWidth / 2;
       
-      // Republic of the Philippines - Match Word default size (12pt)
+      // Line 1
+      const line1 = settings.header_line1 || 'Republic of the Philippines';
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      doc.text('Republic of the Philippines', centerX, yPosition + 4, { align: 'center' }); // Tighter spacing (was 6, now 4)
+      doc.text(line1, centerX, yPosition + 4, { align: 'center' });
       
-      // CEBU TECHNOLOGICAL UNIVERSITY (bold, red) - Match Word size 24 exactly
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(220, 20, 60);
-      doc.setFontSize(12); // Exact match to Word size 24
-      doc.text('CEBU TECHNOLOGICAL UNIVERSITY', centerX, yPosition + 12, { align: 'center' }); // Much tighter spacing (was 14, now 12)
+      // Line 2 (CEBU TECHNOLOGICAL UNIVERSITY) - bold, red
+      const line2 = settings.header_line2 || 'CEBU TECHNOLOGICAL UNIVERSITY';
+      doc.setFont('helvetica', settings.header_line2_bold !== false ? 'bold' : 'normal');
+      const line2Color = hexToRgb(settings.header_line2_color || '#DC143C');
+      doc.setTextColor(line2Color[0], line2Color[1], line2Color[2]);
+      doc.setFontSize(12);
+      doc.text(line2, centerX, yPosition + 12, { align: 'center' });
       
-      // Address - Match Word default size (12pt)
+      // Line 3 (Address)
+      const line3 = settings.header_line3 || 'M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines';
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(0, 0, 0);
-      doc.setFontSize(10); // Match Word default size
-      doc.text('M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines', centerX, yPosition + 17, { align: 'center' }); // Much tighter spacing (was 20, now 17)
+      doc.setFontSize(10);
+      doc.text(line3, centerX, yPosition + 17, { align: 'center' });
       
-      // Website and Phone - Match Word default size (12pt)
-      doc.setFontSize(10); // Match Word default size
-      doc.text('Website: http://www.ctu.edu.ph', centerX, yPosition + 21, { align: 'center' }); // Much tighter spacing (was 25, now 21)
-      doc.text('Phone: +6332 402 4060 loc. 1146', centerX, yPosition + 25, { align: 'center' }); // Much tighter spacing (was 30, now 25)
+      // Line 4 (Website)
+      const line4 = settings.header_line4 || 'Website: http://www.ctu.edu.ph';
+      doc.setFontSize(10);
+      doc.text(line4, centerX, yPosition + 21, { align: 'center' });
       
-      // UNIVERSITY ALUMNI AFFAIRS OFFICE (bold, red) - Match Word size 18 exactly
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(220, 20, 60);
-      doc.setFontSize(9); // Exact match to Word size 18
-      doc.text('UNIVERSITY ALUMNI AFFAIRS OFFICE', centerX, yPosition + 30, { align: 'center' }); // Much tighter spacing (was 36, now 30)
+      // Line 5 (Phone)
+      const line5 = settings.header_line5 || 'Phone: +6332 402 4060 loc. 1146';
+      doc.text(line5, centerX, yPosition + 25, { align: 'center' });
+      
+      // Line 6 (UNIVERSITY ALUMNI AFFAIRS OFFICE) - bold, red
+      const line6 = settings.header_line6 || 'UNIVERSITY ALUMNI AFFAIRS OFFICE';
+      doc.setFont('helvetica', settings.header_line6_bold !== false ? 'bold' : 'normal');
+      const line6Color = hexToRgb(settings.header_line6_color || '#DC143C');
+      doc.setTextColor(line6Color[0], line6Color[1], line6Color[2]);
+      doc.setFontSize(9);
+      doc.text(line6, centerX, yPosition + 30, { align: 'center' });
       
       // Reset color for content
       doc.setTextColor(0, 0, 0);
@@ -142,22 +219,120 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   // Utility function to add institutional footer to PDF
   const addInstitutionalFooterToPDF = async (doc: jsPDF, pageWidth: number, pageHeight: number) => {
     try {
-      const footerBase64 = await getImageAsBase64(footerImage);
+      const settings = reportSettings || {};
       
-      if (footerBase64) {
-        // Add compact footer image at the bottom - match Word document proportions
-        // Calculate proper width and height to maintain aspect ratio
-        const footerWidth = pageWidth - 40; // Full width minus margins
-        const footerHeight = 12; // Compact height like Word document
+      // Check if footer is enabled
+      if (settings.footer_enabled === false) return;
+      
+      // Get the position of the last autoTable to determine where to place footer
+      const lastTableY = (doc as any).lastAutoTable?.finalY || 150;
+      
+      // Check if we need a new page for the footer (footer needs about 80mm of space)
+      const spaceNeeded = 80;
+      let currentY;
+      if (lastTableY + spaceNeeded > pageHeight - 20) {
+        doc.addPage();
+        // Start footer at a reasonable position on the new page
+        currentY = 50;
+      } else {
+        // Start footer after the last table with some spacing
+        currentY = lastTableY + 40;
+      }
+      
+      // Work from top to bottom
+      // 1. Signature section at the top
+      if (settings.signature_enabled !== false) {
+        const boxHeight = 12;
         
-        doc.addImage(footerBase64, 'PNG', 20, pageHeight - 30, footerWidth, footerHeight);
+        // Prepared by section (left)
+        const preparedX = 40;
+        const preparedY1 = currentY;
+        const preparedY2 = preparedY1 + boxHeight;
+        const preparedY3 = preparedY2 + boxHeight;
         
-        // Add footer text below the image
+        // Draw two separate boxes for Prepared by
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.5);
+        
+        // Box 1: Label
+        doc.rect(preparedX, preparedY1, 70, boxHeight);
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
-        doc.text('Generated by Cebu Technological University Alumni Affairs Office', pageWidth / 2, pageHeight - 12, { align: 'center' });
-        doc.text('This report is generated automatically by the Alumni Tracking System', pageWidth / 2, pageHeight - 7, { align: 'center' });
+        doc.text('Prepared by:', preparedX + 35, preparedY1 + 6, { align: 'center' });
+        
+        // Box 2: Name
+        doc.rect(preparedX, preparedY2, 70, boxHeight);
+        const preparedByName = settings.prepared_by_name || 'MARIE JOY B. ALIT, Ph.D.';
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text(preparedByName, preparedX + 35, preparedY2 + 6, { align: 'center' });
+        
+        // Title outside box
+        const preparedByTitle = settings.prepared_by_title || 'University Director for Alumni Affairs';
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.text(preparedByTitle, preparedX + 35, preparedY3 + 2, { align: 'center' });
+        
+        // Approved by section (right)
+        const approvedX = pageWidth - 110;
+        const approvedY1 = currentY;
+        const approvedY2 = approvedY1 + boxHeight;
+        const approvedY3 = approvedY2 + boxHeight;
+        
+        // Box 1: Label
+        doc.rect(approvedX, approvedY1, 70, boxHeight);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Approved by:', approvedX + 35, approvedY1 + 6, { align: 'center' });
+        
+        // Box 2: Name
+        doc.rect(approvedX, approvedY2, 70, boxHeight);
+        const approvedByName = settings.approved_by_name || 'ROMEO P. MONTECILLO, Ph.D.';
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text(approvedByName, approvedX + 35, approvedY2 + 6, { align: 'center' });
+        
+        // Title outside box
+        const approvedByTitle = settings.approved_by_title || 'Vice President for Student Affairs';
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.text(approvedByTitle, approvedX + 35, approvedY3 + 2, { align: 'center' });
+        
+        currentY = Math.max(preparedY3, approvedY3) + 10;
       }
+      
+      // 2. Footer image below signature
+      if (settings.footer_image_enabled !== false) {
+        const footerBase64 = await loadImageOrUrl(settings.footer_image_url || '', footerImage);
+        
+        if (footerBase64) {
+          const footerWidth = pageWidth - 40;
+          const footerHeight = 12;
+          
+          doc.addImage(footerBase64, 'PNG', 20, currentY, footerWidth, footerHeight);
+          currentY += footerHeight + 5;
+        }
+      }
+      
+      // 3. Generated date below footer image
+      const generatedDate = new Date().toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Generated on: ${generatedDate}`, pageWidth / 2, currentY, { align: 'center' });
+      currentY += 10;
+      
+      // 4. Footer text at the bottom
+      const footerText1 = settings.footer_text1 || 'Generated by Cebu Technological University Alumni Affairs Office';
+      const footerText2 = settings.footer_text2 || 'This report is generated automatically by the Alumni Tracking System';
+      
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text(footerText1, pageWidth / 2, currentY, { align: 'center' });
+      doc.text(footerText2, pageWidth / 2, currentY + 5, { align: 'center' });
     } catch (error) {
       console.error('Error adding institutional footer to PDF:', error);
     }
@@ -167,8 +342,23 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   // EXCEL HEADER FUNCTION
   // ========================================
   // Utility function to add institutional header to Excel
-  const addInstitutionalHeaderToExcel = (sheet: any, startRow: number = 1) => {
+  const addInstitutionalHeaderToExcel = async (workbook: any, sheet: any, startRow: number = 1) => {
+    const settings = reportSettings || {};
+    
+    // Check if header is enabled
+    if (settings.header_enabled === false) {
+      return startRow; // Return startRow if disabled
+    }
+    
     let r = startRow;
+    
+    // Load header images if enabled
+    const leftLogoBase64 = settings.left_logo_enabled !== false 
+      ? await loadImageOrUrl(settings.left_logo_url || '', ctuLogo)
+      : '';
+    const rightLogoBase64 = settings.right_logo_enabled !== false
+      ? await loadImageOrUrl(settings.right_logo_url || '', bagongPilipinasLogo)
+      : '';
     
     // Add empty row for spacing (moved down)
     sheet.getRow(r).height = 10;
@@ -186,43 +376,77 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     sheet.getRow(r + 8).height = 20;
     sheet.getRow(r + 9).height = 20; // Added for report title spacing
     
-    // Republic of the Philippines
-    sheet.getCell(`A${r}`).value = 'Republic of the Philippines';
+    // Add logos to row 2
+    if (leftLogoBase64) {
+      const leftImgId = workbook.addImage({
+        base64: leftLogoBase64.split(',')[1],
+        extension: 'png',
+      });
+      sheet.addImage(leftImgId, {
+        tl: { col: 3, row: r - startRow },
+        ext: { width: 100, height: 100 },
+      });
+    }
+    
+    if (rightLogoBase64) {
+      const rightImgId = workbook.addImage({
+        base64: rightLogoBase64.split(',')[1],
+        extension: 'png',
+      });
+      sheet.addImage(rightImgId, {
+        tl: { col: 5, row: r - startRow },
+        ext: { width: 100, height: 100 },
+      });
+    }
+    
+    // Line 1
+    const line1 = settings.header_line1 || 'Republic of the Philippines';
+    sheet.getCell(`A${r}`).value = line1;
     sheet.getCell(`A${r}`).font = { bold: true, size: 11 };
     sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
     sheet.mergeCells(`A${r}:H${r}`);
     r++;
     
-    // CEBU TECHNOLOGICAL UNIVERSITY (bold, red)
-    sheet.getCell(`A${r}`).value = 'CEBU TECHNOLOGICAL UNIVERSITY';
-    sheet.getCell(`A${r}`).font = { bold: true, size: 16, color: { argb: 'FFDC143C' } }; // Red color
+    // Line 2 - CEBU TECHNOLOGICAL UNIVERSITY (bold, red)
+    const line2 = settings.header_line2 || 'CEBU TECHNOLOGICAL UNIVERSITY';
+    const line2Color = settings.header_line2_color || '#DC143C';
+    const argbColor = line2Color.replace('#', 'FF');
+    sheet.getCell(`A${r}`).value = line2;
+    sheet.getCell(`A${r}`).font = { bold: settings.header_line2_bold !== false, size: 16, color: { argb: argbColor } };
     sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
     sheet.mergeCells(`A${r}:H${r}`);
     r++;
     
-    // Address
-    sheet.getCell(`A${r}`).value = 'M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines';
+    // Line 3 - Address
+    const line3 = settings.header_line3 || 'M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines';
+    sheet.getCell(`A${r}`).value = line3;
     sheet.getCell(`A${r}`).font = { size: 10 };
     sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
     sheet.mergeCells(`A${r}:H${r}`);
     r++;
     
-    // Website and Phone
-    sheet.getCell(`A${r}`).value = 'Website: http://www.ctu.edu.ph';
+    // Line 4 - Website
+    const line4 = settings.header_line4 || 'Website: http://www.ctu.edu.ph';
+    sheet.getCell(`A${r}`).value = line4;
     sheet.getCell(`A${r}`).font = { size: 9 };
     sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
     sheet.mergeCells(`A${r}:H${r}`);
     r++;
     
-    sheet.getCell(`A${r}`).value = 'Phone: +6332 402 4060 loc. 1146';
+    // Line 5 - Phone
+    const line5 = settings.header_line5 || 'Phone: +6332 402 4060 loc. 1146';
+    sheet.getCell(`A${r}`).value = line5;
     sheet.getCell(`A${r}`).font = { size: 9 };
     sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
     sheet.mergeCells(`A${r}:H${r}`);
     r++;
     
-    // UNIVERSITY ALUMNI AFFAIRS OFFICE (bold, red)
-    sheet.getCell(`A${r}`).value = 'UNIVERSITY ALUMNI AFFAIRS OFFICE';
-    sheet.getCell(`A${r}`).font = { bold: true, size: 12, color: { argb: 'FFDC143C' } }; // Red color
+    // Line 6 - UNIVERSITY ALUMNI AFFAIRS OFFICE (bold, red)
+    const line6 = settings.header_line6 || 'UNIVERSITY ALUMNI AFFAIRS OFFICE';
+    const line6Color = settings.header_line6_color || '#DC143C';
+    const argb6Color = line6Color.replace('#', 'FF');
+    sheet.getCell(`A${r}`).value = line6;
+    sheet.getCell(`A${r}`).font = { bold: settings.header_line6_bold !== false, size: 12, color: { argb: argb6Color } };
     sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
     sheet.mergeCells(`A${r}:H${r}`);
     r += 3; // Added extra spacing before report title
@@ -248,17 +472,101 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   // EXCEL FOOTER FUNCTION
   // ========================================
   // Utility function to add institutional footer to Excel
-  const addInstitutionalFooterToExcel = (sheet: any, startRow: number) => {
+  const addInstitutionalFooterToExcel = async (workbook: any, sheet: any, startRow: number) => {
+    const settings = reportSettings || {};
+    
+    // Check if footer is enabled
+    if (settings.footer_enabled === false) {
+      return startRow;
+    }
+    
     let r = startRow + 2;
     
-    // Add footer information
-    sheet.getCell(`A${r}`).value = 'Generated by Cebu Technological University Alumni Affairs Office';
+    // Add signature section if enabled
+    if (settings.signature_enabled !== false) {
+      // Skip a row for spacing
+      r++;
+      
+      // Prepared by section (left side)
+      sheet.getCell(`C${r}`).value = 'Prepared by:';
+      sheet.getCell(`C${r}`).font = { bold: false, size: 10 };
+      sheet.getCell(`C${r}`).alignment = { horizontal: 'center' };
+      sheet.mergeCells(`C${r}:D${r}`);
+      
+      // Approved by section (right side)
+      sheet.getCell(`E${r}`).value = 'Approved by:';
+      sheet.getCell(`E${r}`).font = { bold: false, size: 10 };
+      sheet.getCell(`E${r}`).alignment = { horizontal: 'center' };
+      sheet.mergeCells(`E${r}:F${r}`);
+      r++;
+      
+      // Names row
+      const preparedByName = settings.prepared_by_name || 'MARIE JOY B. ALIT, Ph.D.';
+      sheet.getCell(`C${r}`).value = preparedByName;
+      sheet.getCell(`C${r}`).font = { bold: true, size: 11 };
+      sheet.getCell(`C${r}`).alignment = { horizontal: 'center' };
+      sheet.mergeCells(`C${r}:D${r}`);
+      
+      const approvedByName = settings.approved_by_name || 'ROMEO P. MONTECILLO, Ph.D.';
+      sheet.getCell(`E${r}`).value = approvedByName;
+      sheet.getCell(`E${r}`).font = { bold: true, size: 11 };
+      sheet.getCell(`E${r}`).alignment = { horizontal: 'center' };
+      sheet.mergeCells(`E${r}:F${r}`);
+      r++;
+      
+      // Titles row
+      const preparedByTitle = settings.prepared_by_title || 'University Director for Alumni Affairs';
+      sheet.getCell(`C${r}`).value = preparedByTitle;
+      sheet.getCell(`C${r}`).font = { bold: false, size: 9 };
+      sheet.getCell(`C${r}`).alignment = { horizontal: 'center' };
+      sheet.mergeCells(`C${r}:D${r}`);
+      
+      const approvedByTitle = settings.approved_by_title || 'Vice President for Student Affairs';
+      sheet.getCell(`E${r}`).value = approvedByTitle;
+      sheet.getCell(`E${r}`).font = { bold: false, size: 9 };
+      sheet.getCell(`E${r}`).alignment = { horizontal: 'center' };
+      sheet.mergeCells(`E${r}:F${r}`);
+      r += 2;
+    }
+    
+    // Add footer image if enabled
+    if (settings.footer_image_enabled !== false) {
+      const footerImgBase64 = await loadImageOrUrl(settings.footer_image_url || '', footerImage);
+      if (footerImgBase64) {
+        const footerImgId = workbook.addImage({
+          base64: footerImgBase64.split(',')[1],
+          extension: 'png',
+        });
+        sheet.addImage(footerImgId, {
+          tl: { col: 2, row: r - 1 },
+          ext: { width: 2000, height: 60 },
+        });
+      }
+      r += 4;
+    }
+    
+    // Add generated date
+    const generatedDate = new Date().toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+    sheet.getCell(`A${r}`).value = `Generated on: ${generatedDate}`;
     sheet.getCell(`A${r}`).font = { italic: true, size: 9 };
     sheet.getCell(`A${r}`).alignment = { horizontal: 'center' };
     sheet.mergeCells(`A${r}:H${r}`);
     r++;
     
-    sheet.getCell(`A${r}`).value = 'This report is generated automatically by the Alumni Tracking System';
+    // Add footer information
+    const footerText1 = settings.footer_text1 || 'Generated by Cebu Technological University Alumni Affairs Office';
+    sheet.getCell(`A${r}`).value = footerText1;
+    sheet.getCell(`A${r}`).font = { italic: true, size: 9 };
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center' };
+    sheet.mergeCells(`A${r}:H${r}`);
+    r++;
+    
+    const footerText2 = settings.footer_text2 || 'This report is generated automatically by the Alumni Tracking System';
+    sheet.getCell(`A${r}`).value = footerText2;
     sheet.getCell(`A${r}`).font = { italic: true, size: 9 };
     sheet.getCell(`A${r}`).alignment = { horizontal: 'center' };
     sheet.mergeCells(`A${r}:H${r}`);
@@ -294,6 +602,22 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   useEffect(() => {
     if (yearsQuery.data) setAvailableYears(yearsQuery.data);
   }, [yearsQuery.data]);
+
+  // Load report settings on mount
+  useEffect(() => {
+    const loadReportSettings = async () => {
+      try {
+        const response = await api.get('shared/report-settings/');
+        if (response.data.success && response.data.settings) {
+          setReportSettings(response.data.settings);
+        }
+      } catch (error) {
+        console.error('Error loading report settings:', error);
+        // Use defaults if settings can't be loaded
+      }
+    };
+    loadReportSettings();
+  }, []);
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -538,9 +862,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   // QPRO export helpers (placed before export to avoid hoist issues)
   const qproHeaders = [
     'Program',
+    'Last_Name',
     'First_Name',
     'Middle_Name',
-    'Last_Name',
     'Status',
     'Current Company Name',
     'Position_Current',
@@ -570,15 +894,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
     return [
       safe(row['Program']),
+      safe(row['Last_Name']),
       safe(row['First_Name']),
       safe(row['Middle_Name']),
-      safe(row['Last_Name']),
       status,
       safe(pick(['Current Company Name', 'Company_Name_Current'])),
       safe(pick(['Position_Current'])),
       safe(pick(['Current Salary range', 'Current Salary Range', 'Salary Range', 'Salary_Current'])),
       safe(pick(['Sector_Current', 'Current Company Sector', 'Sector'])),
-      safe(pick(['Please specify post graduate/degree', 'Please specify postgraduate/degree', 'Post graduate/degree', 'Post Graduate/Degree', 'Program', 'Pursue_Further_Study'])),
+      safe(pick(['Please specify post graduate/degree', 'Please specify postgraduate/degree', 'Post graduate/degree', 'Post Graduate/Degree'])),
     ];
   };
 
@@ -593,19 +917,200 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         return aAnswered ? -1 : 1; // answered first
       }
       
-      // Second priority: alphabetical by last name (index 3)
-      const aLastName = (a[3] || '').toLowerCase();
-      const bLastName = (b[3] || '').toLowerCase();
-      return aLastName.localeCompare(bLastName);
+      // Second priority: alphabetical by last name, then first name, then middle name
+      // Index: 1 = Last_Name, 2 = First_Name, 3 = Middle_Name (after column reorder)
+      const aLastName = (a[1] || '').toLowerCase().trim();
+      const bLastName = (b[1] || '').toLowerCase().trim();
+      const lastNameCompare = aLastName.localeCompare(bLastName);
+      
+      if (lastNameCompare !== 0) {
+        return lastNameCompare;
+      }
+      
+      // If last names are the same, sort by first name
+      const aFirstName = (a[2] || '').toLowerCase().trim();
+      const bFirstName = (b[2] || '').toLowerCase().trim();
+      const firstNameCompare = aFirstName.localeCompare(bFirstName);
+      
+      if (firstNameCompare !== 0) {
+        return firstNameCompare;
+      }
+      
+      // If first names are also the same, sort by middle name
+      const aMiddleName = (a[3] || '').toLowerCase().trim();
+      const bMiddleName = (b[3] || '').toLowerCase().trim();
+      return aMiddleName.localeCompare(bMiddleName);
     });
+  };
+
+  // Calculate QPRO program breakdown with quarterly statistics
+  const calculateQPROProgramBreakdown = (detailedData: any[]) => {
+    const programs = ['BSIT', 'BSIS', 'BIT-CT'];
+    const breakdown: Record<string, {
+      program: string;
+      total: number;
+      employed: number;
+      unemployed: number;
+      notTracked: number;
+      q1: { employed: number; unemployed: number; total: number };
+      q2: { employed: number; unemployed: number; total: number };
+      q3: { employed: number; unemployed: number; total: number };
+      q4: { employed: number; unemployed: number; total: number };
+    }> = {};
+
+    // Helper to get quarter from date
+    const getQuarter = (dateStr: string) => {
+      if (!dateStr) return null;
+      try {
+        const date = new Date(dateStr);
+        const month = date.getMonth() + 1;
+        if (month >= 1 && month <= 3) return 1;
+        if (month >= 4 && month <= 6) return 2;
+        if (month >= 7 && month <= 9) return 3;
+        if (month >= 10 && month <= 12) return 4;
+      } catch (e) {}
+      return null;
+    };
+
+    // Initialize breakdown for each program
+    programs.forEach(prog => {
+      breakdown[prog] = {
+        program: prog,
+        total: 0,
+        employed: 0,
+        unemployed: 0,
+        notTracked: 0,
+        q1: { employed: 0, unemployed: 0, total: 0 },
+        q2: { employed: 0, unemployed: 0, total: 0 },
+        q3: { employed: 0, unemployed: 0, total: 0 },
+        q4: { employed: 0, unemployed: 0, total: 0 },
+      };
+    });
+
+    // Process each alumni
+    detailedData.forEach(row => {
+      const program = String(row['Program'] || '').toUpperCase();
+      const programMatch = programs.find(p => program.includes(p));
+      
+      if (!programMatch) return;
+
+      const breakdownData = breakdown[programMatch];
+      
+      // Determine status
+      const statusRaw = String(row['Status'] || '').toLowerCase();
+      let isEmployed = false;
+      let isUnemployed = false;
+
+      if (statusRaw.includes('employ')) {
+        isEmployed = true;
+      } else if (statusRaw.includes('unemploy')) {
+        isUnemployed = true;
+      } else if (row['Company_Name_Current'] || row['Position_Current']) {
+        isEmployed = true;
+      } else if (row['Unemployment_Reason']) {
+        isUnemployed = true;
+      }
+
+      // Update overall counts
+      breakdownData.total++;
+      if (isEmployed) breakdownData.employed++;
+      else if (isUnemployed) breakdownData.unemployed++;
+      else breakdownData.notTracked++;
+
+      // Update quarterly counts
+      const trackerDate = row['Tracker_Submission_Date'] || '';
+      const quarter = getQuarter(trackerDate);
+      
+      if (quarter) {
+        const qData = breakdownData[`q${quarter}` as 'q1' | 'q2' | 'q3' | 'q4'];
+        qData.total++;
+        if (isEmployed) qData.employed++;
+        else if (isUnemployed) qData.unemployed++;
+      }
+    });
+
+    // Calculate tracking rates and prepare result
+    const result = programs.map(prog => {
+      const data = breakdown[prog];
+      const trackingTotal = data.employed + data.unemployed;
+      const trackingRate = data.total > 0 ? (trackingTotal / data.total * 100).toFixed(1) : '0.0';
+      
+      const q1Rate = data.q1.total > 0 ? ((data.q1.employed + data.q1.unemployed) / data.q1.total * 100).toFixed(1) : '0.0';
+      const q2Rate = data.q2.total > 0 ? ((data.q2.employed + data.q2.unemployed) / data.q2.total * 100).toFixed(1) : '0.0';
+      const q3Rate = data.q3.total > 0 ? ((data.q3.employed + data.q3.unemployed) / data.q3.total * 100).toFixed(1) : '0.0';
+      const q4Rate = data.q4.total > 0 ? ((data.q4.employed + data.q4.unemployed) / data.q4.total * 100).toFixed(1) : '0.0';
+
+      return {
+        program: data.program,
+        total: data.total,
+        employed: data.employed,
+        unemployed: data.unemployed,
+        notTracked: data.notTracked,
+        trackingRate,
+        q1: { ...data.q1, trackingRate: q1Rate },
+        q2: { ...data.q2, trackingRate: q2Rate },
+        q3: { ...data.q3, trackingRate: q3Rate },
+        q4: { ...data.q4, trackingRate: q4Rate },
+        isTotal: false,
+      };
+    });
+
+    // Add TOTAL row
+    const totalRow = result.reduce((acc, row) => {
+      acc.total += row.total;
+      acc.employed += row.employed;
+      acc.unemployed += row.unemployed;
+      acc.notTracked += row.notTracked;
+      acc.q1.employed += row.q1.employed;
+      acc.q1.unemployed += row.q1.unemployed;
+      acc.q1.total += row.q1.total;
+      acc.q2.employed += row.q2.employed;
+      acc.q2.unemployed += row.q2.unemployed;
+      acc.q2.total += row.q2.total;
+      acc.q3.employed += row.q3.employed;
+      acc.q3.unemployed += row.q3.unemployed;
+      acc.q3.total += row.q3.total;
+      acc.q4.employed += row.q4.employed;
+      acc.q4.unemployed += row.q4.unemployed;
+      acc.q4.total += row.q4.total;
+      return acc;
+    }, {
+      program: 'TOTAL',
+      total: 0,
+      employed: 0,
+      unemployed: 0,
+      notTracked: 0,
+      trackingRate: '0.0',
+      q1: { employed: 0, unemployed: 0, total: 0, trackingRate: '0.0' },
+      q2: { employed: 0, unemployed: 0, total: 0, trackingRate: '0.0' },
+      q3: { employed: 0, unemployed: 0, total: 0, trackingRate: '0.0' },
+      q4: { employed: 0, unemployed: 0, total: 0, trackingRate: '0.0' },
+      isTotal: true,
+    });
+
+    const grandTotal = totalRow.total;
+    totalRow.trackingRate = grandTotal > 0 ? ((totalRow.employed + totalRow.unemployed) / grandTotal * 100).toFixed(1) : '0.0';
+    totalRow.q1.trackingRate = totalRow.q1.total > 0 ? ((totalRow.q1.employed + totalRow.q1.unemployed) / totalRow.q1.total * 100).toFixed(1) : '0.0';
+    totalRow.q2.trackingRate = totalRow.q2.total > 0 ? ((totalRow.q2.employed + totalRow.q2.unemployed) / totalRow.q2.total * 100).toFixed(1) : '0.0';
+    totalRow.q3.trackingRate = totalRow.q3.total > 0 ? ((totalRow.q3.employed + totalRow.q3.unemployed) / totalRow.q3.total * 100).toFixed(1) : '0.0';
+    totalRow.q4.trackingRate = totalRow.q4.total > 0 ? ((totalRow.q4.employed + totalRow.q4.unemployed) / totalRow.q4.total * 100).toFixed(1) : '0.0';
+
+    result.push(totalRow);
+
+    return result;
   };
 
   const addQPRODetailedSheet = (workbook: ExcelJS.Workbook, rows: any[], sheetName = 'QPRO Detailed Alumni Data') => {
     const detail = workbook.addWorksheet(sheetName);
     const headerRow = detail.addRow(qproHeaders);
-    // Make headers bold
+    // Make headers bold with blue background and white text
     headerRow.eachCell((cell) => {
-      cell.font = { bold: true };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1D4E89' }
+      };
     });
     const mapped = (rows || []).map(mapQPRORow);
     sortAlumniData(mapped).forEach((vals) => detail.addRow(vals));
@@ -638,9 +1143,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: 'middle' };
         });
         // Generous padding so long labels fully show in Calibri 11
-        const width = Math.min(maxLen + 6, 100);
+        const width = Math.min(maxLen + 4, 100);
         const col = (sheet as any).getColumn?.(c);
-        if (col) col.width = Math.max(col.width || 0, width, 14);
+        if (col) col.width = Math.max(col.width || 0, width, 12);
       }
 
       // Make likely header rows taller and wrapped so long labels are visible
@@ -650,7 +1155,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           const c2 = String(row.getCell(2)?.value || '');
           const c3 = String(row.getCell(3)?.value || '');
           // Match QPRO/Detail headers
-          const isQproHeader = c1 === 'Program' && c2 === 'First_Name' && c3 === 'Middle_Name';
+          const isQproHeader = c1 === 'Program' && c2 === 'Last_Name' && c3 === 'First_Name';
           const isMetricHeader = c1 === 'Metric' && c2 === 'Value';
           return isQproHeader || isMetricHeader;
         } catch (_) {
@@ -687,7 +1192,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           const c1 = String(row.getCell(1)?.value || '');
           const c2 = String(row.getCell(2)?.value || '');
           const c3 = String(row.getCell(3)?.value || '');
-          if (c1 === 'Program' && c2 === 'First_Name' && c3 === 'Middle_Name') {
+          if (c1 === 'Program' && c2 === 'Last_Name' && c3 === 'First_Name') {
             headerRowIndex = rowNumber;
             throw 'found';
           }
@@ -714,7 +1219,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   };
 
   // High Position helpers for ALL export reuse
-  const headersHighPosition = ['Program','First_Name','Middle_Name','Last_Name','Company_Name_Current','Position_Current'];
+  const headersHighPosition = ['Program','Last_Name','First_Name','Middle_Name','Company_Name_Current','Position_Current'];
   const mapHighPositionRow = (alumnusOrRow: any) => {
     // Supports both high_position_data shape and detailed row shape
     const course = alumnusOrRow.course || alumnusOrRow['Program'] || '';
@@ -726,13 +1231,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       const first = parts[0] || '';
       const last = parts.length > 1 ? parts[parts.length - 1] : '';
       const middle = parts.length > 2 ? parts.slice(1, parts.length - 1).join(' ') : '';
-      return [course, first, middle, last, company, position];
+      return [course, last, first, middle, company, position];
     }
     return [
       course,
+      alumnusOrRow['Last_Name'] || '',
       alumnusOrRow['First_Name'] || '',
       alumnusOrRow['Middle_Name'] || '',
-      alumnusOrRow['Last_Name'] || '',
       company,
       position,
     ];
@@ -941,6 +1446,63 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         theme: 'grid',
         headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
         styles: { fontSize: 9 },
+      });
+
+      yPosition = (doc as any).lastAutoTable.finalY + 10;
+      checkPageBreak(20);
+
+      // Add Employability Report by Program table
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Employability Report by Program', 20, yPosition);
+      yPosition += 8;
+
+      const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
+      
+      // Prepare table data with two-row header
+      const breakdownHead = [
+        ['PROGRAMS', 'TOTAL', 'E', 'UE', 'NT', 'GT', 'QUARTER ONE', '', '', 'QUARTER TWO', '', '', 'QUARTER THREE', '', '', 'QUARTER FOUR', '', ''],
+        ['', '', '', '', '', '', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT']
+      ];
+      
+      const breakdownBody = programBreakdown.map(progData => [
+        progData.program,
+        progData.total,
+        progData.employed,
+        progData.unemployed,
+        progData.notTracked,
+        progData.trackingRate,
+        progData.q1.employed,
+        progData.q1.unemployed,
+        progData.q1.trackingRate,
+        progData.q2.employed,
+        progData.q2.unemployed,
+        progData.q2.trackingRate,
+        progData.q3.employed,
+        progData.q3.unemployed,
+        progData.q3.trackingRate,
+        progData.q4.employed,
+        progData.q4.unemployed,
+        progData.q4.trackingRate,
+      ]);
+
+      autoTable(doc, {
+        head: breakdownHead,
+        body: breakdownBody,
+        startY: yPosition,
+        theme: 'grid',
+        headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 6, cellPadding: 1 },
+        margin: { left: 20, right: 20 },
+        // Let autoTable auto-size columns like Detailed Alumni Data table
+        didParseCell: (data: any) => {
+          // Apply white fill to TOTAL row
+          if (data.row.raw && Array.isArray(data.row.raw) && data.row.raw[0] === 'TOTAL') {
+            data.cell.styles.fillColor = [255, 255, 255];
+            data.cell.styles.textColor = 0;
+            data.cell.styles.fontStyle = 'bold';
+          }
+        },
       });
 
       yPosition = (doc as any).lastAutoTable.finalY + 10;
@@ -1233,6 +1795,67 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Employment Rate', '', `${stats.employment_rate || 0}%`],
             ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)]
           );
+          
+          autoTable(doc, {
+            head: [summaryData[0]],
+            body: summaryData.slice(1),
+            startY: yPosition,
+            theme: 'grid',
+            headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+            styles: { fontSize: 8 },
+          });
+
+          yPosition = (doc as any).lastAutoTable.finalY + 10;
+          
+          // Add Employability Report by Program table after QPRO summary
+          checkPageBreak(20);
+          
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Employability Report by Program', 20, yPosition);
+          yPosition += 8;
+          
+          const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
+          
+          // Prepare table data with two-row header
+          const breakdownHead = [
+            ['PROGRAMS', 'TOTAL', 'E', 'UE', 'NT', 'GT', 'QUARTER ONE', '', '', 'QUARTER TWO', '', '', 'QUARTER THREE', '', '', 'QUARTER FOUR', '', ''],
+            ['', '', '', '', '', '', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT']
+          ];
+          
+          const breakdownBody = programBreakdown.map(progData => [
+            progData.program,
+            progData.total,
+            progData.employed,
+            progData.unemployed,
+            progData.notTracked,
+            progData.trackingRate,
+            progData.q1.employed,
+            progData.q1.unemployed,
+            progData.q1.trackingRate,
+            progData.q2.employed,
+            progData.q2.unemployed,
+            progData.q2.trackingRate,
+            progData.q3.employed,
+            progData.q3.unemployed,
+            progData.q3.trackingRate,
+            progData.q4.employed,
+            progData.q4.unemployed,
+            progData.q4.trackingRate,
+          ]);
+          
+          autoTable(doc, {
+            head: breakdownHead,
+            body: breakdownBody,
+            startY: yPosition,
+            theme: 'grid',
+            headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+            styles: { fontSize: 6, cellPadding: 1 },
+            margin: { left: 20, right: 20 },
+            // Let autoTable auto-size columns like Detailed Alumni Data table
+          });
+          
+          yPosition = (doc as any).lastAutoTable.finalY + 10;
         } else if (type === 'CHED') {
           summaryData.push(
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
@@ -1264,16 +1887,18 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           );
         }
 
-        autoTable(doc, {
-          head: [summaryData[0]],
-          body: summaryData.slice(1),
-          startY: yPosition,
-          theme: 'grid',
-          headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
-          styles: { fontSize: 8 },
-        });
+        if (type !== 'QPRO') {
+          autoTable(doc, {
+            head: [summaryData[0]],
+            body: summaryData.slice(1),
+            startY: yPosition,
+            theme: 'grid',
+            headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+            styles: { fontSize: 8 },
+          });
 
-        yPosition = (doc as any).lastAutoTable.finalY + 10;
+          yPosition = (doc as any).lastAutoTable.finalY + 10;
+        }
         
         // Add detailed alumni data for each type
         const detailedData = detailedDataByType[type] || [];
@@ -1287,7 +1912,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
           // Use the same headers as Excel export for consistency
           const headers = qproHeaders;
-          const rows = detailedData.map((row: any) => mapQPRORow(row));
+          const rows = sortAlumniData(detailedData.map((row: any) => mapQPRORow(row)));
 
           autoTable(doc, {
             head: [headers],
@@ -1330,16 +1955,23 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   ) => {
     const children: (Paragraph | Table)[] = [];
 
-    // Load images for Word document
-    const ctuLogoBase64 = await getImageAsBase64(ctuLogo);
-    const bagongPilipinasBase64 = await getImageAsBase64(bagongPilipinasLogo);
-    const footerBase64 = await getImageAsBase64(footerImage);
+    const settings = reportSettings || {};
+    
+    // Skip header if disabled
+    if (settings.header_enabled !== false) {
+      // Load images for Word document with fallbacks
+      const leftLogoBase64 = settings.left_logo_enabled !== false 
+        ? await loadImageOrUrl(settings.left_logo_url || '', ctuLogo)
+        : '';
+      const rightLogoBase64 = settings.right_logo_enabled !== false
+        ? await loadImageOrUrl(settings.right_logo_url || '', bagongPilipinasLogo)
+        : '';
 
     // ========================================
     // WORD HEADER SECTION
     // ========================================
     // Create header with proper logo positioning using a table
-    if (ctuLogoBase64 && bagongPilipinasBase64) {
+      if (leftLogoBase64 && rightLogoBase64) {
     children.push(
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
@@ -1364,7 +1996,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                     new Paragraph({
                       children: [
                         new ImageRun({
-                          data: ctuLogoBase64.split(',')[1],
+                          data: leftLogoBase64.split(',')[1],
                           type: 'png',
                           transformation: {
                             width: 100, // Bigger logo
@@ -1387,16 +2019,16 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                 new TableCell({
                   children: [
                     new Paragraph({
-                      text: 'Republic of the Philippines',
+                      text: settings.header_line1 || 'Republic of the Philippines',
                       alignment: AlignmentType.CENTER,
                       spacing: { after: 100 },
                     }),
                     new Paragraph({
                       children: [
                         new TextRun({
-                          text: 'CEBU TECHNOLOGICAL UNIVERSITY',
-                          bold: true,
-                          color: 'DC143C',
+                          text: settings.header_line2 || 'CEBU TECHNOLOGICAL UNIVERSITY',
+                          bold: settings.header_line2_bold !== false,
+                          color: settings.header_line2_color ? hexToDocxColor(settings.header_line2_color) : hexToDocxColor('#DC143C'),
                           size: 24,
                         }),
                       ],
@@ -1404,26 +2036,26 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                       spacing: { after: 100 },
                     }),
                     new Paragraph({
-                      text: 'M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines',
+                      text: settings.header_line3 || 'M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines',
                       alignment: AlignmentType.CENTER,
                       spacing: { after: 100 },
                     }),
                     new Paragraph({
-                      text: 'Website: http://www.ctu.edu.ph',
+                      text: settings.header_line4 || 'Website: http://www.ctu.edu.ph',
                       alignment: AlignmentType.CENTER,
                       spacing: { after: 50 },
                     }),
                     new Paragraph({
-                      text: 'Phone: +6332 402 4060 loc. 1146',
+                      text: settings.header_line5 || 'Phone: +6332 402 4060 loc. 1146',
                       alignment: AlignmentType.CENTER,
                       spacing: { after: 100 },
                     }),
                     new Paragraph({
                       children: [
                         new TextRun({
-                          text: 'UNIVERSITY ALUMNI AFFAIRS OFFICE',
-                          bold: true,
-                          color: 'DC143C',
+                          text: settings.header_line6 || 'UNIVERSITY ALUMNI AFFAIRS OFFICE',
+                          bold: settings.header_line6_bold !== false,
+                          color: settings.header_line6_color ? hexToDocxColor(settings.header_line6_color) : hexToDocxColor('#DC143C'),
                           size: 18,
                         }),
                       ],
@@ -1449,7 +2081,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                     new Paragraph({
                       children: [
                         new ImageRun({
-                          data: bagongPilipinasBase64.split(',')[1],
+                          data: rightLogoBase64.split(',')[1],
                           type: 'png',
                           transformation: {
                             width: 100, // Bigger logo
@@ -1477,16 +2109,16 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // Fallback if logos not available - just text
       children.push(
         new Paragraph({
-          text: 'Republic of the Philippines',
+          text: settings.header_line1 || 'Republic of the Philippines',
           alignment: AlignmentType.CENTER,
           spacing: { after: 100 },
         }),
         new Paragraph({
           children: [
             new TextRun({
-              text: 'CEBU TECHNOLOGICAL UNIVERSITY',
-              bold: true,
-              color: 'DC143C',
+              text: settings.header_line2 || 'CEBU TECHNOLOGICAL UNIVERSITY',
+              bold: settings.header_line2_bold !== false,
+              color: settings.header_line2_color ? hexToDocxColor(settings.header_line2_color) : hexToDocxColor('#DC143C'),
               size: 24,
             }),
           ],
@@ -1494,26 +2126,26 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           spacing: { after: 100 },
         }),
         new Paragraph({
-          text: 'M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines',
+          text: settings.header_line3 || 'M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines',
           alignment: AlignmentType.CENTER,
           spacing: { after: 100 },
         }),
         new Paragraph({
-          text: 'Website: http://www.ctu.edu.ph',
+          text: settings.header_line4 || 'Website: http://www.ctu.edu.ph',
           alignment: AlignmentType.CENTER,
           spacing: { after: 50 },
         }),
         new Paragraph({
-          text: 'Phone: +6332 402 4060 loc. 1146',
+          text: settings.header_line5 || 'Phone: +6332 402 4060 loc. 1146',
           alignment: AlignmentType.CENTER,
           spacing: { after: 100 },
         }),
         new Paragraph({
           children: [
             new TextRun({
-              text: 'UNIVERSITY ALUMNI AFFAIRS OFFICE',
-              bold: true,
-              color: 'DC143C',
+              text: settings.header_line6 || 'UNIVERSITY ALUMNI AFFAIRS OFFICE',
+              bold: settings.header_line6_bold !== false,
+              color: settings.header_line6_color ? hexToDocxColor(settings.header_line6_color) : hexToDocxColor('#DC143C'),
               size: 18,
             }),
           ],
@@ -1522,6 +2154,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         })
       );
     }
+    } // Close header enabled check
 
 
     // Report Title
@@ -1556,34 +2189,34 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
     // Metadata
     children.push(
-      new Paragraph({
-        children: [
-          new TextRun({ text: 'Generated: ', bold: true }),
-          new TextRun(new Date().toLocaleDateString()),
-        ],
-        spacing: { after: 100 },
-      }),
-      new Paragraph({
-        children: [
-          new TextRun({ text: 'Year Filter: ', bold: true }),
-          new TextRun(selectedYear || 'ALL'),
-        ],
-        spacing: { after: 100 },
-      }),
-      new Paragraph({
-        children: [
-          new TextRun({ text: 'Program Filter: ', bold: true }),
-          new TextRun(selectedProgram || 'ALL'),
-        ],
-        spacing: { after: 100 },
-      }),
-      new Paragraph({
-        children: [
-          new TextRun({ text: 'Report Type: ', bold: true }),
-          new TextRun(exportType),
-        ],
-        spacing: { after: 400 },
-      })
+        new Paragraph({
+          children: [
+            new TextRun({ text: 'Generated: ', bold: true }),
+            new TextRun({ text: new Date().toLocaleDateString() }),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: 'Year Filter: ', bold: true }),
+            new TextRun({ text: selectedYear || 'ALL' }),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: 'Program Filter: ', bold: true }),
+            new TextRun({ text: selectedProgram || 'ALL' }),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: 'Report Type: ', bold: true }),
+            new TextRun({ text: exportType }),
+          ],
+          spacing: { after: 400 },
+        })
     );
 
     // Helper function to create summary table
@@ -1608,12 +2241,17 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                   new TableCell({
                     children: [
                       new Paragraph({
-                        text: cell,
+                        children: index === 0 ? [
+                          new TextRun({
+                            text: String(cell || ''),
+                            bold: true,
+                            color: 'FFFFFF',
+                          }),
+                        ] : [new TextRun({ text: String(cell || '') })],
                         alignment: AlignmentType.CENTER,
-                        style: index === 0 ? 'strong' : undefined,
                       }),
                     ],
-                    shading: index === 0 ? { fill: '1D4E89' } : undefined,
+                    shading: index === 0 ? { fill: argbToDocxShading('FF1D4E89') } : undefined,
                   })
               ),
             })
@@ -1648,23 +2286,29 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           rows: [
             // Header row
             new TableRow({
-              children: headers.map((header) =>
+              children: headers.map((header, idx) =>
                 new TableCell({
                   children: [
                     new Paragraph({
-                      text: header,
+                      children: [
+                        new TextRun({
+                          text: header,
+                          bold: true,
+                          color: 'FFFFFF',
+                        }),
+                      ],
                       alignment: AlignmentType.CENTER,
-                      style: 'strong',
                     }),
                   ],
-                  shading: { fill: '1D4E89' },
+                  shading: { fill: argbToDocxShading('FF1D4E89') },
+                  width: { size: idx === 0 ? 10 : idx === 9 ? 30 : 12, type: WidthType.PERCENTAGE },
                 })
               ),
             }),
             // Data rows
             ...rows.map((row) =>
               new TableRow({
-                children: row.map((cell: any) =>
+                children: row.map((cell: any, idx: number) =>
                   new TableCell({
                     children: [
                       new Paragraph({
@@ -1672,6 +2316,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                         alignment: AlignmentType.CENTER,
                       }),
                     ],
+                    width: { size: idx === 0 ? 10 : idx === 9 ? 30 : 12, type: WidthType.PERCENTAGE },
                   })
                 ),
               })
@@ -1695,6 +2340,315 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)],
       ];
       children.push(...createSummaryTable('QPRO Statistics Summary', summaryData));
+      
+      // Add Employability Report by Program table
+      const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
+      
+      children.push(
+        new Paragraph({
+          text: 'Employability Report by Program',
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: 240, after: 120 },
+        })
+      );
+
+      // Create the breakdown table with two-row header
+      const breakdownRows = [
+        // First header row with merged cells for quarter headers
+        new TableRow({
+          children: [
+            // PROGRAMS
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'PROGRAMS', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+              verticalMerge: 'restart',
+            }),
+            // TOTAL
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'TOTAL', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+              verticalMerge: 'restart',
+            }),
+            // E
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'E', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+              verticalMerge: 'restart',
+            }),
+            // UE
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'UE', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+              verticalMerge: 'restart',
+            }),
+            // NT
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'NT', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+              verticalMerge: 'restart',
+            }),
+            // GT
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'GT', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+              verticalMerge: 'restart',
+            }),
+            // QUARTER ONE (merges 3 columns)
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'QUARTER ONE', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+              columnSpan: 3,
+            }),
+            // QUARTER TWO (merges 3 columns)
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'QUARTER TWO', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+              columnSpan: 3,
+            }),
+            // QUARTER THREE (merges 3 columns)
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'QUARTER THREE', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+              columnSpan: 3,
+            }),
+            // QUARTER FOUR (merges 3 columns)
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'QUARTER FOUR', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+              columnSpan: 3,
+            }),
+          ],
+        }),
+        // Second header row
+        new TableRow({
+          children: [
+            // Empty cells for vertically merged PROGRAMS, TOTAL, E, UE, NT, GT
+            new TableCell({ children: [new Paragraph('')], verticalMerge: 'continue' }),
+            new TableCell({ children: [new Paragraph('')], verticalMerge: 'continue' }),
+            new TableCell({ children: [new Paragraph('')], verticalMerge: 'continue' }),
+            new TableCell({ children: [new Paragraph('')], verticalMerge: 'continue' }),
+            new TableCell({ children: [new Paragraph('')], verticalMerge: 'continue' }),
+            new TableCell({ children: [new Paragraph('')], verticalMerge: 'continue' }),
+            // E, UE, GT for Q1
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'E', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'UE', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'GT', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+            }),
+            // E, UE, GT for Q2
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'E', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'UE', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'GT', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+            }),
+            // E, UE, GT for Q3
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'E', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'UE', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'GT', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+            }),
+            // E, UE, GT for Q4
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'E', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'UE', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: 'GT', bold: true, color: 'FFFFFF' })],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+              shading: { fill: argbToDocxShading('FF1D4E89') },
+            }),
+          ],
+        }),
+        // Data rows
+        ...programBreakdown.map((progData: any) =>
+          new TableRow({
+            children: [
+              progData.program || '',
+              progData.total || 0,
+              progData.employed || 0,
+              progData.unemployed || 0,
+              progData.notTracked || 0,
+              progData.trackingRate || '0.0',
+              (progData.q1?.employed || 0),
+              (progData.q1?.unemployed || 0),
+              (progData.q1?.trackingRate || '0.0'),
+              (progData.q2?.employed || 0),
+              (progData.q2?.unemployed || 0),
+              (progData.q2?.trackingRate || '0.0'),
+              (progData.q3?.employed || 0),
+              (progData.q3?.unemployed || 0),
+              (progData.q3?.trackingRate || '0.0'),
+              (progData.q4?.employed || 0),
+              (progData.q4?.unemployed || 0),
+              (progData.q4?.trackingRate || '0.0'),
+            ].map((cell: any) =>
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: progData.isTotal ? [
+                      new TextRun({
+                        text: String(cell || ''),
+                        bold: true,
+                      }),
+                    ] : [new TextRun({ text: String(cell || '') })],
+                    alignment: AlignmentType.CENTER,
+                  }),
+                ],
+                shading: progData.isTotal ? { fill: 'FFFFFF' } : undefined,
+              })
+            ),
+          })
+        ),
+      ];
+
+      children.push(
+        new Table({
+          rows: breakdownRows,
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: {
+            top: { style: BorderStyle.SINGLE },
+            bottom: { style: BorderStyle.SINGLE },
+            left: { style: BorderStyle.SINGLE },
+            right: { style: BorderStyle.SINGLE },
+            insideHorizontal: { style: BorderStyle.SINGLE },
+            insideVertical: { style: BorderStyle.SINGLE },
+          },
+        })
+      );
       
       // Add detailed alumni data
       const detailedData = detailedDataByType['QPRO'] || [];
@@ -1805,6 +2759,180 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
         children.push(...createSummaryTable(`${type} Statistics`, summaryData));
         
+        // Add Employability Report by Program table for QPRO in ALL export
+        if (type === 'QPRO') {
+          const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
+          
+          children.push(
+            new Paragraph({
+              text: 'Employability Report by Program',
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 240, after: 120 },
+            })
+          );
+          
+          // Create the breakdown table with two-row header (same structure as QPRO-only export)
+          const breakdownRows = [
+            // First header row
+            new TableRow({
+              children: [
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: 'PROGRAMS', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  shading: { fill: argbToDocxShading('FF1D4E89') },
+                  verticalMerge: 'restart',
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: 'TOTAL', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  shading: { fill: argbToDocxShading('FF1D4E89') },
+                  verticalMerge: 'restart',
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: 'E', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  shading: { fill: argbToDocxShading('FF1D4E89') },
+                  verticalMerge: 'restart',
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: 'UE', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  shading: { fill: argbToDocxShading('FF1D4E89') },
+                  verticalMerge: 'restart',
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: 'NT', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  shading: { fill: argbToDocxShading('FF1D4E89') },
+                  verticalMerge: 'restart',
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: 'GT', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  shading: { fill: argbToDocxShading('FF1D4E89') },
+                  verticalMerge: 'restart',
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: 'QUARTER ONE', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  shading: { fill: argbToDocxShading('FF1D4E89') },
+                  columnSpan: 3,
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: 'QUARTER TWO', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  shading: { fill: argbToDocxShading('FF1D4E89') },
+                  columnSpan: 3,
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: 'QUARTER THREE', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  shading: { fill: argbToDocxShading('FF1D4E89') },
+                  columnSpan: 3,
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: 'QUARTER FOUR', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  shading: { fill: argbToDocxShading('FF1D4E89') },
+                  columnSpan: 3,
+                }),
+              ],
+            }),
+            // Second header row
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph('')], verticalMerge: 'continue' }),
+                new TableCell({ children: [new Paragraph('')], verticalMerge: 'continue' }),
+                new TableCell({ children: [new Paragraph('')], verticalMerge: 'continue' }),
+                new TableCell({ children: [new Paragraph('')], verticalMerge: 'continue' }),
+                new TableCell({ children: [new Paragraph('')], verticalMerge: 'continue' }),
+                new TableCell({ children: [new Paragraph('')], verticalMerge: 'continue' }),
+                ...['E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT'].map(text =>
+                  new TableCell({
+                    children: [new Paragraph({ children: [new TextRun({ text, bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                    shading: { fill: argbToDocxShading('FF1D4E89') },
+                  })
+                ),
+              ],
+            }),
+            // Data rows
+            ...programBreakdown.map(progData =>
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: progData.program, bold: progData.isTotal || false })],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: String(progData.total), bold: progData.isTotal || false })],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: String(progData.employed), bold: progData.isTotal || false })],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: String(progData.unemployed), bold: progData.isTotal || false })],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: String(progData.notTracked), bold: progData.isTotal || false })],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: progData.trackingRate, bold: progData.isTotal || false })],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                  }),
+                  ...[
+                    progData.q1.employed, progData.q1.unemployed, progData.q1.trackingRate,
+                    progData.q2.employed, progData.q2.unemployed, progData.q2.trackingRate,
+                    progData.q3.employed, progData.q3.unemployed, progData.q3.trackingRate,
+                    progData.q4.employed, progData.q4.unemployed, progData.q4.trackingRate,
+                  ].map(val =>
+                    new TableCell({
+                      children: [
+                        new Paragraph({
+                          children: [new TextRun({ text: String(val), bold: progData.isTotal || false })],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                    })
+                  ),
+                ],
+              })
+            ),
+          ];
+          
+          children.push(
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              rows: breakdownRows,
+              borders: {
+                top: { style: BorderStyle.SINGLE },
+                bottom: { style: BorderStyle.SINGLE },
+                left: { style: BorderStyle.SINGLE },
+                right: { style: BorderStyle.SINGLE },
+                insideHorizontal: { style: BorderStyle.SINGLE },
+                insideVertical: { style: BorderStyle.SINGLE },
+              },
+            })
+          );
+        }
+        
         // Add detailed alumni data for each type
         const detailedData = detailedDataByType[type] || [];
         children.push(...createDetailedTable(`${type} Detailed Alumni Data`, detailedData));
@@ -1814,7 +2942,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     // ========================================
     // WORD FOOTER SECTION
     // ========================================
-    // Add institutional footer with image
+    // Add spacing before footer
     children.push(
       new Paragraph({
         text: '',
@@ -1822,7 +2950,145 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       })
     );
 
-    // Add compact footer image if available
+    // Add signature section if enabled
+    if (settings.signature_enabled !== false && settings.footer_enabled !== false) {
+      // Create a container table to hold both signature sections side-by-side
+      children.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: {
+            top: { style: BorderStyle.NONE },
+            bottom: { style: BorderStyle.NONE },
+            left: { style: BorderStyle.NONE },
+            right: { style: BorderStyle.NONE },
+            insideHorizontal: { style: BorderStyle.NONE },
+            insideVertical: { style: BorderStyle.NONE },
+          },
+          rows: [
+            new TableRow({
+              children: [
+                // Left cell with Prepared by table
+                new TableCell({
+                  children: [
+                    new Table({
+                      width: { size: 100, type: WidthType.PERCENTAGE },
+                      borders: {
+                        top: { style: BorderStyle.SINGLE },
+                        bottom: { style: BorderStyle.SINGLE },
+                        left: { style: BorderStyle.SINGLE },
+                        right: { style: BorderStyle.SINGLE },
+                        insideHorizontal: { style: BorderStyle.SINGLE },
+                      },
+                      rows: [
+                        new TableRow({
+                          children: [
+                            new TableCell({
+                              children: [
+                                new Paragraph({
+                                  text: 'Prepared by:',
+                                  alignment: AlignmentType.CENTER,
+                                  spacing: { before: 0, after: 0 },
+                                }),
+                              ],
+                            }),
+                          ],
+                        }),
+                        new TableRow({
+                          children: [
+                            new TableCell({
+                              children: [
+                                new Paragraph({
+                                  children: [
+                                    new TextRun({
+                                      text: settings.prepared_by_name || 'MARIE JOY B. ALIT, Ph.D.',
+                                      bold: true,
+                                    }),
+                                  ],
+                                  alignment: AlignmentType.CENTER,
+                                  spacing: { before: 0, after: 0 },
+                                }),
+                              ],
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                    new Paragraph({
+                      text: settings.prepared_by_title || 'University Director for Alumni Affairs',
+                      alignment: AlignmentType.CENTER,
+                      spacing: { before: 50, after: 0 },
+                    }),
+                  ],
+                  width: { size: 50, type: WidthType.PERCENTAGE },
+                }),
+                // Right cell with Approved by table
+                new TableCell({
+                  children: [
+                    new Table({
+                      width: { size: 100, type: WidthType.PERCENTAGE },
+                      borders: {
+                        top: { style: BorderStyle.SINGLE },
+                        bottom: { style: BorderStyle.SINGLE },
+                        left: { style: BorderStyle.SINGLE },
+                        right: { style: BorderStyle.SINGLE },
+                        insideHorizontal: { style: BorderStyle.SINGLE },
+                      },
+                      rows: [
+                        new TableRow({
+                          children: [
+                            new TableCell({
+                              children: [
+                                new Paragraph({
+                                  text: 'Approved by:',
+                                  alignment: AlignmentType.CENTER,
+                                  spacing: { before: 0, after: 0 },
+                                }),
+                              ],
+                            }),
+                          ],
+                        }),
+                        new TableRow({
+                          children: [
+                            new TableCell({
+                              children: [
+                                new Paragraph({
+                                  children: [
+                                    new TextRun({
+                                      text: settings.approved_by_name || 'ROMEO P. MONTECILLO, Ph.D.',
+                                      bold: true,
+                                    }),
+                                  ],
+                                  alignment: AlignmentType.CENTER,
+                                  spacing: { before: 0, after: 0 },
+                                }),
+                              ],
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                    new Paragraph({
+                      text: settings.approved_by_title || 'Vice President for Student Affairs',
+                      alignment: AlignmentType.CENTER,
+                      spacing: { before: 50, after: 0 },
+                    }),
+                  ],
+                  width: { size: 50, type: WidthType.PERCENTAGE },
+                }),
+              ],
+            }),
+          ],
+        }),
+        new Paragraph({
+          text: '',
+          spacing: { after: 200 },
+        })
+      );
+    }
+
+    // Add footer image if enabled
+    if (settings.footer_enabled !== false && settings.footer_image_enabled !== false) {
+      const footerBase64 = await loadImageOrUrl(settings.footer_image_url || '', footerImage);
     if (footerBase64) {
       children.push(
         new Paragraph({
@@ -1832,29 +3098,46 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               type: 'png',
               transformation: {
                 width: 600,
-                height: 30, // Compact height to match the logo row design
+                  height: 30,
               },
             }),
           ],
           alignment: AlignmentType.CENTER,
-          spacing: { after: 200 },
-        })
-      );
+            spacing: { after: 100 },
+          })
+        );
+      }
     }
 
-    // Add footer text
+    // Add generated date
+    const generatedDate = new Date().toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
     children.push(
       new Paragraph({
-        text: 'Generated by Cebu Technological University Alumni Affairs Office',
+        text: `Generated on: ${generatedDate}`,
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 200 },
+      })
+    );
+
+    // Add footer text if footer enabled
+    if (settings.footer_enabled !== false) {
+      children.push(
+        new Paragraph({
+          text: settings.footer_text1 || 'Generated by Cebu Technological University Alumni Affairs Office',
         alignment: AlignmentType.CENTER,
         spacing: { after: 100 },
       }),
       new Paragraph({
-        text: 'This report is generated automatically by the Alumni Tracking System',
+          text: settings.footer_text2 || 'This report is generated automatically by the Alumni Tracking System',
         alignment: AlignmentType.CENTER,
         spacing: { after: 100 },
       })
     );
+    }
 
     // Create document
     const doc = new Document({
@@ -1942,7 +3225,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const sheet = workbook.addWorksheet('QPRO Report');
         
         // Add institutional header
-        let r = addInstitutionalHeaderToExcel(sheet, 1);
+        let r = await addInstitutionalHeaderToExcel(workbook, sheet, 1);
         
         // Add metadata
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
@@ -1956,10 +3239,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
-        // Make summary headers bold
-        sheet.getCell(`A${r}`).font = { bold: true };
-        sheet.getCell(`B${r}`).font = { bold: true };
-        sheet.getCell(`C${r}`).font = { bold: true };
+        // Make summary headers bold with blue background and white text
+        ['A', 'B', 'C'].forEach(col => {
+          sheet.getCell(`${col}${r}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          sheet.getCell(`${col}${r}`).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
+        });
         r++;
         // Employed
         sheet.getCell(`A${r}`).value = 'Employed';
@@ -1985,18 +3273,118 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`B${r}`).value = generatedStats.total_alumni;
         sheet.getCell(`C${r}`).value = '100%'; r += 2;
 
+        // Add Employability Report by Program table
+        sheet.getCell(`A${r}`).value = '=== EMPLOYABILITY REPORT BY PROGRAM ==='; r++;
+        
+        const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
+        
+        // First header row with overall stats and quarter labels
+        const progHeaderRow = sheet.addRow([
+          'PROGRAMS', 'TOTAL', 'E', 'UE', 'NT', 'GT', '', '', '', '', '', '', '', '', '', '', '', ''
+        ]);
+        progHeaderRow.eachCell((cell, colNumber) => {
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        
+        // Merge cells for quarter labels
+        sheet.mergeCells(`G${r}:I${r}`);
+        sheet.mergeCells(`J${r}:L${r}`);
+        sheet.mergeCells(`M${r}:O${r}`);
+        sheet.mergeCells(`P${r}:R${r}`);
+        
+        sheet.getCell(`G${r}`).value = 'QUARTER ONE';
+        sheet.getCell(`J${r}`).value = 'QUARTER TWO';
+        sheet.getCell(`M${r}`).value = 'QUARTER THREE';
+        sheet.getCell(`P${r}`).value = 'QUARTER FOUR';
+        
+        ['G', 'J', 'M', 'P'].forEach(col => {
+          sheet.getCell(`${col}${r}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          sheet.getCell(`${col}${r}`).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
+          sheet.getCell(`${col}${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        r++;
+        
+        // Second header row
+        const progSubHeaderRow = sheet.addRow([
+          '', '', '', '', '', '', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT'
+        ]);
+        progSubHeaderRow.eachCell((cell, colNumber) => {
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        r++;
+        
+        // Add data rows
+        programBreakdown.forEach(progData => {
+          const progRow = sheet.addRow([
+            progData.program,
+            progData.total,
+            progData.employed,
+            progData.unemployed,
+            progData.notTracked,
+            progData.trackingRate,
+            progData.q1.employed,
+            progData.q1.unemployed,
+            progData.q1.trackingRate,
+            progData.q2.employed,
+            progData.q2.unemployed,
+            progData.q2.trackingRate,
+            progData.q3.employed,
+            progData.q3.unemployed,
+            progData.q3.trackingRate,
+            progData.q4.employed,
+            progData.q4.unemployed,
+            progData.q4.trackingRate,
+          ]);
+          
+          // Style TOTAL row
+          if (progData.isTotal) {
+            progRow.eachCell((cell) => {
+              cell.font = { bold: true };
+              cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFFFFFFF' }
+              };
+            });
+          }
+          
+          r++;
+        });
+        r += 2;
+
         sheet.getCell(`A${r}`).value = 'QPRO Detailed Alumni Data'; r++;
         const headerRow = sheet.addRow(qproHeaders);
-        // Make headers bold
+        // Make headers bold with blue background and white text
         headerRow.eachCell((cell) => {
-          cell.font = { bold: true };
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
         });
         r++;
         const mapped = sortAlumniData((detailedDataByType['QPRO'] || []).map(mapQPRORow));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
 
         // Add institutional footer
-        addInstitutionalFooterToExcel(sheet, r);
+        await addInstitutionalFooterToExcel(workbook, sheet, r);
 
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
@@ -2017,7 +3405,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const sheet = workbook.addWorksheet('CHED Report');
         
         // Add institutional header
-        let r = addInstitutionalHeaderToExcel(sheet, 1);
+        let r = await addInstitutionalHeaderToExcel(workbook, sheet, 1);
         
         // Add metadata
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
@@ -2031,10 +3419,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
-        // Make summary headers bold
-        sheet.getCell(`A${r}`).font = { bold: true };
-        sheet.getCell(`B${r}`).font = { bold: true };
-        sheet.getCell(`C${r}`).font = { bold: true };
+        // Make summary headers bold with blue background and white text
+        ['A', 'B', 'C'].forEach(col => {
+          sheet.getCell(`${col}${r}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          sheet.getCell(`${col}${r}`).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
+        });
         r++;
         // Pursuing Further Study
         const pursuing = Number(generatedStats.pursuing_further_study) || 0;
@@ -2067,16 +3460,21 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         // Detailed
         sheet.getCell(`A${r}`).value = 'CHED Detailed Alumni Data'; r++;
         const headerRow = sheet.addRow(qproHeaders);
-        // Make headers bold
+        // Make headers bold with blue background and white text
         headerRow.eachCell((cell) => {
-          cell.font = { bold: true };
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
         });
         r++;
         const mapped = sortAlumniData((detailedDataByType['CHED'] || []).map(mapQPRORow));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
 
         // Add institutional footer
-        addInstitutionalFooterToExcel(sheet, r);
+        await addInstitutionalFooterToExcel(workbook, sheet, r);
 
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
@@ -2097,7 +3495,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const sheet = workbook.addWorksheet('AACUP Report');
         
         // Add institutional header
-        let r = addInstitutionalHeaderToExcel(sheet, 1);
+        let r = await addInstitutionalHeaderToExcel(workbook, sheet, 1);
         
         // Add metadata
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
@@ -2111,10 +3509,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
-        // Make summary headers bold
-        sheet.getCell(`A${r}`).font = { bold: true };
-        sheet.getCell(`B${r}`).font = { bold: true };
-        sheet.getCell(`C${r}`).font = { bold: true };
+        // Make summary headers bold with blue background and white text
+        ['A', 'B', 'C'].forEach(col => {
+          sheet.getCell(`${col}${r}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          sheet.getCell(`${col}${r}`).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
+        });
         r++;
         // Employed
         const employed = Number(generatedStats.employed_count) || 0;
@@ -2146,16 +3549,21 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         // Detailed
         sheet.getCell(`A${r}`).value = 'AACUP Detailed Alumni Data'; r++;
         const headerRow = sheet.addRow(qproHeaders);
-        // Make headers bold
+        // Make headers bold with blue background and white text
         headerRow.eachCell((cell) => {
-          cell.font = { bold: true };
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
         });
         r++;
         const mapped2 = sortAlumniData((detailedDataByType['AACUP'] || []).map(mapQPRORow));
         mapped2.forEach((vals) => { sheet.addRow(vals); r++; });
 
         // Add institutional footer
-        addInstitutionalFooterToExcel(sheet, r);
+        await addInstitutionalFooterToExcel(workbook, sheet, r);
 
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
@@ -2176,7 +3584,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const sheet = workbook.addWorksheet('High Position Report');
         
         // Add institutional header
-        let r = addInstitutionalHeaderToExcel(sheet, 1);
+        let r = await addInstitutionalHeaderToExcel(workbook, sheet, 1);
         
         // Add metadata
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
@@ -2190,10 +3598,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
-        // Make summary headers bold
-        sheet.getCell(`A${r}`).font = { bold: true };
-        sheet.getCell(`B${r}`).font = { bold: true };
-        sheet.getCell(`C${r}`).font = { bold: true };
+        // Make summary headers bold with blue background and white text
+        ['A', 'B', 'C'].forEach(col => {
+          sheet.getCell(`${col}${r}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          sheet.getCell(`${col}${r}`).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
+        });
         r++;
         // High Position metrics
         const hpCount = Number(generatedStats.high_position_count) || 0;
@@ -2207,7 +3620,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`C${r}`).value = '100%'; r += 2;
 
         // Detailed: only high-position alumni with limited columns
-        const headersHP = ['Program','First_Name','Middle_Name','Last_Name','Company_Name_Current','Position_Current'];
+        const headersHP = ['Program','Last_Name','First_Name','Middle_Name','Company_Name_Current','Position_Current'];
         sheet.getCell(`A${r}`).value = 'High Position Detailed Alumni Data'; r++;
         sheet.addRow(headersHP); r++;
 
@@ -2253,7 +3666,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         rows.forEach((vals) => { sheet.addRow(vals); r++; });
 
         // Add institutional footer
-        addInstitutionalFooterToExcel(sheet, r);
+        await addInstitutionalFooterToExcel(workbook, sheet, r);
 
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
@@ -2274,7 +3687,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const sheet = workbook.addWorksheet('SUC Report');
         
         // Add institutional header
-        let r = addInstitutionalHeaderToExcel(sheet, 1);
+        let r = await addInstitutionalHeaderToExcel(workbook, sheet, 1);
         
         // Add metadata
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
@@ -2288,10 +3701,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
         sheet.getCell(`A${r}`).value = 'Metric'; sheet.getCell(`B${r}`).value = 'Value'; sheet.getCell(`C${r}`).value = 'Percentage';
-        // Make summary headers bold
-        sheet.getCell(`A${r}`).font = { bold: true };
-        sheet.getCell(`B${r}`).font = { bold: true };
-        sheet.getCell(`C${r}`).font = { bold: true };
+        // Make summary headers bold with blue background and white text
+        ['A', 'B', 'C'].forEach(col => {
+          sheet.getCell(`${col}${r}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          sheet.getCell(`${col}${r}`).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
+        });
         r++;
         // High Position
         const highPos = Number(generatedStats.high_position_count) || 0;
@@ -2323,16 +3741,21 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         // Detailed
         sheet.getCell(`A${r}`).value = 'SUC Detailed Alumni Data'; r++;
         const headerRow = sheet.addRow(qproHeaders);
-        // Make headers bold
+        // Make headers bold with blue background and white text
         headerRow.eachCell((cell) => {
-          cell.font = { bold: true };
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
         });
         r++;
         const mapped = sortAlumniData((detailedDataByType['SUC'] || []).map(mapQPRORow));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
 
         // Add institutional footer
-        addInstitutionalFooterToExcel(sheet, r);
+        await addInstitutionalFooterToExcel(workbook, sheet, r);
 
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
@@ -2353,7 +3776,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       let rowIdx = 1;
       if (allStats) {
         // Add institutional header
-        rowIdx = addInstitutionalHeaderToExcel(worksheet, 1);
+        rowIdx = await addInstitutionalHeaderToExcel(workbook, worksheet, 1);
         
         // Add metadata
         worksheet.getCell(`A${rowIdx}`).value = `Generated Date`;
@@ -2380,10 +3803,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           worksheet.getCell(`A${rowIdx}`).value = 'Metric';
           worksheet.getCell(`B${rowIdx}`).value = 'Value';
           worksheet.getCell(`C${rowIdx}`).value = 'Percentage';
-          // Make headers bold
-          worksheet.getCell(`A${rowIdx}`).font = { bold: true };
-          worksheet.getCell(`B${rowIdx}`).font = { bold: true };
-          worksheet.getCell(`C${rowIdx}`).font = { bold: true };
+          // Make headers bold with blue background and white text
+          ['A', 'B', 'C'].forEach(col => {
+            worksheet.getCell(`${col}${rowIdx}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            worksheet.getCell(`${col}${rowIdx}`).fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FF1D4E89' }
+            };
+          });
           rowIdx++;
 
           // Set current chart section for this type
@@ -2419,7 +3847,103 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Employment Success Rate';
             worksheet.getCell(`B${rowIdx}`).value = `${stats.employment_rate}%`;
+            rowIdx += 2;
+            
+            // Add Employability Report by Program table
+            worksheet.getCell(`A${rowIdx}`).value = '=== EMPLOYABILITY REPORT BY PROGRAM ===';
             rowIdx++;
+            
+            const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
+            
+            // First header row with overall stats and quarter labels
+            const progHeaderRow = worksheet.addRow([
+              'PROGRAMS', 'TOTAL', 'E', 'UE', 'NT', 'GT', '', '', '', '', '', '', '', '', '', '', '', ''
+            ]);
+            progHeaderRow.eachCell((cell, colNumber) => {
+              cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+              cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF1D4E89' }
+              };
+              cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            });
+            
+            // Merge cells for quarter labels
+            worksheet.mergeCells(`G${rowIdx}:I${rowIdx}`);
+            worksheet.mergeCells(`J${rowIdx}:L${rowIdx}`);
+            worksheet.mergeCells(`M${rowIdx}:O${rowIdx}`);
+            worksheet.mergeCells(`P${rowIdx}:R${rowIdx}`);
+            
+            worksheet.getCell(`G${rowIdx}`).value = 'QUARTER ONE';
+            worksheet.getCell(`J${rowIdx}`).value = 'QUARTER TWO';
+            worksheet.getCell(`M${rowIdx}`).value = 'QUARTER THREE';
+            worksheet.getCell(`P${rowIdx}`).value = 'QUARTER FOUR';
+            
+            ['G', 'J', 'M', 'P'].forEach(col => {
+              worksheet.getCell(`${col}${rowIdx}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+              worksheet.getCell(`${col}${rowIdx}`).fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF1D4E89' }
+              };
+              worksheet.getCell(`${col}${rowIdx}`).alignment = { horizontal: 'center', vertical: 'middle' };
+            });
+            rowIdx++;
+            
+            // Second header row
+            const progSubHeaderRow = worksheet.addRow([
+              '', '', '', '', '', '', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT'
+            ]);
+            progSubHeaderRow.eachCell((cell, colNumber) => {
+              cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+              cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF1D4E89' }
+              };
+              cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            });
+            rowIdx++;
+            
+            // Add data rows
+            programBreakdown.forEach(progData => {
+              const progRow = worksheet.addRow([
+                progData.program,
+                progData.total,
+                progData.employed,
+                progData.unemployed,
+                progData.notTracked,
+                progData.trackingRate,
+                progData.q1.employed,
+                progData.q1.unemployed,
+                progData.q1.trackingRate,
+                progData.q2.employed,
+                progData.q2.unemployed,
+                progData.q2.trackingRate,
+                progData.q3.employed,
+                progData.q3.unemployed,
+                progData.q3.trackingRate,
+                progData.q4.employed,
+                progData.q4.unemployed,
+                progData.q4.trackingRate,
+              ]);
+              
+              // Style TOTAL row
+              if (progData.isTotal) {
+                progRow.eachCell((cell) => {
+                  cell.font = { bold: true };
+                  cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFFFFFFF' }
+                  };
+                });
+              }
+              
+              rowIdx++;
+            });
+            rowIdx += 2;
           } else if (stats?.type === 'CHED') {
             worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
             worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni;
@@ -2618,38 +4142,53 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               
               const mappedHP = highPositionRows.map(mapHighPositionRow);
               const headerRow = worksheet.addRow(headersHighPosition);
-              // Make headers bold
+              // Make headers bold with blue background and white text
               headerRow.eachCell((cell) => {
-                cell.font = { bold: true };
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FF1D4E89' }
+                };
               });
               rowIdx++;
               mappedHP.forEach((vals: (string | number)[]) => { worksheet.addRow(vals); rowIdx++; });
               // Excel sheet names must be <= 31 chars; use a concise, clear name
               const detailSheet = workbook.addWorksheet('High Position Details');
               
+              // Add institutional header to detail sheet
+              let detailRowIdx = await addInstitutionalHeaderToExcel(workbook, detailSheet, 1);
+              
               // Add summary metrics to HIGH_POSITION sheet
-              let detailRowIdx = 1;
               detailSheet.getCell(`A${detailRowIdx}`).value = 'HIGH_POSITION Statistics Summary';
               detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
               detailRowIdx++;
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Generated Date';
               detailSheet.getCell(`B${detailRowIdx}`).value = new Date().toLocaleDateString();
+              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
               detailRowIdx++;
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Year Filter';
               detailSheet.getCell(`B${detailRowIdx}`).value = selectedYear || 'ALL';
+              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
               detailRowIdx++;
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Program Filter';
               detailSheet.getCell(`B${detailRowIdx}`).value = selectedProgram || 'ALL';
+              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
               detailRowIdx += 2;
               detailSheet.getCell(`A${detailRowIdx}`).value = '=== SUMMARY STATISTICS ===';
               detailRowIdx++;
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Metric';
               detailSheet.getCell(`B${detailRowIdx}`).value = 'Value';
               detailSheet.getCell(`C${detailRowIdx}`).value = 'Percentage';
-              // Make summary headers bold
-              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
-              detailSheet.getCell(`B${detailRowIdx}`).font = { bold: true };
-              detailSheet.getCell(`C${detailRowIdx}`).font = { bold: true };
+              // Make summary headers bold with blue background and white text
+              ['A', 'B', 'C'].forEach(col => {
+                detailSheet.getCell(`${col}${detailRowIdx}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                detailSheet.getCell(`${col}${detailRowIdx}`).fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FF1D4E89' }
+                };
+              });
               detailRowIdx++;
               
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Total Alumni';
@@ -2669,46 +4208,74 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               detailRowIdx++;
               
               const detailHeaderRow = detailSheet.addRow(headersHighPosition);
-              // Make headers bold
+              // Make headers bold with blue background and white text
               detailHeaderRow.eachCell((cell) => {
-                cell.font = { bold: true };
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FF1D4E89' }
+                };
               });
-              mappedHP.forEach((vals: (string | number)[]) => detailSheet.addRow(vals));
+              detailRowIdx++;
+              mappedHP.forEach((vals: (string | number)[]) => { 
+                detailSheet.addRow(vals);
+                detailRowIdx++;
+              });
+              
+              // Add institutional footer to detail sheet
+              await addInstitutionalFooterToExcel(workbook, detailSheet, detailRowIdx);
+              
               autoSizeAndWrapSheet(detailSheet);
             } else {
               const mapped = sortAlumniData(rows.map(mapQPRORow));
               const headerRow = worksheet.addRow(qproHeaders);
-              // Make headers bold
+              // Make headers bold with blue background and white text
               headerRow.eachCell((cell) => {
-                cell.font = { bold: true };
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FF1D4E89' }
+                };
               });
               rowIdx++;
               mapped.forEach((vals) => { worksheet.addRow(vals); rowIdx++; });
               const detailSheet = workbook.addWorksheet(`${type} Detailed Alumni Data`);
               
+              // Add institutional header to detail sheet
+              let detailRowIdx = await addInstitutionalHeaderToExcel(workbook, detailSheet, 1);
+              
               // Add summary metrics to individual sheets
-              let detailRowIdx = 1;
               detailSheet.getCell(`A${detailRowIdx}`).value = `${type} Statistics Summary`;
               detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
               detailRowIdx++;
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Generated Date';
               detailSheet.getCell(`B${detailRowIdx}`).value = new Date().toLocaleDateString();
+              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
               detailRowIdx++;
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Year Filter';
               detailSheet.getCell(`B${detailRowIdx}`).value = selectedYear || 'ALL';
+              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
               detailRowIdx++;
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Program Filter';
               detailSheet.getCell(`B${detailRowIdx}`).value = selectedProgram || 'ALL';
+              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
               detailRowIdx += 2;
               detailSheet.getCell(`A${detailRowIdx}`).value = '=== SUMMARY STATISTICS ===';
               detailRowIdx++;
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Metric';
               detailSheet.getCell(`B${detailRowIdx}`).value = 'Value';
               detailSheet.getCell(`C${detailRowIdx}`).value = 'Percentage';
-              // Make summary headers bold
-              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
-              detailSheet.getCell(`B${detailRowIdx}`).font = { bold: true };
-              detailSheet.getCell(`C${detailRowIdx}`).font = { bold: true };
+              // Make summary headers bold with blue background and white text
+              ['A', 'B', 'C'].forEach(col => {
+                detailSheet.getCell(`${col}${detailRowIdx}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                detailSheet.getCell(`${col}${detailRowIdx}`).fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FF1D4E89' }
+                };
+              });
               detailRowIdx++;
               
               // Add type-specific metrics
@@ -2731,7 +4298,103 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                 detailSheet.getCell(`A${detailRowIdx}`).value = 'Untracked';
                 detailSheet.getCell(`B${detailRowIdx}`).value = stats.untracked_count || 0;
                 detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.untracked_count, stats.total_alumni);
+                detailRowIdx += 2;
+                
+                // Add Employability Report by Program table for QPRO
+                detailSheet.getCell(`A${detailRowIdx}`).value = '=== EMPLOYABILITY REPORT BY PROGRAM ===';
                 detailRowIdx++;
+                
+                const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
+                
+                // First header row with overall stats and quarter labels
+                const progHeaderRow = detailSheet.addRow([
+                  'PROGRAMS', 'TOTAL', 'E', 'UE', 'NT', 'GT', '', '', '', '', '', '', '', '', '', '', '', ''
+                ]);
+                progHeaderRow.eachCell((cell, colNumber) => {
+                  cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                  cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FF1D4E89' }
+                  };
+                  cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                });
+                
+                // Merge cells for quarter labels
+                detailSheet.mergeCells(`G${detailRowIdx}:I${detailRowIdx}`);
+                detailSheet.mergeCells(`J${detailRowIdx}:L${detailRowIdx}`);
+                detailSheet.mergeCells(`M${detailRowIdx}:O${detailRowIdx}`);
+                detailSheet.mergeCells(`P${detailRowIdx}:R${detailRowIdx}`);
+                
+                detailSheet.getCell(`G${detailRowIdx}`).value = 'QUARTER ONE';
+                detailSheet.getCell(`J${detailRowIdx}`).value = 'QUARTER TWO';
+                detailSheet.getCell(`M${detailRowIdx}`).value = 'QUARTER THREE';
+                detailSheet.getCell(`P${detailRowIdx}`).value = 'QUARTER FOUR';
+                
+                ['G', 'J', 'M', 'P'].forEach(col => {
+                  detailSheet.getCell(`${col}${detailRowIdx}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                  detailSheet.getCell(`${col}${detailRowIdx}`).fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FF1D4E89' }
+                  };
+                  detailSheet.getCell(`${col}${detailRowIdx}`).alignment = { horizontal: 'center', vertical: 'middle' };
+                });
+                detailRowIdx++;
+                
+                // Second header row
+                const progSubHeaderRow = detailSheet.addRow([
+                  '', '', '', '', '', '', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT'
+                ]);
+                progSubHeaderRow.eachCell((cell, colNumber) => {
+                  cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                  cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FF1D4E89' }
+                  };
+                  cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                });
+                detailRowIdx++;
+                
+                // Add data rows
+                programBreakdown.forEach(progData => {
+                  const progRow = detailSheet.addRow([
+                    progData.program,
+                    progData.total,
+                    progData.employed,
+                    progData.unemployed,
+                    progData.notTracked,
+                    progData.trackingRate,
+                    progData.q1.employed,
+                    progData.q1.unemployed,
+                    progData.q1.trackingRate,
+                    progData.q2.employed,
+                    progData.q2.unemployed,
+                    progData.q2.trackingRate,
+                    progData.q3.employed,
+                    progData.q3.unemployed,
+                    progData.q3.trackingRate,
+                    progData.q4.employed,
+                    progData.q4.unemployed,
+                    progData.q4.trackingRate,
+                  ]);
+                  
+                  // Style TOTAL row
+                  if (progData.isTotal) {
+                    progRow.eachCell((cell) => {
+                      cell.font = { bold: true };
+                      cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFFFFFFF' }
+                      };
+                    });
+                  }
+                  
+                  detailRowIdx++;
+                });
+                detailRowIdx += 2;
               } else if (type === 'CHED') {
                 detailSheet.getCell(`A${detailRowIdx}`).value = 'Total Alumni';
                 detailSheet.getCell(`B${detailRowIdx}`).value = stats.total_alumni || 0;
@@ -2818,11 +4481,24 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               detailRowIdx++;
               
               const detailHeaderRow = detailSheet.addRow(qproHeaders);
-              // Make headers bold
+              // Make headers bold with blue background and white text
               detailHeaderRow.eachCell((cell) => {
-                cell.font = { bold: true };
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FF1D4E89' }
+                };
               });
-              mapped.forEach((vals) => detailSheet.addRow(vals));
+              detailRowIdx++;
+              mapped.forEach((vals) => { 
+                detailSheet.addRow(vals);
+                detailRowIdx++;
+              });
+              
+              // Add institutional footer to detail sheet
+              await addInstitutionalFooterToExcel(workbook, detailSheet, detailRowIdx);
+              
               autoSizeAndWrapSheet(detailSheet);
             }
           }
@@ -2849,6 +4525,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         worksheet.getCell(`A${rowIdx}`).value = 'Metric';
         worksheet.getCell(`B${rowIdx}`).value = 'Value';
         worksheet.getCell(`C${rowIdx}`).value = 'Percentage';
+        // Make summary headers bold with blue background and white text
+        ['A', 'B', 'C'].forEach(col => {
+          worksheet.getCell(`${col}${rowIdx}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          worksheet.getCell(`${col}${rowIdx}`).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
+        });
         rowIdx++;
         if (generatedStats?.type === 'QPRO') {
           worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
@@ -3065,7 +4750,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       }
 
       // Add institutional footer to main worksheet
-      addInstitutionalFooterToExcel(worksheet, rowIdx);
+      await addInstitutionalFooterToExcel(workbook, worksheet, rowIdx);
 
       // Download the Excel file
       const buffer = await workbook.xlsx.writeBuffer();

@@ -820,6 +820,11 @@ export const deleteMessageApi = async (conversationId: number, messageId: number
   return data as { status: string };
 };
 
+export const updateMessageApi = async (conversationId: number, messageId: number, content: string) => {
+  const { data } = await api.put(`messaging/conversations/${conversationId}/messages/${messageId}/`, { content });
+  return data as MessageItem;
+};
+
 export const searchUsersForMessaging = async (q: string) => {
   const { data } = await api.get(`messaging/users/search/?q=${encodeURIComponent(q)}`);
   return data as { users: Array<{ user_id: number; f_name: string; l_name: string }>; count: number; query: string };

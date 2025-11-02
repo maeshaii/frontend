@@ -9,6 +9,7 @@ export interface UiMessage {
   content: string;
   sender_id: number;
   sender_name: string;
+  sender_avatar?: string | null;
   created_at: string;
   is_read: boolean;
   tempId?: string;

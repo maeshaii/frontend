@@ -17,6 +17,7 @@ import { deduplicateMessages, addMessageWithDeduplication, replaceTempMessage, r
 import { sanitizeUserInput, validateMessageType } from '../../utils/securityUtils';
 import { WebSocketErrorBoundary } from '../../components/ErrorBoundary';
 import { useLogger } from '../../utils/logger';
+import { renderTextWithLinks } from '../../utils/linkRenderer';
 import './Messaging.css';
 
 interface ChatInterfaceProps {
@@ -466,7 +467,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversation, onBack }) =
                     )}
                   </div>
                 ) : (
-                  message.content
+                  <div style={{ fontSize: '13px', color: '#050505', lineHeight: '1.38', wordBreak: 'break-word' }}>
+                    {renderTextWithLinks(message.content)}
+                  </div>
                 )}
               </div>
               <div className="message-time">{formatTime(message.created_at)}</div>

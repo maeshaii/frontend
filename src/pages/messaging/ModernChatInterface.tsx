@@ -8,6 +8,8 @@ import {
   markConversationRead,
   getUserInfo,
   uploadAttachment,
+  deleteMessageApi,
+  updateMessageApi,
   api
 } from '../../services/api';
 import { ConversationWebSocket, WsEvent } from '../../services/websocketHelper';
@@ -18,6 +20,8 @@ import { deduplicateMessages, addMessageWithDeduplication, replaceTempMessage, r
 import { sanitizeUserInput, validateMessageType } from '../../utils/securityUtils';
 import { WebSocketErrorBoundary } from '../../components/ErrorBoundary';
 import { useLogger } from '../../utils/logger';
+import { renderTextWithLinks } from '../../utils/linkRenderer';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import './Messaging.css';
 
 interface ModernChatInterfaceProps {
@@ -43,7 +47,6 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
   const [hasMarkedAsRead, setHasMarkedAsRead] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
   const hasMarkedRef = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -56,6 +59,9 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [downloadFile, setDownloadFile] = useState<{url: string, name: string} | null>(null);
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editMessageContent, setEditMessageContent] = useState<string>('');
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const scrollToBottom = useCallback(() => {
@@ -84,6 +90,25 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
     initUser();
   }, []);
 
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showEmojiPicker) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.emoji-picker-container') && !target.closest('.input-action-btn')) {
+          setShowEmojiPicker(false);
+        }
+      }
+    };
+
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showEmojiPicker]);
+
   const loadMessages = useCallback(async (cursor?: string) => {
     if (!conversation) return;
     
@@ -94,6 +119,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         content: m.content,
         sender_id: m.sender.user_id,
         sender_name: m.sender.name,
+        sender_avatar: m.sender.avatar_url || null,
         created_at: m.created_at,
         is_read: m.is_read,
         message_type: (m as any).message_type,
@@ -231,6 +257,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
               content: messageData.content || '',
               sender_id: messageData.sender_id || 0,
               sender_name: messageData.sender_name || '',
+              sender_avatar: messageData.sender_avatar || messageData.sender?.avatar_url || null,
               created_at: messageData.created_at || new Date().toISOString(),
               is_read: false,
               message_type: messageData.message_type,
@@ -251,6 +278,24 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
               }
               return addMessageWithDeduplication(prev, newMessage);
             });
+            
+            // Emit event for new message to update badge (only if not from current user)
+            if (messageData.sender_id !== currentUser?.user_id && messageData.sender_id !== currentUser?.id) {
+              window.dispatchEvent(new CustomEvent('newMessage', { 
+                detail: { 
+                  conversationId: conversation?.conversation_id,
+                  message: newMessage 
+                } 
+              }));
+              // Also refresh conversations to update unread count
+              if (conversation) {
+                import('../../services/api').then(({ listConversations }) => {
+                  listConversations().then(conversations => {
+                    window.dispatchEvent(new CustomEvent('conversationsUpdated', { detail: conversations }));
+                  }).catch(err => console.error('Failed to refresh conversations:', err));
+                });
+              }
+            }
             
             // Delay scroll to ensure messages are rendered
             setTimeout(() => {
@@ -334,6 +379,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         content: sanitizedText,
         sender_id: currentUser?.user_id || 0,
         sender_name: currentUser?.full_name || 'You',
+        sender_avatar: currentUser?.profile_pic || currentUser?.avatar_url || null,
         created_at: new Date().toISOString(),
         is_read: false,
         tempId,
@@ -357,6 +403,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
           content: saved.content,
           sender_id: saved.sender.user_id,
           sender_name: saved.sender.name,
+          sender_avatar: saved.sender.avatar_url || null,
           created_at: saved.created_at,
           is_read: saved.is_read,
           message_type: (saved as any).message_type,
@@ -420,6 +467,15 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
     }
   };
 
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    setInputValue(prev => prev + emojiData.emoji);
+    setShowEmojiPicker(false);
+    // Focus back on the input
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
   const loadMoreMessages = useCallback(async () => {
     if (!nextCursor || isLoadingMore) return;
     setIsLoadingMore(true);
@@ -434,6 +490,74 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
     const date = new Date(dateString);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }, []);
+
+  const handleEditMessage = async (messageId: string) => {
+    if (!conversation || !editMessageContent.trim()) return;
+    
+    try {
+      const updated = await updateMessageApi(conversation.conversation_id, parseInt(messageId), editMessageContent);
+      
+      const updatedMessage: UiMessage = {
+        id: String(updated.message_id),
+        content: updated.content,
+        sender_id: updated.sender.user_id,
+        sender_name: updated.sender.name,
+        sender_avatar: updated.sender.avatar_url || null,
+        created_at: updated.created_at,
+        is_read: updated.is_read,
+        message_type: (updated as any).message_type,
+        attachment_url: ((updated as any).attachments && (updated as any).attachments[0]?.file_url) || null,
+      };
+      
+      setMessages(prev => prev.map(m => m.id === messageId ? updatedMessage : m));
+      setEditingMessageId(null);
+      setEditMessageContent('');
+    } catch (error) {
+      console.error('Failed to update message:', error);
+      alert('Failed to update message. Please try again.');
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!conversation) return;
+    
+    if (!window.confirm('Are you sure you want to delete this message?')) return;
+    
+    try {
+      await deleteMessageApi(conversation.conversation_id, parseInt(messageId));
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      setDeletingMessageId(null);
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+      alert('Failed to delete message. Please try again.');
+    }
+  };
+
+  const getAvatarDisplay = (message: UiMessage) => {
+    const firstName = message.sender_name?.split(' ')[0] || 'U';
+    const initial = firstName.charAt(0).toUpperCase();
+    
+    if (message.sender_avatar) {
+      const avatarUrl = message.sender_avatar.startsWith('http') 
+        ? message.sender_avatar 
+        : `${window.location.origin}${message.sender_avatar}`;
+      return (
+        <img 
+          src={avatarUrl} 
+          alt={message.sender_name}
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.style.display = 'none';
+            const parent = target.parentElement;
+            if (parent) {
+              parent.innerHTML = `<div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; border-radius: 50%;">${initial}</div>`;
+            }
+          }}
+        />
+      );
+    }
+    return <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 600, fontSize: '14px', borderRadius: '50%' }}>{initial}</div>;
+  };
 
   const isOwnMessage = useCallback((message: UiMessage) => {
     const myId = currentUser?.user_id ?? (currentUser as any)?.id;
@@ -545,94 +669,241 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
             <div className="messages-list">
               {groupedMessages.map((group, groupIndex) => {
                 const isOwn = group.sender_id === (currentUser?.user_id ?? (currentUser as any)?.id);
+                const isFirstOfGroup = groupIndex === 0 || groupedMessages[groupIndex - 1].sender_id !== group.sender_id;
                 
                 return (
                   <div key={groupIndex} className={`message-group ${isOwn ? 'sent' : 'received'}`}>
-                    {group.messages.map((message, messageIndex) => (
-                      <div key={message.id} className={`message-item ${isOwn ? 'sent' : 'received'}`}>
-                        <div className="message-bubble">
-                        {message.attachment_url ? (
-                          <div className="attachment-preview">
-                            {message.attachment_info?.file_category === 'image' || isImageFile((message.attachment_info?.file_category as FileCategory) || 'document', message.attachment_info?.file_type) ? (
-                              <>
-                                <img 
-                                  src={message.attachment_url} 
-                                  alt={message.content} 
-                                  className="attachment-image"
-                                  onClick={() => setLightboxUrl(message.attachment_url!)}
-                                />
-                                <button 
-                                  className="attachment-download-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDownloadFile({
-                                      url: message.attachment_url!,
-                                      name: message.attachment_info?.file_name || 'image'
-                                    });
-                                  }}
-                                  title="Download image"
-                                >
-                                  ⬇️ Download
-                                </button>
-                              </>
-                            ) : isVideoFile((message.attachment_info?.file_category as FileCategory) || 'document', message.attachment_info?.file_type) ? (
-                              <div className="video-attachment">
-                                <video
-                                  controls
-                                  className="attachment-video"
-                                  onPlay={() => setPlayingVideoId(message.id)}
-                                  onPause={() => setPlayingVideoId(null)}
-                                >
-                                  <source src={message.attachment_url} type="video/mp4" />
-                                  Your browser does not support the video tag.
-                                </video>
-                                <div className="video-filename">
-                                  {message.attachment_info?.file_name || message.content}
-                                </div>
-                              </div>
-                            ) : (
-                              <div 
-                                className="attachment-file"
-                                onClick={() => setDownloadFile({
-                                  url: message.attachment_url!,
-                                  name: message.attachment_info?.file_name || message.content
-                                })}
-                                style={{ cursor: 'pointer' }}
-                              >
-                                <span className="file-icon">
-                                  {getFileIcon((message.attachment_info?.file_category as FileCategory) || 'document', message.attachment_info?.file_type)}
-                                </span>
-                                <div className="file-info">
-                                  <div className="file-name">
-                                    {message.attachment_info?.file_name || message.content}
+                    {group.messages.map((message, messageIndex) => {
+                      const messageIsOwn = isOwnMessage(message);
+                      const showAvatar = messageIndex === 0 && isFirstOfGroup;
+                      
+                      return (
+                        <div key={message.id} className={`message-item ${isOwn ? 'sent' : 'received'}`} style={{ display: 'flex', flexDirection: isOwn ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: '8px', marginBottom: '8px' }}>
+                          {/* Avatar - only show for received messages (not own messages) */}
+                          {showAvatar && !messageIsOwn ? (
+                            <div
+                              className="message-avatar"
+                              onClick={() => {
+                                if (message.sender_id) {
+                                  navigate(`/profile/${message.sender_id}`);
+                                }
+                              }}
+                              title={message.sender_name}
+                              style={{ 
+                                width: '32px', 
+                                height: '32px', 
+                                borderRadius: '50%', 
+                                overflow: 'hidden',
+                                flexShrink: 0,
+                                cursor: 'pointer',
+                                marginTop: '4px'
+                              }}
+                            >
+                              {getAvatarDisplay(message)}
+                            </div>
+                          ) : (
+                            <div style={{ width: '32px', flexShrink: 0 }} />
+                          )}
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                            <div className="message-bubble" style={{ position: 'relative' }}>
+                              {editingMessageId === message.id ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                  <textarea
+                                    value={editMessageContent}
+                                    onChange={(e) => setEditMessageContent(e.target.value)}
+                                    style={{ 
+                                      width: '100%', 
+                                      minHeight: '60px', 
+                                      padding: '8px', 
+                                      borderRadius: '8px', 
+                                      border: '1px solid #ddd',
+                                      resize: 'vertical',
+                                      fontFamily: 'inherit',
+                                      fontSize: '14px'
+                                    }}
+                                    autoFocus
+                                  />
+                                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                    <button
+                                      onClick={() => {
+                                        setEditingMessageId(null);
+                                        setEditMessageContent('');
+                                      }}
+                                      style={{
+                                        padding: '6px 12px',
+                                        border: '1px solid #ddd',
+                                        borderRadius: '6px',
+                                        background: 'white',
+                                        cursor: 'pointer',
+                                        fontSize: '12px'
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      onClick={() => handleEditMessage(message.id)}
+                                      style={{
+                                        padding: '6px 12px',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        background: '#007bff',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        fontSize: '12px'
+                                      }}
+                                    >
+                                      Save
+                                    </button>
                                   </div>
-                                  {message.attachment_info?.file_size && (
-                                    <div className="file-size">
-                                      {formatFileSize(message.attachment_info.file_size)}
+                                </div>
+                              ) : (
+                                <>
+                                  {message.attachment_url ? (
+                                    <div className="attachment-preview">
+                                      {message.attachment_info?.file_category === 'image' || isImageFile((message.attachment_info?.file_category as FileCategory) || 'document', message.attachment_info?.file_type) ? (
+                                        <>
+                                          <img 
+                                            src={message.attachment_url} 
+                                            alt={message.content} 
+                                            className="attachment-image"
+                                            onClick={() => setLightboxUrl(message.attachment_url!)}
+                                          />
+                                          <button 
+                                            className="attachment-download-btn"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setDownloadFile({
+                                                url: message.attachment_url!,
+                                                name: message.attachment_info?.file_name || 'image'
+                                              });
+                                            }}
+                                            title="Download image"
+                                          >
+                                            ⬇️ Download
+                                          </button>
+                                        </>
+                                      ) : isVideoFile((message.attachment_info?.file_category as FileCategory) || 'document', message.attachment_info?.file_type) ? (
+                                        <div className="video-attachment">
+                                          <video
+                                            controls
+                                            className="attachment-video"
+                                            onPlay={() => setPlayingVideoId(message.id)}
+                                            onPause={() => setPlayingVideoId(null)}
+                                          >
+                                            <source src={message.attachment_url} type="video/mp4" />
+                                            Your browser does not support the video tag.
+                                          </video>
+                                          <div className="video-filename">
+                                            {message.attachment_info?.file_name || message.content}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div 
+                                          className="attachment-file"
+                                          onClick={() => setDownloadFile({
+                                            url: message.attachment_url!,
+                                            name: message.attachment_info?.file_name || message.content
+                                          })}
+                                          style={{ cursor: 'pointer' }}
+                                        >
+                                          <span className="file-icon">
+                                            {getFileIcon((message.attachment_info?.file_category as FileCategory) || 'document', message.attachment_info?.file_type)}
+                                          </span>
+                                          <div className="file-info">
+                                            <div className="file-name">
+                                              {message.attachment_info?.file_name || message.content}
+                                            </div>
+                                            {message.attachment_info?.file_size && (
+                                              <div className="file-size">
+                                                {formatFileSize(message.attachment_info.file_size)}
+                                              </div>
+                                            )}
+                                          </div>
+                                          <span className="download-icon">⬇️</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="message-text">
+                                      {renderTextWithLinks(message.content, { color: isOwn ? '#ffffff' : '#050505' })}
                                     </div>
                                   )}
-                                </div>
-                                <span className="download-icon">⬇️</span>
+                                  
+                                  {/* Edit/Delete buttons for own messages (only for text messages) */}
+                                  {messageIsOwn && !message.attachment_url && (
+                                    <div style={{ 
+                                      position: 'absolute', 
+                                      top: '4px', 
+                                      right: '4px', 
+                                      display: 'flex', 
+                                      gap: '4px',
+                                      opacity: 0,
+                                      transition: 'opacity 0.2s'
+                                    }} 
+                                    className="message-actions"
+                                    onMouseEnter={(e) => {
+                                      const target = e.currentTarget;
+                                      target.style.opacity = '1';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      const target = e.currentTarget;
+                                      target.style.opacity = '0';
+                                    }}
+                                    >
+                                      <button
+                                        onClick={() => {
+                                          setEditingMessageId(message.id);
+                                          setEditMessageContent(message.content);
+                                        }}
+                                        style={{
+                                          padding: '4px 8px',
+                                          border: 'none',
+                                          borderRadius: '4px',
+                                          background: '#f0f0f0',
+                                          cursor: 'pointer',
+                                          fontSize: '11px',
+                                          color: '#666'
+                                        }}
+                                        title="Edit message"
+                                      >
+                                        ✏️
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteMessage(message.id)}
+                                        style={{
+                                          padding: '4px 8px',
+                                          border: 'none',
+                                          borderRadius: '4px',
+                                          background: '#f0f0f0',
+                                          cursor: 'pointer',
+                                          fontSize: '11px',
+                                          color: '#666'
+                                        }}
+                                        title="Delete message"
+                                      >
+                                        🗑️
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                            
+                            {messageIndex === group.messages.length - 1 && (
+                              <div className="message-time" style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11px', color: '#999' }}>
+                                {formatTime(message.created_at)}
+                                {isOwn && (
+                                  <div className="message-status">
+                                    <span className="status-icon delivered">✓✓</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
-                        ) : (
-                          <div className="message-text">{message.content}</div>
-                        )}
                         </div>
-                        
-                        {messageIndex === group.messages.length - 1 && (
-                          <div className="message-time">
-                            {formatTime(message.created_at)}
-                            {isOwn && (
-                              <div className="message-status">
-                                <span className="status-icon delivered">✓✓</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 );
               })}
@@ -666,6 +937,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
             <div className="input-wrapper">
               <div className="input-actions">
                 <button 
+                  type="button"
                   className="input-action-btn"
                   onClick={() => fileInputRef.current?.click()}
                   title="Attach file"
@@ -673,20 +945,16 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                   📎
                 </button>
                 <button 
+                  type="button"
                   className="input-action-btn"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowEmojiPicker(!showEmojiPicker);
+                  }}
                   title="Emoji"
                 >
                   😊
-                </button>
-                <button 
-                  className="input-action-btn"
-                  onMouseDown={() => setIsRecording(true)}
-                  onMouseUp={() => setIsRecording(false)}
-                  onMouseLeave={() => setIsRecording(false)}
-                  title="Voice message"
-                >
-                  {isRecording ? '🔴' : '🎤'}
                 </button>
               </div>
               
@@ -717,6 +985,33 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
               </div>
             </div>
         </div>
+
+        {/* Emoji Picker */}
+        {showEmojiPicker && (
+          <div 
+            className="emoji-picker-container"
+            style={{
+              position: 'absolute',
+              bottom: '80px',
+              right: '20px',
+              zIndex: 1000,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              background: '#fff',
+              border: '1px solid #e0e0e0'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <EmojiPicker
+              onEmojiClick={handleEmojiClick}
+              width={350}
+              height={400}
+              previewConfig={{ showPreview: false }}
+              skinTonesDisabled
+            />
+          </div>
+        )}
 
         {/* Hidden file input */}
         <input
@@ -779,6 +1074,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                 content: saved.content,
                 sender_id: saved.sender.user_id,
                 sender_name: saved.sender.name,
+                sender_avatar: saved.sender.avatar_url || null,
                 created_at: saved.created_at,
                 is_read: saved.is_read,
                 message_type: (saved as any).message_type,

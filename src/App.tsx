@@ -331,11 +331,11 @@ const App: React.FC = () => {
             }
           />
 
-          {/* Messaging routes - available to alumni and OJT users */}
+          {/* Messaging routes - available to all users with messaging access (alumni, OJT, admin, peso, coordinator) */}
           <Route
             path="/messages"
             element={
-              <PrivateRoute roles={['user', 'ojt']}>
+              <PrivateRoute roles={['user', 'ojt', 'admin', 'peso', 'coordinator']}>
                 <Messaging />
               </PrivateRoute>
             }
