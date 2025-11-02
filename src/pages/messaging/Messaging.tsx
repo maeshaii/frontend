@@ -55,6 +55,8 @@ const Messaging: React.FC = () => {
         setIsLoading(true);
         const data = await listConversations();
         setConversations(data || []);
+        // Emit event to update badge in top bar
+        window.dispatchEvent(new CustomEvent('conversationsUpdated', { detail: data || [] }));
       } catch (error) {
         console.error('Failed to load conversations:', error);
       } finally {
@@ -71,9 +73,14 @@ const Messaging: React.FC = () => {
       const detail = (e as CustomEvent).detail || {};
       const conversationId: number | undefined = detail.conversationId;
       if (!conversationId) return;
-      setConversations(prev => prev.map(c => 
-        c.conversation_id === conversationId ? { ...c, unread_count: 0 } : c
-      ));
+      setConversations(prev => {
+        const updated = prev.map(c => 
+          c.conversation_id === conversationId ? { ...c, unread_count: 0 } : c
+        );
+        // Emit event to update badge in top bar
+        window.dispatchEvent(new CustomEvent('conversationsUpdated', { detail: updated }));
+        return updated;
+      });
     };
     window.addEventListener('conversationRead', handler as EventListener);
     return () => window.removeEventListener('conversationRead', handler as EventListener);
@@ -82,20 +89,34 @@ const Messaging: React.FC = () => {
   const handleSelectConversation = (conversation: ConversationSummary) => {
     setSelectedConversation(conversation);
     // Optimistically clear unread count in the sidebar when opening a conversation
-    setConversations(prev => prev.map(c => 
-      c.conversation_id === conversation.conversation_id 
-        ? { ...c, unread_count: 0 } 
-        : c
-    ));
+    setConversations(prev => {
+      const updated = prev.map(c => 
+        c.conversation_id === conversation.conversation_id 
+          ? { ...c, unread_count: 0 } 
+          : c
+      );
+      // Emit event to update badge in top bar
+      window.dispatchEvent(new CustomEvent('conversationsUpdated', { detail: updated }));
+      return updated;
+    });
     if (isMobile) {
       // On mobile, we might want to hide the conversation list
       // and show only the chat interface
     }
   };
 
-  const handleConversationCreated = (conversation: ConversationSummary) => {
+  const handleConversationCreated = async (conversation: ConversationSummary) => {
     setSelectedConversation(conversation);
     setShowUserSearch(false);
+    // Refresh conversations list to include new conversation
+    try {
+      const data = await listConversations();
+      setConversations(data || []);
+      // Emit event to update badge in top bar
+      window.dispatchEvent(new CustomEvent('conversationsUpdated', { detail: data || [] }));
+    } catch (error) {
+      console.error('Failed to refresh conversations:', error);
+    }
   };
 
   const handleBackToConversations = () => {
@@ -113,6 +134,25 @@ const Messaging: React.FC = () => {
     window.location.href = '/logout';
   };
 
+  // Determine user type from localStorage
+  const [userType, setUserType] = useState<{ isAdmin: boolean; isPeso: boolean }>({ isAdmin: false, isPeso: false });
+  
+  useEffect(() => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        const accountType = user?.account_type || {};
+        setUserType({
+          isAdmin: !!(accountType.admin || accountType.ccict),
+          isPeso: !!accountType.peso
+        });
+      }
+    } catch (error) {
+      console.error('Error parsing user data:', error);
+    }
+  }, []);
+
 	return (
 		<div className="messaging-page">
       {/* Global Top Bar */}
@@ -120,8 +160,8 @@ const Messaging: React.FC = () => {
         showProfile={showProfile}
         setShowProfile={setShowProfile}
         handleLogout={handleLogout}
-        isAdmin={false}
-        isPeso={false}
+        isAdmin={userType.isAdmin}
+        isPeso={userType.isPeso}
       />
 
 			<div className="messaging-container">

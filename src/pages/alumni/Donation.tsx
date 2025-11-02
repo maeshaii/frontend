@@ -4,7 +4,7 @@ import { Box, Card, Typography, Avatar, TextField } from '@mui/material';
 import AlumniTopBar from './AlumniTopBar';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
-import RepostCard from '../../components/RepostCard';
+import RepostCard, { PostItemLite } from '../../components/RepostCard';
 import ctulogo from '../../images/ctulogo.png';
 import { getProfilePicUrl, handleProfilePicError } from '../../utils/profilePicUtils';
 import { getDonationRequests, followUser, unfollowUser, checkFollowStatus } from '../../services/api';
@@ -712,7 +712,7 @@ const DonationPage: React.FC = () => {
                           likes_count: item.repostData.original_post.likes_count || 0,
                           comments: item.repostData.original_post.comments || [],
                           comments_count: item.repostData.original_post.comments_count || 0
-                        } : undefined
+                        } as PostItemLite : undefined
                       }}
                       currentUserId={currentUserId}
                       formatTime={formatTime}

@@ -16,7 +16,7 @@ interface UserLite {
   profile_pic?: string;
 }
 
-interface PostItemLite {
+export interface PostItemLite {
   post_id?: number; // original post id
   donation_id?: number; // for donation reposts
   created_at?: string | null;

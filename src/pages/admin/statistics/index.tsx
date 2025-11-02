@@ -367,10 +367,6 @@ export default function Statistics() {
 
           </div>
 
-          <div style={styles.lastUpdated}>
-            Last updated: {lastUpdated.toLocaleTimeString()}
-          </div>
-
           {/* Buttons aligned to right */}
           <div className="filter-buttons">
             <button className="action-button" onClick={() => setShowModal(true)}>

@@ -222,6 +222,9 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   const [customJobInputs, setCustomJobInputs] = useState<{ [questionId: string]: boolean }>({});
   const [jobInputValues, setJobInputValues] = useState<{ [questionId: string]: string }>({});
   const [jobAlignment, setJobAlignment] = useState<Record<string, string>>({});
+  
+  // State for multiple award documents (question 31)
+  const [awardDocuments, setAwardDocuments] = useState<{ [questionId: number]: File[] }>({});
 
   // Conditional rendering logic
   const shouldShowCategory = (category: CategoryItem) => {
@@ -634,6 +637,22 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         options: undefined,
       };
     }
+    if (text.includes('date hired') || (text.includes('hired') && text.includes('date'))) {
+      return {
+        type: 'date',
+        placeholder: 'YYYY-MM-DD',
+        validate: (v: string) => (v ? '' : 'Date hired required.'),
+        options: undefined,
+      };
+    }
+    if (text.includes('date started') || (text.includes('started') && text.includes('date'))) {
+      return {
+        type: 'date',
+        placeholder: 'YYYY-MM-DD',
+        validate: (v: string) => (v ? '' : 'Date started required.'),
+        options: undefined,
+      };
+    }
     if (
       text.includes('facebook') ||
       text.includes('twitter') ||
@@ -660,6 +679,24 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
           { value: 'above_30000', label: '30,000 above' }
         ],
         placeholder: 'Select salary range',
+        validate: (v: string) => {
+          if (!v) return ''; // Allow empty for optional fields
+          return '';
+        }
+      };
+    }
+    // Handle employment duration as select dropdown
+    if (text.includes('how long') && text.includes('employed')) {
+      return {
+        type: 'select',
+        options: [
+          { value: 'less_than_6_months', label: 'Less than 6 months' },
+          { value: '6_months_1_year', label: '6 months – 1 year' },
+          { value: '1_2_years', label: '1 – 2 years' },
+          { value: '3_5_years', label: '3 – 5 years' },
+          { value: 'more_than_5_years', label: 'More than 5 years' }
+        ],
+        placeholder: 'Select employment duration',
         validate: (v: string) => {
           if (!v) return ''; // Allow empty for optional fields
           return '';
@@ -712,7 +749,23 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         for (const question of category.questions) {
           if (question.required) {
             const answer = formResponses[question.id];
-            if (!answer || (typeof answer === 'string' && answer.trim() === '')) {
+            // Check if question 31 (award supporting docs) - needs at least one file
+            const lowerText = question.text.toLowerCase();
+            const isAwardSupportingDocs = (lowerText.includes('supporting documents') || lowerText.includes('supporting document')) && 
+                                           (lowerText.includes('awards') || lowerText.includes('award') || lowerText.includes('recognition'));
+            
+            if (isAwardSupportingDocs) {
+              // For award documents, check if array has at least one valid file
+              const files = awardDocuments[question.id] || [];
+              const hasValidFile = Array.isArray(files) && files.some(file => file !== null && file !== undefined);
+              if (!hasValidFile) {
+                missingRequiredQuestions.push({
+                  questionNumber: getQuestionNumber(categories.indexOf(category), category.questions.indexOf(question)),
+                  questionText: question.text
+                });
+              }
+            } else if (!answer || (typeof answer === 'string' && answer.trim() === '') || 
+                     (Array.isArray(answer) && answer.length === 0)) {
               missingRequiredQuestions.push({
                 questionNumber: getQuestionNumber(categories.indexOf(category), category.questions.indexOf(question)),
                 questionText: question.text
@@ -743,8 +796,29 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
       const processedAnswers: Record<string, any> = {};
 
       for (const [questionId, answer] of Object.entries(formResponses)) {
-        if (answer instanceof File) {
-          // This is a file upload
+        // Check if this is question 31 (award supporting docs) with multiple files
+        const question = categories
+          .flatMap(cat => cat.questions)
+          .find(q => q.id.toString() === questionId.toString());
+        
+        const lowerText = question?.text.toLowerCase() || '';
+        const isAwardSupportingDocs = (lowerText.includes('supporting documents') || lowerText.includes('supporting document')) && 
+                                       (lowerText.includes('awards') || lowerText.includes('award') || lowerText.includes('recognition'));
+        
+        if (isAwardSupportingDocs && Array.isArray(answer)) {
+          // Handle multiple award documents (question 31)
+          const files = awardDocuments[parseInt(questionId)] || [];
+          const validFiles = files.filter(file => file !== null && file !== undefined);
+          
+          processedAnswers[questionId] = { type: 'file', multiple: true, count: validFiles.length };
+          
+          // Append each file with index
+          validFiles.forEach((file, index) => {
+            formData.append(`file_${questionId}_${index}`, file);
+            console.log(`🔍 Form Submit Debug - Award document ${index + 1} for question ${questionId}:`, file.name);
+          });
+        } else if (answer instanceof File) {
+          // This is a single file upload
           processedAnswers[questionId] = { type: 'file' };
           formData.append(`file_${questionId}`, answer);
           console.log(`🔍 Form Submit Debug - File upload for question ${questionId}:`, answer.name);
@@ -966,6 +1040,30 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                     cat.title.toLowerCase().includes('further study')}
                   {cat.questions.sort((a, b) => (a.order || 0) - (b.order || 0)).map((q, qIdx) => {
                     if (shouldHideQuestionText(q.text)) return null;
+                    
+                    // Check if this is question 31 (Supporting Documents for awards/recognition)
+                    // Only show if question 30 (awards/recognition) is answered "Yes"
+                    const lowerText = q.text.toLowerCase();
+                    const isAwardSupportingDocs = (lowerText.includes('supporting documents') || lowerText.includes('supporting document')) && 
+                                                   (lowerText.includes('awards') || lowerText.includes('award') || lowerText.includes('recognition'));
+                    
+                    if (isAwardSupportingDocs) {
+                      // Find question 30 (awards/recognition question)
+                      const awardQuestion = categories
+                        .flatMap(cat => cat.questions)
+                        .find(ques => {
+                          const qt = ques.text.toLowerCase();
+                          return ques.type === 'radio' && 
+                                 (qt.includes('awards') || qt.includes('award') || qt.includes('recognition')) &&
+                                 (qt.includes('received') || qt.includes('during') || qt.includes('employment'));
+                        });
+                      
+                      // Only show question 31 if question 30 is answered "Yes"
+                      if (!awardQuestion || formResponses[awardQuestion.id] !== 'Yes') {
+                        return null;
+                      }
+                    }
+                    
                     if (q.text.toLowerCase().includes('current position')) {
                       return (
                         <div key={q.id} style={{ marginBottom: 16 }}>
@@ -1000,12 +1098,14 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                               const lower = q.text.toLowerCase();
                               const isAge = lower.includes('age');
                               const isBirth = lower.includes('birth') || lower.includes('bday') || lower.includes('date of birth');
+                              const isDateHired = lower.includes('date hired') || (lower.includes('hired') && lower.includes('date'));
+                              const isDateStarted = lower.includes('date started') || (lower.includes('started') && lower.includes('date'));
                               const isPhone = lower.includes('phone') || lower.includes('mobile') || lower.includes('contact');
                               const isSalary = lower.includes('salary') || lower.includes('salary range');
-                              const type = isAge ? 'number' : isBirth ? 'date' : isPhone ? 'tel' : inputProps.type;
-                              const placeholder = isBirth ? 'YYYY-MM-DD' : inputProps.placeholder;
+                              const type = isAge ? 'number' : isBirth ? 'date' : isDateHired ? 'date' : isDateStarted ? 'date' : isPhone ? 'tel' : inputProps.type;
+                              const placeholder = isBirth || isDateHired || isDateStarted ? 'YYYY-MM-DD' : inputProps.placeholder;
                               
-                              // Handle select dropdown for salary fields
+                              // Handle select dropdown for special fields (salary, employment duration, etc.)
                               if (inputProps.type === 'select' && inputProps.options) {
                                 return (
                                   <>
@@ -1068,51 +1168,180 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                                 </>
                               );
                             })()}
-                          {q.type === 'file' && (
-                            <div className="file-upload-container">
-                              <input
-                                type="file"
-                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
-                                onChange={(e) => {
-                                  const file = e.target.files && e.target.files[0];
-                                  if (file) {
-                                    // Validate file size (10MB)
-                                    if (file.size > 10 * 1024 * 1024) {
-                                      alert('File size must be less than 10MB');
-                                      e.target.value = '';
-                                      return;
-                                    }
+                          {q.type === 'file' && (() => {
+                            const lowerText = q.text.toLowerCase();
+                            const isAwardSupportingDocs = (lowerText.includes('supporting documents') || lowerText.includes('supporting document')) && 
+                                                           (lowerText.includes('awards') || lowerText.includes('award') || lowerText.includes('recognition'));
+                            
+                            // Handle multiple award documents (question 31)
+                            if (isAwardSupportingDocs) {
+                              const currentFiles = awardDocuments[q.id] || [];
+                              
+                              const handleFileChange = (index: number, file: File | null) => {
+                                if (!file) return;
+                                
+                                // Validate file size (10MB)
+                                if (file.size > 10 * 1024 * 1024) {
+                                  alert('File size must be less than 10MB');
+                                  return;
+                                }
 
-                                    // Validate file type
-                                    const allowedTypes = [
-                                      'application/pdf',
-                                      'application/msword',
-                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                                      'image/jpeg',
-                                      'image/jpg',
-                                      'image/png',
-                                      'image/gif',
-                                    ];
+                                // Validate file type
+                                const allowedTypes = [
+                                  'application/pdf',
+                                  'application/msword',
+                                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                  'image/jpeg',
+                                  'image/jpg',
+                                  'image/png',
+                                  'image/gif',
+                                ];
 
-                                    if (!allowedTypes.includes(file.type)) {
-                                      alert(
-                                        'Please select a valid file type: PDF, DOC, DOCX, JPG, PNG, or GIF'
-                                      );
-                                      e.target.value = '';
-                                      return;
-                                    }
-                                  }
-                                  handleResponseChange(cat.id, q.id, file);
-                                }}
-                              />
-                              {formResponses[q.id] && (
-                                <div className="file-info">
-                                  <strong>Selected file:</strong> {formResponses[q.id].name}(
-                                  {(formResponses[q.id].size / 1024 / 1024).toFixed(2)} MB)
+                                if (!allowedTypes.includes(file.type)) {
+                                  alert('Please select a valid file type: PDF, DOC, DOCX, JPG, PNG, or GIF');
+                                  return;
+                                }
+
+                                const updatedFiles = [...currentFiles];
+                                updatedFiles[index] = file;
+                                setAwardDocuments({ ...awardDocuments, [q.id]: updatedFiles });
+                                handleResponseChange(cat.id, q.id, updatedFiles);
+                              };
+
+                              const addAnotherAward = () => {
+                                const updatedFiles = currentFiles.length > 0 ? [...currentFiles, null as any] : [null as any];
+                                setAwardDocuments({ ...awardDocuments, [q.id]: updatedFiles });
+                                // Initialize form response if empty
+                                if (!formResponses[q.id] || !Array.isArray(formResponses[q.id])) {
+                                  handleResponseChange(cat.id, q.id, updatedFiles);
+                                }
+                              };
+
+                              const removeAward = (index: number) => {
+                                const updatedFiles = currentFiles.filter((_, i) => i !== index);
+                                setAwardDocuments({ ...awardDocuments, [q.id]: updatedFiles });
+                                handleResponseChange(cat.id, q.id, updatedFiles);
+                              };
+
+                              return (
+                                <div>
+                                  {currentFiles.map((file, index) => (
+                                    <div key={index} style={{ marginBottom: 16, padding: 12, border: '1px solid #ddd', borderRadius: 4 }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                        <label style={{ fontWeight: 500, fontSize: 14 }}>
+                                          Award Document {index + 1}
+                                        </label>
+                                        {currentFiles.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => removeAward(index)}
+                                            style={{
+                                              backgroundColor: '#ff3b3b',
+                                              color: 'white',
+                                              border: 'none',
+                                              padding: '4px 12px',
+                                              borderRadius: 4,
+                                              cursor: 'pointer',
+                                              fontSize: 12
+                                            }}
+                                          >
+                                            Remove
+                                          </button>
+                                        )}
+                                      </div>
+                                      <div className="file-upload-container">
+                                        <input
+                                          type="file"
+                                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                                          onChange={(e) => {
+                                            const file = e.target.files && e.target.files[0];
+                                            if (file) {
+                                              handleFileChange(index, file);
+                                            }
+                                            e.target.value = '';
+                                          }}
+                                        />
+                                        {file && (
+                                          <div className="file-info">
+                                            <strong>Selected file:</strong> {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    onClick={addAnotherAward}
+                                    style={{
+                                      backgroundColor: '#1e4c7a',
+                                      color: 'white',
+                                      border: 'none',
+                                      padding: '10px 20px',
+                                      borderRadius: 4,
+                                      cursor: 'pointer',
+                                      fontSize: 14,
+                                      fontWeight: 500,
+                                      marginTop: 8
+                                    }}
+                                  >
+                                    + Add Another Award
+                                  </button>
+                                  {currentFiles.length === 0 && (
+                                    <div style={{ marginTop: 8, color: '#888', fontSize: 12 }}>
+                                      Click the button above to add your first award document.
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          )}
+                              );
+                            }
+                            
+                            // Regular single file upload for other questions
+                            return (
+                              <div className="file-upload-container">
+                                <input
+                                  type="file"
+                                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                                  onChange={(e) => {
+                                    const file = e.target.files && e.target.files[0];
+                                    if (file) {
+                                      // Validate file size (10MB)
+                                      if (file.size > 10 * 1024 * 1024) {
+                                        alert('File size must be less than 10MB');
+                                        e.target.value = '';
+                                        return;
+                                      }
+
+                                      // Validate file type
+                                      const allowedTypes = [
+                                        'application/pdf',
+                                        'application/msword',
+                                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                        'image/jpeg',
+                                        'image/jpg',
+                                        'image/png',
+                                        'image/gif',
+                                      ];
+
+                                      if (!allowedTypes.includes(file.type)) {
+                                        alert(
+                                          'Please select a valid file type: PDF, DOC, DOCX, JPG, PNG, or GIF'
+                                        );
+                                        e.target.value = '';
+                                        return;
+                                      }
+                                    }
+                                    handleResponseChange(cat.id, q.id, file);
+                                  }}
+                                />
+                                {formResponses[q.id] && (
+                                  <div className="file-info">
+                                    <strong>Selected file:</strong> {formResponses[q.id].name}(
+                                    {(formResponses[q.id].size / 1024 / 1024).toFixed(2)} MB)
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                           {q.type === 'radio' &&
                             getDisplayOptions(q) &&
                             getDisplayOptions(q)!.map((opt) => (
@@ -1128,34 +1357,37 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                               </label>
                             ))}
                           {q.type === 'checkbox' &&
-                            q.options &&
-                            q.options.map((opt) => (
-                              <label key={opt} style={{ marginRight: 12 }}>
-                                <input
-                                  type="checkbox"
-                                  value={opt}
-                                  checked={
-                                    Array.isArray(formResponses[q.id]) &&
-                                    formResponses[q.id].includes(opt)
-                                  }
-                                  onChange={(e) => {
-                                    const prev = Array.isArray(formResponses[q.id])
-                                      ? formResponses[q.id]
-                                      : [];
-                                    if (e.target.checked) {
-                                      handleResponseChange(cat.id, q.id, [...prev, opt]);
-                                    } else {
-                                      handleResponseChange(
-                                        cat.id,
-                                        q.id,
-                                        prev.filter((v: string) => v !== opt)
-                                      );
-                                    }
-                                  }}
-                                />{' '}
-                                {opt}
-                              </label>
-                            ))}
+                            q.options && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {q.options.map((opt) => (
+                                  <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <input
+                                      type="checkbox"
+                                      value={opt}
+                                      checked={
+                                        Array.isArray(formResponses[q.id]) &&
+                                        formResponses[q.id].includes(opt)
+                                      }
+                                      onChange={(e) => {
+                                        const prev = Array.isArray(formResponses[q.id])
+                                          ? formResponses[q.id]
+                                          : [];
+                                        if (e.target.checked) {
+                                          handleResponseChange(cat.id, q.id, [...prev, opt]);
+                                        } else {
+                                          handleResponseChange(
+                                            cat.id,
+                                            q.id,
+                                            prev.filter((v: string) => v !== opt)
+                                          );
+                                        }
+                                      }}
+                                    />{' '}
+                                    {opt}
+                                  </label>
+                                ))}
+                              </div>
+                            )}
                           {q.type === 'multiple' && q.options && (
                             <select
                               value={formResponses[q.id] || ''}
