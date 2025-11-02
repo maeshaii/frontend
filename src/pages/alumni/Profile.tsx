@@ -1159,7 +1159,7 @@ getPosts()
         {/* Left Sidebar */}
         <div className="profile-left-sidebar">
           {/* Introduction */}
-          <div className="profile-card">
+          <div>
             <div className="profile-intro-title">Introduction</div>
             <div className="profile-bio-container">
               {/* Show bio if exists, otherwise show Add Bio button */}
@@ -1271,7 +1271,7 @@ getPosts()
 
           {/* Engagement Points - Only for Alumni viewing their own profile */}
           {user && user.account_type?.user && isOwnProfile && (
-            <div className="profile-card" style={{ marginTop: '16px' }}>
+            <div style={{ marginTop: '16px' }}>
               <div className="profile-intro-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>🏆</span>
                 <span>Engagement Points</span>
@@ -1461,7 +1461,7 @@ getPosts()
 
           {/* Followers - Hide for admin and PESO accounts */}
           {!user?.account_type?.peso && (!user?.account_type?.admin || isOwnProfile) && (!user?.account_type?.ccict || isOwnProfile) && (
-          <div className="profile-followers-card">
+          <div style={{ marginBottom: '24px' }}>
             <div className="profile-followers-header">
               <div className="profile-followers-title">Followers ({followers.length})</div>
               <div
@@ -1528,7 +1528,7 @@ getPosts()
 
           {/* Following - Hide for admin and PESO accounts */}
           {!user?.account_type?.peso && (!user?.account_type?.admin || isOwnProfile) && (!user?.account_type?.ccict || isOwnProfile) && (
-          <div className="profile-followers-card">
+          <div style={{ marginBottom: '24px' }}>
             <div className="profile-followers-header">
               <div className="profile-followers-title">Following ({following.length})</div>
               <div
