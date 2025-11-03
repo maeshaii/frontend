@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost, getPostLikes, getRepostLikes } from '../services/api';
+import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost, getPostLikes, getRepostLikes, getDonationLikes, getForumLikes } from '../services/api';
 import { 
   commentOnForumPost, 
   deleteForumComment, 
@@ -1076,6 +1076,13 @@ const PostCard: React.FC<PostCardProps> = ({
       if (isRepostPost && repostData?.repost_id) {
         // Fetch likes for repost
         likesData = await getRepostLikes(repostData.repost_id);
+      } else if (isDonation) {
+        // Fetch likes for donation post
+        const donationId = (post as any).donation_id || post.post_id;
+        likesData = await getDonationLikes(donationId);
+      } else if (isForum) {
+        // Fetch likes for forum post
+        likesData = await getForumLikes(post.post_id);
       } else {
         // Fetch likes for regular post
         likesData = await getPostLikes(post.post_id);
@@ -1192,7 +1199,7 @@ const PostCard: React.FC<PostCardProps> = ({
                     </div>
                     {isDonation && (
                       <span style={{
-                        background: 'linear-gradient(135deg, #174f84 0%, #2d5aa0 100%)',
+                        backgroundColor: '#059669',
                         color: '#ffffff',
                         fontSize: '10px',
                         fontWeight: '600',
@@ -1202,7 +1209,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         letterSpacing: '0.5px',
                         boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                       }}>
-                        💝 Donation
+                        Donation
                       </span>
                     )}
                   </div>
@@ -2085,7 +2092,7 @@ const PostCard: React.FC<PostCardProps> = ({
               </div>
               {isDonation && (
                 <span style={{
-                  background: 'linear-gradient(135deg, #174f84 0%, #2d5aa0 100%)',
+                  backgroundColor: '#059669',
                   color: '#ffffff',
                   fontSize: '10px',
                   fontWeight: '600',
@@ -2095,7 +2102,7 @@ const PostCard: React.FC<PostCardProps> = ({
                   letterSpacing: '0.5px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                 }}>
-                  💝 Donation
+                  Donation
                 </span>
               )}
             </div>

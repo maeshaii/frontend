@@ -988,6 +988,46 @@ export const getRepostLikes = async (repostId: number) => {
   return response.data;
 };
 
+// Get likes for a specific donation
+export const getDonationLikes = async (donationId: number) => {
+  // Use the detail endpoint which includes likes
+  const response = await api.get(`donations/${donationId}/`);
+  if (response.data && response.data.likes) {
+    // Transform to match the likes format
+    return {
+      likes: response.data.likes.map((like: any) => ({
+        user_id: like.user?.user_id || like.user_id,
+        f_name: like.user?.f_name || like.f_name,
+        m_name: like.user?.m_name || like.m_name,
+        l_name: like.user?.l_name || like.l_name,
+        profile_pic: like.user?.profile_pic || like.profile_pic,
+        initials: like.user?.initials || like.initials
+      }))
+    };
+  }
+  return { likes: [] };
+};
+
+// Get likes for a specific forum post
+export const getForumLikes = async (forumId: number) => {
+  // Use the detail endpoint which includes likes (forum uses post_id but stored separately)
+  const response = await api.get(`forum/${forumId}/`);
+  if (response.data && response.data.likes) {
+    // Transform to match the likes format
+    return {
+      likes: response.data.likes.map((like: any) => ({
+        user_id: like.user?.user_id || like.user_id,
+        f_name: like.user?.f_name || like.f_name,
+        m_name: like.user?.m_name || like.m_name,
+        l_name: like.user?.l_name || like.l_name,
+        profile_pic: like.user?.profile_pic || like.profile_pic,
+        initials: like.user?.initials || like.initials
+      }))
+    };
+  }
+  return { likes: [] };
+};
+
 export const getDonationComments = async (donationId: number) => {
   const response = await api.get(`donations/${donationId}/comments/`);
   return response.data;

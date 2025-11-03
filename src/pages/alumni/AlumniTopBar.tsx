@@ -229,21 +229,71 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
       dashboardPath = `/dashboard/${userId}`;
     }
     
-    navigate(dashboardPath);
-    setTimeout(() => {
-      const selectors = ['.center-content', '.profile-center-content', '.main-content'];
-      let scrolled = false;
-      for (const sel of selectors) {
-        const el = document.querySelector(sel);
-        if (el) {
-          el.scrollTo({ top: 0, behavior: 'smooth' });
-          scrolled = true;
-        }
+    // Check if we're already on the dashboard page
+    const currentPath = location.pathname;
+    const isAlreadyOnDashboard = currentPath.includes('/dashboard/');
+    
+    if (isAlreadyOnDashboard) {
+      // Just scroll to top if already on dashboard
+      // Find and scroll all scrollable containers
+      const scrollableFeed = document.querySelector('.scrollable-feed') as HTMLElement;
+      if (scrollableFeed && scrollableFeed.scrollTop > 0) {
+        scrollableFeed.scrollTo({ top: 0, behavior: 'smooth' });
       }
-      if (!scrolled) {
+      
+      // Also try other possible scroll containers and scroll them all
+      const selectors = ['.center-content', '.profile-center-content', '.main-content', '.page-container', '.main-content-container'];
+      selectors.forEach(sel => {
+        const el = document.querySelector(sel) as HTMLElement;
+        if (el && el.scrollTop > 0) {
+          el.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      });
+      
+      // Also check for body/html scrolling
+      if (document.body.scrollTop > 0) {
+        document.body.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      if (document.documentElement.scrollTop > 0) {
+        document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      
+      // Last resort: scroll window
+      if (window.scrollY > 0) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
-    }, 200);
+    } else {
+      // Navigate to dashboard and then scroll
+      navigate(dashboardPath);
+      setTimeout(() => {
+        // Try scrollable-feed first (main scroll container in UnifiedDashboard)
+        const scrollableFeed = document.querySelector('.scrollable-feed') as HTMLElement;
+        if (scrollableFeed) {
+          scrollableFeed.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        
+        // Try center-content as fallback
+        const centerContent = document.querySelector('.center-content') as HTMLElement;
+        if (centerContent) {
+          centerContent.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        
+        // Fallback to other possible scroll containers
+        const selectors = ['.scrollable-feed', '.center-content', '.profile-center-content', '.main-content', '.page-container', '.main-content-container'];
+        for (const sel of selectors) {
+          const el = document.querySelector(sel) as HTMLElement;
+          if (el) {
+            el.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+          }
+        }
+        
+        // Last resort: scroll window
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 200);
+    }
   };
 
   const handleNotificationClick = () => {
@@ -262,7 +312,41 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
       notificationPath = `/notifications`;
     }
     
-    navigate(notificationPath);
+    // Check if we're already on the notification page
+    const currentPath = location.pathname;
+    const isAlreadyOnNotification = currentPath.includes('/notification') || currentPath.includes('/notifications');
+    
+    if (isAlreadyOnNotification) {
+      // Just scroll to top if already on notification page
+      // Scroll all possible scroll containers
+      const selectors = ['.scrollable-feed', '.center-content', '.profile-center-content', '.main-content', '.page-container', '.main-content-container'];
+      let scrolled = false;
+      selectors.forEach(sel => {
+        const el = document.querySelector(sel) as HTMLElement;
+        if (el && el.scrollTop > 0) {
+          el.scrollTo({ top: 0, behavior: 'smooth' });
+          scrolled = true;
+        }
+      });
+      
+      // Also check for body/html scrolling
+      if (document.body.scrollTop > 0) {
+        document.body.scrollTo({ top: 0, behavior: 'smooth' });
+        scrolled = true;
+      }
+      if (document.documentElement.scrollTop > 0) {
+        document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
+        scrolled = true;
+      }
+      
+      // Last resort: scroll window
+      if (!scrolled && window.scrollY > 0) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } else {
+      // Navigate to notification page
+      navigate(notificationPath);
+    }
   };
 
   const handleProfileClick = () => {
@@ -289,7 +373,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   return (
     <div
       style={{
-        background: 'linear-gradient(135deg, #003366 0%, #0066cc 100%)',
+        background: '#174f84',
         padding: '14px 32px',
         display: 'flex',
         alignItems: 'center',
@@ -581,7 +665,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             borderRadius: '16px',
             transition: 'all 0.3s ease',
             background: location.pathname.includes('/dashboard') 
-              ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%)'
+              ? 'rgba(255, 255, 255, 0.2)'
               : 'transparent',
             boxShadow: location.pathname.includes('/dashboard') 
               ? '0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
@@ -622,7 +706,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             borderRadius: '16px',
             transition: 'all 0.3s ease',
             background: location.pathname.includes('/message') 
-              ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%)'
+              ? 'rgba(255, 255, 255, 0.2)'
               : 'transparent',
             boxShadow: location.pathname.includes('/message') 
               ? '0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
@@ -688,7 +772,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           borderRadius: '16px',
           transition: 'all 0.3s ease',
           background: location.pathname.includes('/notification') 
-            ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%)'
+            ? 'rgba(255, 255, 255, 0.2)'
             : 'transparent',
           boxShadow: location.pathname.includes('/notification') 
             ? '0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
@@ -765,7 +849,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               borderRadius: '16px',
               transition: 'all 0.3s ease',
               background: location.pathname.includes('/tracker') 
-                ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%)'
+                ? 'rgba(255, 255, 255, 0.2)'
                 : 'transparent',
               boxShadow: location.pathname.includes('/tracker') 
                 ? '0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
@@ -819,7 +903,15 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
-            <i className="pi pi-bars" style={{ color: 'white', fontSize: 20 }}></i>
+            <i className="pi pi-bars" style={{ 
+              color: 'white', 
+              fontSize: 20, 
+              display: 'inline-block',
+              minWidth: '20px',
+              minHeight: '20px',
+              lineHeight: '1',
+              fontFamily: 'primeicons'
+            }}></i>
             <span style={{ 
               color: 'white', 
               fontSize: 12, 

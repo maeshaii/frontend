@@ -464,7 +464,34 @@ const DonationPage: React.FC = () => {
   }
 
   return (
-    <Box sx={{ bgcolor: '#f0f4f8', minHeight: '100vh' }}>
+    <Box sx={{ 
+      bgcolor: '#f0f4f8', 
+      minHeight: '100vh',
+      overflowX: 'hidden',
+      '&::-webkit-scrollbar': {
+        display: 'none'
+      },
+      scrollbarWidth: 'none',
+      msOverflowStyle: 'none'
+    }}>
+      <style>
+        {`
+          body {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+          }
+          body::-webkit-scrollbar {
+            display: none;
+          }
+          * {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+          }
+          *::-webkit-scrollbar {
+            display: none;
+          }
+        `}
+      </style>
       <AlumniTopBar 
         showProfile={showProfile}
         setShowProfile={setShowProfile}
@@ -482,7 +509,7 @@ const DonationPage: React.FC = () => {
               p: 3,
               borderRadius: 3,
               boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-              background: 'linear-gradient(135deg, #d32f2f 0%, #f06292 100%)',
+              background: '#c62828',
               color: 'white'
             }}
           >
@@ -508,7 +535,7 @@ const DonationPage: React.FC = () => {
         </Box>  
 
         {/* Three Column Layout */}
-      <Box sx={{ display: 'flex', gap: 3, px: 3, pb: 3 }}>
+      <Box sx={{ display: 'flex', gap: 3, px: 3, pb: 3, alignItems: 'flex-start' }}>
         {/* Left Sidebar - About */}
           <Box sx={{ flex: '0 0 300px' }}>
           <Card sx={{ 
@@ -516,75 +543,82 @@ const DonationPage: React.FC = () => {
             boxShadow: '0 4px 16px rgba(0,0,0,0.06)', 
             p: 3, 
             bgcolor: 'white',
-            border: '1px solid rgba(0,0,0,0.05)',
-            background: 'linear-gradient(135deg, #ffffff 0%, #fff5f7 100%)'
+            border: '1px solid rgba(0,0,0,0.05)'
           }}>
             <Typography variant="h6" component="div" fontWeight="bold" sx={{ 
               mb: 2,
-              color: '#d32f2f',
+              color: '#c62828',
               display: 'flex',
               alignItems: 'center',
               gap: 1,
               fontSize: '20px'
             }}>
-              <span style={{ fontSize: '24px' }}>💝</span>
+              <span style={{ fontSize: '24px' }}>❤️</span>
               About Donations
             </Typography>
             <Typography variant="body2" sx={{ color: '#5a6c7d', mb: 2, lineHeight: 1.8, fontSize: '14px' }}>
-              Help fellow alumni by supporting their donation requests. Share your needs and connect with your batchmates for mutual support.
+              A dedicated space for CTU alumni to connect and support each other through donations. Whether you need assistance or want to help fellow alumni, this platform brings our community together for mutual aid and solidarity.
             </Typography>
-            <Box sx={{ mt: 2, pt: 2, borderTop: '2px solid rgba(211, 47, 47, 0.1)' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid rgba(198, 40, 40, 0.1)' }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
                   width: 8, 
                   height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#d32f2f', 
-                  mr: 1.5 
+                  bgcolor: '#c62828',
+                  mr: 1.5,
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
-                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
-                  Create donation requests for items you need
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Connect with alumni from your batch and beyond
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
                   width: 8, 
                   height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#d32f2f', 
-                  mr: 1.5 
+                  bgcolor: '#c62828',
+                  mr: 1.5,
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
-                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
-                  Browse requests from your batchmates
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Support causes that matter to our community
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
                   width: 8, 
                   height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#d32f2f', 
-                  mr: 1.5 
+                  bgcolor: '#c62828',
+                  mr: 1.5,
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
-                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
-                  Like and comment to show support
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Build stronger alumni relationships
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
                 <Box sx={{ 
                   width: 8, 
                   height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#d32f2f', 
-                  mr: 1.5 
+                  bgcolor: '#c62828',
+                  mr: 1.5,
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
-                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
-                  Repost to help spread the word
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Share resources and opportunities
                 </Typography>
               </Box>
             </Box>
-            <Box sx={{ mt: 3, p: 2.5, bgcolor: 'rgba(211, 47, 47, 0.05)', borderRadius: 2, border: '1px solid rgba(211, 47, 47, 0.1)' }}>
-              <Typography variant="body2" sx={{ color: '#d32f2f', fontStyle: 'italic', fontSize: '13px', lineHeight: 1.6 }}>
+            <Box sx={{ mt: 3, p: 2.5, bgcolor: '#f9fafb', borderRadius: 2, border: '1px solid rgba(0,0,0,0.08)' }}>
+              <Typography variant="body2" sx={{ color: '#6b7280', fontStyle: 'italic', fontSize: '13px', lineHeight: 1.6 }}>
                 "Together we can make a difference in each other's lives."
               </Typography>
             </Box>
@@ -592,7 +626,7 @@ const DonationPage: React.FC = () => {
         </Box>
 
           {/* Center Content */}
-          <Box sx={{ flex: '1 1 600px' }}>
+          <Box sx={{ flex: '1 1 600px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             {/* Start a post */}
             <Card sx={{ 
               mb: 3, 
@@ -601,6 +635,7 @@ const DonationPage: React.FC = () => {
               p: 3,
               border: '1px solid rgba(0,0,0,0.05)',
               transition: 'all 0.3s ease',
+              flexShrink: 0,
               '&:hover': {
                 boxShadow: '0 6px 20px rgba(0,0,0,0.1)',
                 transform: 'translateY(-2px)'
@@ -651,7 +686,7 @@ const DonationPage: React.FC = () => {
                       },
                       '&.Mui-focused': {
                         bgcolor: '#fff',
-                        boxShadow: '0 0 0 3px rgba(211, 47, 47, 0.1)'
+                        boxShadow: '0 0 0 3px rgba(198, 40, 40, 0.1)'
                       },
                     }
                   }}
@@ -661,7 +696,7 @@ const DonationPage: React.FC = () => {
 
           {/* Donations Feed */}
             <Box sx={{ 
-              maxHeight: 'calc(100vh - 300px)', 
+              maxHeight: 'calc(100vh - 250px)',
               overflowY: 'auto',
               scrollbarWidth: 'none', /* Firefox */
               msOverflowStyle: 'none', /* IE and Edge */
@@ -771,57 +806,17 @@ const DonationPage: React.FC = () => {
           </Box>
 
         {/* Right Sidebar - Stats */}
-          <Box sx={{ flex: '0 0 300px' }}>
-          <Card sx={{ 
-            p: 3, 
-            borderRadius: 3, 
-            boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
-            border: '1px solid rgba(0,0,0,0.05)',
-            background: 'linear-gradient(135deg, #ffffff 0%, #fff5f7 100%)'
-          }}>
-            <Typography variant="h6" fontWeight="bold" sx={{ 
-              color: '#d32f2f',
-              mb: 3,
-              fontSize: '18px'
-            }}>
-              📊 Quick Stats
-            </Typography>
-            <Box sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '14px' }}>
-                  Total Requests
-                </Typography>
-                <Typography variant="h6" fontWeight="bold" sx={{ color: '#d32f2f' }}>
-                  {donations.length}
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '14px' }}>
-                  Your Requests
-                </Typography>
-                <Typography variant="h6" fontWeight="bold" sx={{ color: '#d32f2f' }}>
-                  {donations.filter((d: any) => Number(d.user?.user_id) === Number(currentUserId)).length}
-                </Typography>
-              </Box>
-            </Box>
-            <Box sx={{ pt: 2, borderTop: '2px solid rgba(211, 47, 47, 0.1)' }}>
-              <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                Help make a positive impact by supporting your batchmates' donation requests.
-              </Typography>
-            </Box>
-          </Card>
-
+          <Box sx={{ flex: '0 0 300px', display: 'flex', flexDirection: 'column' }}>
           {/* Tips Card */}
           <Card sx={{ 
-            mt: 3,
             p: 3, 
             borderRadius: 3, 
             boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
             border: '1px solid rgba(0,0,0,0.05)',
-            background: 'linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)'
+            bgcolor: 'white'
           }}>
             <Typography variant="h6" fontWeight="bold" sx={{ 
-              color: '#1976d2',
+              color: '#059669',
               mb: 2.5,
               fontSize: '18px'
             }}>
@@ -830,54 +825,58 @@ const DonationPage: React.FC = () => {
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#1976d2', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Be specific about what you need
+                  Provide clear details about your situation
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#1976d2', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Include images when possible
+                  Include relevant photos or documents
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#1976d2', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Respond promptly to offers
+                  Set realistic timelines if applicable
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#1976d2', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Express gratitude for donations
+                  Update your request as circumstances change
                 </Typography>
               </Box>
             </Box>
@@ -890,10 +889,10 @@ const DonationPage: React.FC = () => {
             borderRadius: 3, 
             boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
             border: '1px solid rgba(0,0,0,0.05)',
-            background: 'linear-gradient(135deg, #fff9e6 0%, #fffce8 100%)'
+            bgcolor: 'white'
           }}>
             <Typography variant="h6" fontWeight="bold" sx={{ 
-              color: '#f57c00',
+              color: '#059669',
               mb: 2,
               fontSize: '18px'
             }}>
@@ -902,41 +901,58 @@ const DonationPage: React.FC = () => {
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#f57c00', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Like to show your support
+                  Share requests to increase visibility
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#f57c00', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Comment to offer help
+                  Reach out privately to offer assistance
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                <Box sx={{ 
+                  width: 8, 
+                  height: 8, 
+                  borderRadius: '50%', 
+                  bgcolor: '#059669',
+                  mr: 1.5,
+                  mt: 0.75,
+                  flexShrink: 0
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Connect requesters with relevant resources
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#f57c00', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Repost to spread the word
+                  Follow up to see how you can continue helping
                 </Typography>
               </Box>
             </Box>

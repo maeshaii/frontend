@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { likeRepost, unlikeRepost, commentOnRepost, getRepostLikes, editRepostComment, deleteRepostComment, editRepost, deleteRepost, editPost, deletePost, getCommentReplies } from '../services/api';
 import { getProfilePicUrl, handleProfilePicError, getImageUrl } from '../utils/profilePicUtils';
 import RepostButton from './RepostButton';
@@ -668,7 +669,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
               </div>
               {context === 'donation' && (
                 <span style={{
-                  background: 'linear-gradient(135deg, #174f84 0%, #2d5aa0 100%)',
+                  backgroundColor: '#059669',
                   color: '#ffffff',
                   fontSize: '10px',
                   fontWeight: '600',
@@ -678,7 +679,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                   letterSpacing: '0.5px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                 }}>
-                  💝 Donation
+                  Donation
                 </span>
               )}
             </div>
@@ -870,7 +871,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                   <div style={{ fontWeight: 'bold', fontSize: 13, color: '#333' }}>{originalPosterName || 'Original Post'}</div>
                   {original.donation_id && (
                     <span style={{
-                      background: 'linear-gradient(135deg, #174f84 0%, #2d5aa0 100%)',
+                      backgroundColor: '#059669',
                       color: '#ffffff',
                       fontSize: '10px',
                       fontWeight: '600',
@@ -880,7 +881,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                       letterSpacing: '0.5px',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                     }}>
-                      💝 Donation
+                      Donation
                     </span>
                   )}
                 </div>
@@ -1053,25 +1054,27 @@ const RepostCard: React.FC<RepostCardProps> = ({
               return (
                 <div style={{ marginTop: 8 }}>
                   {originalImages.length === 1 ? (
-                    // Single image
-                    <img
-                      src={getImageUrl(originalImages[0])}
-                      alt="original post"
-                      style={{ 
-                        cursor: 'pointer',
-                        width: 'auto',
-                        height: 'auto',
-                        maxWidth: '100%',
-                        maxHeight: '40vh',
-                        borderRadius: '8px',
-                        objectFit: 'contain'
-                      }}
+                    // Single image - centered
+                    <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                      <img
+                        src={getImageUrl(originalImages[0])}
+                        alt="original post"
+                        style={{ 
+                          cursor: 'pointer',
+                          width: 'auto',
+                          height: 'auto',
+                          maxWidth: '100%',
+                          maxHeight: '40vh',
+                          borderRadius: '8px',
+                          objectFit: 'contain'
+                        }}
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         target.style.display = 'none';
                         console.error('Failed to load original post image:', originalImages[0]);
                       }}
                     />
+                    </div>
                   ) : (
                     // Multiple images grid for original post - Facebook style (smaller)
                     <div style={{
@@ -1672,30 +1675,171 @@ const RepostCard: React.FC<RepostCardProps> = ({
         ) : null}
 
       {/* Likes modal */}
-      {showLikesModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setShowLikesModal(false)}>
-          <div style={{ background: '#fff', borderRadius: 12, width: '90%', maxWidth: 400, padding: 20, position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowLikesModal(false)} style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.05)', border: 'none', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer' }}>×</button>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: 16, fontWeight: 700, color: '#1e4c7a', textAlign: 'center' }}>👍 People who liked this</h3>
-            {likesLoading ? (
-              <div style={{ textAlign: 'center', padding: 20, color: '#6c757d' }}>Loading likes...</div>
-            ) : fetchedLikes.length ? (
-              fetchedLikes.map((like: any, i: number) => {
-                const u = like.user || like;
-                const name = `${u.f_name || ''} ${u.m_name || ''} ${u.l_name || ''}`.trim() || 'Unknown User';
-                const pic = getProfilePicUrl(u.profile_pic);
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '10px 6px', borderBottom: i < fetchedLikes.length - 1 ? '1px solid #eee' : 'none' }}>
-                    <img src={pic} alt={name} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', marginRight: 12 }} onError={handleProfilePicError} />
-                    <div style={{ fontWeight: 600, fontSize: 15, color: '#333' }}>{name}</div>
-                  </div>
-                );
-              })
-            ) : (
-              <div style={{ textAlign: 'center', padding: 20, color: '#6c757d' }}>No likes yet</div>
-            )}
+      {showLikesModal && ReactDOM.createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            animation: 'fadeIn 0.2s ease-out',
+            margin: 0,
+            padding: 0,
+            overflow: 'auto'
+          }}
+          onClick={() => setShowLikesModal(false)}
+        >
+          <div
+            style={{
+              background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+              borderRadius: 14,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.15), 0 8px 16px rgba(0,0,0,0.1)',
+              maxWidth: 400,
+              width: '90%',
+              padding: 20,
+              position: 'relative',
+              border: '1px solid rgba(255,255,255,0.2)',
+              animation: 'slideUp 0.3s ease-out',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowLikesModal(false)}
+              style={{
+                position: 'absolute',
+                top: 12,
+                right: 12,
+                background: 'rgba(0,0,0,0.05)',
+                border: 'none',
+                borderRadius: '50%',
+                width: 28,
+                height: 28,
+                fontSize: 14,
+                cursor: 'pointer',
+                color: '#666',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.1)';
+                e.currentTarget.style.color = '#333';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.05)';
+                e.currentTarget.style.color = '#666';
+              }}
+            >
+              ×
+            </button>
+
+            <h2 style={{
+              margin: '0 0 16px 0',
+              fontSize: 18,
+              fontWeight: '700',
+              color: '#1e4c7a',
+              textAlign: 'center',
+              borderBottom: '1px solid #e0e0e0',
+              paddingBottom: 10,
+            }}>
+              👍 People who liked this
+            </h2>
+
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              {likesLoading ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '20px',
+                  color: '#6c757d',
+                  fontSize: '14px',
+                }}>
+                  Loading likes...
+                </div>
+              ) : fetchedLikes && fetchedLikes.length > 0 ? (
+                fetchedLikes.map((like: any, index: number) => {
+                  const likeUser = like.user || like;
+                  const userName = `${likeUser.f_name || ''} ${likeUser.m_name || ''} ${likeUser.l_name || ''}`.trim();
+                  const userProfilePic = getProfilePicUrl(likeUser.profile_pic);
+
+                  return (
+                    <div
+                      key={index}
+                      onClick={() => {
+                        if (likeUser.user_id) {
+                          const currentPath = window.location.pathname;
+                          if (currentPath.startsWith('/peso')) {
+                            window.location.href = `/peso/profile/${likeUser.user_id}`;
+                          } else if (currentPath.startsWith('/ccict')) {
+                            window.location.href = `/ccict/profile/${likeUser.user_id}`;
+                          } else {
+                            window.location.href = `/profile/${likeUser.user_id}`;
+                          }
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '12px',
+                        borderBottom: index < (fetchedLikes?.length || 0) - 1 ? '1px solid #f0f0f0' : 'none',
+                        cursor: 'pointer',
+                        borderRadius: '8px',
+                        transition: 'background-color 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f8f9fa';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <img
+                        src={userProfilePic}
+                        alt="Profile"
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          marginRight: 12,
+                          border: '2px solid #e5e7eb',
+                        }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = ctulogo;
+                        }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: '600', fontSize: 15, color: '#333' }}>
+                          {userName || 'Unknown User'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '20px',
+                  color: '#6c757d',
+                  fontSize: '14px',
+                }}>
+                  No likes yet
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

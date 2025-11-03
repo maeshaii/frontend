@@ -548,7 +548,36 @@ const ForumPage: React.FC = () => {
 
 
   return (
-    <Box sx={{ bgcolor: '#f0f4f8', minHeight: '100vh' }}>
+    <Box sx={{ 
+      bgcolor: '#f0f4f8', 
+      height: '100vh',
+      overflowX: 'hidden',
+      overflowY: 'hidden',
+      '&::-webkit-scrollbar': {
+        display: 'none'
+      },
+      scrollbarWidth: 'none',
+      msOverflowStyle: 'none'
+    }}>
+      <style>
+        {`
+          body {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            overflow: hidden;
+          }
+          body::-webkit-scrollbar {
+            display: none;
+          }
+          * {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+          }
+          *::-webkit-scrollbar {
+            display: none;
+          }
+        `}
+      </style>
       {/* Alumni TopBar */}
       <AlumniTopBar 
         showProfile={showProfile}
@@ -597,9 +626,20 @@ const ForumPage: React.FC = () => {
         <Box sx={{ display: 'flex', gap: 3 }}>
           {/* Left Sidebar - Members */}
           <Box sx={{ flex: '0 0 300px' }}>
-            <div className="profile-followers-card">
+            <Card sx={{ 
+              p: 3, 
+              borderRadius: 3, 
+              boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+              border: '1px solid rgba(0,0,0,0.05)',
+              background: 'linear-gradient(135deg, #ffffff 0%, #f8faff 100%)'
+            }}>
               <div className="profile-followers-header">
-                <div className="profile-followers-title">Members ({allMembers.length})</div>
+                <Typography variant="h6" fontWeight="bold" sx={{ 
+                  color: '#174f84',
+                  fontSize: '20px'
+                }}>
+                  Members ({allMembers.length})
+                </Typography>
                 <div
                   className="profile-followers-seeall"
                   onClick={() => {
@@ -686,7 +726,7 @@ const ForumPage: React.FC = () => {
                   </>
                 )}
               </div>
-            </div>
+            </Card>
           </Box>
 
           {/* Center Content */}
@@ -759,7 +799,7 @@ const ForumPage: React.FC = () => {
 
             {/* Posts Feed */}
             <Box sx={{ 
-              maxHeight: 'calc(100vh - 300px)', 
+              maxHeight: 'calc(100vh - 250px)', 
               overflowY: 'auto',
               scrollbarWidth: 'none', /* Firefox */
               msOverflowStyle: 'none', /* IE and Edge */
@@ -1095,7 +1135,7 @@ const ForumPage: React.FC = () => {
                   gap: 1,
                   fontSize: '20px'
                 }}>
-                  <span style={{ fontSize: '24px' }}>💬</span>
+                  <span style={{ fontSize: '24px' }}>📢</span>
                   About Forum
                 </Typography>
               <Typography variant="body2" sx={{ 

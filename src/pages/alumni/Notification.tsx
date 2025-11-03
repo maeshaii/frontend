@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchNotifications, deleteNotifications, markNotificationAsRead, api, getPostFromComment } from '../../services/api';
+import { fetchNotifications, deleteNotifications, markNotificationAsRead, api, getPostFromComment, getAdminPesoUsers } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import { getProfilePicUrl } from '../../utils/profilePicUtils';
@@ -63,6 +63,8 @@ const NotificationPage: React.FC = () => {
   const [loadingProfilePics, setLoadingProfilePics] = useState<Set<string>>(new Set());
   const [lastApiCall, setLastApiCall] = useState<number>(0);
   const loadedProfilePics = React.useRef<Set<string>>(new Set());
+  const [adminUserIds, setAdminUserIds] = useState<number[]>([]);
+  const [adminProfilePic, setAdminProfilePic] = useState<string | null>(null);
   const navigate = useNavigate();
 
   // Debug profile picture updates
@@ -172,6 +174,32 @@ const NotificationPage: React.FC = () => {
       loadProfilePics();
     }
   }, [realTimeNotifications]);
+
+  // Fetch admin user IDs and profile for tracker notifications
+  React.useEffect(() => {
+    const fetchAdminProfile = async () => {
+      try {
+        const response = await getAdminPesoUsers();
+        if (response.success && response.admin_user_ids && response.admin_user_ids.length > 0) {
+          setAdminUserIds(response.admin_user_ids);
+          // Fetch admin profile picture
+          const adminUserId = response.admin_user_ids[0];
+          try {
+            const adminResponse = await api.get(`alumni/profile/${adminUserId}/`);
+            if (adminResponse.data && adminResponse.data.profile_pic) {
+              const profilePicUrl = getProfilePicUrl(adminResponse.data.profile_pic);
+              setAdminProfilePic(profilePicUrl);
+            }
+          } catch (error) {
+            console.error('Error fetching admin profile:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching admin/PESO users:', error);
+      }
+    };
+    fetchAdminProfile();
+  }, []);
 
   // Cleanup old cache entries on component mount
   React.useEffect(() => {
@@ -1580,6 +1608,26 @@ const NotificationPage: React.FC = () => {
                       const authorPicMatch = notif.content.match(/<!--AUTHOR_PIC:([^>]+)-->/);
                       const directPicUrl = authorPicMatch ? authorPicMatch[1] : undefined;
 
+                      // For tracker notifications, use admin profile
+                      if (isTrackerNotification && adminProfilePic) {
+                        return (
+                          <img
+                            src={adminProfilePic}
+                            alt="Admin"
+                            style={{
+                              width: '48px',
+                              height: '48px',
+                              borderRadius: '50%',
+                              objectFit: 'cover',
+                              border: '2px solid #e9ecef'
+                            }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = ctulogo;
+                            }}
+                          />
+                        );
+                      }
+
                       return (
                         <ProfilePicComponent
                           userId={userId || undefined}
@@ -1751,7 +1799,7 @@ const NotificationPage: React.FC = () => {
           <div
             style={{
               background: 'white',
-              width: '400px',
+              width: '600px',
               maxWidth: '90vw',
               borderRadius: '12px',
               overflow: 'hidden',
@@ -1812,37 +1860,63 @@ const NotificationPage: React.FC = () => {
                 overflow: 'hidden',
                 flexShrink: 0
               }}>
-                <ProfilePicComponent 
-                  userId={(() => {
-                    if (openNotif.type && openNotif.type.toLowerCase() === 'follow') {
-                      const match = openNotif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
-                      return match ? match[2] : undefined;
-                    }
-                    const actorIdMatch = openNotif.content?.match(/<!--ACTOR_ID:(\d+)-->/);
-                    const authorIdMatch = openNotif.content?.match(/<!--AUTHOR_ID:(\d+)-->/);
-                    return actorIdMatch?.[1] || authorIdMatch?.[1] || undefined;
-                  })()}
-                  userName={(() => {
-                    if (openNotif.type && openNotif.type.toLowerCase() === 'follow') {
-                      const match = openNotif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
-                      return match ? match[1] : '';
-                    }
-                    // Check for AUTHOR_NAME marker (for PESO/Admin posts)
-                    const authorNameMatch = openNotif.content.match(/<!--AUTHOR_NAME:([^>]+)-->/);
-                    if (authorNameMatch) {
-                      return authorNameMatch[1];
-                    }
-                    // Fallback to pattern matching
-                    const nameMatch = openNotif.content.match(/^([^<]+?)\s+(commented|mentioned|liked|reposted|shared|posted|created)/i);
-                    return nameMatch ? nameMatch[1].trim() : '';
-                  })()}
-                  size="40px"
-                  directPicUrl={(() => {
-                    // Extract AUTHOR_PIC marker for PESO/Admin posts
-                    const authorPicMatch = openNotif.content?.match(/<!--AUTHOR_PIC:([^>]+)-->/);
-                    return authorPicMatch ? authorPicMatch[1] : undefined;
-                  })()}
-                />
+                {(() => {
+                  const isTrackerModal = (openNotif.type?.toLowerCase().includes('tracker') || openNotif.content?.includes('Tracker Form'));
+                  
+                  // For tracker notifications, use admin profile
+                  if (isTrackerModal && adminProfilePic) {
+                    return (
+                      <img
+                        src={adminProfilePic}
+                        alt="Admin"
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          border: '2px solid #e9ecef'
+                        }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = ctulogo;
+                        }}
+                      />
+                    );
+                  }
+                  
+                  return (
+                    <ProfilePicComponent 
+                      userId={(() => {
+                        if (openNotif.type && openNotif.type.toLowerCase() === 'follow') {
+                          const match = openNotif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
+                          return match ? match[2] : undefined;
+                        }
+                        const actorIdMatch = openNotif.content?.match(/<!--ACTOR_ID:(\d+)-->/);
+                        const authorIdMatch = openNotif.content?.match(/<!--AUTHOR_ID:(\d+)-->/);
+                        return actorIdMatch?.[1] || authorIdMatch?.[1] || undefined;
+                      })()}
+                      userName={(() => {
+                        if (openNotif.type && openNotif.type.toLowerCase() === 'follow') {
+                          const match = openNotif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
+                          return match ? match[1] : '';
+                        }
+                        // Check for AUTHOR_NAME marker (for PESO/Admin posts)
+                        const authorNameMatch = openNotif.content.match(/<!--AUTHOR_NAME:([^>]+)-->/);
+                        if (authorNameMatch) {
+                          return authorNameMatch[1];
+                        }
+                        // Fallback to pattern matching
+                        const nameMatch = openNotif.content.match(/^([^<]+?)\s+(commented|mentioned|liked|reposted|shared|posted|created)/i);
+                        return nameMatch ? nameMatch[1].trim() : '';
+                      })()}
+                      size="40px"
+                      directPicUrl={(() => {
+                        // Extract AUTHOR_PIC marker for PESO/Admin posts
+                        const authorPicMatch = openNotif.content?.match(/<!--AUTHOR_PIC:([^>]+)-->/);
+                        return authorPicMatch ? authorPicMatch[1] : undefined;
+                      })()}
+                    />
+                  );
+                })()}
               </div>
 
               {/* Notification Info */}

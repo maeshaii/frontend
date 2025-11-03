@@ -1295,9 +1295,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                       src={adminUserData?.profile_pic ? (String(adminUserData.profile_pic).startsWith('http') ? adminUserData.profile_pic : `http://127.0.0.1:8000${adminUserData.profile_pic}`) : ctulogo} 
                       alt="Admin Profile" 
                       className="quick-link-icon"
-                      style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                      style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover' }}
                     />
-                    <div className="quick-link-text">CCICT</div>
+                    <div className="quick-link-text">{adminUserData?.name || 'CCICT'}</div>
                   </div>
                 </div>
                 <div 
@@ -1321,9 +1321,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                       src={pesoUserData?.profile_pic ? (String(pesoUserData.profile_pic).startsWith('http') ? pesoUserData.profile_pic : `http://127.0.0.1:8000${pesoUserData.profile_pic}`) : ctulogo} 
                       alt="PESO Profile" 
                       className="quick-link-icon"
-                      style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                      style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover' }}
                     />
-                    <div className="quick-link-text">PESO</div>
+                    <div className="quick-link-text">{pesoUserData?.name || 'PESO'}</div>
                   </div>
                 </div>
               </div>
@@ -1338,7 +1338,6 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 >
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
-                    <div className="quick-link-icon forum-icon">C</div>
                     <div className="quick-link-text">FORUM</div>
                   </div>
                 </div>
@@ -1353,7 +1352,6 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 >
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
-                    <div className="quick-link-icon peso-icon">✱</div>
                     <div className="quick-link-text">DONATION</div>
                   </div>
                 </div>
