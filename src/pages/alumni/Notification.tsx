@@ -1476,6 +1476,7 @@ const NotificationPage: React.FC = () => {
           ) : (
             filteredNotifications.map((notif: any, index: number) => {
               const isTrackerNotification = notif.type.toLowerCase().includes('tracker') || notif.content.includes('Tracker Form');
+              const isRewardNotification = notif.type?.toLowerCase() === 'reward';
               
               return (
                 <div
@@ -1502,8 +1503,9 @@ const NotificationPage: React.FC = () => {
                     gap: '12px'
                     }}
                     onClick={async () => {
-                    if (isTrackerNotification) {
-                      // Show modal for tracker notifications
+                    const isRewardNotification = notif.type?.toLowerCase() === 'reward';
+                    if (isTrackerNotification || isRewardNotification) {
+                      // Show modal for tracker and reward notifications
                       setOpenNotif(notif);
                     } else {
                       // Direct redirect for post-related notifications
@@ -1608,11 +1610,34 @@ const NotificationPage: React.FC = () => {
                       const authorPicMatch = notif.content.match(/<!--AUTHOR_PIC:([^>]+)-->/);
                       const directPicUrl = authorPicMatch ? authorPicMatch[1] : undefined;
 
-                      // For tracker notifications, use admin profile
-                      if (isTrackerNotification && adminProfilePic) {
+                      // For tracker and reward notifications, use admin profile
+                      if ((isTrackerNotification || isRewardNotification) && adminProfilePic) {
                         return (
                           <img
                             src={adminProfilePic}
+                            alt="Admin"
+                            style={{
+                              width: '48px',
+                              height: '48px',
+                              borderRadius: '50%',
+                              objectFit: 'cover',
+                              border: '2px solid #e9ecef'
+                            }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = ctulogo;
+                            }}
+                          />
+                        );
+                      }
+                      
+                      // For reward notifications, use admin profile from notification content
+                      if (isRewardNotification && directPicUrl) {
+                        const profilePicUrl = directPicUrl.startsWith('http') 
+                          ? directPicUrl 
+                          : `http://127.0.0.1:8000${directPicUrl}`;
+                        return (
+                          <img
+                            src={profilePicUrl}
                             alt="Admin"
                             style={{
                               width: '48px',
@@ -1862,9 +1887,10 @@ const NotificationPage: React.FC = () => {
               }}>
                 {(() => {
                   const isTrackerModal = (openNotif.type?.toLowerCase().includes('tracker') || openNotif.content?.includes('Tracker Form'));
+                  const isRewardModal = openNotif.type?.toLowerCase() === 'reward';
                   
-                  // For tracker notifications, use admin profile
-                  if (isTrackerModal && adminProfilePic) {
+                  // For tracker and reward notifications, use admin profile
+                  if ((isTrackerModal || isRewardModal) && adminProfilePic) {
                     return (
                       <img
                         src={adminProfilePic}
@@ -1883,6 +1909,32 @@ const NotificationPage: React.FC = () => {
                     );
                   }
                   
+                  // For reward notifications, use admin profile from notification content
+                  if (isRewardModal) {
+                    const authorPicMatch = openNotif.content?.match(/<!--AUTHOR_PIC:([^>]+)-->/);
+                    if (authorPicMatch) {
+                      const profilePicUrl = authorPicMatch[1].startsWith('http') 
+                        ? authorPicMatch[1] 
+                        : `http://127.0.0.1:8000${authorPicMatch[1]}`;
+                      return (
+                        <img
+                          src={profilePicUrl}
+                          alt="Admin"
+                          style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            border: '2px solid #e9ecef'
+                          }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = ctulogo;
+                          }}
+                        />
+                      );
+                    }
+                  }
+                  
                   return (
                     <ProfilePicComponent 
                       userId={(() => {
@@ -1899,7 +1951,7 @@ const NotificationPage: React.FC = () => {
                           const match = openNotif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
                           return match ? match[1] : '';
                         }
-                        // Check for AUTHOR_NAME marker (for PESO/Admin posts)
+                        // Check for AUTHOR_NAME marker (for PESO/Admin posts and reward notifications)
                         const authorNameMatch = openNotif.content.match(/<!--AUTHOR_NAME:([^>]+)-->/);
                         if (authorNameMatch) {
                           return authorNameMatch[1];
@@ -1910,7 +1962,7 @@ const NotificationPage: React.FC = () => {
                       })()}
                       size="40px"
                       directPicUrl={(() => {
-                        // Extract AUTHOR_PIC marker for PESO/Admin posts
+                        // Extract AUTHOR_PIC marker for PESO/Admin posts and reward notifications
                         const authorPicMatch = openNotif.content?.match(/<!--AUTHOR_PIC:([^>]+)-->/);
                         return authorPicMatch ? authorPicMatch[1] : undefined;
                       })()}
@@ -2289,6 +2341,56 @@ const NotificationPage: React.FC = () => {
                     disabled={postLoading}
                   >
                     {postLoading ? 'Loading...' : 'View Post'}
+                  </button>
+                </div>
+              ) : (openNotif.type && openNotif.type.toLowerCase() === 'reward') ? (
+                <div>
+                  <div style={{ 
+                    whiteSpace: 'pre-wrap',
+                    fontSize: '14px',
+                    lineHeight: '1.6',
+                    color: '#333',
+                    marginBottom: '20px'
+                  }}>
+                    {openNotif.content.replace(/<!--[^>]+-->/g, '')}
+                  </div>
+                  <button
+                    style={{
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      color: '#fff',
+                      padding: '12px 24px',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                      marginTop: '16px',
+                      transition: 'all 0.2s ease',
+                      width: '100%',
+                      boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(102, 126, 234, 0.3)';
+                    }}
+                    onClick={() => {
+                      setOpenNotif(null);
+                      // Navigate to profile page and open "My Reward Requests" modal
+                      const userStr = localStorage.getItem('user');
+                      const user = userStr ? JSON.parse(userStr) : null;
+                      const userId = user?.user_id || user?.id;
+                      if (userId) {
+                        // Set flag to open reward requests modal on profile page
+                        localStorage.setItem('openRewardRequests', 'true');
+                        navigate(`/profile/${userId}`);
+                      }
+                    }}
+                  >
+                    🎁 View My Reward Requests
                   </button>
                 </div>
               ) : (openNotif.type && (openNotif.type.toLowerCase() === 'like' || openNotif.type.toLowerCase() === 'comment' || openNotif.type.toLowerCase() === 'admin_peso_post' || openNotif.type.toLowerCase() === 'reply' || openNotif.type.toLowerCase() === 'mention')) ? (

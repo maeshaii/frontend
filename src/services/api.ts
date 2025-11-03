@@ -1151,6 +1151,27 @@ export const getEngagementLeaderboard = async (limit: number = 50, userType: str
   return response.data;
 };
 
+// Get engagement points settings
+export const getEngagementPointsSettings = async () => {
+  const response = await api.get('engagement/points-settings/');
+  return response.data;
+};
+
+// Update engagement points settings
+export const updateEngagementPointsSettings = async (settings: {
+  enabled: boolean;
+  like: number;
+  comment: number;
+  share: number;
+  reply: number;
+  post: number;
+  post_with_photo: number;
+  tracker_form: number;
+}) => {
+  const response = await api.post('engagement/points-settings/', settings);
+  return response.data;
+};
+
 // -------- Inventory Management API Functions --------
 
 // Get all inventory items
@@ -1199,6 +1220,49 @@ export const giveReward = async (userId: number, rewardId: number) => {
 // Get reward history
 export const getRewardHistory = async (limit: number = 50) => {
   const response = await api.get(`rewards/history/?limit=${limit}`);
+  return response.data;
+};
+
+// Request reward (user self-service)
+export const requestReward = async (rewardId: number) => {
+  const response = await api.post('rewards/request/', {
+    reward_id: rewardId
+  });
+  return response.data;
+};
+
+// Get reward requests (admin: all requests, user: own requests)
+export const getRewardRequests = async (status?: string) => {
+  const url = status ? `rewards/requests/?status=${status}` : 'rewards/requests/';
+  const response = await api.get(url);
+  return response.data;
+};
+
+// Approve reward request (admin only)
+export const approveRewardRequest = async (requestId: number, voucherCode?: string, notes?: string, instructions?: string) => {
+  const response = await api.post(`rewards/requests/${requestId}/approve/`, {
+    voucher_code: voucherCode,
+    notes: notes || instructions,
+    instructions: instructions || notes
+  });
+  return response.data;
+};
+
+// Claim reward request (user claims after admin approval)
+export const claimRewardRequest = async (requestId: number) => {
+  const response = await api.post(`rewards/requests/${requestId}/claim/`);
+  return response.data;
+};
+
+// Upload voucher file (admin only)
+export const uploadVoucherFile = async (requestId: number, file: File) => {
+  const formData = new FormData();
+  formData.append('voucher_file', file);
+  const response = await api.post(`rewards/requests/${requestId}/upload-voucher/`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
   return response.data;
 };
 
