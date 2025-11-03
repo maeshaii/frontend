@@ -1338,6 +1338,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 >
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
+                    <div className="quick-link-icon forum-icon">C</div>
                     <div className="quick-link-text">FORUM</div>
                   </div>
                 </div>
@@ -1352,6 +1353,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 >
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
+                    <div className="quick-link-icon peso-icon">✱</div>
                     <div className="quick-link-text">DONATION</div>
                   </div>
                 </div>

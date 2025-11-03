@@ -115,7 +115,7 @@ const App: React.FC = () => {
           <Route
             path="/statistics"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['admin']}>
                 <Statistics />
               </PrivateRoute>
             }
@@ -139,7 +139,7 @@ const App: React.FC = () => {
           <Route
             path="/tracker/*"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['admin']} >
                 <Tracker />
               </PrivateRoute>
             }
@@ -168,7 +168,7 @@ const App: React.FC = () => {
           <Route
             path="/peso/notifications"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['peso']}>
                 <NotificationPage />
               </PrivateRoute>
             }
@@ -176,7 +176,7 @@ const App: React.FC = () => {
           <Route
             path="/peso/profile"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['peso']}>
                 <PesoProfile />
               </PrivateRoute>
             }
@@ -184,15 +184,15 @@ const App: React.FC = () => {
           <Route
             path="/peso/profile/:id"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['peso']}>
                 <PesoProfile />
               </PrivateRoute>
             }
           />
           <Route
             path="/peso/settings"
-            element={
-              <PrivateRoute>
+            element={  
+              <PrivateRoute roles={['peso']}>
                 <Settings />
               </PrivateRoute>
             }
@@ -200,7 +200,7 @@ const App: React.FC = () => {
           <Route
             path="/ccict/settings"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['admin']}>
                 <Settings />
               </PrivateRoute>
             }
@@ -208,7 +208,7 @@ const App: React.FC = () => {
           <Route
             path="/ccict/dashboard/:id"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['admin']}>
                 <AdminDashboard />
               </PrivateRoute>
             }
@@ -216,7 +216,7 @@ const App: React.FC = () => {
           <Route
             path="/ccict/notification"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['admin']}>
                 <NotificationPage />
               </PrivateRoute>
             }
@@ -224,7 +224,7 @@ const App: React.FC = () => {
           <Route
             path="/ccict/profile"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['admin']}>
                 <AdminProfilePage />
               </PrivateRoute>
             }
@@ -232,7 +232,7 @@ const App: React.FC = () => {
           <Route
             path="/ccict/profile/:id"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['admin']}>
                 <AdminProfilePage />
               </PrivateRoute>
             }
@@ -250,7 +250,7 @@ const App: React.FC = () => {
           <Route
             path="/profile/:id"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['user', 'ojt']}>
                 <AlumniProfile />
               </PrivateRoute>
             }
@@ -267,7 +267,7 @@ const App: React.FC = () => {
           <Route
             path="/ojt/profile/:id"
             element={
-              <PrivateRoute>
+              <PrivateRoute roles={['ojt']}>
                 <AlumniProfile />
               </PrivateRoute>
             }
@@ -275,7 +275,7 @@ const App: React.FC = () => {
           <Route
             path="/ojt/profile"
             element={
-              <PrivateRoute roles={['user', 'ojt']}>
+              <PrivateRoute roles={['ojt']}>
                 <AlumniProfile />
               </PrivateRoute>
             }
@@ -285,7 +285,7 @@ const App: React.FC = () => {
           <Route
             path="/forum"
             element={
-              <PrivateRoute roles={['user', 'ojt']}>
+              <PrivateRoute roles={['user']}>
                 <ForumPage />
               </PrivateRoute>
             }
@@ -293,7 +293,7 @@ const App: React.FC = () => {
           <Route
             path="/donation"
             element={
-              <PrivateRoute roles={['user', 'ojt']}>
+              <PrivateRoute roles={['user']}>
                 <DonationPage />
               </PrivateRoute>
             }
@@ -309,7 +309,7 @@ const App: React.FC = () => {
           <Route
             path="/tracker"
             element={
-              <PrivateRoute roles={['user', 'ojt']}>
+              <PrivateRoute roles={['user']}>
                 <AlumniTracker />
               </PrivateRoute>
             }
