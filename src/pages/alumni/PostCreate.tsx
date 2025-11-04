@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createPost, createForumPost, createDonationRequest } from '../../services/api';
+import { createPost, createForumPost, createDonationRequest, getUserPoints } from '../../services/api';
 import ctulogo from '../../images/ctulogo.png';
 import './postcreate.css';
 
@@ -127,6 +127,26 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
         const result = await createPost(postData);
         
         console.log('Post creation result:', result);
+        
+        // Refresh points after posting (only for alumni users)
+        // Add a small delay to ensure backend has processed points update
+        if (storedUser && storedUser.account_type && storedUser.account_type.user) {
+          const userId = storedUser.user_id || storedUser.id;
+          if (userId) {
+            // Wait a bit for backend to process points
+            setTimeout(async () => {
+              try {
+                const points = await getUserPoints(userId);
+                // Dispatch event to notify Profile component
+                window.dispatchEvent(new CustomEvent('pointsUpdated', { 
+                  detail: { userId, points } 
+                }));
+              } catch (error) {
+                console.error('Error refreshing points after post:', error);
+              }
+            }, 500); // 500ms delay to ensure backend has processed
+          }
+        }
       }
 
       onPosted();

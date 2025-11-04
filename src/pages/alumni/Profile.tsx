@@ -8,7 +8,7 @@ import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, de
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
-import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle } from 'react-icons/hi2';
+import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye } from 'react-icons/hi2';
 
 function getCurrentUserId(user: AlumniUser | null): number | null {
   if (!user) return null;
@@ -208,6 +208,8 @@ const AlumniProfile: React.FC = () => {
   const [claimingReward, setClaimingReward] = useState<number | null>(null);
   const [userRewardRequests, setUserRewardRequests] = useState<any[]>([]);
   const [showApprovedRewardsModal, setShowApprovedRewardsModal] = useState(false);
+  const [selectedRewardDetail, setSelectedRewardDetail] = useState<any | null>(null);
+  const [rewardStatusFilter, setRewardStatusFilter] = useState<'all' | 'pending' | 'approved' | 'claimed' | 'did_not_push_through'>('all');
 
   // Get current user ID
   const currentUserObj = JSON.parse(localStorage.getItem('user') || '{}');
@@ -813,6 +815,24 @@ getPosts()
     // Check immediately and also when user loads
     checkAndOpenRewardRequests();
   }, [user]);
+
+  // Listen for points updates from other components (like PostCard, PostCreate)
+  useEffect(() => {
+    const handlePointsUpdate = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { userId, points } = customEvent.detail;
+      // Only update if viewing own profile and the userId matches
+      if (isOwnProfile && currentId && Number(userId) === Number(currentId)) {
+        console.log('Points updated, refreshing display:', points);
+        setUserPoints(points);
+      }
+    };
+
+    window.addEventListener('pointsUpdated', handlePointsUpdate);
+    return () => {
+      window.removeEventListener('pointsUpdated', handlePointsUpdate);
+    };
+  }, [isOwnProfile, currentId]);
 
   const handleClaimApprovedReward = async (requestId: number) => {
     if (claimingReward !== null) return;
@@ -1564,7 +1584,7 @@ getPosts()
                       </div>
                     </div>
 
-                    {/* Shares */}
+                    {/* Repost */}
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -1574,7 +1594,7 @@ getPosts()
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <HiOutlineArrowPath size={16} color="#6b7280" strokeWidth={1.5} />
-                        <span>Shares</span>
+                        <span>Repost</span>
                         <span style={{ fontSize: '12px', color: '#999' }}>
                           ({userPoints.points_breakdown?.shares?.count || 0})
                         </span>
@@ -4162,7 +4182,7 @@ getPosts()
               background: 'white',
               borderRadius: '16px',
               padding: '24px',
-              maxWidth: '600px',
+              maxWidth: '1000px',
               width: '100%',
               maxHeight: '80vh',
               overflow: 'auto',
@@ -4174,9 +4194,16 @@ getPosts()
               <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#174f84', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <HiOutlineCheckCircle size={24} color="#174f84" strokeWidth={1.5} />
                 <span>My Reward Requests</span>
+                <span style={{ fontSize: '14px', fontWeight: '500', color: '#64748b', marginLeft: '8px' }}>
+                  ({userRewardRequests.length})
+                </span>
               </h2>
               <button
-                onClick={() => setShowApprovedRewardsModal(false)}
+                onClick={() => {
+                  setShowApprovedRewardsModal(false);
+                  setSelectedRewardDetail(null);
+                  setRewardStatusFilter('all');
+                }}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -4195,37 +4222,362 @@ getPosts()
                 <div style={{ fontSize: '16px', color: '#666' }}>No reward requests yet</div>
               </div>
             ) : (
-              <div style={{ display: 'grid', gap: '16px' }}>
-                {userRewardRequests.map((req: any) => {
+              <>
+                {/* Filters and View Toggle */}
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  marginBottom: '16px',
+                  flexWrap: 'wrap',
+                  gap: '12px'
+                }}>
+                  {/* Status Filter */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {(['all', 'pending', 'approved', 'claimed', 'did_not_push_through'] as const).map((filter) => (
+                      <button
+                        key={filter}
+                        onClick={() => setRewardStatusFilter(filter)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          border: '1px solid #e2e8f0',
+                          background: rewardStatusFilter === filter ? '#667eea' : 'white',
+                          color: rewardStatusFilter === filter ? 'white' : '#64748b',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          textTransform: 'capitalize',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        {filter === 'all' ? 'All' : 
+                         filter === 'approved' ? 'Ready' : 
+                         filter === 'did_not_push_through' ? 'Did Not Push Through' : 
+                         filter}
+                      </button>
+                    ))}
+                  </div>
+
+                </div>
+
+                {/* Filtered Rewards */}
+                {(() => {
+                  const filteredRewards = userRewardRequests.filter((req: any) => {
+                    if (rewardStatusFilter === 'all') return true;
+                    if (rewardStatusFilter === 'pending') return req.status === 'pending';
+                    if (rewardStatusFilter === 'approved') return req.status === 'approved' || req.status === 'ready_for_pickup';
+                    if (rewardStatusFilter === 'claimed') return req.status === 'claimed';
+                    if (rewardStatusFilter === 'did_not_push_through') {
+                      // Reward that was approved but expired before being claimed
+                      const isApproved = req.status === 'approved' || req.status === 'ready_for_pickup';
+                      const isNotClaimed = req.status !== 'claimed';
+                      const hasExpired = req.expires_at && new Date(req.expires_at) < new Date();
+                      return isApproved && isNotClaimed && hasExpired;
+                    }
+                    return true;
+                  });
+
+                  if (filteredRewards.length === 0) {
+                    return (
+                      <div style={{ textAlign: 'center', padding: '40px' }}>
+                        <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔍</div>
+                        <div style={{ fontSize: '16px', color: '#666' }}>No rewards found for this filter</div>
+                      </div>
+                    );
+                  }
+
+                  // Check if any reward can be claimed (to show Expires column)
+                  const hasClaimableRewards = filteredRewards.some((req: any) => {
+                    const isApproved = req.status === 'approved' || req.status === 'ready_for_pickup';
+                    const isClaimed = req.status === 'claimed';
+                    return isApproved && !isClaimed;
+                  });
+
+                  // Table View
+                  return (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Reward</th>
+                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Type</th>
+                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Status</th>
+                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Cost</th>
+                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Requested</th>
+                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Approved</th>
+                            {hasClaimableRewards && (
+                              <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Expires</th>
+                            )}
+                            <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredRewards.map((req: any) => {
                   const isApproved = req.status === 'approved' || req.status === 'ready_for_pickup';
                   const isClaimed = req.status === 'claimed';
                   const isPending = req.status === 'pending';
-                  const canClaim = isApproved && !isClaimed;
-                  const isClaiming = claimingReward === req.request_id;
+                            const hasExpired = req.expires_at && new Date(req.expires_at) < new Date();
+                            const didNotPushThrough = isApproved && !isClaimed && hasExpired;
+                            const isMerchandise = req.reward_type?.toLowerCase().includes('merchandise') || 
+                                                 req.reward_type?.toLowerCase().includes('merch') ||
+                                                 req.reward_type?.toLowerCase().includes('product') ||
+                                                 req.reward_type?.toLowerCase().includes('item');
+                            // Only vouchers can be claimed by user, merchandise must be released by admin
+                            const canClaim = isApproved && !isClaimed && !isMerchandise;
 
                   return (
-                    <div
+                              <tr 
                       key={req.request_id}
                       style={{
+                                  borderBottom: '1px solid #f1f5f9',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.2s',
+                                  backgroundColor: didNotPushThrough ? '#fef2f2' : 'transparent'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = didNotPushThrough ? '#fee2e2' : '#f8fafc';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = didNotPushThrough ? '#fef2f2' : 'transparent';
+                                }}
+                              >
+                                <td style={{ padding: '12px', fontWeight: '600', color: '#1e293b', fontSize: '14px' }}>
+                                  {req.reward_name}
+                                </td>
+                                <td style={{ padding: '12px', color: '#64748b', fontSize: '13px' }}>
+                                  {req.reward_type}
+                                </td>
+                                <td style={{ padding: '12px' }}>
+                                  <span style={{
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    fontWeight: '600',
+                                    background: didNotPushThrough ? '#fee2e2' : isPending ? '#fef3c7' : isApproved ? '#d1fae5' : isClaimed ? '#dbeafe' : '#f3f4f6',
+                                    color: didNotPushThrough ? '#991b1b' : isPending ? '#92400e' : isApproved ? '#065f46' : isClaimed ? '#1e40af' : '#374151'
+                                  }}>
+                                    {didNotPushThrough ? 'Expired' :
+                                     req.status === 'pending' ? 'Pending' : 
+                                     req.status === 'approved' ? 'Ready' :
+                                     req.status === 'ready_for_pickup' ? 'Ready' :
+                                     req.status === 'claimed' ? 'Claimed' : req.status}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px', color: '#667eea', fontWeight: '600', fontSize: '13px' }}>
+                                  {req.points_cost} pts
+                                </td>
+                                <td style={{ padding: '12px', color: '#64748b', fontSize: '13px' }}>
+                                  {req.requested_at ? new Date(req.requested_at).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  }) : '-'}
+                                </td>
+                                <td style={{ padding: '12px', color: '#64748b', fontSize: '13px' }}>
+                                  {req.approved_at ? new Date(req.approved_at).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  }) : '-'}
+                                </td>
+                                {hasClaimableRewards && (
+                                  <td style={{ padding: '12px', color: canClaim ? (hasExpired ? '#dc2626' : '#64748b') : '#64748b', fontSize: '13px', fontWeight: canClaim && hasExpired ? '600' : '400' }}>
+                                    {canClaim && req.expires_at ? new Date(req.expires_at).toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric'
+                                    }) : '-'}
+                                  </td>
+                                )}
+                                <td style={{ padding: '12px', textAlign: 'center' }}>
+                                  <button
+                                    onClick={() => setSelectedRewardDetail(req)}
+                                    style={{
+                                      padding: '6px 12px',
+                                      borderRadius: '6px',
+                                      border: '1px solid #667eea',
+                                      background: 'white',
+                                      color: '#667eea',
+                                      fontSize: '12px',
+                                      fontWeight: '600',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      transition: 'all 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = '#667eea';
+                                      e.currentTarget.style.color = 'white';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = 'white';
+                                      e.currentTarget.style.color = '#667eea';
+                                    }}
+                                  >
+                                    <HiOutlineEye size={14} />
+                                    View
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Reward Detail Modal */}
+      {selectedRewardDetail && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1001,
+            padding: '20px'
+          }}
+          onClick={() => setSelectedRewardDetail(null)}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '24px',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Render the same detailed card view for selectedRewardDetail */}
+            {(() => {
+              const req = selectedRewardDetail;
+              const isApproved = req.status === 'approved' || req.status === 'ready_for_pickup';
+              const isClaimed = req.status === 'claimed';
+              const isPending = req.status === 'pending';
+              const isMerchandise = req.reward_type?.toLowerCase().includes('merchandise') || 
+                                   req.reward_type?.toLowerCase().includes('merch') ||
+                                   req.reward_type?.toLowerCase().includes('product') ||
+                                   req.reward_type?.toLowerCase().includes('item');
+              // Only vouchers can be claimed by user, merchandise must be released by admin
+              const canClaim = isApproved && !isClaimed && !isMerchandise;
+              const isClaiming = claimingReward === req.request_id;
+
+                  return (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#174f84' }}>
+                      Reward Details
+                    </h2>
+                    <button
+                      onClick={() => setSelectedRewardDetail(null)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '24px',
+                        cursor: 'pointer',
+                        color: '#666'
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div style={{
                         border: '1px solid #e0e0e0',
                         borderRadius: '12px',
                         padding: '16px',
                         background: isClaimed ? '#f0f9ff' : isApproved ? '#f0fdf4' : '#fef3c7'
-                      }}
-                    >
-                      <div style={{ marginBottom: '12px' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: '#174f84', marginBottom: '4px' }}>
+                  }}>
+                    {/* Use the same detailed card structure from card view */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <h3 style={{ 
+                        margin: 0, 
+                        fontSize: '20px', 
+                        fontWeight: '700', 
+                        color: '#1e293b', 
+                        marginBottom: '16px',
+                        letterSpacing: '-0.02em'
+                      }}>
                           {req.reward_name}
                         </h3>
-                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
-                          Type: {req.reward_type}
+                      
+                      {/* Details Grid */}
+                      <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: '1fr 1fr', 
+                        gap: '12px 24px',
+                        marginBottom: '16px',
+                        padding: '16px',
+                        background: '#f8fafc',
+                        borderRadius: '10px',
+                        border: '1px solid #e2e8f0'
+                      }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ 
+                            color: '#64748b', 
+                            fontWeight: '500',
+                            fontSize: '11px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
+                          }}>
+                            Type
+                          </span>
+                          <span style={{ color: '#0f172a', fontWeight: '600', fontSize: '14px' }}>
+                            {req.reward_type}
+                          </span>
                         </div>
-                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
-                          Cost: <strong style={{ color: '#667eea' }}>{req.reward_value}</strong> ({req.points_cost} points)
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ 
+                            color: '#64748b', 
+                            fontWeight: '500',
+                            fontSize: '11px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
+                          }}>
+                            Cost
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <strong style={{ color: '#667eea', fontSize: '14px', fontWeight: '700' }}>
+                              {req.points_cost} pts
+                            </strong>
+                            <span style={{ color: '#94a3b8', fontSize: '13px' }}>
+                              ({req.reward_value})
+                            </span>
                         </div>
-                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
-                          Status: <strong style={{ 
-                            color: isPending ? '#f59e0b' : isApproved ? '#10b981' : isClaimed ? '#3b82f6' : '#666'
+                        </div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ 
+                            color: '#64748b', 
+                            fontWeight: '500',
+                            fontSize: '11px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
+                          }}>
+                            Status
+                          </span>
+                          <strong style={{ 
+                            color: isPending ? '#f59e0b' : isApproved ? '#10b981' : isClaimed ? '#3b82f6' : '#64748b',
+                            fontSize: '14px',
+                            fontWeight: '600'
                           }}>
                             {req.status === 'pending' ? 'Pending Approval' : 
                              req.status === 'approved' ? 'Approved - Ready to Claim' :
@@ -4233,24 +4585,158 @@ getPosts()
                              req.status === 'claimed' ? 'Claimed' : req.status}
                           </strong>
                         </div>
+                        
                         {req.requested_at && (
-                          <div style={{ fontSize: '12px', color: '#999', marginBottom: '4px' }}>
-                            Requested: {new Date(req.requested_at).toLocaleDateString()}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ 
+                              color: '#64748b', 
+                              fontWeight: '500',
+                              fontSize: '11px',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px'
+                            }}>
+                              Requested
+                            </span>
+                            <span style={{ color: '#0f172a', fontWeight: '500', fontSize: '14px' }}>
+                              {new Date(req.requested_at).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                              })}
+                            </span>
                           </div>
                         )}
+                        
+                        {req.approved_at && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ 
+                              color: '#64748b', 
+                              fontWeight: '500',
+                              fontSize: '11px',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px'
+                            }}>
+                              Approved
+                            </span>
+                            <span style={{ color: '#0f172a', fontWeight: '500', fontSize: '14px' }}>
+                              {new Date(req.approved_at).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                              })}
+                            </span>
+                          </div>
+                        )}
+                        
                         {req.expires_at && (
-                          <div style={{ fontSize: '12px', color: '#dc2626', marginBottom: '4px' }}>
-                            Expires: {new Date(req.expires_at).toLocaleDateString()}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ 
+                              color: '#64748b', 
+                              fontWeight: '500',
+                              fontSize: '11px',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px'
+                            }}>
+                              Expires
+                            </span>
+                            <span style={{ 
+                              color: '#dc2626', 
+                              fontWeight: '600', 
+                              fontSize: '14px'
+                            }}>
+                              {new Date(req.expires_at).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                              })}
+                            </span>
                           </div>
                         )}
+                      </div>
+
+                      {/* Instructions Section */}
                         {req.notes && (
-                          <div style={{ fontSize: '14px', color: '#333', marginTop: '8px', padding: '8px', background: '#f9fafb', borderRadius: '8px' }}>
-                            <strong>Instructions:</strong> {req.notes}
+                        <div style={{ 
+                          marginTop: '16px',
+                          marginBottom: '16px',
+                          padding: '14px 16px', 
+                          background: 'linear-gradient(to right, #f8fafc 0%, #ffffff 100%)', 
+                          borderRadius: '10px',
+                          border: '1px solid #e2e8f0',
+                          borderLeft: '4px solid #64748b'
+                        }}>
+                          <div style={{ 
+                            fontWeight: '700', 
+                            color: '#334155',
+                            marginBottom: '8px',
+                            fontSize: '11px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}>
+                            <span style={{ fontSize: '14px' }}>📋</span>
+                            Instructions
+                          </div>
+                          <div style={{ 
+                            lineHeight: '1.6', 
+                            color: '#475569',
+                            fontSize: '14px'
+                          }}>
+                            {req.notes}
+                          </div>
                           </div>
                         )}
+
+                      {/* Voucher Code Section */}
                         {req.voucher_code && (
-                          <div style={{ fontSize: '14px', color: '#333', marginTop: '8px', padding: '8px', background: '#f0f9ff', borderRadius: '8px' }}>
-                            <strong>Voucher Code:</strong> {req.voucher_code}
+                        <div style={{ 
+                          marginTop: '16px',
+                          padding: '16px', 
+                          background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', 
+                          borderRadius: '10px',
+                          border: '1px solid #bfdbfe',
+                          borderLeft: '4px solid #3b82f6'
+                        }}>
+                          <div style={{ 
+                            fontWeight: '700', 
+                            color: '#1e40af',
+                            marginBottom: '10px',
+                            fontSize: '11px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}>
+                            <span style={{ fontSize: '14px' }}>🎫</span>
+                            Voucher Code
+                          </div>
+                          <div style={{ 
+                            fontSize: '20px',
+                            fontWeight: '800',
+                            color: '#1e3a8a',
+                            fontFamily: '"SF Mono", "Monaco", "Inconsolata", "Roboto Mono", monospace',
+                            letterSpacing: '2px',
+                            padding: '12px 16px',
+                            background: 'white',
+                            borderRadius: '8px',
+                            border: '2px solid #93c5fd',
+                            textAlign: 'center',
+                            boxShadow: '0 2px 4px rgba(59, 130, 246, 0.1)'
+                          }}>
+                            {req.voucher_code}
+                          </div>
+                          <div style={{
+                            fontSize: '11px',
+                            color: '#64748b',
+                            textAlign: 'center',
+                            marginTop: '8px',
+                            fontStyle: 'italic'
+                          }}>
+                            Save this code for redemption
+                          </div>
                           </div>
                         )}
                       </div>
@@ -4284,7 +4770,7 @@ getPosts()
                           }}
                         >
                           {isClaiming ? 'Claiming...' : (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
                               <HiOutlineGift size={16} strokeWidth={1.5} />
                               <span>Claim Reward</span>
                             </span>
@@ -4292,10 +4778,9 @@ getPosts()
                         </button>
                       )}
                     </div>
+                </>
                   );
-                })}
-              </div>
-            )}
+            })()}
           </div>
         </div>
       )}

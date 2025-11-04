@@ -1134,6 +1134,7 @@ export const getUserPoints = async (userId: number) => {
       comments: { points: 0, count: 0 },
       shares: { points: 0, count: 0 },
       replies: { points: 0, count: 0 },
+      posts: { points: 0, count: 0 },
       posts_with_photos: { points: 0, count: 0 },
       tracker_form: { points: 0, count: 0 }
     }

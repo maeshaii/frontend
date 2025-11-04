@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import RepostModal from './RepostModal';
-import { repostPost, repostForumPost, repostDonation } from '../services/api';
+import { repostPost, repostForumPost, repostDonation, getUserPoints } from '../services/api';
 
 interface RepostButtonProps {
   originalPost: {
@@ -85,6 +85,24 @@ const RepostButton: React.FC<RepostButtonProps> = ({
       console.log('Repost result:', result);
       setShowRepostModal(false);
       onRepost?.(); // This will refresh the posts to show the new repost
+      
+      // Refresh points after reposting (only for alumni users)
+      const raw = localStorage.getItem('user');
+      const storedUser = raw ? JSON.parse(raw) : null;
+      if (storedUser && storedUser.account_type && storedUser.account_type.user) {
+        const userId = storedUser.user_id || storedUser.id;
+        if (userId) {
+          try {
+            const points = await getUserPoints(userId);
+            // Dispatch event to notify Profile component
+            window.dispatchEvent(new CustomEvent('pointsUpdated', { 
+              detail: { userId, points } 
+            }));
+          } catch (error) {
+            console.error('Error refreshing points after repost:', error);
+          }
+        }
+      }
     } catch (error: any) {
       console.error('Error creating repost:', error);
       alert('Failed to create repost. Please try again.');

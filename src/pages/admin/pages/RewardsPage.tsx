@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
-import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardRequests, approveRewardRequest, getEngagementPointsSettings, updateEngagementPointsSettings } from '../../../services/api';
+import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardRequests, approveRewardRequest, claimRewardRequest, getEngagementPointsSettings, updateEngagementPointsSettings } from '../../../services/api';
 import { FaTimes } from 'react-icons/fa';
 import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList } from 'react-icons/hi2';
 
@@ -19,7 +19,9 @@ interface LeaderboardEntry {
     comments: { points: number; count: number };
     shares: { points: number; count: number };
     replies: { points: number; count: number };
+    posts: { points: number; count: number };
     posts_with_photos: { points: number; count: number };
+    tracker_form?: { points: number; count: number };
   };
   last_updated: string;
 }
@@ -82,6 +84,7 @@ const RewardsPage: React.FC = () => {
   const [pointsSettingsLoading, setPointsSettingsLoading] = useState(false);
   const [voucherCode, setVoucherCode] = useState('');
   const [approving, setApproving] = useState(false);
+  const [releasing, setReleasing] = useState(false);
 
   useEffect(() => {
     fetchLeaderboardData();
@@ -209,6 +212,34 @@ const RewardsPage: React.FC = () => {
     }
   };
 
+  const handleReleaseMerchandise = async (requestId: number) => {
+    if (releasing) return;
+    
+    const request = rewardRequests.find(req => req.request_id === requestId);
+    if (!request) return;
+
+    const confirm = window.confirm(`Release "${request.reward_name}" to ${request.user_name}?\n\nPoints will be deducted and inventory will be updated.`);
+    if (!confirm) return;
+
+    try {
+      setReleasing(true);
+      // For merchandise, admin calls claim endpoint to release it
+      const response = await claimRewardRequest(requestId);
+      
+      if (response.success) {
+        alert('Merchandise released successfully! Points have been deducted and user has been notified.');
+        await fetchRewardRequests();
+      } else {
+        alert(response.message || 'Failed to release merchandise');
+      }
+    } catch (error: any) {
+      console.error('Error releasing merchandise:', error);
+      alert(error.response?.data?.message || 'Failed to release merchandise');
+    } finally {
+      setReleasing(false);
+    }
+  };
+
   const fetchLeaderboardData = async () => {
     setLoading(true);
     try {
@@ -251,6 +282,20 @@ const RewardsPage: React.FC = () => {
     } catch (error) {
       console.error('Error fetching inventory:', error);
       alert('Failed to load inventory items');
+    }
+  };
+
+  const fetchInventoryItems = async () => {
+    try {
+      const response = await getInventoryItems();
+      if (response.success) {
+        setInventoryItems(response.items || []);
+      } else {
+        setInventoryItems([]);
+      }
+    } catch (error) {
+      console.error('Error fetching inventory items:', error);
+      setInventoryItems([]);
     }
   };
 
@@ -716,7 +761,12 @@ const RewardsPage: React.FC = () => {
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
                     onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-                    onClick={() => setSelectedUser(entry)}
+                    onClick={() => {
+                      // Open reward modal directly instead of detail modal
+                      setSelectedUser(entry);
+                      setShowRewardModal(true);
+                      fetchInventoryItems();
+                    }}
                   >
                     {/* Profile Picture */}
                     {entry.profile_pic ? (
@@ -810,7 +860,13 @@ const RewardsPage: React.FC = () => {
                           <HiOutlineArrowUturnLeft size={12} strokeWidth={1.5} /> {entry.points_breakdown.replies.count}
                         </span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <HiOutlineDocumentText size={12} strokeWidth={1.5} /> {entry.points_breakdown.posts?.count || 0}
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <HiOutlineCamera size={12} strokeWidth={1.5} /> {entry.points_breakdown.posts_with_photos.count}
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <HiOutlineClipboardDocumentList size={12} strokeWidth={1.5} /> {(entry.points_breakdown as any).tracker_form?.count || 0}
                         </span>
                       </div>
                     </div>
@@ -845,205 +901,6 @@ const RewardsPage: React.FC = () => {
           </div>
           </div>
         </div>
-
-        {/* User Detail Modal */}
-        {selectedUser && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-          onClick={() => setSelectedUser(null)}
-          >
-            <div style={{
-              backgroundColor: 'white',
-              padding: '32px',
-              borderRadius: '16px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-              width: '600px',
-              maxWidth: '90%',
-              position: 'relative'
-            }}
-            onClick={(e) => e.stopPropagation()}
-            >
-              {/* X Close Button */}
-              <button
-                onClick={() => setSelectedUser(null)}
-                style={{
-                  position: 'absolute',
-                  top: '16px',
-                  right: '16px',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '8px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#6b7280',
-                  transition: 'all 0.2s',
-                  width: '32px',
-                  height: '32px'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#f3f4f6';
-                  e.currentTarget.style.color = '#1f2937';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = '#6b7280';
-                }}
-              >
-                <FaTimes size={18} />
-              </button>
-
-              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                <div style={{
-                  fontSize: '48px',
-                  fontWeight: 'bold',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  marginBottom: '8px'
-                }}>
-                  {selectedUser.total_points}
-                </div>
-                <h2 style={{ margin: '0 0 8px 0', color: '#1f2937', fontSize: '24px', fontWeight: '600' }}>
-                  {selectedUser.name}
-                </h2>
-                <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>
-                  Rank #{selectedUser.rank} • {selectedUser.user_type}
-                </p>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
-                {/* Likes */}
-                <div style={{
-                  background: '#f0f9ff',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
-                    <HiOutlineHeart size={18} color="#0369a1" strokeWidth={1.5} />
-                  </div>
-                  <div style={{ fontSize: '24px', fontWeight: '600', color: '#0369a1', marginBottom: '4px' }}>
-                    {selectedUser.points_breakdown.likes.count}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Likes</div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#667eea' }}>
-                    +{selectedUser.points_breakdown.likes.points} pts
-                  </div>
-                </div>
-
-                {/* Comments */}
-                <div style={{
-                  background: '#f0fdf4',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
-                    <HiOutlineChatBubbleLeft size={18} color="#065f46" strokeWidth={1.5} />
-                  </div>
-                  <div style={{ fontSize: '24px', fontWeight: '600', color: '#065f46', marginBottom: '4px' }}>
-                    {selectedUser.points_breakdown.comments.count}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Comments</div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#667eea' }}>
-                    +{selectedUser.points_breakdown.comments.points} pts
-                  </div>
-                </div>
-
-                {/* Shares */}
-                <div style={{
-                  background: '#fef3c7',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
-                    <HiOutlineArrowPath size={18} color="#92400e" strokeWidth={1.5} />
-                  </div>
-                  <div style={{ fontSize: '24px', fontWeight: '600', color: '#92400e', marginBottom: '4px' }}>
-                    {selectedUser.points_breakdown.shares.count}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Shares</div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#667eea' }}>
-                    +{selectedUser.points_breakdown.shares.points} pts
-                  </div>
-                </div>
-
-                {/* Replies */}
-                <div style={{
-                  background: '#fce7f3',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
-                    <HiOutlineArrowUturnLeft size={18} color="#831843" strokeWidth={1.5} />
-                  </div>
-                  <div style={{ fontSize: '24px', fontWeight: '600', color: '#831843', marginBottom: '4px' }}>
-                    {selectedUser.points_breakdown.replies.count}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Replies</div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#667eea' }}>
-                    +{selectedUser.points_breakdown.replies.points} pts
-                  </div>
-                </div>
-
-                {/* Posts with Photos */}
-                <div style={{
-                  background: '#ede9fe',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
-                    <HiOutlineCamera size={18} color="#5b21b6" strokeWidth={1.5} />
-                  </div>
-                  <div style={{ fontSize: '24px', fontWeight: '600', color: '#5b21b6', marginBottom: '4px' }}>
-                    {selectedUser.points_breakdown.posts_with_photos.count}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Posts with Photos</div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#667eea' }}>
-                    +{selectedUser.points_breakdown.posts_with_photos.points} pts
-                  </div>
-                </div>
-
-                {/* Tracker Form */}
-                {(selectedUser.points_breakdown as any).tracker_form && (
-                  <div style={{
-                    background: '#fef3c7',
-                    padding: '16px',
-                    borderRadius: '12px',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
-                      <HiOutlineClipboardDocumentList size={18} color="#92400e" strokeWidth={1.5} />
-                    </div>
-                    <div style={{ fontSize: '24px', fontWeight: '600', color: '#92400e', marginBottom: '4px' }}>
-                      {(selectedUser.points_breakdown as any).tracker_form.count}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Tracker Form</div>
-                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#667eea' }}>
-                      +{(selectedUser.points_breakdown as any).tracker_form.points} pts
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Give Reward Modal */}
         {showRewardModal && selectedUser && (
@@ -1505,37 +1362,87 @@ const RewardsPage: React.FC = () => {
                             </div>
                           </div>
 
-                          {/* Approve Button */}
+                          {/* Approve/Release Button */}
                           <div>
-                            <button
-                              onClick={() => {
-                                setSelectedRequest(req);
-                                setInstructions('');
-                                setVoucherCode('');
-                                setShowApproveModal(true);
-                              }}
-                              style={{
-                                padding: '12px 24px',
-                                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '8px',
-                                fontSize: '14px',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'translateY(-2px)';
-                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'translateY(0)';
-                                e.currentTarget.style.boxShadow = 'none';
-                              }}
-                            >
-                              Review & Approve
-                            </button>
+                            {(() => {
+                              const isMerchandise = req.reward_type?.toLowerCase().includes('merchandise') || 
+                                                   req.reward_type?.toLowerCase().includes('merch') ||
+                                                   req.reward_type?.toLowerCase().includes('product') ||
+                                                   req.reward_type?.toLowerCase().includes('item');
+                              const isReadyForPickup = req.status === 'ready_for_pickup';
+                              const isClaimed = req.status === 'claimed';
+                              
+                              // Show Release button for merchandise that's ready for pickup
+                              if (isMerchandise && isReadyForPickup && !isClaimed) {
+                                return (
+                                  <button
+                                    onClick={() => handleReleaseMerchandise(req.request_id)}
+                                    disabled={releasing}
+                                    style={{
+                                      padding: '12px 24px',
+                                      background: releasing ? '#9ca3af' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '8px',
+                                      fontSize: '14px',
+                                      fontWeight: '600',
+                                      cursor: releasing ? 'not-allowed' : 'pointer',
+                                      transition: 'all 0.2s',
+                                      opacity: releasing ? 0.6 : 1
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (!releasing) {
+                                        e.currentTarget.style.transform = 'translateY(-2px)';
+                                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.4)';
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.transform = 'translateY(0)';
+                                      e.currentTarget.style.boxShadow = 'none';
+                                    }}
+                                  >
+                                    {releasing ? 'Releasing...' : '✓ Release'}
+                                  </button>
+                                );
+                              }
+                              
+                              // Show Approve button for pending requests
+                              if (req.status === 'pending') {
+                                return (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedRequest(req);
+                                      setInstructions('');
+                                      setVoucherCode('');
+                                      setShowApproveModal(true);
+                                    }}
+                                    style={{
+                                      padding: '12px 24px',
+                                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '8px',
+                                      fontSize: '14px',
+                                      fontWeight: '600',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.transform = 'translateY(-2px)';
+                                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.transform = 'translateY(0)';
+                                      e.currentTarget.style.boxShadow = 'none';
+                                    }}
+                                  >
+                                    Review & Approve
+                                  </button>
+                                );
+                              }
+                              
+                              return null;
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -1908,11 +1815,11 @@ const RewardsPage: React.FC = () => {
                   />
                 </div>
 
-                {/* Shares */}
+                {/* Repost */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: '#f9fafb', borderRadius: '6px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <HiOutlineArrowPath size={18} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '14px', fontWeight: '500', color: '#1f2937' }}>Shares</span>
+                    <span style={{ fontSize: '14px', fontWeight: '500', color: '#1f2937' }}>Repost</span>
                   </div>
                   <input
                     type="number"
