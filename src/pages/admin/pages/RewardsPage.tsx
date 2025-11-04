@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
-import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardRequests, approveRewardRequest, claimRewardRequest, getEngagementPointsSettings, updateEngagementPointsSettings } from '../../../services/api';
+import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardRequests, approveRewardRequest, claimRewardRequest, getEngagementPointsSettings, updateEngagementPointsSettings, getRewardHistory, fetchTrackerResponses, fetchAlumniDetails } from '../../../services/api';
 import { FaTimes } from 'react-icons/fa';
-import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList } from 'react-icons/hi2';
+import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineUser, HiOutlineTag } from 'react-icons/hi2';
 
 interface LeaderboardEntry {
   rank: number;
@@ -55,6 +55,21 @@ interface RewardRequest {
   notes: string | null;
 }
 
+interface RewardHistoryEntry {
+  id: number;
+  user_id: number;
+  user_name: string;
+  profile_pic: string | null;
+  program: string | null;
+  year_graduated: number | null;
+  reward_name: string;
+  reward_type: string;
+  reward_value: string;
+  points_deducted: number;
+  given_by: string;
+  given_at: string;
+}
+
 const RewardsPage: React.FC = () => {
   const navigate = useNavigate();
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -85,12 +100,43 @@ const RewardsPage: React.FC = () => {
   const [voucherCode, setVoucherCode] = useState('');
   const [approving, setApproving] = useState(false);
   const [releasing, setReleasing] = useState(false);
+  const [rewardHistory, setRewardHistory] = useState<RewardHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [inventoryCount, setInventoryCount] = useState(0);
+  const [tableFilter, setTableFilter] = useState<'requests' | 'history'>('requests');
+  const [requestStatusFilter, setRequestStatusFilter] = useState<'all' | 'pending' | 'approved' | 'ready_for_pickup'>('all');
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [trackerFormResponsesCount, setTrackerFormResponsesCount] = useState(0);
+  const [trackerFormLoading, setTrackerFormLoading] = useState(true);
+  const [showTrackerResponsesModal, setShowTrackerResponsesModal] = useState(false);
+  const [trackerResponses, setTrackerResponses] = useState<any[]>([]);
+  const [trackerResponsesLoading, setTrackerResponsesLoading] = useState(false);
 
   useEffect(() => {
     fetchLeaderboardData();
     fetchRewardRequests();
+    fetchRewardHistory();
     fetchPointsSettings();
-  }, [filter]);
+    fetchInventoryCount();
+    fetchTrackerFormResponsesCount();
+    
+    // Close dropdown when clicking outside
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('[data-status-dropdown]')) {
+        setShowStatusDropdown(false);
+      }
+    };
+    
+    if (showStatusDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [filter, showStatusDropdown]);
 
   const fetchPointsSettings = async () => {
     try {
@@ -147,38 +193,96 @@ const RewardsPage: React.FC = () => {
   const fetchRewardRequests = async () => {
     setRequestsLoading(true);
     try {
-      console.log('Fetching reward requests with status=pending...');
-      const response = await getRewardRequests('pending');
-      console.log('Reward requests API response:', response);
-      console.log('Response success:', response?.success);
-      console.log('Response requests array:', response?.requests);
-      console.log('Response count:', response?.count);
-      
+      const response = await getRewardRequests(); // Fetch all requests without status filter
       if (response && response.success) {
         const requests = response.requests || [];
-        console.log(`✅ Loaded ${requests.length} pending reward requests`);
-        if (requests.length === 0) {
-          console.warn('⚠️ No pending requests found in response, but API call succeeded');
-        }
         setRewardRequests(requests);
       } else {
-        console.error('❌ API returned success=false:', response?.message || 'Unknown error');
         setRewardRequests([]);
-        // Show alert to admin for debugging
-        if (response?.message) {
-          console.error('Error message from API:', response.message);
-        }
       }
     } catch (error: any) {
-      console.error('❌ Exception fetching reward requests:', error);
-      console.error('Error response:', error.response);
-      console.error('Error response data:', error.response?.data);
-      console.error('Error status:', error.response?.status);
+      console.error('Error fetching reward requests:', error);
       setRewardRequests([]);
-      // Show error to admin
-      alert(`Error loading reward requests: ${error.response?.data?.message || error.message || 'Unknown error'}`);
     } finally {
       setRequestsLoading(false);
+    }
+  };
+
+  const fetchRewardHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const data = await getRewardHistory(100);
+      setRewardHistory(data.history || []);
+    } catch (error) {
+      console.error('Error fetching reward history:', error);
+      setRewardHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const fetchInventoryCount = async () => {
+    try {
+      const response = await getInventoryItems();
+      if (response.success) {
+        setInventoryCount(response.items?.length || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching inventory count:', error);
+    }
+  };
+
+  const fetchTrackerFormResponsesCount = async () => {
+    setTrackerFormLoading(true);
+    try {
+      const response = await fetchTrackerResponses();
+      if (response && response.success && response.responses) {
+        setTrackerFormResponsesCount(response.responses.length);
+      } else {
+        setTrackerFormResponsesCount(0);
+      }
+    } catch (error) {
+      console.error('Error fetching tracker form responses:', error);
+      setTrackerFormResponsesCount(0);
+    } finally {
+      setTrackerFormLoading(false);
+    }
+  };
+
+  const fetchTrackerResponsesWithDetails = async () => {
+    setTrackerResponsesLoading(true);
+    try {
+      const response = await fetchTrackerResponses();
+      if (response && response.success && response.responses) {
+        // Fetch user details to get graduation year
+        const responsesWithDetails = await Promise.all(
+          response.responses.map(async (resp: any) => {
+            try {
+              const userDetails = await fetchAlumniDetails(resp.user_id);
+              return {
+                ...resp,
+                year_graduated: userDetails?.alumni?.year_graduated || userDetails?.alumni?.batch || null,
+                program: userDetails?.alumni?.program || null
+              };
+            } catch (error) {
+              console.error(`Error fetching details for user ${resp.user_id}:`, error);
+              return {
+                ...resp,
+                year_graduated: null,
+                program: null
+              };
+            }
+          })
+        );
+        setTrackerResponses(responsesWithDetails);
+      } else {
+        setTrackerResponses([]);
+      }
+    } catch (error) {
+      console.error('Error fetching tracker responses:', error);
+      setTrackerResponses([]);
+    } finally {
+      setTrackerResponsesLoading(false);
     }
   };
 
@@ -201,6 +305,7 @@ const RewardsPage: React.FC = () => {
         setInstructions('');
         setVoucherCode('');
         await fetchRewardRequests();
+        await fetchRewardHistory();
       } else {
         alert(response.message || 'Failed to approve reward request');
       }
@@ -229,6 +334,7 @@ const RewardsPage: React.FC = () => {
       if (response.success) {
         alert('Merchandise released successfully! Points have been deducted and user has been notified.');
         await fetchRewardRequests();
+        await fetchRewardHistory();
       } else {
         alert(response.message || 'Failed to release merchandise');
       }
@@ -324,8 +430,9 @@ const RewardsPage: React.FC = () => {
         setSelectedReward(null);
         setSelectedUser(null);
         
-        // Refresh leaderboard
+        // Refresh leaderboard and history
         fetchLeaderboardData();
+        fetchRewardHistory();
       } else {
         alert(`❌ Failed to give reward: ${response.message}`);
       }
@@ -363,13 +470,15 @@ const RewardsPage: React.FC = () => {
       backgroundColor: '#f0f4f8'
     },
     pageHeader: {
-      backgroundColor: '#b8daf0',
+      backgroundColor: '#ffffff',
       padding: '32px 40px',
       marginBottom: '32px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: '20px'
+      gap: '20px',
+      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+      borderBottom: '1px solid #e5e7eb'
     },
     headerTitle: {
       fontSize: '32px',
@@ -384,7 +493,7 @@ const RewardsPage: React.FC = () => {
     },
     headerSubtitle: {
       fontSize: '14px',
-      color: '#4a5568',
+      color: '#6b7280',
       marginTop: '8px',
       fontWeight: '400'
     },
@@ -438,7 +547,7 @@ const RewardsPage: React.FC = () => {
       transition: 'all 0.2s'
     },
     inventoryCard: {
-      backgroundColor: 'white',
+      backgroundColor: '#1e3a5f',
       padding: '32px 28px',
       borderRadius: '16px',
       boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
@@ -446,12 +555,13 @@ const RewardsPage: React.FC = () => {
       cursor: 'pointer',
       transition: 'all 0.2s',
       textAlign: 'center' as const,
-      border: '2px solid transparent'
+      border: '2px solid transparent',
+      position: 'relative' as const
     },
     inventoryTitle: {
       fontSize: '20px',
       fontWeight: '700',
-      color: '#1e3a5f',
+      color: 'white',
       margin: '0 0 8px 0',
       display: 'flex',
       alignItems: 'center',
@@ -461,7 +571,7 @@ const RewardsPage: React.FC = () => {
     },
     inventorySubtitle: {
       fontSize: '14px',
-      color: '#6b7280',
+      color: 'rgba(255, 255, 255, 0.9)',
       margin: 0,
       fontWeight: '400'
     },
@@ -573,332 +683,923 @@ const RewardsPage: React.FC = () => {
             </h1>
             <p style={styles.headerSubtitle}>Manage alumni engagement rewards and leaderboard</p>
           </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <button
-              onClick={() => navigate('/reward-history')}
-              style={{
-                padding: '10px 20px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: '#1e3a5f',
-                color: 'white',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#2d5a8f';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#1e3a5f';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
-              }}
-            >
-              Reward History
-            </button>
-            <button
-              onClick={() => navigate('/inventory')}
-              style={{
-                padding: '10px 20px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: '#1e3a5f',
-                color: 'white',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#2d5a8f';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#1e3a5f';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
-              }}
-            >
-              Inventory
-            </button>
-          </div>
         </div>
 
-        {/* Content Wrapper */}
-        <div style={styles.contentWrapper}>
-          <div style={styles.contentGrid}>
-            {/* Left Panel */}
-            <div style={styles.leftPanel}>
-            {/* Reward Requests Card */}
+        {/* Header Cards Section */}
+        <div style={{ padding: '0 40px 24px 40px' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '20px'
+          }}>
+            {/* Inventory Card */}
             <div 
-              style={{...styles.inventoryCard, position: 'relative'}}
-              onClick={() => setShowRequestsModal(true)}
+              style={styles.inventoryCard}
+              onClick={() => navigate('/inventory')}
               onMouseEnter={(e) => {
-                e.currentTarget.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.12)';
-                e.currentTarget.style.borderColor = '#1e3a5f';
-                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(30, 58, 95, 0.3)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.backgroundColor = '#153e75';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
-                e.currentTarget.style.borderColor = 'transparent';
                 e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.backgroundColor = '#1e3a5f';
               }}
             >
-              <h3 style={styles.inventoryTitle}>REWARD REQUESTS</h3>
-              <p style={styles.inventorySubtitle}>Review and approve user requests</p>
-              {requestsLoading ? (
-                <div style={{ 
-                  marginTop: '20px', 
-                  fontSize: '24px', 
-                  color: '#6b7280' 
-                }}>
-                  ⏳
-                </div>
-              ) : (
-                <>
-                  <div style={{ 
-                    marginTop: '20px', 
-                    fontSize: '32px', 
-                    fontWeight: 'bold', 
-                    color: '#1e3a5f' 
-                  }}>
-                    {rewardRequests.length}
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-                    {rewardRequests.length === 1 ? 'Pending Request' : 'Pending Requests'}
-                  </div>
-                </>
-              )}
-              {rewardRequests.length > 0 && (
-                <div style={{
-                  position: 'absolute',
-                  top: '16px',
-                  right: '16px',
-                  backgroundColor: '#dc2626',
-                  color: 'white',
-                  borderRadius: '50%',
-                  width: '24px',
-                  height: '24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '12px',
-                  fontWeight: 'bold'
-                }}>
-                  {rewardRequests.length}
-                </div>
-              )}
+              <div style={styles.inventoryTitle}>INVENTORY</div>
+              <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'white' }}>{inventoryCount}</div>
+              <div style={styles.inventorySubtitle}>Items Available</div>
             </div>
 
             {/* Points Settings Card */}
             <div 
-              style={{...styles.inventoryCard, position: 'relative', marginTop: '24px'}}
+              style={styles.inventoryCard}
               onClick={() => setShowPointsSettingsModal(true)}
               onMouseEnter={(e) => {
-                e.currentTarget.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.12)';
-                e.currentTarget.style.borderColor = '#1e3a5f';
-                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(30, 58, 95, 0.3)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.backgroundColor = '#153e75';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
-                e.currentTarget.style.borderColor = 'transparent';
                 e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.backgroundColor = '#1e3a5f';
               }}
             >
-              <h3 style={styles.inventoryTitle}>POINTS SETTINGS</h3>
-              <p style={styles.inventorySubtitle}>Configure engagement point values</p>
-              <div style={{ 
-                marginTop: '20px', 
-                fontSize: '16px', 
-                color: '#1e3a5f',
-                fontWeight: '600'
-              }}>
-                Manage Points
+              <div style={styles.inventoryTitle}>POINTS SETTINGS</div>
+              <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'white' }}>
+                {pointsSettings.enabled ? '✓' : '✗'}
+              </div>
+              <div style={styles.inventorySubtitle}>
+                {pointsSettings.enabled ? 'Enabled' : 'Disabled'}
               </div>
             </div>
-          </div>
 
-          {/* Right Panel - Leaderboard */}
-          <div style={styles.rightPanel}>
-            <div style={{ marginBottom: '28px' }}>
-              <h2 style={styles.rightPanelTitle}>
-                ALUMNI ENGAGEMENT LEADERBOARD
-              </h2>
-              <p style={styles.rightPanelSubtitle}>Top alumni contributors ranked by engagement points</p>
-            </div>
-            
-            <div style={styles.rewardList}>
-              {loading ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
-                  <div style={{ fontSize: '32px', marginBottom: '16px' }}>⏳</div>
-                  <div>Loading leaderboard...</div>
-                </div>
-              ) : leaderboard.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
-                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎯</div>
-                  <div style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px' }}>No data yet</div>
-                  <div style={{ fontSize: '14px' }}>Start engaging to appear on the leaderboard!</div>
-                </div>
-              ) : (
-                leaderboard.map((entry, index) => (
-                  <div
-                    key={entry.user_id}
-                    style={{
-                      ...styles.rewardItem,
-                      cursor: 'pointer',
-                      backgroundColor: index === 0 ? '#fff7ed' : index === 1 ? '#f0f9ff' : index === 2 ? '#fef3c7' : 'transparent',
-                      padding: '16px',
-                      marginBottom: '8px',
-                      borderRadius: '12px',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-                    onClick={() => {
-                      // Open reward modal directly instead of detail modal
-                      setSelectedUser(entry);
-                      setShowRewardModal(true);
-                      fetchInventoryItems();
-                    }}
-                  >
-                    {/* Profile Picture */}
-                    {entry.profile_pic ? (
-                      <img 
-                        src={
-                          String(entry.profile_pic).startsWith('http') 
-                            ? entry.profile_pic 
-                            : `http://127.0.0.1:8000${entry.profile_pic}`
-                        }
-                        alt={entry.name}
-                        style={{
-                          width: '48px',
-                          height: '48px',
-                          borderRadius: '50%',
-                          objectFit: 'cover',
-                          border: index < 3 ? '3px solid #1e3a5f' : '2px solid #e5e7eb',
-                          boxShadow: index < 3 ? '0 4px 6px rgba(0,0,0,0.1)' : 'none'
-                        }}
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          // Show fallback avatar
-                          const parent = target.parentElement;
-                          if (parent) {
-                            const fallback = parent.querySelector('.profile-pic-fallback') as HTMLElement;
-                            if (fallback) {
-                              fallback.style.display = 'flex';
-                            }
-                          }
-                        }}
-                      />
-                    ) : null}
-                    <div 
-                      className="profile-pic-fallback"
-                      style={{
-                        width: '48px',
-                        height: '48px',
-                        borderRadius: '50%',
-                        display: entry.profile_pic ? 'none' : 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '20px',
-                        fontWeight: 'bold',
-                        background: index === 0 ? 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' : 
-                                    index === 1 ? 'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)' :
-                                    index === 2 ? 'linear-gradient(135deg, #d97706 0%, #b45309 100%)' :
-                                    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        color: 'white',
-                        border: index < 3 ? '3px solid #1e3a5f' : '2px solid #e5e7eb',
-                        boxShadow: index < 3 ? '0 4px 6px rgba(0,0,0,0.1)' : 'none'
-                      }}
-                    >
-                      {entry.profile_pic ? entry.name.charAt(0).toUpperCase() : entry.name.charAt(0).toUpperCase()}
-                    </div>
-
-                    {/* User Info */}
-                    <div style={{ flex: 1, marginLeft: '16px' }}>
-                      <div style={{
-                        fontSize: '16px',
-                        fontWeight: '600',
-                        color: '#1f2937',
-                        marginBottom: '4px'
-                      }}>
-                        {entry.name}
-                      </div>
-                      <div style={{
-                        fontSize: '13px',
-                        color: '#6b7280',
-                        marginBottom: '4px'
-                      }}>
-                        {entry.user_type} • {entry.program || 'No Program'} • {entry.year_graduated || 'N/A'}
-                      </div>
-                      <div style={{
-                        fontSize: '12px',
-                        color: '#9ca3af',
-                        display: 'flex',
-                        gap: '12px',
-                        flexWrap: 'wrap',
-                        alignItems: 'center'
-                      }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <HiOutlineHeart size={12} strokeWidth={1.5} /> {entry.points_breakdown.likes.count}
-                        </span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <HiOutlineChatBubbleLeft size={12} strokeWidth={1.5} /> {entry.points_breakdown.comments.count}
-                        </span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <HiOutlineArrowPath size={12} strokeWidth={1.5} /> {entry.points_breakdown.shares.count}
-                        </span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <HiOutlineArrowUturnLeft size={12} strokeWidth={1.5} /> {entry.points_breakdown.replies.count}
-                        </span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <HiOutlineDocumentText size={12} strokeWidth={1.5} /> {entry.points_breakdown.posts?.count || 0}
-                        </span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <HiOutlineCamera size={12} strokeWidth={1.5} /> {entry.points_breakdown.posts_with_photos.count}
-                        </span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <HiOutlineClipboardDocumentList size={12} strokeWidth={1.5} /> {(entry.points_breakdown as any).tracker_form?.count || 0}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Points */}
-                    <div style={{
-                      textAlign: 'right',
-                      marginLeft: '16px'
-                    }}>
-                      <div style={{
-                        fontSize: '28px',
-                        fontWeight: 'bold',
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent',
-                        backgroundClip: 'text'
-                      }}>
-                        {entry.total_points}
-                      </div>
-                      <div style={{
-                        fontSize: '12px',
-                        color: '#9ca3af',
-                        fontWeight: '500'
-                      }}>
-                        points
-                      </div>
-                    </div>
+            {/* Tracker Form Responses Card */}
+            <div 
+              style={styles.inventoryCard}
+              onClick={() => {
+                setShowTrackerResponsesModal(true);
+                fetchTrackerResponsesWithDetails();
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(30, 58, 95, 0.3)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.backgroundColor = '#153e75';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.backgroundColor = '#1e3a5f';
+              }}
+            >
+              <div style={styles.inventoryTitle}>TRACKER FORM RESPONSES</div>
+              {trackerFormLoading ? (
+                <div style={{ fontSize: '20px', color: 'rgba(255, 255, 255, 0.9)' }}>⏳</div>
+              ) : trackerFormResponsesCount > 0 ? (
+                <>
+                  <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'white' }}>
+                    {trackerFormResponsesCount}
                   </div>
-                ))
+                  <div style={styles.inventorySubtitle}>users answered</div>
+                </>
+              ) : (
+                <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.9)' }}>No responses</div>
               )}
             </div>
           </div>
+                    </div>
+
+        {/* Content Wrapper - Unified Table */}
+        <div style={styles.contentWrapper}>
+                      <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+            border: '1px solid #e2e8f0',
+            overflow: 'hidden'
+          }}>
+            {/* Header with Filter Tabs */}
+            <div style={{
+              padding: '20px',
+              borderBottom: '2px solid #e5e7eb',
+              backgroundColor: '#f9fafb',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div>
+                  <h2 style={{
+                    fontSize: '20px',
+                    fontWeight: '700',
+                    color: '#1e3a5f',
+                    margin: 0
+                  }}>
+                    {tableFilter === 'requests' ? 'REWARD REQUESTS' : 'REWARD HISTORY'}
+                  </h2>
+                  <p style={{
+                    fontSize: '13px',
+                    color: '#6b7280',
+                    margin: '4px 0 0 0'
+                  }}>
+                    {tableFilter === 'requests' 
+                      ? (() => {
+                          // Filter out claimed requests for the count
+                          const nonClaimedRequests = rewardRequests.filter(req => req.status !== 'claimed');
+                          const filteredCount = requestStatusFilter === 'all' 
+                            ? nonClaimedRequests.length 
+                            : nonClaimedRequests.filter(req => 
+                                requestStatusFilter === 'pending' ? req.status === 'pending' :
+                                requestStatusFilter === 'approved' ? req.status === 'approved' :
+                                requestStatusFilter === 'ready_for_pickup' ? req.status === 'ready_for_pickup' : true
+                              ).length;
+                          return `${filteredCount} ${requestStatusFilter === 'all' ? 'total' : requestStatusFilter === 'pending' ? 'pending' : requestStatusFilter === 'approved' ? 'approved' : 'ready for pickup'} requests`;
+                        })()
+                      : `${rewardHistory.length} rewards distributed`}
+                  </p>
+                </div>
+                
+                {/* Filter Tabs */}
+                <div style={{
+                  display: 'flex',
+                  gap: '8px',
+                  backgroundColor: '#f3f4f6',
+                  padding: '4px',
+                  borderRadius: '8px'
+                }}>
+                  <button
+                    onClick={() => {
+                      setTableFilter('requests');
+                      setShowStatusDropdown(false);
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      backgroundColor: tableFilter === 'requests' ? 'white' : 'transparent',
+                      color: tableFilter === 'requests' ? '#1e3a5f' : '#6b7280',
+                      boxShadow: tableFilter === 'requests' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Requests
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTableFilter('history');
+                      setShowStatusDropdown(false);
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      backgroundColor: tableFilter === 'history' ? 'white' : 'transparent',
+                      color: tableFilter === 'history' ? '#1e3a5f' : '#6b7280',
+                      boxShadow: tableFilter === 'history' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    History
+                  </button>
+                </div>
+              </div>
+              
+              {/* Status Filter Dropdown - Only show when requests tab is active */}
+              {tableFilter === 'requests' && (
+                <div style={{
+                  display: 'flex',
+                  gap: '12px',
+                  alignItems: 'center',
+                  position: 'relative',
+                  flexWrap: 'wrap'
+                }}>
+                  <span style={{
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: '#6b7280',
+                    marginRight: '4px'
+                  }}>
+                    Filter by status:
+                  </span>
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      data-status-dropdown
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowStatusDropdown(!showStatusDropdown);
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '8px',
+                        border: '1px solid #e5e7eb',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        backgroundColor: 'white',
+                        color: '#1e3a5f',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        minWidth: '160px',
+                        justifyContent: 'space-between',
+                        transition: 'box-shadow 0.2s ease-out, border-color 0.2s ease-out',
+                        boxShadow: showStatusDropdown ? '0 2px 8px rgba(0, 0, 0, 0.1)' : '0 1px 2px rgba(0, 0, 0, 0.05)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = '#cbd5e1';
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!showStatusDropdown) {
+                          e.currentTarget.style.borderColor = '#e5e7eb';
+                          e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+                        }
+                      }}
+                    >
+                      <span>
+                        {requestStatusFilter === 'all' ? 'All' : 
+                         requestStatusFilter === 'pending' ? 'Pending' : 
+                         requestStatusFilter === 'approved' ? 'Approved' :
+                         'Ready for Pickup'}
+                      </span>
+                      <span style={{ 
+                        fontSize: '10px',
+                        transform: showStatusDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s'
+                      }}>▼</span>
+                    </button>
+                    {showStatusDropdown && (
+                      <div 
+                        data-status-dropdown
+                        style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          right: 0,
+                          backgroundColor: 'white',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                          border: '1px solid #e5e7eb',
+                          zIndex: 100,
+                          marginTop: '4px',
+                          overflow: 'hidden',
+                          animation: 'fadeInDropdown 0.2s ease-out',
+                          transformOrigin: 'top center'
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                      >
+                        <style>{`
+                          @keyframes fadeInDropdown {
+                            from {
+                              opacity: 0;
+                              transform: translateY(-8px) scale(0.95);
+                            }
+                            to {
+                              opacity: 1;
+                              transform: translateY(0) scale(1);
+                            }
+                          }
+                        `}</style>
+                        <div
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Close dropdown first, then update filter after a brief delay for smooth transition
+                            setShowStatusDropdown(false);
+                            setTimeout(() => {
+                              setRequestStatusFilter('all');
+                              setSearchTerm('');
+                            }, 150);
+                          }}
+                          style={{
+                            padding: '10px 16px',
+                            cursor: 'pointer',
+                            backgroundColor: requestStatusFilter === 'all' ? '#f3f4f6' : 'white',
+                            color: requestStatusFilter === 'all' ? '#1e3a5f' : '#374151',
+                            fontSize: '13px',
+                            fontWeight: requestStatusFilter === 'all' ? '600' : '400',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (requestStatusFilter !== 'all') {
+                              e.currentTarget.style.backgroundColor = '#f9fafb';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (requestStatusFilter !== 'all') {
+                              e.currentTarget.style.backgroundColor = 'white';
+                            }
+                          }}
+                        >
+                          All
+                        </div>
+                        <div
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Close dropdown first, then update filter after a brief delay for smooth transition
+                            setShowStatusDropdown(false);
+                            setTimeout(() => {
+                              setRequestStatusFilter('pending');
+                              setSearchTerm('');
+                            }, 150);
+                          }}
+                          style={{
+                            padding: '10px 16px',
+                            cursor: 'pointer',
+                            backgroundColor: requestStatusFilter === 'pending' ? '#f3f4f6' : 'white',
+                            color: requestStatusFilter === 'pending' ? '#1e3a5f' : '#374151',
+                            fontSize: '13px',
+                            fontWeight: requestStatusFilter === 'pending' ? '600' : '400',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (requestStatusFilter !== 'pending') {
+                              e.currentTarget.style.backgroundColor = '#f9fafb';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (requestStatusFilter !== 'pending') {
+                              e.currentTarget.style.backgroundColor = 'white';
+                            }
+                          }}
+                        >
+                          Pending
+                        </div>
+                        <div
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Close dropdown first, then update filter after a brief delay for smooth transition
+                            setShowStatusDropdown(false);
+                            setTimeout(() => {
+                              setRequestStatusFilter('approved');
+                              setSearchTerm('');
+                            }, 150);
+                          }}
+                          style={{
+                            padding: '10px 16px',
+                            cursor: 'pointer',
+                            backgroundColor: requestStatusFilter === 'approved' ? '#f3f4f6' : 'white',
+                            color: requestStatusFilter === 'approved' ? '#1e3a5f' : '#374151',
+                            fontSize: '13px',
+                            fontWeight: requestStatusFilter === 'approved' ? '600' : '400',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (requestStatusFilter !== 'approved') {
+                              e.currentTarget.style.backgroundColor = '#f9fafb';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (requestStatusFilter !== 'approved') {
+                              e.currentTarget.style.backgroundColor = 'white';
+                            }
+                          }}
+                        >
+                          Approved
+                        </div>
+                        <div
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Close dropdown first, then update filter after a brief delay for smooth transition
+                            setShowStatusDropdown(false);
+                            setTimeout(() => {
+                              setRequestStatusFilter('ready_for_pickup');
+                            }, 150);
+                          }}
+                          style={{
+                            padding: '10px 16px',
+                            cursor: 'pointer',
+                            backgroundColor: requestStatusFilter === 'ready_for_pickup' ? '#f3f4f6' : 'white',
+                            color: requestStatusFilter === 'ready_for_pickup' ? '#1e3a5f' : '#374151',
+                            fontSize: '13px',
+                            fontWeight: requestStatusFilter === 'ready_for_pickup' ? '600' : '400',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (requestStatusFilter !== 'ready_for_pickup') {
+                              e.currentTarget.style.backgroundColor = '#f9fafb';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (requestStatusFilter !== 'ready_for_pickup') {
+                              e.currentTarget.style.backgroundColor = 'white';
+                            }
+                          }}
+                        >
+                          Ready for Pickup
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Search Bar - Only show when ready_for_pickup filter is active */}
+                  {requestStatusFilter === 'ready_for_pickup' && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      position: 'relative',
+                      flex: '1',
+                      minWidth: '250px'
+                    }}>
+                      <input
+                        type="text"
+                        placeholder="Search by user name or reward..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        style={{
+                          padding: '8px 16px 8px 40px',
+                          borderRadius: '8px',
+                          border: '1px solid #e5e7eb',
+                          fontSize: '13px',
+                          width: '100%',
+                          backgroundColor: 'white',
+                          color: '#374151',
+                          transition: 'border-color 0.2s',
+                          outline: 'none'
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = '#3b82f6';
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = '#e5e7eb';
+                        }}
+                      />
+                      <span style={{
+                        position: 'absolute',
+                        left: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        fontSize: '16px',
+                        color: '#9ca3af'
+                      }}>
+                        🔍
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+              
+            {/* Unified Table Content */}
+            <div style={{ 
+              maxHeight: '600px', 
+              overflowY: 'auto',
+              transition: 'opacity 0.3s ease-in-out'
+            }}>
+              {tableFilter === 'requests' ? (
+                <>
+                  {requestsLoading ? (
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>⏳</div>
+                      <div>Loading requests...</div>
+                    </div>
+                  ) : (() => {
+                    // Use a key to force smooth re-render
+                    const contentKey = `${requestStatusFilter}-${searchTerm}`;
+                    // First filter out claimed requests (they should only appear in history)
+                    let filteredRequests = rewardRequests.filter(req => req.status !== 'claimed');
+                    
+                    // Then filter by status
+                    if (requestStatusFilter !== 'all') {
+                      filteredRequests = filteredRequests.filter(req => {
+                        if (requestStatusFilter === 'pending') return req.status === 'pending';
+                        if (requestStatusFilter === 'approved') return req.status === 'approved';
+                        if (requestStatusFilter === 'ready_for_pickup') return req.status === 'ready_for_pickup';
+                        return true;
+                      });
+                    }
+                    
+                    // Then filter by search term if status is ready_for_pickup and search term exists
+                    if (requestStatusFilter === 'ready_for_pickup' && searchTerm.trim()) {
+                      const searchLower = searchTerm.toLowerCase().trim();
+                      filteredRequests = filteredRequests.filter(req => {
+                        const userName = req.user_name?.toLowerCase() || '';
+                        const rewardName = req.reward_name?.toLowerCase() || '';
+                        return userName.includes(searchLower) || 
+                               rewardName.includes(searchLower);
+                      });
+                    }
+                    
+                    if (filteredRequests.length === 0) {
+                      return (
+                        <div 
+                          key={`empty-${contentKey}`}
+                          style={{ 
+                            textAlign: 'center', 
+                            padding: '40px', 
+                            color: '#6b7280',
+                            animation: 'fadeIn 0.3s ease-in-out'
+                          }}
+                        >
+                          <style>{`
+                            @keyframes fadeIn {
+                              from {
+                                opacity: 0;
+                                transform: translateY(4px);
+                              }
+                              to {
+                                opacity: 1;
+                                transform: translateY(0);
+                              }
+                            }
+                          `}</style>
+                          <div style={{ fontSize: '48px', marginBottom: '8px' }}>📋</div>
+                          <div>
+                            {requestStatusFilter === 'ready_for_pickup' && searchTerm.trim() 
+                              ? `No results found for "${searchTerm}"`
+                              : `No ${requestStatusFilter === 'all' ? '' : requestStatusFilter === 'pending' ? 'pending' : requestStatusFilter === 'approved' ? 'approved' : 'ready for pickup'} requests yet`}
+                          </div>
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <div
+                        key={contentKey}
+                        style={{
+                          animation: 'fadeIn 0.3s ease-in-out',
+                          opacity: 1
+                        }}
+                      >
+                        <style>{`
+                          @keyframes fadeIn {
+                            from {
+                              opacity: 0;
+                              transform: translateY(4px);
+                            }
+                            to {
+                              opacity: 1;
+                              transform: translateY(0);
+                            }
+                          }
+                        `}</style>
+                        <table style={{
+                          width: '100%',
+                          borderCollapse: 'collapse',
+                          transition: 'opacity 0.3s ease-in-out'
+                        }}>
+                        <thead style={{
+                          backgroundColor: '#f9fafb',
+                          position: 'sticky',
+                          top: 0,
+                          zIndex: 10
+                        }}>
+                          <tr>
+                            <th style={{
+                              padding: '12px 16px',
+                              textAlign: 'left',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              color: '#6b7280',
+                              textTransform: 'uppercase',
+                              borderBottom: '2px solid #e5e7eb'
+                            }}>User</th>
+                            <th style={{
+                              padding: '12px 16px',
+                              textAlign: 'left',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              color: '#6b7280',
+                              textTransform: 'uppercase',
+                              borderBottom: '2px solid #e5e7eb'
+                            }}>Reward</th>
+                            <th style={{
+                              padding: '12px 16px',
+                              textAlign: 'left',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              color: '#6b7280',
+                              textTransform: 'uppercase',
+                              borderBottom: '2px solid #e5e7eb'
+                            }}>Status</th>
+                            <th style={{
+                              padding: '12px 16px',
+                              textAlign: 'right',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              color: '#6b7280',
+                              textTransform: 'uppercase',
+                              borderBottom: '2px solid #e5e7eb'
+                            }}>Points</th>
+                            <th style={{
+                              padding: '12px 16px',
+                              textAlign: 'center',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              color: '#6b7280',
+                              textTransform: 'uppercase',
+                              borderBottom: '2px solid #e5e7eb'
+                            }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredRequests.map((req) => {
+                          const statusColors: { [key: string]: string } = {
+                            'pending': '#f59e0b',
+                            'approved': '#10b981',
+                            'ready_for_pickup': '#3b82f6',
+                            'claimed': '#6366f1',
+                            'rejected': '#ef4444'
+                          };
+                          const statusBg: { [key: string]: string } = {
+                            'pending': '#fef3c7',
+                            'approved': '#d1fae5',
+                            'ready_for_pickup': '#dbeafe',
+                            'claimed': '#e0e7ff',
+                            'rejected': '#fee2e2'
+                          };
+                          
+                          return (
+                            <tr key={req.request_id} style={{
+                              borderBottom: '1px solid #f3f4f6',
+                              transition: 'background-color 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                            >
+                              <td style={{ padding: '12px 16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  {req.profile_pic ? (
+                                    <img 
+                                      src={String(req.profile_pic).startsWith('http') ? req.profile_pic : `http://127.0.0.1:8000${req.profile_pic}`}
+                                      alt={req.user_name}
+                                      style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '50%',
+                                        objectFit: 'cover'
+                                      }}
+                                    />
+                                  ) : (
+                                    <div style={{
+                                      width: '32px',
+                                      height: '32px',
+                                      borderRadius: '50%',
+                                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      color: 'white',
+                                      fontSize: '14px',
+                                      fontWeight: 'bold'
+                                    }}>
+                                      {req.user_name.charAt(0)}
+                                    </div>
+                                  )}
+                                  <div>
+                                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>
+                                      {req.user_name}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <div style={{ fontSize: '14px', fontWeight: '500', color: '#1f2937' }}>
+                                  {req.reward_name}
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                  {req.reward_type}
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <span style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  backgroundColor: statusBg[req.status] || '#f3f4f6',
+                                  color: statusColors[req.status] || '#6b7280',
+                                  textTransform: 'capitalize',
+                                  display: 'inline-block'
+                                }}>
+                                  {req.status.replace('_', ' ')}
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: '#dc2626' }}>
+                                {req.points_cost}
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                {req.status === 'pending' && (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedRequest(req);
+                                      setInstructions('');
+                                      setVoucherCode('');
+                                      setShowApproveModal(true);
+                                    }}
+                                    style={{
+                                      padding: '6px 12px',
+                                      background: '#10b981',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      fontSize: '12px',
+                                      fontWeight: '600',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    Review
+                                  </button>
+                                )}
+                                {req.status === 'ready_for_pickup' && (
+                                  <button
+                                    onClick={() => handleReleaseMerchandise(req.request_id)}
+                                    disabled={releasing}
+                                    style={{
+                                      padding: '6px 12px',
+                                      background: '#3b82f6',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      fontSize: '12px',
+                                      fontWeight: '600',
+                                      cursor: releasing ? 'not-allowed' : 'pointer',
+                                      opacity: releasing ? 0.6 : 1
+                                    }}
+                                  >
+                                    Release
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
+                </>
+              ) : (
+                <>
+                  {historyLoading ? (
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>⏳</div>
+                      <div>Loading history...</div>
+                    </div>
+                  ) : rewardHistory.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                      <div style={{ fontSize: '48px', marginBottom: '8px' }}>📜</div>
+                      <div>No rewards given yet</div>
+                    </div>
+                  ) : (
+                    <table style={{
+                      width: '100%',
+                      borderCollapse: 'collapse'
+                    }}>
+                      <thead style={{
+                        backgroundColor: '#f9fafb',
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 10
+                      }}>
+                        <tr>
+                          <th style={{
+                            padding: '12px 16px',
+                            textAlign: 'left',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            color: '#6b7280',
+                            textTransform: 'uppercase',
+                            borderBottom: '2px solid #e5e7eb'
+                          }}>User</th>
+                          <th style={{
+                            padding: '12px 16px',
+                            textAlign: 'left',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            color: '#6b7280',
+                            textTransform: 'uppercase',
+                            borderBottom: '2px solid #e5e7eb'
+                          }}>Reward</th>
+                          <th style={{
+                            padding: '12px 16px',
+                            textAlign: 'left',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            color: '#6b7280',
+                            textTransform: 'uppercase',
+                            borderBottom: '2px solid #e5e7eb'
+                          }}>Given By</th>
+                          <th style={{
+                            padding: '12px 16px',
+                            textAlign: 'right',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            color: '#6b7280',
+                            textTransform: 'uppercase',
+                            borderBottom: '2px solid #e5e7eb'
+                          }}>Points</th>
+                          <th style={{
+                            padding: '12px 16px',
+                            textAlign: 'left',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            color: '#6b7280',
+                            textTransform: 'uppercase',
+                            borderBottom: '2px solid #e5e7eb'
+                          }}>Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rewardHistory.map((entry) => (
+                          <tr key={entry.id} style={{
+                            borderBottom: '1px solid #f3f4f6',
+                            transition: 'background-color 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          >
+                            <td style={{ padding: '12px 16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {entry.profile_pic ? (
+                                  <img 
+                                    src={String(entry.profile_pic).startsWith('http') ? entry.profile_pic : `http://127.0.0.1:8000${entry.profile_pic}`}
+                                    alt={entry.user_name}
+                                    style={{
+                                      width: '32px',
+                                      height: '32px',
+                                      borderRadius: '50%',
+                                      objectFit: 'cover'
+                                    }}
+                                  />
+                                ) : (
+                                  <div style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '50%',
+                                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: 'white',
+                                    fontSize: '14px',
+                                    fontWeight: 'bold'
+                                  }}>
+                                    {entry.user_name.charAt(0)}
+                      </div>
+                                )}
+                                <div>
+                                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>
+                                    {entry.user_name}
+                    </div>
+                                  {(entry.program || entry.year_graduated) && (
+                                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>
+                                      {entry.program || ''} {entry.year_graduated ? `• ${entry.year_graduated}` : ''}
+                  </div>
+              )}
+            </div>
+          </div>
+                            </td>
+                            <td style={{ padding: '12px 16px' }}>
+                              <div style={{ fontSize: '14px', fontWeight: '500', color: '#1f2937' }}>
+                                {entry.reward_name}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                {entry.reward_type}
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>
+                              {entry.given_by}
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: '#dc2626' }}>
+                              {entry.points_deducted}
+                            </td>
+                            <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>
+                              {new Date(entry.given_at).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                              })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -928,28 +1629,64 @@ const RewardsPage: React.FC = () => {
             }}
             onClick={(e) => e.stopPropagation()}
             >
-              <h2 style={{ 
-                margin: '0 0 24px 0', 
-                color: '#1f2937', 
-                fontSize: '24px', 
-                fontWeight: '600',
-                textAlign: 'center'
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '24px',
+                paddingBottom: '20px',
+                borderBottom: '1px solid #e5e7eb'
               }}>
-                🎁 Select Reward for {selectedUser.name}
-              </h2>
+                <h2 style={{ 
+                  margin: 0, 
+                  color: '#1e3a5f', 
+                  fontSize: '20px', 
+                  fontWeight: '700',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  Select Reward for {selectedUser.name}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowRewardModal(false);
+                    setSelectedReward(null);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '24px',
+                    color: '#6b7280',
+                    cursor: 'pointer',
+                    padding: '4px 8px',
+                    lineHeight: '1',
+                    transition: 'color 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = '#1f2937'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
+                >
+                  ×
+                </button>
+              </div>
 
               <div style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                padding: '16px',
-                borderRadius: '12px',
+                backgroundColor: '#f8fafc',
+                padding: '16px 20px',
+                borderRadius: '8px',
                 marginBottom: '24px',
-                textAlign: 'center'
+                border: '1px solid #e5e7eb',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
               }}>
-                <div style={{ color: 'white', fontSize: '14px', marginBottom: '4px' }}>
-                  Available Points
-                </div>
-                <div style={{ color: 'white', fontSize: '32px', fontWeight: 'bold' }}>
-                  {selectedUser.total_points}
+                <div>
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>
+                    Available Points
+                  </div>
+                  <div style={{ fontSize: '28px', fontWeight: '700', color: '#1e3a5f' }}>
+                    {selectedUser.total_points}
+                  </div>
                 </div>
               </div>
 
@@ -981,21 +1718,24 @@ const RewardsPage: React.FC = () => {
                         onClick={() => setSelectedReward(item.id)}
                         style={{
                           padding: '16px',
-                          border: selectedReward === item.id ? '2px solid #667eea' : '2px solid #e5e7eb',
-                          borderRadius: '12px',
+                          border: selectedReward === item.id ? '2px solid #1e3a5f' : '1px solid #e5e7eb',
+                          borderRadius: '8px',
                           marginBottom: '12px',
                           cursor: 'pointer',
                           transition: 'all 0.2s',
-                          background: selectedReward === item.id ? '#f0f9ff' : 'white'
+                          background: selectedReward === item.id ? '#f0f4f8' : 'white',
+                          boxShadow: selectedReward === item.id ? '0 2px 4px rgba(30, 58, 95, 0.1)' : 'none'
                         }}
                         onMouseEnter={(e) => {
                           if (selectedReward !== item.id) {
                             e.currentTarget.style.borderColor = '#cbd5e1';
+                            e.currentTarget.style.backgroundColor = '#f9fafb';
                           }
                         }}
                         onMouseLeave={(e) => {
                           if (selectedReward !== item.id) {
                             e.currentTarget.style.borderColor = '#e5e7eb';
+                            e.currentTarget.style.backgroundColor = 'white';
                           }
                         }}
                       >
@@ -1010,8 +1750,8 @@ const RewardsPage: React.FC = () => {
                           </div>
                           <div style={{
                             fontSize: '18px',
-                            fontWeight: 'bold',
-                            color: '#667eea',
+                            fontWeight: '700',
+                            color: '#1e3a5f',
                             marginLeft: '16px'
                           }}>
                             {item.value}
@@ -1053,23 +1793,25 @@ const RewardsPage: React.FC = () => {
                     flex: 1,
                     padding: '12px',
                     background: selectedReward && inventoryItems.length > 0 
-                      ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' 
-                      : '#d1d5db',
-                    color: 'white',
+                      ? '#1e3a5f' 
+                      : '#e5e7eb',
+                    color: selectedReward && inventoryItems.length > 0 ? 'white' : '#9ca3af',
                     border: 'none',
                     borderRadius: '8px',
                     fontSize: '14px',
                     fontWeight: '600',
                     cursor: selectedReward && inventoryItems.length > 0 ? 'pointer' : 'not-allowed',
-                    transition: 'transform 0.2s'
+                    transition: 'all 0.2s'
                   }}
                   onMouseEnter={(e) => {
                     if (selectedReward && inventoryItems.length > 0) {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.backgroundColor = '#153e75';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
+                    if (selectedReward && inventoryItems.length > 0) {
+                      e.currentTarget.style.backgroundColor = '#1e3a5f';
+                    }
                   }}
                 >
                   Confirm Give Reward
@@ -1456,85 +2198,144 @@ const RewardsPage: React.FC = () => {
 
         {/* Approve Request Modal */}
         {showApproveModal && selectedRequest && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1001,
-          }}
-          onClick={() => {
-            if (!approving) {
-              setShowApproveModal(false);
-              setSelectedRequest(null);
-              setInstructions('');
-              setVoucherCode('');
-            }
-          }}
-          >
+          <>
+            <style>
+              {`
+                @keyframes slideIn {
+                  from {
+                    opacity: 0;
+                    transform: translateY(-20px) scale(0.95);
+                  }
+                  to {
+                    opacity: 1;
+                    transform: translateY(0) scale(1);
+                  }
+                }
+                @keyframes spin {
+                  from {
+                    transform: rotate(0deg);
+                  }
+                  to {
+                    transform: rotate(360deg);
+                  }
+                }
+              `}
+            </style>
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1001,
+              backdropFilter: 'blur(2px)',
+            }}
+            onClick={() => {
+              if (!approving) {
+                setShowApproveModal(false);
+                setSelectedRequest(null);
+                setInstructions('');
+                setVoucherCode('');
+              }
+            }}
+            >
             <div style={{
               backgroundColor: 'white',
-              padding: '32px',
+              padding: '32px 40px',
               borderRadius: '16px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-              width: '600px',
-              maxWidth: '90%'
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              width: '800px',
+              maxWidth: '95%',
+              position: 'relative',
+              animation: 'slideIn 0.3s ease-out',
+              borderTop: '4px solid #1e3a5f'
             }}
             onClick={(e) => e.stopPropagation()}
             >
-              <h2 style={{ 
-                margin: '0 0 24px 0', 
-                color: '#1f2937', 
-                fontSize: '24px', 
-                fontWeight: '600',
-                textAlign: 'center'
-              }}>
-                🎁 Approve Reward Request
-              </h2>
-
+              {/* Header Section */}
               <div style={{
-                background: '#f9fafb',
-                padding: '16px',
-                borderRadius: '12px',
+                marginBottom: '28px',
+                paddingBottom: '20px',
+                borderBottom: '1px solid #e5e7eb'
+              }}>
+                <h2 style={{ 
+                  margin: 0, 
+                  color: '#1e3a5f', 
+                  fontSize: '22px', 
+                  fontWeight: '600',
+                  letterSpacing: '-0.3px'
+                }}>
+                  Approve Reward Request
+                </h2>
+              </div>
+
+              {/* Information Grid - Horizontal Layout */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '16px',
                 marginBottom: '24px'
               }}>
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '14px', color: '#6b7280', marginBottom: '4px' }}>User</div>
-                  <div style={{ fontSize: '16px', fontWeight: '600', color: '#1f2937' }}>
+                {/* User */}
+                <div style={{
+                  background: '#f8fafc',
+                  padding: '16px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>User</div>
+                  <div style={{ fontSize: '15px', fontWeight: '600', color: '#0f172a', lineHeight: '1.4' }}>
                     {selectedRequest.user_name}
                   </div>
                 </div>
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '14px', color: '#6b7280', marginBottom: '4px' }}>Reward</div>
-                  <div style={{ fontSize: '16px', fontWeight: '600', color: '#1e3a5f' }}>
-                    {selectedRequest.reward_name} ({selectedRequest.reward_type})
+
+                {/* Reward */}
+                <div style={{
+                  background: '#f8fafc',
+                  padding: '16px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Reward</div>
+                  <div style={{ fontSize: '15px', fontWeight: '600', color: '#0f172a', lineHeight: '1.4' }}>
+                    {selectedRequest.reward_name}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                    {selectedRequest.reward_type}
                   </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: '14px', color: '#6b7280', marginBottom: '4px' }}>Points Cost</div>
-                  <div style={{ fontSize: '16px', fontWeight: '600', color: '#dc2626' }}>
-                    {selectedRequest.points_cost} points
+
+                {/* Points Cost */}
+                <div style={{
+                  background: '#f8fafc',
+                  padding: '16px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Points Cost</div>
+                  <div style={{ fontSize: '18px', fontWeight: '700', color: '#dc2626', lineHeight: '1.4' }}>
+                    {selectedRequest.points_cost}
                   </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>points</div>
                 </div>
               </div>
 
               {(selectedRequest.reward_type.toLowerCase().includes('voucher') || 
                 selectedRequest.reward_type.toLowerCase().includes('gift card') || 
                 selectedRequest.reward_type.toLowerCase().includes('coupon')) && (
-                <div style={{ marginBottom: '24px' }}>
+                <div style={{ marginBottom: '20px' }}>
                   <label style={{ 
                     display: 'block', 
-                    fontSize: '14px', 
-                    fontWeight: '600', 
+                    fontSize: '13px', 
+                    fontWeight: '500', 
                     color: '#374151', 
-                    marginBottom: '8px' 
+                    marginBottom: '8px'
                   }}>
-                    Voucher Code (Optional)
+                    Voucher Code <span style={{ fontWeight: '400', color: '#94a3b8' }}>(Optional)</span>
                   </label>
                   <input
                     type="text"
@@ -1543,14 +2344,21 @@ const RewardsPage: React.FC = () => {
                     placeholder="Enter voucher code..."
                     style={{
                       width: '100%',
-                      padding: '12px',
-                      border: '2px solid #e5e7eb',
+                      padding: '11px 14px',
+                      border: '1px solid #e2e8f0',
                       borderRadius: '8px',
                       fontSize: '14px',
-                      transition: 'border-color 0.2s'
+                      transition: 'all 0.15s',
+                      backgroundColor: '#ffffff'
                     }}
-                    onFocus={(e) => e.currentTarget.style.borderColor = '#667eea'}
-                    onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = '#1e3a5f';
+                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(30, 58, 95, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
                   />
                 </div>
               )}
@@ -1558,12 +2366,12 @@ const RewardsPage: React.FC = () => {
               <div style={{ marginBottom: '24px' }}>
                 <label style={{ 
                   display: 'block', 
-                  fontSize: '14px', 
-                  fontWeight: '600', 
+                  fontSize: '13px', 
+                  fontWeight: '500', 
                   color: '#374151', 
-                  marginBottom: '8px' 
+                  marginBottom: '8px'
                 }}>
-                  Instructions for User <span style={{ color: '#dc2626' }}>*</span>
+                  Instructions for User <span style={{ color: '#dc2626', fontWeight: '600' }}>*</span>
                 </label>
                 <textarea
                   value={instructions}
@@ -1573,18 +2381,30 @@ const RewardsPage: React.FC = () => {
                   required
                   style={{
                     width: '100%',
-                    padding: '12px',
-                    border: '2px solid #e5e7eb',
+                    padding: '11px 14px',
+                    border: '1px solid #e2e8f0',
                     borderRadius: '8px',
                     fontSize: '14px',
                     fontFamily: 'inherit',
                     resize: 'vertical' as const,
-                    transition: 'border-color 0.2s'
+                    transition: 'all 0.15s',
+                    backgroundColor: '#ffffff',
+                    lineHeight: '1.5'
                   }}
-                  onFocus={(e) => e.currentTarget.style.borderColor = '#667eea'}
-                  onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#1e3a5f';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(30, 58, 95, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 />
-                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                <div style={{ 
+                  fontSize: '12px', 
+                  color: '#64748b', 
+                  marginTop: '6px'
+                }}>
                   These instructions will be sent to the user via notification
                 </div>
               </div>
@@ -1602,25 +2422,27 @@ const RewardsPage: React.FC = () => {
                   disabled={approving}
                   style={{
                     flex: 1,
-                    padding: '12px',
-                    background: '#6b7280',
-                    color: 'white',
-                    border: 'none',
+                    padding: '12px 20px',
+                    background: '#ffffff',
+                    color: '#475569',
+                    border: '1px solid #e2e8f0',
                     borderRadius: '8px',
                     fontSize: '14px',
-                    fontWeight: '600',
+                    fontWeight: '500',
                     cursor: approving ? 'not-allowed' : 'pointer',
                     opacity: approving ? 0.6 : 1,
-                    transition: 'background-color 0.2s'
+                    transition: 'all 0.15s'
                   }}
                   onMouseEnter={(e) => {
                     if (!approving) {
-                      e.currentTarget.style.backgroundColor = '#4b5563';
+                      e.currentTarget.style.backgroundColor = '#f8fafc';
+                      e.currentTarget.style.borderColor = '#cbd5e1';
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (!approving) {
-                      e.currentTarget.style.backgroundColor = '#6b7280';
+                      e.currentTarget.style.backgroundColor = '#ffffff';
+                      e.currentTarget.style.borderColor = '#e2e8f0';
                     }
                   }}
                 >
@@ -1631,30 +2453,35 @@ const RewardsPage: React.FC = () => {
                   disabled={approving || !instructions.trim()}
                   style={{
                     flex: 1,
-                    padding: '12px',
-                    background: (approving || !instructions.trim()) ? '#d1d5db' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    padding: '12px 20px',
+                    background: (approving || !instructions.trim()) 
+                      ? '#cbd5e1' 
+                      : '#1e3a5f',
                     color: 'white',
                     border: 'none',
                     borderRadius: '8px',
                     fontSize: '14px',
-                    fontWeight: '600',
+                    fontWeight: '500',
                     cursor: (approving || !instructions.trim()) ? 'not-allowed' : 'pointer',
-                    transition: 'transform 0.2s'
+                    transition: 'all 0.15s'
                   }}
                   onMouseEnter={(e) => {
                     if (!approving && instructions.trim()) {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.backgroundColor = '#2d5a8f';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
+                    if (!approving && instructions.trim()) {
+                      e.currentTarget.style.backgroundColor = '#1e3a5f';
+                    }
                   }}
                 >
-                  {approving ? 'Approving...' : '✓ Approve Request'}
+                  {approving ? 'Approving...' : 'Approve Request'}
                 </button>
               </div>
             </div>
           </div>
+          </>
         )}
 
         {/* Points Settings Modal */}
@@ -1675,18 +2502,18 @@ const RewardsPage: React.FC = () => {
           >
             <div style={{
               backgroundColor: 'white',
-              padding: '24px',
+              padding: '20px 28px',
               borderRadius: '12px',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-              width: '480px',
-              maxWidth: '90%',
-              maxHeight: '85vh',
+              width: '750px',
+              maxWidth: '95%',
+              maxHeight: '75vh',
               overflow: 'auto'
             }}
             onClick={(e) => e.stopPropagation()}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#1e3a5f' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#1e3a5f' }}>
                   Points Settings
                 </h2>
                 <button
@@ -1718,7 +2545,7 @@ const RewardsPage: React.FC = () => {
                 </button>
               </div>
 
-              <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '20px' }}>
+              <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '16px' }}>
                 Configure how many points are awarded for each engagement action.
               </p>
 
@@ -1727,10 +2554,10 @@ const RewardsPage: React.FC = () => {
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'space-between', 
-                padding: '12px', 
+                padding: '10px 14px', 
                 background: pointsSettings.enabled ? '#f0fdf4' : '#fef2f2', 
                 borderRadius: '8px', 
-                marginBottom: '20px',
+                marginBottom: '16px',
                 border: `2px solid ${pointsSettings.enabled ? '#10b981' : '#ef4444'}`
               }}>
                 <div>
@@ -1770,12 +2597,12 @@ const RewardsPage: React.FC = () => {
                 </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px', opacity: pointsSettings.enabled ? 1 : 0.5, pointerEvents: pointsSettings.enabled ? 'auto' : 'none' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '16px', opacity: pointsSettings.enabled ? 1 : 0.5, pointerEvents: pointsSettings.enabled ? 'auto' : 'none' }}>
                 {/* Likes */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <HiOutlineHeart size={18} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '14px', fontWeight: '500', color: '#1f2937' }}>Likes</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <HiOutlineHeart size={16} color="#6b7280" strokeWidth={1.5} />
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Likes</span>
                   </div>
                   <input
                     type="number"
@@ -1783,8 +2610,8 @@ const RewardsPage: React.FC = () => {
                     value={pointsSettings.like}
                     onChange={(e) => setPointsSettings({ ...pointsSettings, like: parseInt(e.target.value) || 0 })}
                     style={{
-                      width: '70px',
-                      padding: '6px 10px',
+                      width: '60px',
+                      padding: '5px 8px',
                       border: '1px solid #d1d5db',
                       borderRadius: '6px',
                       fontSize: '13px',
@@ -1794,10 +2621,10 @@ const RewardsPage: React.FC = () => {
                 </div>
 
                 {/* Comments */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <HiOutlineChatBubbleLeft size={18} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '14px', fontWeight: '500', color: '#1f2937' }}>Comments</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <HiOutlineChatBubbleLeft size={16} color="#6b7280" strokeWidth={1.5} />
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Comments</span>
                   </div>
                   <input
                     type="number"
@@ -1805,8 +2632,8 @@ const RewardsPage: React.FC = () => {
                     value={pointsSettings.comment}
                     onChange={(e) => setPointsSettings({ ...pointsSettings, comment: parseInt(e.target.value) || 0 })}
                     style={{
-                      width: '70px',
-                      padding: '6px 10px',
+                      width: '60px',
+                      padding: '5px 8px',
                       border: '1px solid #d1d5db',
                       borderRadius: '6px',
                       fontSize: '13px',
@@ -1816,10 +2643,10 @@ const RewardsPage: React.FC = () => {
                 </div>
 
                 {/* Repost */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <HiOutlineArrowPath size={18} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '14px', fontWeight: '500', color: '#1f2937' }}>Repost</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <HiOutlineArrowPath size={16} color="#6b7280" strokeWidth={1.5} />
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Repost</span>
                   </div>
                   <input
                     type="number"
@@ -1827,8 +2654,8 @@ const RewardsPage: React.FC = () => {
                     value={pointsSettings.share}
                     onChange={(e) => setPointsSettings({ ...pointsSettings, share: parseInt(e.target.value) || 0 })}
                     style={{
-                      width: '70px',
-                      padding: '6px 10px',
+                      width: '60px',
+                      padding: '5px 8px',
                       border: '1px solid #d1d5db',
                       borderRadius: '6px',
                       fontSize: '13px',
@@ -1838,10 +2665,10 @@ const RewardsPage: React.FC = () => {
                 </div>
 
                 {/* Replies */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <HiOutlineArrowUturnLeft size={18} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '14px', fontWeight: '500', color: '#1f2937' }}>Replies</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <HiOutlineArrowUturnLeft size={16} color="#6b7280" strokeWidth={1.5} />
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Replies</span>
                   </div>
                   <input
                     type="number"
@@ -1849,8 +2676,8 @@ const RewardsPage: React.FC = () => {
                     value={pointsSettings.reply}
                     onChange={(e) => setPointsSettings({ ...pointsSettings, reply: parseInt(e.target.value) || 0 })}
                     style={{
-                      width: '70px',
-                      padding: '6px 10px',
+                      width: '60px',
+                      padding: '5px 8px',
                       border: '1px solid #d1d5db',
                       borderRadius: '6px',
                       fontSize: '13px',
@@ -1860,10 +2687,10 @@ const RewardsPage: React.FC = () => {
                 </div>
 
                 {/* Posts */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <HiOutlineDocumentText size={18} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '14px', fontWeight: '500', color: '#1f2937' }}>Posts</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <HiOutlineDocumentText size={16} color="#6b7280" strokeWidth={1.5} />
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Posts</span>
                   </div>
                   <input
                     type="number"
@@ -1871,8 +2698,8 @@ const RewardsPage: React.FC = () => {
                     value={pointsSettings.post}
                     onChange={(e) => setPointsSettings({ ...pointsSettings, post: parseInt(e.target.value) || 0 })}
                     style={{
-                      width: '70px',
-                      padding: '6px 10px',
+                      width: '60px',
+                      padding: '5px 8px',
                       border: '1px solid #d1d5db',
                       borderRadius: '6px',
                       fontSize: '13px',
@@ -1882,10 +2709,10 @@ const RewardsPage: React.FC = () => {
                 </div>
 
                 {/* Posts with Photos */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <HiOutlineCamera size={18} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '14px', fontWeight: '500', color: '#1f2937' }}>Posts with Photos</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <HiOutlineCamera size={16} color="#6b7280" strokeWidth={1.5} />
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Posts with Photos</span>
                   </div>
                   <input
                     type="number"
@@ -1893,8 +2720,8 @@ const RewardsPage: React.FC = () => {
                     value={pointsSettings.post_with_photo}
                     onChange={(e) => setPointsSettings({ ...pointsSettings, post_with_photo: parseInt(e.target.value) || 0 })}
                     style={{
-                      width: '70px',
-                      padding: '6px 10px',
+                      width: '60px',
+                      padding: '5px 8px',
                       border: '1px solid #d1d5db',
                       borderRadius: '6px',
                       fontSize: '13px',
@@ -1904,10 +2731,10 @@ const RewardsPage: React.FC = () => {
                 </div>
 
                 {/* Tracker Form */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <HiOutlineClipboardDocumentList size={18} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '14px', fontWeight: '500', color: '#1f2937' }}>Tracker Form</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <HiOutlineClipboardDocumentList size={16} color="#6b7280" strokeWidth={1.5} />
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Tracker Form</span>
                   </div>
                   <input
                     type="number"
@@ -1915,8 +2742,8 @@ const RewardsPage: React.FC = () => {
                     value={pointsSettings.tracker_form}
                     onChange={(e) => setPointsSettings({ ...pointsSettings, tracker_form: parseInt(e.target.value) || 0 })}
                     style={{
-                      width: '70px',
-                      padding: '6px 10px',
+                      width: '60px',
+                      padding: '5px 8px',
                       border: '1px solid #d1d5db',
                       borderRadius: '6px',
                       fontSize: '13px',
@@ -1926,12 +2753,12 @@ const RewardsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 <button
                   onClick={() => setShowPointsSettingsModal(false)}
                   style={{
                     flex: 1,
-                    padding: '10px',
+                    padding: '9px',
                     background: '#f3f4f6',
                     color: '#374151',
                     border: 'none',
@@ -1948,7 +2775,7 @@ const RewardsPage: React.FC = () => {
                   disabled={pointsSettingsLoading}
                   style={{
                     flex: 1,
-                    padding: '10px',
+                    padding: '9px',
                     background: pointsSettingsLoading ? '#d1d5db' : 'linear-gradient(135deg, #1e3a5f 0%, #2d5a8f 100%)',
                     color: 'white',
                     border: 'none',
@@ -1962,6 +2789,209 @@ const RewardsPage: React.FC = () => {
                   {pointsSettingsLoading ? 'Saving...' : 'Save Settings'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tracker Form Responses Modal */}
+        {showTrackerResponsesModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1003,
+            backdropFilter: 'blur(2px)',
+          }}
+          onClick={() => setShowTrackerResponsesModal(false)}
+          >
+            <div style={{
+              backgroundColor: 'white',
+              padding: '24px 32px',
+              borderRadius: '16px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+              width: '900px',
+              maxWidth: '95%',
+              maxHeight: '85vh',
+              overflow: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#1e3a5f' }}>
+                  Tracker Form Responses
+                </h2>
+                <button
+                  onClick={() => setShowTrackerResponsesModal(false)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '8px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#6b7280',
+                    transition: 'all 0.2s',
+                    width: '32px',
+                    height: '32px'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f3f4f6';
+                    e.currentTarget.style.color = '#1f2937';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = '#6b7280';
+                  }}
+                >
+                  <FaTimes size={18} />
+                </button>
+              </div>
+
+              {trackerResponsesLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>Loading...</div>
+              ) : trackerResponses.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>No tracker form responses found</div>
+              ) : (() => {
+                // Group responses by graduation year
+                const groupedByYear: { [key: string]: any[] } = {};
+                trackerResponses.forEach((resp: any) => {
+                  const year = resp.year_graduated || 'Unknown';
+                  if (!groupedByYear[year]) {
+                    groupedByYear[year] = [];
+                  }
+                  groupedByYear[year].push(resp);
+                });
+
+                const sortedYears = Object.keys(groupedByYear).sort((a, b) => {
+                  if (a === 'Unknown') return 1;
+                  if (b === 'Unknown') return -1;
+                  return Number(b) - Number(a);
+                });
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    {sortedYears.map((year) => (
+                      <div key={year} style={{
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '12px',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          background: '#f8fafc',
+                          padding: '12px 16px',
+                          borderBottom: '1px solid #e5e7eb'
+                        }}>
+                          <h3 style={{
+                            margin: 0,
+                            fontSize: '16px',
+                            fontWeight: '600',
+                            color: '#1e3a5f'
+                          }}>
+                            Batch {year} ({groupedByYear[year].length} {groupedByYear[year].length === 1 ? 'user' : 'users'})
+                          </h3>
+                        </div>
+                        <div style={{ padding: '8px' }}>
+                          {groupedByYear[year].map((resp: any, index: number) => (
+                            <div key={resp.user_id || index} style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '12px',
+                              borderRadius: '8px',
+                              marginBottom: index < groupedByYear[year].length - 1 ? '8px' : 0,
+                              background: '#ffffff',
+                              border: '1px solid #e5e7eb'
+                            }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937', marginBottom: '4px' }}>
+                                  {resp.name}
+                                </div>
+                                {resp.program && (
+                                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                    {resp.program}
+                                  </div>
+                                )}
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  // Find user in leaderboard or fetch user details
+                                  const userFromLeaderboard = leaderboard.find(u => u.user_id === resp.user_id);
+                                  if (userFromLeaderboard) {
+                                    setSelectedUser(userFromLeaderboard);
+                                    setShowRewardModal(true);
+                                    await fetchInventoryItems();
+                                  } else {
+                                    // Fetch user details to get points
+                                    try {
+                                      const userDetails = await fetchAlumniDetails(resp.user_id);
+                                      if (userDetails?.success && userDetails?.alumni) {
+                                        const userEntry: LeaderboardEntry = {
+                                          rank: 0,
+                                          user_id: resp.user_id,
+                                          name: resp.name,
+                                          profile_pic: userDetails.alumni.profile_pic,
+                                          user_type: 'alumni',
+                                          year_graduated: resp.year_graduated,
+                                          program: resp.program,
+                                          total_points: userDetails.alumni.total_points || 0,
+                                          points_breakdown: {
+                                            likes: { points: 0, count: 0 },
+                                            comments: { points: 0, count: 0 },
+                                            shares: { points: 0, count: 0 },
+                                            replies: { points: 0, count: 0 },
+                                            posts: { points: 0, count: 0 },
+                                            posts_with_photos: { points: 0, count: 0 }
+                                          },
+                                          last_updated: new Date().toISOString()
+                                        };
+                                        setSelectedUser(userEntry);
+                                        setShowRewardModal(true);
+                                        await fetchInventoryItems();
+                                      } else {
+                                        alert('Unable to fetch user details');
+                                      }
+                                    } catch (error) {
+                                      console.error('Error fetching user details:', error);
+                                      alert('Error fetching user details');
+                                    }
+                                  }
+                                }}
+                                style={{
+                                  padding: '8px 16px',
+                                  background: '#1e3a5f',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  fontSize: '13px',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#2d5a8f';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#1e3a5f';
+                                }}
+                              >
+                                Assign Reward
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

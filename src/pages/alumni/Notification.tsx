@@ -2379,13 +2379,21 @@ const NotificationPage: React.FC = () => {
                     }}
                     onClick={() => {
                       setOpenNotif(null);
-                      // Navigate to profile page and open "My Reward Requests" modal
+                      // Extract reward request ID from notification content
+                      const requestIdMatch = openNotif.content.match(/<!--REQUEST_ID:(\d+)-->/);
+                      const requestId = requestIdMatch ? requestIdMatch[1] : null;
+                      
                       const userStr = localStorage.getItem('user');
                       const user = userStr ? JSON.parse(userStr) : null;
                       const userId = user?.user_id || user?.id;
                       if (userId) {
-                        // Set flag to open reward requests modal on profile page
-                        localStorage.setItem('openRewardRequests', 'true');
+                        if (requestId) {
+                          // Set flag to open specific reward detail modal
+                          localStorage.setItem('openRewardDetail', requestId);
+                        } else {
+                          // Fallback: open reward requests list modal if no request ID found
+                          localStorage.setItem('openRewardRequests', 'true');
+                        }
                         navigate(`/profile/${userId}`);
                       }
                     }}

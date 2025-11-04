@@ -816,6 +816,55 @@ getPosts()
     checkAndOpenRewardRequests();
   }, [user]);
 
+  // Check for openRewardDetail flag from notification - opens specific reward detail modal
+  useEffect(() => {
+    const checkAndOpenRewardDetail = async () => {
+      const openRewardDetailId = localStorage.getItem('openRewardDetail');
+      if (openRewardDetailId && user && user.user_id) {
+        localStorage.removeItem('openRewardDetail');
+        console.log('Opening reward detail modal from notification for request ID:', openRewardDetailId);
+        try {
+          // Fetch reward requests directly to get fresh data
+          const response = await getRewardRequests();
+          if (response.success && response.requests) {
+            // Find the specific reward request by ID
+            const rewardDetail = response.requests.find(
+              (req: any) => req.request_id === Number(openRewardDetailId)
+            );
+            if (rewardDetail) {
+              // Update state and open detail modal
+              setUserRewardRequests(response.requests);
+              setTimeout(() => {
+                setSelectedRewardDetail(rewardDetail);
+              }, 200);
+            } else {
+              // If not found, update state and fallback to opening the list modal
+              console.log('Reward detail not found, opening list modal instead');
+              setUserRewardRequests(response.requests);
+              setTimeout(() => {
+                setShowApprovedRewardsModal(true);
+              }, 200);
+            }
+          } else {
+            // If fetch failed, try to open list modal
+            setTimeout(() => {
+              setShowApprovedRewardsModal(true);
+            }, 200);
+          }
+        } catch (error) {
+          console.error('Error fetching reward detail:', error);
+          // On error, try to open list modal
+          setTimeout(() => {
+            setShowApprovedRewardsModal(true);
+          }, 200);
+        }
+      }
+    };
+    
+    // Check immediately and also when user loads
+    checkAndOpenRewardDetail();
+  }, [user]);
+
   // Listen for points updates from other components (like PostCard, PostCreate)
   useEffect(() => {
     const handlePointsUpdate = async (event: Event) => {
@@ -4033,9 +4082,9 @@ getPosts()
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#174f84', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <HiOutlineGift size={24} color="#174f84" strokeWidth={1.5} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid #e5e7eb' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#1e3a5f', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <HiOutlineGift size={24} color="#1e3a5f" strokeWidth={1.5} />
                 <span>Available Rewards</span>
               </h2>
               <button
@@ -4045,8 +4094,13 @@ getPosts()
                   border: 'none',
                   fontSize: '24px',
                   cursor: 'pointer',
-                  color: '#666'
+                  color: '#6b7280',
+                  padding: '4px 8px',
+                  lineHeight: '1',
+                  transition: 'color 0.2s'
                 }}
+                onMouseEnter={(e) => e.currentTarget.style.color = '#1f2937'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
               >
                 ×
               </button>
@@ -4054,7 +4108,7 @@ getPosts()
 
             {rewardsLoading ? (
               <div style={{ textAlign: 'center', padding: '40px' }}>
-                <div style={{ fontSize: '16px', color: '#666' }}>Loading rewards...</div>
+                <div style={{ fontSize: '16px', color: '#6b7280' }}>Loading rewards...</div>
               </div>
             ) : (() => {
               // Filter to only show rewards user can afford
@@ -4069,8 +4123,8 @@ getPosts()
               return affordableRewards.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px' }}>
                   <div style={{ fontSize: '24px', marginBottom: '8px' }}>📭</div>
-                  <div style={{ fontSize: '16px', color: '#666' }}>No rewards available that you can afford at the moment</div>
-                  <div style={{ fontSize: '14px', color: '#999', marginTop: '8px' }}>
+                  <div style={{ fontSize: '16px', color: '#6b7280', marginBottom: '8px' }}>No rewards available that you can afford at the moment</div>
+                  <div style={{ fontSize: '14px', color: '#9ca3af', marginTop: '8px' }}>
                     You currently have {userPoints?.total_points || 0} points
                   </div>
                 </div>
@@ -4095,26 +4149,34 @@ getPosts()
                     <div
                       key={item.id}
                       style={{
-                        border: '1px solid #e0e0e0',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        background: canAfford && item.quantity > 0 ? '#f8f9fa' : '#f5f5f5'
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        padding: '12px 16px',
+                        background: 'white',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '16px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.08)';
+                        e.currentTarget.style.borderColor = '#cbd5e1';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
+                        e.currentTarget.style.borderColor = '#e5e7eb';
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
-                        <div style={{ flex: 1 }}>
-                          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: '#174f84', marginBottom: '4px' }}>
-                            {item.name}
-                          </h3>
-                          <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
-                            Type: {item.type}
-                          </div>
-                          <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
-                            Cost: <strong style={{ color: '#667eea' }}>{item.value}</strong>
-                          </div>
-                          <div style={{ fontSize: '14px', color: '#666' }}>
-                            Stock: {item.quantity} available
-                          </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#1f2937', marginBottom: '4px' }}>
+                          {item.name}
+                        </h3>
+                        <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                          <span>Type: {item.type}</span>
+                          <span>Cost: <strong style={{ color: '#1e3a5f', fontWeight: '700' }}>{item.value}</strong></span>
+                          <span>Stock: {item.quantity} available</span>
                         </div>
                       </div>
                       
@@ -4122,27 +4184,27 @@ getPosts()
                         onClick={() => handleRequestReward(item.id)}
                         disabled={!canAfford || item.quantity <= 0 || isClaiming}
                         style={{
-                          width: '100%',
-                          padding: '10px',
-                          borderRadius: '8px',
+                          padding: '8px 16px',
+                          borderRadius: '6px',
                           border: 'none',
-                          background: canAfford && item.quantity > 0 ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#ccc',
-                          color: 'white',
-                          fontSize: '14px',
+                          background: canAfford && item.quantity > 0 ? '#1e3a5f' : '#e5e7eb',
+                          color: canAfford && item.quantity > 0 ? 'white' : '#9ca3af',
+                          fontSize: '13px',
                           fontWeight: '600',
                           cursor: canAfford && item.quantity > 0 ? 'pointer' : 'not-allowed',
-                          opacity: canAfford && item.quantity > 0 ? 1 : 0.6,
-                          transition: 'all 0.2s'
+                          transition: 'all 0.2s',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0
                         }}
                         onMouseEnter={(e) => {
                           if (canAfford && item.quantity > 0) {
-                            e.currentTarget.style.transform = 'translateY(-2px)';
-                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
+                            e.currentTarget.style.backgroundColor = '#153e75';
                           }
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = 'none';
+                          if (canAfford && item.quantity > 0) {
+                            e.currentTarget.style.backgroundColor = '#1e3a5f';
+                          }
                         }}
                       >
                         {isClaiming ? 'Processing...' : canAfford && item.quantity > 0 ? 'Request to Claim Reward' : 
