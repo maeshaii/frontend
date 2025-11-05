@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
 import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardRequests, approveRewardRequest, claimRewardRequest, getEngagementPointsSettings, updateEngagementPointsSettings, getRewardHistory, fetchTrackerResponses, fetchAlumniDetails } from '../../../services/api';
 import { FaTimes } from 'react-icons/fa';
 import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineUser, HiOutlineTag } from 'react-icons/hi2';
+import { useRealTimeNotifications } from '../../../hooks/useRealTimeNotifications';
 
 interface LeaderboardEntry {
   rank: number;
@@ -113,6 +114,25 @@ const RewardsPage: React.FC = () => {
   const [trackerResponses, setTrackerResponses] = useState<any[]>([]);
   const [trackerResponsesLoading, setTrackerResponsesLoading] = useState(false);
 
+  // Use real-time notifications hook to detect new reward requests
+  const { notifications: realTimeNotifications } = useRealTimeNotifications({
+    enablePolling: false, // We'll use our own polling for requests
+    autoConnect: true
+  });
+
+  // Refresh reward requests when a new reward request notification is received
+  useEffect(() => {
+    if (realTimeNotifications && realTimeNotifications.length > 0) {
+      const latestNotification = realTimeNotifications[0];
+      // Check if this is a reward request notification (type comes from notif_type in backend)
+      if (latestNotification?.type === 'Reward Request') {
+        console.log('New reward request notification detected via WebSocket, refreshing requests...');
+        fetchRewardRequests(true); // Silent refresh to avoid UI flicker
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realTimeNotifications]);
+
   useEffect(() => {
     fetchLeaderboardData();
     fetchRewardRequests();
@@ -120,6 +140,25 @@ const RewardsPage: React.FC = () => {
     fetchPointsSettings();
     fetchInventoryCount();
     fetchTrackerFormResponsesCount();
+    
+    // Set up polling to refresh reward requests every 5 seconds for real-time updates
+    const pollInterval = setInterval(() => {
+      fetchRewardRequests(true); // Silent polling to avoid UI flicker
+    }, 5000); // Poll every 5 seconds
+    
+    // Listen for notification events that indicate a new reward request
+    const handleRewardRequestNotification = (event: CustomEvent) => {
+      const notification = event.detail?.notification || event.detail;
+      // Check if this is a reward request notification (type comes from notif_type in backend)
+      if (notification?.type === 'Reward Request') {
+        console.log('New reward request notification received, refreshing requests...');
+        fetchRewardRequests(true); // Silent refresh to avoid UI flicker
+      }
+    };
+    
+    // Listen for custom events from notification system
+    window.addEventListener('rewardRequestCreated', handleRewardRequestNotification as EventListener);
+    window.addEventListener('notificationReceived', handleRewardRequestNotification as EventListener);
     
     // Close dropdown when clicking outside
     const handleClickOutside = (event: MouseEvent) => {
@@ -134,6 +173,9 @@ const RewardsPage: React.FC = () => {
     }
     
     return () => {
+      clearInterval(pollInterval);
+      window.removeEventListener('rewardRequestCreated', handleRewardRequestNotification as EventListener);
+      window.removeEventListener('notificationReceived', handleRewardRequestNotification as EventListener);
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [filter, showStatusDropdown]);
@@ -190,21 +232,47 @@ const RewardsPage: React.FC = () => {
     }
   };
 
-  const fetchRewardRequests = async () => {
-    setRequestsLoading(true);
+  const fetchRewardRequests = async (silent: boolean = false) => {
+    if (!silent) {
+      setRequestsLoading(true);
+    }
     try {
       const response = await getRewardRequests(); // Fetch all requests without status filter
       if (response && response.success) {
         const requests = response.requests || [];
         setRewardRequests(requests);
+        
+        // Count pending requests and update localStorage for sidebar badge
+        const pendingCount = requests.filter((req: RewardRequest) => req.status === 'pending').length;
+        try {
+          localStorage.setItem('rewardReqCount', String(pendingCount));
+          // Dispatch custom event to notify sidebar in same tab
+          window.dispatchEvent(new CustomEvent('rewardRequestCountUpdated'));
+        } catch (e) {
+          console.error('Error updating reward request count:', e);
+        }
       } else {
         setRewardRequests([]);
+        try {
+          localStorage.setItem('rewardReqCount', '0');
+          window.dispatchEvent(new CustomEvent('rewardRequestCountUpdated'));
+        } catch (e) {
+          console.error('Error updating reward request count:', e);
+        }
       }
     } catch (error: any) {
       console.error('Error fetching reward requests:', error);
       setRewardRequests([]);
+      try {
+        localStorage.setItem('rewardReqCount', '0');
+        window.dispatchEvent(new CustomEvent('rewardRequestCountUpdated'));
+      } catch (e) {
+        console.error('Error updating reward request count:', e);
+      }
     } finally {
-      setRequestsLoading(false);
+      if (!silent) {
+        setRequestsLoading(false);
+      }
     }
   };
 

@@ -39,18 +39,53 @@ const Sidebar = () => {
   const [pendingRequests, setPendingRequests] = useState<number>(() => {
     try { return Number(localStorage.getItem('coordinatorReqCount')) || 0; } catch { return 0; }
   });
+  const [pendingRewardRequests, setPendingRewardRequests] = useState<number>(() => {
+    try { return Number(localStorage.getItem('rewardReqCount')) || 0; } catch { return 0; }
+  });
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'coordinatorReqCount') {
         setPendingRequests(Number(e.newValue) || 0);
       }
+      if (e.key === 'rewardReqCount') {
+        setPendingRewardRequests(Number(e.newValue) || 0);
+      }
     };
     window.addEventListener('storage', onStorage);
     // Initialize once
     try { setPendingRequests(Number(localStorage.getItem('coordinatorReqCount')) || 0); } catch {}
+    try { setPendingRewardRequests(Number(localStorage.getItem('rewardReqCount')) || 0); } catch {}
     return () => window.removeEventListener('storage', onStorage);
   }, []);
+
+  // Also listen for custom events from other tabs/windows
+  useEffect(() => {
+    const handleRewardRequestUpdate = () => {
+      try {
+        const count = Number(localStorage.getItem('rewardReqCount')) || 0;
+        setPendingRewardRequests(count);
+      } catch {}
+    };
+    
+    // Listen for custom events
+    window.addEventListener('rewardRequestCountUpdated', handleRewardRequestUpdate);
+    
+    // Also check localStorage periodically for same-tab updates
+    const interval = setInterval(() => {
+      try {
+        const count = Number(localStorage.getItem('rewardReqCount')) || 0;
+        if (count !== pendingRewardRequests) {
+          setPendingRewardRequests(count);
+        }
+      } catch {}
+    }, 2000); // Check every 2 seconds
+    
+    return () => {
+      window.removeEventListener('rewardRequestCountUpdated', handleRewardRequestUpdate);
+      clearInterval(interval);
+    };
+  }, [pendingRewardRequests]);
   // On small screens, start CLOSED (hamburger state)
   const [mobileOpen, setMobileOpen] = useState(initialSmall ? false : false);
   // Use ref to persist mobileOpen state across route changes
@@ -429,6 +464,7 @@ const Sidebar = () => {
             {links.map((link) => {
               const active = isActive(link);
               const isRequests = link.to === '/requests';
+              const isRewards = link.to === '/rewards';
               return (
               <li key={link.to}>
                 <Link
@@ -470,6 +506,12 @@ const Sidebar = () => {
                   {isRequests && pendingRequests > 0 && (
                     <>
                       <span style={styles.requestsBadge}>{pendingRequests}</span>
+                      <span style={styles.requestsDot} />
+                    </>
+                  )}
+                  {isRewards && pendingRewardRequests > 0 && (
+                    <>
+                      <span style={styles.requestsBadge}>{pendingRewardRequests}</span>
                       <span style={styles.requestsDot} />
                     </>
                   )}

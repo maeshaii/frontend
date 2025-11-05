@@ -276,19 +276,24 @@ const AlumniProfile: React.FC = () => {
           setUser(userData);
           setEditBio(profileData.profile_bio || '');
           
-          // Fetch engagement points (only for Alumni)
+          // Fetch engagement points (for Alumni and OJT users)
           const isAlumni = profileData.account_type?.user;
-          if (isAlumni && profileData.user_id) {
+          const isOJT = profileData.account_type?.ojt;
+          if ((isAlumni || isOJT) && profileData.user_id) {
             setPointsLoading(true);
             try {
               const points = await getUserPoints(profileData.user_id);
-              setUserPoints(points);
+              // If points is null or empty object, set to null
+              setUserPoints(points && (points.total_points !== undefined || points.points_breakdown) ? points : null);
             } catch (error) {
               console.error('Error fetching points:', error);
               setUserPoints(null);
             } finally {
               setPointsLoading(false);
             }
+          } else {
+            // If not Alumni or OJT, ensure userPoints is null
+            setUserPoints(null);
           }
           
           // Update localStorage only if viewing own profile
@@ -1504,8 +1509,21 @@ getPosts()
             )}
           </div>
 
-          {/* Engagement Points - Only for Alumni viewing their own profile */}
-          {user && user.account_type?.user && isOwnProfile && (
+          {/* Engagement Points - For Alumni and OJT users viewing their own profile */}
+          {(() => {
+            const hasRewardsAccess = user && (user.account_type?.user || user.account_type?.ojt) && isOwnProfile;
+            if (process.env.NODE_ENV === 'development') {
+              console.log('Rewards Card Debug:', {
+                user: !!user,
+                account_type: user?.account_type,
+                isAlumni: user?.account_type?.user,
+                isOJT: user?.account_type?.ojt,
+                isOwnProfile,
+                hasRewardsAccess
+              });
+            }
+            return hasRewardsAccess;
+          })() && (
             <div style={{ marginTop: '16px' }}>
               <div className="profile-intro-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>🏆</span>
@@ -1516,102 +1534,178 @@ getPosts()
                 <div style={{ padding: '20px', textAlign: 'center' }}>
                   <div style={{ fontSize: '14px', color: '#666' }}>Loading points...</div>
                 </div>
-              ) : userPoints ? (
+              ) : (
                 <div>
-                  {/* Total Points */}
-                  <div style={{
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    color: 'white',
-                    marginBottom: '16px',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>Total Points</div>
-                    <div style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '12px' }}>{userPoints.total_points || 0}</div>
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                      <button
-                        onClick={() => {
-                          setShowRewardsModal(true);
-                          fetchInventoryItems();
-                        }}
-                        style={{
-                          background: 'rgba(255, 255, 255, 0.2)',
-                          border: '1px solid rgba(255, 255, 255, 0.3)',
-                          borderRadius: '8px',
-                          padding: '8px 16px',
-                          color: 'white',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
-                        }}
-                      >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <HiOutlineGift size={16} strokeWidth={1.5} />
-                          <span>View Rewards</span>
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowApprovedRewardsModal(true);
-                          fetchUserRewardRequests();
-                        }}
-                        style={{
-                          background: 'rgba(255, 255, 255, 0.2)',
-                          border: '1px solid rgba(255, 255, 255, 0.3)',
-                          borderRadius: '8px',
-                          padding: '8px 16px',
-                          color: 'white',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
-                        }}
-                      >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <HiOutlineCheckCircle size={16} strokeWidth={1.5} />
-                          <span>My Requests</span>
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Points Breakdown */}
-                  <div style={{ fontSize: '14px', color: '#333' }}>
-                    <div style={{ fontWeight: '600', marginBottom: '12px', color: '#174f84' }}>Points Breakdown</div>
-                    
-                    {/* Likes */}
+                  {/* Total Points - Show even if userPoints is null/undefined */}
+                  {userPoints && (
                     <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f0f0f0'
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      borderRadius: '12px',
+                      padding: '20px',
+                      color: 'white',
+                      marginBottom: '16px',
+                      textAlign: 'center'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <HiOutlineHeart size={16} color="#6b7280" strokeWidth={1.5} />
-                        <span>Likes</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.likes?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.likes?.points || 0}
+                      <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>Total Points</div>
+                      <div style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '12px' }}>{userPoints.total_points || 0}</div>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => {
+                            setShowRewardsModal(true);
+                            fetchInventoryItems();
+                          }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            color: 'white',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <HiOutlineGift size={16} strokeWidth={1.5} />
+                            <span>View Rewards</span>
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowApprovedRewardsModal(true);
+                            fetchUserRewardRequests();
+                          }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            color: 'white',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <HiOutlineCheckCircle size={16} strokeWidth={1.5} />
+                            <span>My Requests</span>
+                          </span>
+                        </button>
                       </div>
                     </div>
+                  )}
+                  
+                  {/* Reward Card - Always show for OJT and Alumni users, even without points */}
+                  {!userPoints && (
+                    <div style={{
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      borderRadius: '12px',
+                      padding: '20px',
+                      color: 'white',
+                      marginBottom: '16px',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>Total Points</div>
+                      <div style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '12px' }}>0</div>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => {
+                            setShowRewardsModal(true);
+                            fetchInventoryItems();
+                          }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            color: 'white',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <HiOutlineGift size={16} strokeWidth={1.5} />
+                            <span>View Rewards</span>
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowApprovedRewardsModal(true);
+                            fetchUserRewardRequests();
+                          }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            color: 'white',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <HiOutlineCheckCircle size={16} strokeWidth={1.5} />
+                            <span>My Requests</span>
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Points Breakdown - Only show if userPoints exists */}
+                  {userPoints && (
+                    <div style={{ fontSize: '14px', color: '#333' }}>
+                      <div style={{ fontWeight: '600', marginBottom: '12px', color: '#174f84' }}>Points Breakdown</div>
+                      
+                      {/* Likes */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '10px 0',
+                        borderBottom: '1px solid #f0f0f0'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <HiOutlineHeart size={16} color="#6b7280" strokeWidth={1.5} />
+                          <span>Likes</span>
+                          <span style={{ fontSize: '12px', color: '#999' }}>
+                            ({userPoints.points_breakdown?.likes?.count || 0})
+                          </span>
+                        </div>
+                        <div style={{ fontWeight: '600', color: '#667eea' }}>
+                          +{userPoints.points_breakdown?.likes?.points || 0}
+                        </div>
+                      </div>
 
                     {/* Comments */}
                     <div style={{
@@ -1713,40 +1807,28 @@ getPosts()
                       </div>
                     </div>
 
-                    {/* Tracker Form */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <HiOutlineClipboardDocumentList size={16} color="#6b7280" strokeWidth={1.5} />
-                        <span>Tracker Form</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.tracker_form?.count || 0})
-                        </span>
+                    {/* Tracker Form - Only show for Alumni users, not OJT */}
+                    {user && user.account_type?.user && !user.account_type?.ojt && (
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '10px 0'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <HiOutlineClipboardDocumentList size={16} color="#6b7280" strokeWidth={1.5} />
+                          <span>Tracker Form</span>
+                          <span style={{ fontSize: '12px', color: '#999' }}>
+                            ({userPoints.points_breakdown?.tracker_form?.count || 0})
+                          </span>
+                        </div>
+                        <div style={{ fontWeight: '600', color: '#667eea' }}>
+                          +{userPoints.points_breakdown?.tracker_form?.points || 0}
+                        </div>
                       </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.tracker_form?.points || 0}
-                      </div>
-                    </div>
+                    )}
                   </div>
-                </div>
-              ) : (
-                <div style={{
-                  padding: '20px',
-                  textAlign: 'center',
-                  background: '#f5f7fa',
-                  borderRadius: '8px'
-                }}>
-                  <div style={{ fontSize: '24px', marginBottom: '8px' }}>🎮</div>
-                  <div style={{ fontSize: '14px', color: '#666' }}>
-                    Start engaging to earn points!
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
-                    Like, comment, share, and post to level up
-                  </div>
+                  )}
                 </div>
               )}
             </div>

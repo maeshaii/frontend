@@ -1834,20 +1834,19 @@ const NotificationPage: React.FC = () => {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close Button */}
             <button
               onClick={() => setOpenNotif(null)}
               style={{
                 position: 'absolute',
-                top: '12px',
-                right: '12px',
-                background: 'rgba(0,0,0,0.1)',
+                top: '16px',
+                right: '16px',
+                background: 'none',
                 border: 'none',
-                fontSize: 16,
+                fontSize: '24px',
                 cursor: 'pointer',
-                color: '#666',
-                width: '28px',
-                height: '28px',
+                color: '#6b7280',
+                width: '32px',
+                height: '32px',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -1856,12 +1855,12 @@ const NotificationPage: React.FC = () => {
                 zIndex: 10
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(0,0,0,0.2)';
-                e.currentTarget.style.color = '#333';
+                e.currentTarget.style.backgroundColor = '#f3f4f6';
+                e.currentTarget.style.color = '#1f2937';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(0,0,0,0.1)';
-                e.currentTarget.style.color = '#666';
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#6b7280';
               }}
               title="Close"
             >
@@ -1870,12 +1869,12 @@ const NotificationPage: React.FC = () => {
             
             {/* Header with avatar */}
             <div style={{
-              background: '#f8f9fa',
-              padding: '20px',
-              borderBottom: '1px solid #e9ecef',
+              background: '#ffffff',
+              padding: '20px 24px',
+              borderBottom: '1px solid #e5e7eb',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px'
+              gap: '16px'
             }}>
               {/* User Profile Picture */}
               <div style={{
@@ -1974,16 +1973,16 @@ const NotificationPage: React.FC = () => {
               {/* Notification Info */}
               <div style={{ flex: 1 }}>
                 <div style={{ 
-                  fontSize: '16px', 
-                  fontWeight: '600',
-                  color: '#333',
-                  marginBottom: '4px'
+                  fontSize: '18px', 
+                  fontWeight: '700',
+                  color: '#1e3a5f',
+                  marginBottom: '6px'
                 }}>
                   {openNotif.subject || 'Notification'}
                 </div>
                 <div style={{ 
-                  fontSize: '12px',
-                  color: '#666'
+                  fontSize: '13px',
+                  color: '#6b7280'
                 }}>
                   {formatHybrid(openNotif.date)}
                 </div>
@@ -1991,11 +1990,11 @@ const NotificationPage: React.FC = () => {
             </div>
             
             
-            <div style={{ padding: '20px' }}>
+            <div style={{ padding: '24px' }}>
               <div style={{ 
                 fontSize: 14, 
-                lineHeight: '1.5', 
-                color: '#555',
+                lineHeight: '1.6', 
+                color: '#374151',
                 marginBottom: '20px'
               }}>
               {openNotif.type && openNotif.type.toLowerCase() === 'follow' ? (
@@ -2348,15 +2347,19 @@ const NotificationPage: React.FC = () => {
                   <div style={{ 
                     whiteSpace: 'pre-wrap',
                     fontSize: '14px',
-                    lineHeight: '1.6',
-                    color: '#333',
-                    marginBottom: '20px'
+                    lineHeight: '1.7',
+                    color: '#374151',
+                    marginBottom: '24px',
+                    padding: '16px',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '8px',
+                    border: '1px solid #e5e7eb'
                   }}>
                     {openNotif.content.replace(/<!--[^>]+-->/g, '')}
                   </div>
                   <button
                     style={{
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      background: '#1e3a5f',
                       color: '#fff',
                       padding: '12px 24px',
                       border: 'none',
@@ -2364,18 +2367,18 @@ const NotificationPage: React.FC = () => {
                       cursor: 'pointer',
                       fontWeight: '600',
                       fontSize: '14px',
-                      marginTop: '16px',
-                      transition: 'all 0.2s ease',
                       width: '100%',
-                      boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
+                      e.currentTarget.style.backgroundColor = '#153e75';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(102, 126, 234, 0.3)';
+                      e.currentTarget.style.backgroundColor = '#1e3a5f';
                     }}
                     onClick={() => {
                       setOpenNotif(null);
@@ -2398,7 +2401,8 @@ const NotificationPage: React.FC = () => {
                       }
                     }}
                   >
-                    🎁 View My Reward Requests
+                    <span>🎁</span>
+                    <span>View My Reward Requests</span>
                   </button>
                 </div>
               ) : (openNotif.type && (openNotif.type.toLowerCase() === 'like' || openNotif.type.toLowerCase() === 'comment' || openNotif.type.toLowerCase() === 'admin_peso_post' || openNotif.type.toLowerCase() === 'reply' || openNotif.type.toLowerCase() === 'mention')) ? (

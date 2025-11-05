@@ -841,7 +841,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
           data.files_uploaded > 0 ? ` and ${data.files_uploaded} file(s) uploaded` : '';
         alert(`Form submitted successfully!${fileMessage}`);
         
-        // Refresh points after tracker form submission (only for alumni users)
+        // Refresh points after tracker form submission (for Alumni users only - OJT can't submit tracker)
         const userStr = localStorage.getItem('user');
         if (userStr) {
           try {

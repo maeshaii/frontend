@@ -128,9 +128,9 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
         
         console.log('Post creation result:', result);
         
-        // Refresh points after posting (only for alumni users)
+        // Refresh points after posting (for Alumni and OJT users)
         // Add a small delay to ensure backend has processed points update
-        if (storedUser && storedUser.account_type && storedUser.account_type.user) {
+        if (storedUser && storedUser.account_type && (storedUser.account_type.user || storedUser.account_type.ojt)) {
           const userId = storedUser.user_id || storedUser.id;
           if (userId) {
             // Wait a bit for backend to process points

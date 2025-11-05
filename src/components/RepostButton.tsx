@@ -86,10 +86,10 @@ const RepostButton: React.FC<RepostButtonProps> = ({
       setShowRepostModal(false);
       onRepost?.(); // This will refresh the posts to show the new repost
       
-      // Refresh points after reposting (only for alumni users)
+      // Refresh points after reposting (for Alumni and OJT users)
       const raw = localStorage.getItem('user');
       const storedUser = raw ? JSON.parse(raw) : null;
-      if (storedUser && storedUser.account_type && storedUser.account_type.user) {
+      if (storedUser && storedUser.account_type && (storedUser.account_type.user || storedUser.account_type.ojt)) {
         const userId = storedUser.user_id || storedUser.id;
         if (userId) {
           try {
