@@ -4,7 +4,7 @@ import AlumniTopBar from './AlumniTopBar';
 import ctulogo from '../../images/ctulogo.png';
 import './profile.css';
 import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api, createConversation } from '../../services/api';
-import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment, getUserPoints, getInventoryItems, requestReward, getRewardRequests, claimRewardRequest } from '../../services/api';
+import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment, getUserPoints, getInventoryItems, requestReward, getRewardRequests, claimRewardRequest, getEngagementPointsSettings } from '../../services/api';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
@@ -201,6 +201,16 @@ const AlumniProfile: React.FC = () => {
   const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
   const [userPoints, setUserPoints] = useState<any>(null);
   const [pointsLoading, setPointsLoading] = useState(false);
+  const [pointsSettings, setPointsSettings] = useState({
+    enabled: true,
+    like: 1,
+    comment: 3,
+    share: 5,
+    reply: 2,
+    post: 0,
+    post_with_photo: 15,
+    tracker_form: 0
+  });
   const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
   const [showRewardsModal, setShowRewardsModal] = useState(false);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
@@ -210,6 +220,28 @@ const AlumniProfile: React.FC = () => {
   const [showApprovedRewardsModal, setShowApprovedRewardsModal] = useState(false);
   const [selectedRewardDetail, setSelectedRewardDetail] = useState<any | null>(null);
   const [rewardStatusFilter, setRewardStatusFilter] = useState<'all' | 'pending' | 'approved' | 'claimed' | 'did_not_push_through'>('all');
+  const [showRewardFilterDropdown, setShowRewardFilterDropdown] = useState(false);
+  const [showMonthlyLimitModal, setShowMonthlyLimitModal] = useState(false);
+  const [showConfirmRequestModal, setShowConfirmRequestModal] = useState(false);
+  const [pendingRewardRequest, setPendingRewardRequest] = useState<{id: number; name: string; value: string; type?: string} | null>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showRewardFilterDropdown && !target.closest('[data-reward-filter-dropdown]')) {
+        setShowRewardFilterDropdown(false);
+      }
+    };
+
+    if (showRewardFilterDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showRewardFilterDropdown]);
 
   // Get current user ID
   const currentUserObj = JSON.parse(localStorage.getItem('user') || '{}');
@@ -285,6 +317,25 @@ const AlumniProfile: React.FC = () => {
               const points = await getUserPoints(profileData.user_id);
               // If points is null or empty object, set to null
               setUserPoints(points && (points.total_points !== undefined || points.points_breakdown) ? points : null);
+              
+              // Fetch points settings
+              try {
+                const settingsResponse = await getEngagementPointsSettings();
+                if (settingsResponse && settingsResponse.success && settingsResponse.settings) {
+                  setPointsSettings({
+                    enabled: settingsResponse.settings.enabled !== false,
+                    like: settingsResponse.settings.like_points || 0,
+                    comment: settingsResponse.settings.comment_points || 0,
+                    share: settingsResponse.settings.share_points || 0,
+                    reply: settingsResponse.settings.reply_points || 0,
+                    post: settingsResponse.settings.post_points || 0,
+                    post_with_photo: settingsResponse.settings.post_with_photo_points || 0,
+                    tracker_form: settingsResponse.settings.tracker_form_points || 0
+                  });
+                }
+              } catch (settingsError) {
+                console.error('Error fetching points settings:', settingsError);
+              }
             } catch (error) {
               console.error('Error fetching points:', error);
               setUserPoints(null);
@@ -741,35 +792,48 @@ getPosts()
       return;
     }
 
-    const isVoucher = reward.type?.toLowerCase().includes('voucher') || 
-                      reward.type?.toLowerCase().includes('gift card') ||
-                      reward.type?.toLowerCase().includes('coupon');
-    const isMerchandise = reward.type?.toLowerCase().includes('merchandise') || 
-                         reward.type?.toLowerCase().includes('merch') ||
-                         reward.type?.toLowerCase().includes('product') ||
-                         reward.type?.toLowerCase().includes('item');
+    // Check if user has already requested a reward this month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthlyRequests = userRewardRequests.filter((req: any) => {
+      const requestedDate = new Date(req.requested_at);
+      return requestedDate >= startOfMonth;
+    });
 
-    const confirmMessage = isVoucher 
-      ? "Please expect a reply from us regarding your reward request."
-      : isMerchandise
-      ? "Please note that this reward must be claimed in person at the CTU office."
-      : "Your reward request has been submitted and is pending approval.";
+    if (monthlyRequests.length >= 1) {
+      setShowMonthlyLimitModal(true);
+      return;
+    }
 
-    const confirm = window.confirm(`Request "${reward.name}" for ${reward.value}?\n\n${confirmMessage}`);
-    if (!confirm) return;
+    // Show confirmation modal instead of browser confirm
+    setPendingRewardRequest({
+      id: rewardId,
+      name: reward.name,
+      value: reward.value,
+      type: reward.type
+    });
+    setShowConfirmRequestModal(true);
+  };
 
+  const confirmRequestReward = async () => {
+    if (!pendingRewardRequest) return;
+    
+    const rewardId = pendingRewardRequest.id;
+    setShowConfirmRequestModal(false);
+    
     try {
       setClaimingReward(rewardId);
       const response = await requestReward(rewardId);
       
       if (response.success) {
-        alert(response.message || confirmMessage);
-        
         // Refresh requests
         await fetchUserRewardRequests();
         
         // Refresh inventory
         await fetchInventoryItems();
+        
+        // Close modal
+        setPendingRewardRequest(null);
       } else {
         alert(response.message || 'Failed to request reward');
       }
@@ -885,6 +949,66 @@ getPosts()
     window.addEventListener('pointsUpdated', handlePointsUpdate);
     return () => {
       window.removeEventListener('pointsUpdated', handlePointsUpdate);
+    };
+  }, [isOwnProfile, currentId]);
+
+  // Listen for WebSocket points updates for cross-platform real-time updates
+  useEffect(() => {
+    if (!isOwnProfile || !currentId) return;
+
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+
+    const wsBase = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const wsHost = window.location.host.replace(':3000', ':8000'); // Adjust port if needed
+    const wsUrl = `${wsBase}${wsHost}/ws/notifications/?token=${encodeURIComponent(token)}`;
+
+    let ws: WebSocket | null = null;
+
+    try {
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log('WebSocket connected for points updates');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'points_update' && data.points) {
+            const pointsData = data.points;
+            // Only update if it's for the current user
+            if (Number(pointsData.user_id) === Number(currentId)) {
+              console.log('Points updated via WebSocket:', pointsData);
+              setUserPoints(pointsData);
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket disconnected for points updates');
+        // Optionally reconnect after a delay
+        setTimeout(() => {
+          if (isOwnProfile && currentId) {
+            // This will trigger the effect again
+          }
+        }, 5000);
+      };
+    } catch (error) {
+      console.error('Error setting up WebSocket:', error);
+    }
+
+    return () => {
+      if (ws) {
+        ws.close();
+      }
     };
   }, [isOwnProfile, currentId]);
 
@@ -1547,12 +1671,16 @@ getPosts()
                       textAlign: 'center'
                     }}>
                       <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>Total Points</div>
-                      <div style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '12px' }}>{userPoints.total_points || 0}</div>
+                      <div style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '8px' }}>{userPoints.total_points || 0}</div>
+                      {userPoints.rank && (
+                        <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '12px' }}>Rank #{userPoints.rank}</div>
+                      )}
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                         <button
                           onClick={() => {
                             setShowRewardsModal(true);
                             fetchInventoryItems();
+                            fetchUserRewardRequests();
                           }}
                           style={{
                             background: 'rgba(255, 255, 255, 0.2)',
@@ -1620,12 +1748,18 @@ getPosts()
                       textAlign: 'center'
                     }}>
                       <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>Total Points</div>
-                      <div style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '12px' }}>0</div>
+                      <div style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '8px' }}>0</div>
+                      {userPoints?.rank ? (
+                        <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '12px' }}>Rank #{userPoints.rank}</div>
+                      ) : (
+                        <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '12px' }}>Rank -</div>
+                      )}
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                         <button
                           onClick={() => {
                             setShowRewardsModal(true);
                             fetchInventoryItems();
+                            fetchUserRewardRequests();
                           }}
                           style={{
                             background: 'rgba(255, 255, 255, 0.2)',
@@ -1688,145 +1822,192 @@ getPosts()
                       <div style={{ fontWeight: '600', marginBottom: '12px', color: '#174f84' }}>Points Breakdown</div>
                       
                       {/* Likes */}
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '10px 0',
-                        borderBottom: '1px solid #f0f0f0'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <HiOutlineHeart size={16} color="#6b7280" strokeWidth={1.5} />
-                          <span>Likes</span>
-                          <span style={{ fontSize: '12px', color: '#999' }}>
-                            ({userPoints.points_breakdown?.likes?.count || 0})
-                          </span>
-                        </div>
-                        <div style={{ fontWeight: '600', color: '#667eea' }}>
-                          +{userPoints.points_breakdown?.likes?.points || 0}
-                        </div>
-                      </div>
+                      {(() => {
+                        const count = userPoints.points_breakdown?.likes?.count || 0;
+                        const pointsPerAction = pointsSettings.like;
+                        const calculatedPoints = count * pointsPerAction;
+                        return (
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '10px 0',
+                            borderBottom: '1px solid #f0f0f0'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <HiOutlineHeart size={16} color="#6b7280" strokeWidth={1.5} />
+                              <span>Likes</span>
+                              <span style={{ fontSize: '12px', color: '#999' }}>
+                                ({count})
+                              </span>
+                            </div>
+                            <div style={{ fontWeight: '600', color: '#667eea' }}>
+                              +{calculatedPoints}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                     {/* Comments */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <HiOutlineChatBubbleLeft size={16} color="#6b7280" strokeWidth={1.5} />
-                        <span>Comments</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.comments?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.comments?.points || 0}
-                      </div>
-                    </div>
+                    {(() => {
+                      const count = userPoints.points_breakdown?.comments?.count || 0;
+                      const pointsPerAction = pointsSettings.comment;
+                      const calculatedPoints = count * pointsPerAction;
+                      return (
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '10px 0',
+                          borderBottom: '1px solid #f0f0f0'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <HiOutlineChatBubbleLeft size={16} color="#6b7280" strokeWidth={1.5} />
+                            <span>Comments</span>
+                            <span style={{ fontSize: '12px', color: '#999' }}>
+                              ({count})
+                            </span>
+                          </div>
+                          <div style={{ fontWeight: '600', color: '#667eea' }}>
+                            +{calculatedPoints}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Repost */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <HiOutlineArrowPath size={16} color="#6b7280" strokeWidth={1.5} />
-                        <span>Repost</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.shares?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.shares?.points || 0}
-                      </div>
-                    </div>
+                    {(() => {
+                      const count = userPoints.points_breakdown?.shares?.count || 0;
+                      const pointsPerAction = pointsSettings.share;
+                      const calculatedPoints = count * pointsPerAction;
+                      return (
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '10px 0',
+                          borderBottom: '1px solid #f0f0f0'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <HiOutlineArrowPath size={16} color="#6b7280" strokeWidth={1.5} />
+                            <span>Repost</span>
+                            <span style={{ fontSize: '12px', color: '#999' }}>
+                              ({count})
+                            </span>
+                          </div>
+                          <div style={{ fontWeight: '600', color: '#667eea' }}>
+                            +{calculatedPoints}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Replies */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <HiOutlineArrowUturnLeft size={16} color="#6b7280" strokeWidth={1.5} />
-                        <span>Replies</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.replies?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.replies?.points || 0}
-                      </div>
-                    </div>
+                    {(() => {
+                      const count = userPoints.points_breakdown?.replies?.count || 0;
+                      const pointsPerAction = pointsSettings.reply;
+                      const calculatedPoints = count * pointsPerAction;
+                      return (
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '10px 0',
+                          borderBottom: '1px solid #f0f0f0'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <HiOutlineArrowUturnLeft size={16} color="#6b7280" strokeWidth={1.5} />
+                            <span>Replies</span>
+                            <span style={{ fontSize: '12px', color: '#999' }}>
+                              ({count})
+                            </span>
+                          </div>
+                          <div style={{ fontWeight: '600', color: '#667eea' }}>
+                            +{calculatedPoints}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Posts */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <HiOutlineDocumentText size={16} color="#6b7280" strokeWidth={1.5} />
-                        <span>Posts</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.posts?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.posts?.points || 0}
-                      </div>
-                    </div>
+                    {(() => {
+                      const count = userPoints.points_breakdown?.posts?.count || 0;
+                      const pointsPerAction = pointsSettings.post;
+                      const calculatedPoints = count * pointsPerAction;
+                      return (
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '10px 0',
+                          borderBottom: '1px solid #f0f0f0'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <HiOutlineDocumentText size={16} color="#6b7280" strokeWidth={1.5} />
+                            <span>Posts</span>
+                            <span style={{ fontSize: '12px', color: '#999' }}>
+                              ({count})
+                            </span>
+                          </div>
+                          <div style={{ fontWeight: '600', color: '#667eea' }}>
+                            +{calculatedPoints}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Posts with Photos */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <HiOutlineCamera size={16} color="#6b7280" strokeWidth={1.5} />
-                        <span>Posts w/ Photos</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.posts_with_photos?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.posts_with_photos?.points || 0}
-                      </div>
-                    </div>
+                    {(() => {
+                      const count = userPoints.points_breakdown?.posts_with_photos?.count || 0;
+                      const pointsPerAction = pointsSettings.post_with_photo;
+                      const calculatedPoints = count * pointsPerAction;
+                      return (
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '10px 0',
+                          borderBottom: '1px solid #f0f0f0'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <HiOutlineCamera size={16} color="#6b7280" strokeWidth={1.5} />
+                            <span>Posts w/ Photos</span>
+                            <span style={{ fontSize: '12px', color: '#999' }}>
+                              ({count})
+                            </span>
+                          </div>
+                          <div style={{ fontWeight: '600', color: '#667eea' }}>
+                            +{calculatedPoints}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Tracker Form - Only show for Alumni users, not OJT */}
-                    {user && user.account_type?.user && !user.account_type?.ojt && (
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '10px 0'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <HiOutlineClipboardDocumentList size={16} color="#6b7280" strokeWidth={1.5} />
-                          <span>Tracker Form</span>
-                          <span style={{ fontSize: '12px', color: '#999' }}>
-                            ({userPoints.points_breakdown?.tracker_form?.count || 0})
-                          </span>
+                    {user && user.account_type?.user && !user.account_type?.ojt && (() => {
+                      const count = userPoints.points_breakdown?.tracker_form?.count || 0;
+                      const pointsPerAction = pointsSettings.tracker_form;
+                      const calculatedPoints = count * pointsPerAction;
+                      return (
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '10px 0'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <HiOutlineClipboardDocumentList size={16} color="#6b7280" strokeWidth={1.5} />
+                            <span>Tracker Form</span>
+                            <span style={{ fontSize: '12px', color: '#999' }}>
+                              ({count})
+                            </span>
+                          </div>
+                          <div style={{ fontWeight: '600', color: '#667eea' }}>
+                            +{calculatedPoints}
+                          </div>
                         </div>
-                        <div style={{ fontWeight: '600', color: '#667eea' }}>
-                          +{userPoints.points_breakdown?.tracker_form?.points || 0}
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                   )}
                 </div>
@@ -4377,30 +4558,119 @@ getPosts()
                   gap: '12px'
                 }}>
                   {/* Status Filter */}
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {(['all', 'pending', 'approved', 'claimed', 'did_not_push_through'] as const).map((filter) => (
-                      <button
-                        key={filter}
-                        onClick={() => setRewardStatusFilter(filter)}
-                        style={{
-                          padding: '6px 12px',
-                          borderRadius: '6px',
-                          border: '1px solid #e2e8f0',
-                          background: rewardStatusFilter === filter ? '#667eea' : 'white',
-                          color: rewardStatusFilter === filter ? 'white' : '#64748b',
-                          fontSize: '12px',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          textTransform: 'capitalize',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        {filter === 'all' ? 'All' : 
-                         filter === 'approved' ? 'Ready' : 
-                         filter === 'did_not_push_through' ? 'Did Not Push Through' : 
-                         filter}
-                      </button>
-                    ))}
+                  <div style={{ position: 'relative' }} data-reward-filter-dropdown>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: '500' }}>Filter by status:</span>
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          type="button"
+                          role="button"
+                          aria-expanded={showRewardFilterDropdown}
+                          aria-haspopup="true"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowRewardFilterDropdown(!showRewardFilterDropdown);
+                          }}
+                          data-reward-filter-dropdown
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: '8px',
+                            border: '1px solid #e5e7eb',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            backgroundColor: 'white',
+                            color: '#1e3a5f',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            minWidth: '180px',
+                            justifyContent: 'space-between',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = '#cbd5e1';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!showRewardFilterDropdown) {
+                              e.currentTarget.style.borderColor = '#e5e7eb';
+                            }
+                          }}
+                        >
+                          <span>
+                            {rewardStatusFilter === 'all' ? 'All' : 
+                             rewardStatusFilter === 'pending' ? 'Pending' : 
+                             rewardStatusFilter === 'approved' ? 'Ready' : 
+                             rewardStatusFilter === 'claimed' ? 'Claimed' : 
+                             'Did Not Push Through'}
+                          </span>
+                          <span style={{ 
+                            fontSize: '10px',
+                            transform: showRewardFilterDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                            transition: 'transform 0.2s'
+                          }}>▼</span>
+                        </button>
+                        {showRewardFilterDropdown && (
+                          <div 
+                            data-reward-filter-dropdown
+                            style={{
+                              position: 'absolute',
+                              top: '100%',
+                              left: 0,
+                              backgroundColor: 'white',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                              border: '1px solid #e5e7eb',
+                              zIndex: 100,
+                              marginTop: '4px',
+                              overflow: 'hidden',
+                              minWidth: '180px'
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                          >
+                            {(['all', 'pending', 'approved', 'claimed', 'did_not_push_through'] as const).map((filter) => (
+                              <div
+                                key={filter}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setRewardStatusFilter(filter);
+                                  setShowRewardFilterDropdown(false);
+                                }}
+                                style={{
+                                  padding: '10px 16px',
+                                  cursor: 'pointer',
+                                  backgroundColor: rewardStatusFilter === filter ? '#f3f4f6' : 'white',
+                                  color: rewardStatusFilter === filter ? '#1e3a5f' : '#374151',
+                                  fontSize: '13px',
+                                  fontWeight: rewardStatusFilter === filter ? '600' : '400',
+                                  transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (rewardStatusFilter !== filter) {
+                                    e.currentTarget.style.backgroundColor = '#f9fafb';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (rewardStatusFilter !== filter) {
+                                    e.currentTarget.style.backgroundColor = 'white';
+                                  }
+                                }}
+                              >
+                                {filter === 'all' ? 'All' : 
+                                 filter === 'approved' ? 'Ready' : 
+                                 filter === 'did_not_push_through' ? 'Did Not Push Through' : 
+                                 filter.charAt(0).toUpperCase() + filter.slice(1)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                 </div>
@@ -4925,6 +5195,299 @@ getPosts()
                 </>
                   );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* Monthly Limit Modal */}
+      {showMonthlyLimitModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1001,
+            padding: '20px'
+          }}
+          onClick={() => setShowMonthlyLimitModal(false)}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '32px',
+              maxWidth: '500px',
+              width: '100%',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+              textAlign: 'center'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '24px', marginBottom: '16px' }}>⚠️</div>
+            <h2 style={{ 
+              margin: '0 0 16px 0', 
+              fontSize: '20px', 
+              fontWeight: '600', 
+              color: '#1e3a5f' 
+            }}>
+              Monthly Limit Reached
+            </h2>
+            <p style={{ 
+              margin: '0 0 24px 0', 
+              fontSize: '15px', 
+              color: '#6b7280',
+              lineHeight: '1.6'
+            }}>
+              You can only request 1 reward per month. Please wait until next month to request another reward.
+            </p>
+            <button
+              onClick={() => setShowMonthlyLimitModal(false)}
+              style={{
+                padding: '12px 32px',
+                background: '#1e3a5f',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '15px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                width: '100%',
+                maxWidth: '200px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#2d5a8f';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#1e3a5f';
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Request Reward Modal */}
+      {showConfirmRequestModal && pendingRewardRequest && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1001,
+            padding: '20px'
+          }}
+          onClick={() => {
+            setShowConfirmRequestModal(false);
+            setPendingRewardRequest(null);
+          }}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '32px',
+              maxWidth: '500px',
+              width: '100%',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              marginBottom: '24px',
+              paddingBottom: '20px',
+              borderBottom: '1px solid #e5e7eb'
+            }}>
+              <h2 style={{ 
+                margin: 0,
+                fontSize: '20px', 
+                fontWeight: '700', 
+                color: '#1e3a5f',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <HiOutlineGift size={24} color="#1e3a5f" strokeWidth={1.5} />
+                <span>Request Reward</span>
+              </h2>
+              <button
+                onClick={() => {
+                  setShowConfirmRequestModal(false);
+                  setPendingRewardRequest(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#6b7280',
+                  padding: '4px 8px',
+                  lineHeight: '1',
+                  transition: 'color 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.color = '#1f2937'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Content */}
+            <div>
+              {(() => {
+                // Extract points from value (e.g., "1 pt" or "10 pts" -> "1" or "10")
+                const pointsMatch = pendingRewardRequest.value?.match(/(\d+)/);
+                const pointsValue = pointsMatch ? parseInt(pointsMatch[1]) : 0;
+                const pointsText = pointsValue === 1 ? 'point' : 'points';
+                
+                return (
+                  <p style={{ 
+                    margin: '0 0 20px 0', 
+                    fontSize: '16px', 
+                    color: '#374151',
+                    lineHeight: '1.6'
+                  }}>
+                    You are about to redeem <strong style={{ color: '#1e3a5f', fontWeight: '600' }}>{pendingRewardRequest.name}</strong> as your reward for accumulating <strong style={{ color: '#1e3a5f', fontWeight: '600' }}>{pointsValue} {pointsText}</strong>.
+                  </p>
+                );
+              })()}
+              
+              {/* CTU Claim Notice - Only show for merchandise */}
+              {pendingRewardRequest.type && 
+               pendingRewardRequest.type.toLowerCase().includes('merchandise') && (
+                <div style={{
+                  background: '#fef3c7',
+                  border: '1px solid #fcd34d',
+                  borderRadius: '8px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px'
+                }}>
+                  <div style={{
+                    fontSize: '18px',
+                    flexShrink: 0,
+                    marginTop: '2px'
+                  }}>
+                    ⚠️
+                  </div>
+                  <p style={{
+                    margin: 0,
+                    fontSize: '14px',
+                    color: '#92400e',
+                    lineHeight: '1.6'
+                  }}>
+                    Please take note that this needs to be claimed in the CTU.
+                  </p>
+                </div>
+              )}
+
+              <div style={{
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '8px',
+                padding: '12px 16px',
+                marginBottom: '24px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '10px'
+              }}>
+                <div style={{
+                  fontSize: '16px',
+                  flexShrink: 0,
+                  marginTop: '2px',
+                  color: '#1e40af'
+                }}>
+                  ℹ️
+                </div>
+                <p style={{
+                  margin: 0,
+                  fontSize: '13px',
+                  color: '#1e40af',
+                  lineHeight: '1.5'
+                }}>
+                  Note: You can only redeem 1 reward per month.
+                </p>
+              </div>
+
+              <div style={{ 
+                display: 'flex', 
+                gap: '12px', 
+                justifyContent: 'flex-end',
+                marginTop: '24px'
+              }}>
+                <button
+                  onClick={() => {
+                    setShowConfirmRequestModal(false);
+                    setPendingRewardRequest(null);
+                  }}
+                  style={{
+                    padding: '12px 24px',
+                    background: '#f3f4f6',
+                    color: '#374151',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#e5e7eb';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmRequestReward}
+                  disabled={claimingReward !== null}
+                  style={{
+                    padding: '12px 24px',
+                    background: claimingReward !== null ? '#9ca3af' : '#1e3a5f',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: claimingReward !== null ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (claimingReward === null) {
+                      e.currentTarget.style.backgroundColor = '#2d5a8f';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (claimingReward === null) {
+                      e.currentTarget.style.backgroundColor = '#1e3a5f';
+                    }
+                  }}
+                >
+                  {claimingReward !== null ? 'Processing...' : 'Confirm Request'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

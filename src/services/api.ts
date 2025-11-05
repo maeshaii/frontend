@@ -1210,17 +1210,18 @@ export const deleteInventoryItem = async (itemId: number) => {
 };
 
 // Give reward to user
-export const giveReward = async (userId: number, rewardId: number) => {
+export const giveReward = async (userId: number, rewardId: number, isTrackerReward: boolean = false) => {
   const response = await api.post('rewards/give/', {
     user_id: userId,
-    reward_id: rewardId
+    reward_id: rewardId,
+    is_tracker_reward: isTrackerReward
   });
   return response.data;
 };
 
 // Get reward history
-export const getRewardHistory = async (limit: number = 50) => {
-  const response = await api.get(`rewards/history/?limit=${limit}`);
+export const getRewardHistory = async (limit: number = 50, trackerOnly: boolean = false) => {
+  const response = await api.get(`rewards/history/?limit=${limit}&tracker_only=${trackerOnly}`);
   return response.data;
 };
 

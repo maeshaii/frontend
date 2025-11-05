@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { editReply, deleteReply, createReply, searchAlumni } from '../services/api';
+import { editReply, deleteReply, createReply, searchAlumni, getUserPoints } from '../services/api';
 import ctulogo from '../images/ctulogo.png';
 import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
 
@@ -126,6 +126,22 @@ const Reply: React.FC<ReplyProps> = ({
       setReplyContent('');
       setShowReplyInput(false);
       onReplyUpdate();
+      
+      // Refresh points after successful reply (for Alumni and OJT users)
+      if (currentUserId) {
+        // Add a small delay to ensure backend has processed points update
+        setTimeout(async () => {
+          try {
+            const points = await getUserPoints(currentUserId);
+            // Dispatch event to notify Profile component
+            window.dispatchEvent(new CustomEvent('pointsUpdated', { 
+              detail: { userId: currentUserId, points } 
+            }));
+          } catch (error) {
+            console.error('Error refreshing points after reply:', error);
+          }
+        }, 500); // 500ms delay to ensure backend has processed
+      }
     } catch (error) {
       console.error('Error creating reply:', error);
     } finally {

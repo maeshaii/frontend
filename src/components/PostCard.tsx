@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost, getPostLikes, getRepostLikes, getDonationLikes, getForumLikes } from '../services/api';
+import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost, getPostLikes, getRepostLikes, getDonationLikes, getForumLikes, getUserPoints } from '../services/api';
 import { 
   commentOnForumPost, 
   deleteForumComment, 
@@ -523,6 +523,27 @@ const PostCard: React.FC<PostCardProps> = ({
     };
   }, [showOptions, post.post_id, post.comments, setShowOptions, showCommentOptions]);
 
+  // Helper function to refresh and dispatch points update
+  const refreshPointsAndDispatch = useCallback(async () => {
+    if (!currentUserId) return;
+    try {
+      // Add a small delay to ensure backend has processed points update
+      setTimeout(async () => {
+        try {
+          const points = await getUserPoints(currentUserId);
+          // Dispatch event to notify Profile component
+          window.dispatchEvent(new CustomEvent('pointsUpdated', { 
+            detail: { userId: currentUserId, points } 
+          }));
+        } catch (error) {
+          console.error('Error refreshing points after action:', error);
+        }
+      }, 500); // 500ms delay to ensure backend has processed
+    } catch (error) {
+      console.error('Error in refreshPointsAndDispatch:', error);
+    }
+  }, [currentUserId]);
+
   const handleLike = async () => {
     if (!setLikedPosts) return;
     console.log('handleLike called for post:', post.post_id, 'isForum:', isForum, 'isDonation:', isDonation, 'isRepostPost:', isRepostPost);
@@ -569,6 +590,10 @@ const PostCard: React.FC<PostCardProps> = ({
         await likePost(post.post_id);
         setLikedPosts(prev => ({ ...prev, [post.post_id]: true }));
       }
+      
+      // Refresh points after successful like
+      refreshPointsAndDispatch();
+      
       onPostUpdate?.();
     } catch (error) {
       console.error('Error liking post:', error);
@@ -768,6 +793,10 @@ const PostCard: React.FC<PostCardProps> = ({
         setShowCommentInput?.(prev => ({ ...prev, [itemId]: false }));
         // Automatically show comments section when a comment is added
         setShowCommentsSection(prev => ({ ...prev, [itemId]: true }));
+        
+        // Refresh points after successful comment
+        refreshPointsAndDispatch();
+        
         onPostUpdate?.();
       }
     } catch (error) {

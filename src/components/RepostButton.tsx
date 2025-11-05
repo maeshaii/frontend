@@ -92,15 +92,18 @@ const RepostButton: React.FC<RepostButtonProps> = ({
       if (storedUser && storedUser.account_type && (storedUser.account_type.user || storedUser.account_type.ojt)) {
         const userId = storedUser.user_id || storedUser.id;
         if (userId) {
-          try {
-            const points = await getUserPoints(userId);
-            // Dispatch event to notify Profile component
-            window.dispatchEvent(new CustomEvent('pointsUpdated', { 
-              detail: { userId, points } 
-            }));
-          } catch (error) {
-            console.error('Error refreshing points after repost:', error);
-          }
+          // Add a small delay to ensure backend has processed points update
+          setTimeout(async () => {
+            try {
+              const points = await getUserPoints(userId);
+              // Dispatch event to notify Profile component
+              window.dispatchEvent(new CustomEvent('pointsUpdated', { 
+                detail: { userId, points } 
+              }));
+            } catch (error) {
+              console.error('Error refreshing points after repost:', error);
+            }
+          }, 500); // 500ms delay to ensure backend has processed
         }
       }
     } catch (error: any) {

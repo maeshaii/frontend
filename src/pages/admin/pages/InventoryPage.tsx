@@ -26,7 +26,6 @@ const InventoryPage: React.FC = () => {
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [stockFilter, setStockFilter] = useState<'all' | 'low'>('all');
 
   // Fetch inventory items on component mount
   useEffect(() => {
@@ -186,15 +185,9 @@ const InventoryPage: React.FC = () => {
       backgroundColor: '#f0f4f8'
     },
     pageHeader: {
-      backgroundColor: '#ffffff',
+      backgroundColor: '#b8daf0',
       padding: '32px 40px',
-      marginBottom: '32px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: '20px',
-      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-      borderBottom: '1px solid #e5e7eb'
+      marginBottom: '32px'
     },
     headerTitle: {
       fontSize: '32px',
@@ -206,7 +199,7 @@ const InventoryPage: React.FC = () => {
     },
     headerSubtitle: {
       fontSize: '14px',
-      color: '#6b7280',
+      color: '#4a5568',
       marginTop: '8px',
       fontWeight: '400'
     },
@@ -255,8 +248,7 @@ const InventoryPage: React.FC = () => {
       marginBottom: '24px',
       display: 'flex',
       alignItems: 'center',
-      gap: '12px',
-      letterSpacing: '0.5px'
+      gap: '12px'
     },
     formGrid: {
       display: 'grid',
@@ -292,29 +284,30 @@ const InventoryPage: React.FC = () => {
     inventoryTable: {
       width: '100%',
       borderCollapse: 'collapse' as const,
-      fontSize: '13px'
+      fontSize: '14px'
     },
     tableHeader: {
-      backgroundColor: '#f9fafb',
-      borderBottom: '2px solid #e5e7eb'
+      backgroundColor: '#1e3a5f',
+      position: 'sticky' as const,
+      top: 0,
+      zIndex: 10
     },
     tableHeaderCell: {
-      padding: '12px 16px',
+      padding: '18px 16px',
       textAlign: 'left' as const,
-      fontSize: '12px',
-      fontWeight: '600',
-      color: '#6b7280',
+      fontSize: '13px',
+      fontWeight: '700',
+      color: 'white',
       textTransform: 'uppercase' as const,
-      letterSpacing: '0.5px'
+      letterSpacing: '0.8px'
     },
     tableRow: {
       borderBottom: '1px solid #f3f4f6',
       transition: 'background-color 0.2s'
     },
     tableCell: {
-      padding: '16px 16px',
-      color: '#374151',
-      fontSize: '14px'
+      padding: '16px 12px',
+      color: '#374151'
     },
     itemIcon: {
       fontSize: '24px',
@@ -322,9 +315,8 @@ const InventoryPage: React.FC = () => {
       marginRight: '10px'
     },
     itemName: {
-      fontWeight: '600',
-      color: '#1f2937',
-      fontSize: '14px'
+      fontWeight: '500',
+      color: '#1f2937'
     },
     quantityBadge: {
       display: 'inline-block',
@@ -351,17 +343,17 @@ const InventoryPage: React.FC = () => {
       backgroundColor: '#1e3a5f',
       color: 'white',
       border: 'none',
-      padding: '12px 24px',
-      borderRadius: '10px',
-      fontSize: '14px',
-      fontWeight: '600',
+      padding: '14px 32px',
+      borderRadius: '12px',
+      fontSize: '15px',
+      fontWeight: '700',
       cursor: 'pointer',
       transition: 'all 0.2s',
       display: 'flex',
       alignItems: 'center',
-      gap: '8px',
-      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-      letterSpacing: '0.3px'
+      gap: '10px',
+      boxShadow: '0 2px 6px rgba(30, 58, 95, 0.3)',
+      letterSpacing: '0.5px'
     },
     modalOverlay: {
       position: 'fixed' as const,
@@ -446,6 +438,10 @@ const InventoryPage: React.FC = () => {
     }
   };
 
+  const totalItems = inventoryItems.length;
+  const totalStock = inventoryItems.reduce((sum, item) => sum + item.quantity, 0);
+  const lowStockItems = inventoryItems.filter(item => item.quantity < 15).length;
+
   return (
     <div style={styles.container}>
       <Sidebar />
@@ -466,10 +462,10 @@ const InventoryPage: React.FC = () => {
                 background: 'white',
                 border: '2px solid #1e3a5f',
                 color: '#1e3a5f',
-                fontSize: '14px',
+                fontSize: '15px',
                 fontWeight: '600',
                 cursor: 'pointer',
-                padding: '10px 20px',
+                padding: '12px 24px',
                 borderRadius: '10px',
                 transition: 'all 0.2s'
               }}
@@ -482,7 +478,7 @@ const InventoryPage: React.FC = () => {
                 e.currentTarget.style.color = '#1e3a5f';
               }}
             >
-              <span style={{ fontSize: '16px' }}>←</span>
+              <span style={{ fontSize: '18px' }}>←</span>
               <span>Back to Rewards</span>
             </button>
           </div>
@@ -490,46 +486,51 @@ const InventoryPage: React.FC = () => {
 
         {/* Content Wrapper */}
         <div style={styles.contentWrapper}>
+          {/* Stats Bar */}
+          <div style={styles.statsBar}>
+          <div 
+            style={styles.statCard}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+          >
+            <div style={styles.statNumber}>{totalItems}</div>
+            <div style={styles.statLabel}>Total Items</div>
+          </div>
+          <div 
+            style={styles.statCard}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+          >
+            <div style={styles.statNumber}>{totalStock}</div>
+            <div style={styles.statLabel}>Total Stock</div>
+          </div>
+          <div 
+            style={{
+              ...styles.statCard,
+              backgroundColor: lowStockItems > 0 ? '#dc2626' : '#1e3a5f'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+          >
+            <div style={styles.statNumber}>
+              {lowStockItems}
+            </div>
+            <div style={styles.statLabel}>Low Stock Alerts</div>
+          </div>
+          </div>
+
         {/* Inventory Table */}
         <div style={styles.tableSection}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <h2 style={{ ...styles.sectionTitle, margin: 0 }}>
-                Current Inventory ({stockFilter === 'low' 
-                  ? inventoryItems.filter(item => item.quantity < 15).length 
-                  : inventoryItems.length} items)
-              </h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '14px', color: '#6b7280', fontWeight: '500' }}>Filter by status:</span>
-                <select
-                  value={stockFilter}
-                  onChange={(e) => setStockFilter(e.target.value as 'all' | 'low')}
-                  style={{
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#374151',
-                    backgroundColor: 'white',
-                    cursor: 'pointer',
-                    outline: 'none',
-                    transition: 'border-color 0.2s'
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = '#1e3a5f'}
-                  onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
-                >
-                  <option value="all">All</option>
-                  <option value="low">Low Stock</option>
-                </select>
-              </div>
-            </div>
+            <h2 style={{ ...styles.sectionTitle, margin: 0 }}>
+              Current Inventory ({inventoryItems.length} items)
+            </h2>
             <button
               style={styles.addButton}
               onClick={() => setShowAddModal(true)}
               onMouseEnter={(e) => {
                 (e.target as HTMLButtonElement).style.backgroundColor = '#2c5282';
-                (e.target as HTMLButtonElement).style.transform = 'translateY(-1px)';
+                (e.target as HTMLButtonElement).style.transform = 'translateY(-2px)';
               }}
               onMouseLeave={(e) => {
                 (e.target as HTMLButtonElement).style.backgroundColor = '#1e3a5f';
@@ -542,7 +543,9 @@ const InventoryPage: React.FC = () => {
           <div style={{ 
             maxHeight: '500px', 
             overflowY: 'auto', 
-            overflowX: 'auto'
+            overflowX: 'auto',
+            border: '1px solid #e2e8f0',
+            borderRadius: '8px'
           }}>
             <table style={styles.inventoryTable}>
               <thead style={styles.tableHeader}>
@@ -555,42 +558,24 @@ const InventoryPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {(() => {
-                  const filteredItems = stockFilter === 'low' 
-                    ? inventoryItems.filter(item => item.quantity < 15)
-                    : inventoryItems;
-                  
-                  return filteredItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} style={{ padding: '60px 20px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '16px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>
-                          {stockFilter === 'low' 
-                            ? 'No low stock items' 
-                            : 'No items in inventory'}
-                        </div>
-                        <div style={{ fontSize: '14px', color: '#9ca3af' }}>
-                          {stockFilter === 'low' 
-                            ? 'All items have sufficient stock (15+)' 
-                            : 'Add your first reward item using the Add New Item button'}
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredItems.map((item) => {
-                      const isLowStock = item.quantity < 15;
-                      return (
+                {inventoryItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '60px 20px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '16px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>
+                        No items in inventory
+                      </div>
+                      <div style={{ fontSize: '14px', color: '#9ca3af' }}>
+                        Add your first reward item using the Add New Item button
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  inventoryItems.map((item) => (
                     <tr 
                       key={item.id} 
-                      style={{
-                        ...styles.tableRow,
-                        backgroundColor: isLowStock ? '#fee2e2' : 'transparent'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = isLowStock ? '#fecaca' : '#f9fafb';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = isLowStock ? '#fee2e2' : 'transparent';
-                      }}
+                      style={styles.tableRow}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                     >
                       <td style={styles.tableCell}>
                         <span style={styles.itemName}>{item.name}</span>
@@ -651,10 +636,8 @@ const InventoryPage: React.FC = () => {
                         </button>
                       </td>
                     </tr>
-                    );
-                    })
-                  );
-                })()}
+                  ))
+                )}
               </tbody>
             </table>
           </div>

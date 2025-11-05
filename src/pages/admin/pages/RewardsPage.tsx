@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
-import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardRequests, approveRewardRequest, claimRewardRequest, getEngagementPointsSettings, updateEngagementPointsSettings, getRewardHistory, fetchTrackerResponses, fetchAlumniDetails } from '../../../services/api';
+import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardRequests, approveRewardRequest, claimRewardRequest, getEngagementPointsSettings, updateEngagementPointsSettings, getRewardHistory, fetchTrackerResponses } from '../../../services/api';
 import { FaTimes } from 'react-icons/fa';
 import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineUser, HiOutlineTag } from 'react-icons/hi2';
 import { useRealTimeNotifications } from '../../../hooks/useRealTimeNotifications';
@@ -107,12 +107,11 @@ const RewardsPage: React.FC = () => {
   const [tableFilter, setTableFilter] = useState<'requests' | 'history'>('requests');
   const [requestStatusFilter, setRequestStatusFilter] = useState<'all' | 'pending' | 'approved' | 'ready_for_pickup'>('all');
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [rewardTypeFilter, setRewardTypeFilter] = useState<'all' | string>('all');
+  const [showRewardTypeDropdown, setShowRewardTypeDropdown] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [trackerFormResponsesCount, setTrackerFormResponsesCount] = useState(0);
   const [trackerFormLoading, setTrackerFormLoading] = useState(true);
-  const [showTrackerResponsesModal, setShowTrackerResponsesModal] = useState(false);
-  const [trackerResponses, setTrackerResponses] = useState<any[]>([]);
-  const [trackerResponsesLoading, setTrackerResponsesLoading] = useState(false);
 
   // Use real-time notifications hook to detect new reward requests
   const { notifications: realTimeNotifications } = useRealTimeNotifications({
@@ -160,31 +159,48 @@ const RewardsPage: React.FC = () => {
     window.addEventListener('rewardRequestCreated', handleRewardRequestNotification as EventListener);
     window.addEventListener('notificationReceived', handleRewardRequestNotification as EventListener);
     
-    // Close dropdown when clicking outside
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('[data-status-dropdown]')) {
-        setShowStatusDropdown(false);
-      }
-    };
-    
-    if (showStatusDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    
     return () => {
       clearInterval(pollInterval);
       window.removeEventListener('rewardRequestCreated', handleRewardRequestNotification as EventListener);
       window.removeEventListener('notificationReceived', handleRewardRequestNotification as EventListener);
+    };
+  }, [filter]);
+
+  // Close dropdown when clicking outside - separate useEffect to avoid triggering data refresh
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showStatusDropdown && !target.closest('[data-status-dropdown]')) {
+        setShowStatusDropdown(false);
+      }
+      if (showRewardTypeDropdown && !target.closest('[data-reward-type-dropdown]')) {
+        setShowRewardTypeDropdown(false);
+      }
+    };
+
+    if (showStatusDropdown || showRewardTypeDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [filter, showStatusDropdown]);
+  }, [showStatusDropdown, showRewardTypeDropdown]);
 
   const fetchPointsSettings = async () => {
     try {
       const response = await getEngagementPointsSettings();
       if (response.success && response.settings) {
-        setPointsSettings(response.settings);
+        setPointsSettings({
+          enabled: response.settings.enabled !== false,
+          like: response.settings.like_points || 0,
+          comment: response.settings.comment_points || 0,
+          share: response.settings.share_points || 0,
+          reply: response.settings.reply_points || 0,
+          post: response.settings.post_points || 0,
+          post_with_photo: response.settings.post_with_photo_points || 0,
+          tracker_form: response.settings.tracker_form_points || 0
+        });
       } else {
         // Use default values if API fails
         setPointsSettings({
@@ -314,43 +330,6 @@ const RewardsPage: React.FC = () => {
       setTrackerFormResponsesCount(0);
     } finally {
       setTrackerFormLoading(false);
-    }
-  };
-
-  const fetchTrackerResponsesWithDetails = async () => {
-    setTrackerResponsesLoading(true);
-    try {
-      const response = await fetchTrackerResponses();
-      if (response && response.success && response.responses) {
-        // Fetch user details to get graduation year
-        const responsesWithDetails = await Promise.all(
-          response.responses.map(async (resp: any) => {
-            try {
-              const userDetails = await fetchAlumniDetails(resp.user_id);
-              return {
-                ...resp,
-                year_graduated: userDetails?.alumni?.year_graduated || userDetails?.alumni?.batch || null,
-                program: userDetails?.alumni?.program || null
-              };
-            } catch (error) {
-              console.error(`Error fetching details for user ${resp.user_id}:`, error);
-              return {
-                ...resp,
-                year_graduated: null,
-                program: null
-              };
-            }
-          })
-        );
-        setTrackerResponses(responsesWithDetails);
-      } else {
-        setTrackerResponses([]);
-      }
-    } catch (error) {
-      console.error('Error fetching tracker responses:', error);
-      setTrackerResponses([]);
-    } finally {
-      setTrackerResponsesLoading(false);
     }
   };
 
@@ -783,7 +762,10 @@ const RewardsPage: React.FC = () => {
             {/* Points Settings Card */}
             <div 
               style={styles.inventoryCard}
-              onClick={() => setShowPointsSettingsModal(true)}
+              onClick={() => {
+                fetchPointsSettings();
+                setShowPointsSettingsModal(true);
+              }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.boxShadow = '0 4px 12px rgba(30, 58, 95, 0.3)';
                 e.currentTarget.style.transform = 'translateY(-2px)';
@@ -808,8 +790,7 @@ const RewardsPage: React.FC = () => {
             <div 
               style={styles.inventoryCard}
               onClick={() => {
-                setShowTrackerResponsesModal(true);
-                fetchTrackerResponsesWithDetails();
+                navigate('/tracker-responses');
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.boxShadow = '0 4px 12px rgba(30, 58, 95, 0.3)';
@@ -822,7 +803,7 @@ const RewardsPage: React.FC = () => {
                 e.currentTarget.style.backgroundColor = '#1e3a5f';
               }}
             >
-              <div style={styles.inventoryTitle}>TRACKER FORM RESPONSES</div>
+              <div style={styles.inventoryTitle}>TRACKER RESPONDENTS</div>
               {trackerFormLoading ? (
                 <div style={{ fontSize: '20px', color: 'rgba(255, 255, 255, 0.9)' }}>⏳</div>
               ) : trackerFormResponsesCount > 0 ? (
@@ -889,7 +870,13 @@ const RewardsPage: React.FC = () => {
                               ).length;
                           return `${filteredCount} ${requestStatusFilter === 'all' ? 'total' : requestStatusFilter === 'pending' ? 'pending' : requestStatusFilter === 'approved' ? 'approved' : 'ready for pickup'} requests`;
                         })()
-                      : `${rewardHistory.length} rewards distributed`}
+                      : (() => {
+                          const filteredHistory = rewardHistory.filter((entry) => {
+                            if (rewardTypeFilter === 'all') return true;
+                            return entry.reward_type === rewardTypeFilter;
+                          });
+                          return `${filteredHistory.length} ${rewardTypeFilter === 'all' ? 'rewards distributed' : `${rewardTypeFilter.toLowerCase()} rewards`}`;
+                        })()}
                   </p>
                 </div>
                 
@@ -905,6 +892,8 @@ const RewardsPage: React.FC = () => {
                     onClick={() => {
                       setTableFilter('requests');
                       setShowStatusDropdown(false);
+                      setRewardTypeFilter('all');
+                      setShowRewardTypeDropdown(false);
                     }}
                     style={{
                       padding: '8px 16px',
@@ -925,6 +914,8 @@ const RewardsPage: React.FC = () => {
                     onClick={() => {
                       setTableFilter('history');
                       setShowStatusDropdown(false);
+                      setRewardTypeFilter('all');
+                      setShowRewardTypeDropdown(false);
                     }}
                     style={{
                       padding: '8px 16px',
@@ -963,6 +954,10 @@ const RewardsPage: React.FC = () => {
                   </span>
                   <div style={{ position: 'relative' }}>
                     <button
+                      type="button"
+                      role="button"
+                      aria-expanded={showStatusDropdown}
+                      aria-haspopup="true"
                       data-status-dropdown
                       onClick={(e) => {
                         e.preventDefault();
@@ -1226,8 +1221,185 @@ const RewardsPage: React.FC = () => {
                   )}
                 </div>
               )}
-            </div>
               
+              {/* Reward Type Filter Dropdown - Only show when history tab is active */}
+              {tableFilter === 'history' && (
+                <div style={{
+                  display: 'flex',
+                  gap: '12px',
+                  alignItems: 'center',
+                  position: 'relative',
+                  flexWrap: 'wrap'
+                }}>
+                  <span style={{
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: '#6b7280',
+                    marginRight: '4px'
+                  }}>
+                    Filter by type:
+                  </span>
+                  <div style={{ position: 'relative' }} data-reward-type-dropdown>
+                    <button
+                      type="button"
+                      role="button"
+                      aria-expanded={showRewardTypeDropdown}
+                      aria-haspopup="true"
+                      data-reward-type-dropdown
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowRewardTypeDropdown(!showRewardTypeDropdown);
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '8px',
+                        border: '1px solid #e5e7eb',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        backgroundColor: 'white',
+                        color: '#1e3a5f',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        minWidth: '180px',
+                        justifyContent: 'space-between',
+                        transition: 'box-shadow 0.2s ease-out, border-color 0.2s ease-out',
+                        boxShadow: showRewardTypeDropdown ? '0 2px 8px rgba(0, 0, 0, 0.1)' : '0 1px 2px rgba(0, 0, 0, 0.05)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = '#cbd5e1';
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!showRewardTypeDropdown) {
+                          e.currentTarget.style.borderColor = '#e5e7eb';
+                          e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+                        }
+                      }}
+                    >
+                      <span>
+                        {rewardTypeFilter === 'all' ? 'All' : rewardTypeFilter}
+                      </span>
+                      <span style={{ 
+                        fontSize: '10px',
+                        transform: showRewardTypeDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s'
+                      }}>▼</span>
+                    </button>
+                    {showRewardTypeDropdown && (
+                      <div 
+                        data-reward-type-dropdown
+                        style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          right: 0,
+                          backgroundColor: 'white',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                          border: '1px solid #e5e7eb',
+                          zIndex: 100,
+                          marginTop: '4px',
+                          overflow: 'hidden',
+                          animation: 'fadeInDropdown 0.2s ease-out',
+                          transformOrigin: 'top center',
+                          maxHeight: '300px',
+                          overflowY: 'auto'
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                      >
+                        <style>{`
+                          @keyframes fadeInDropdown {
+                            from {
+                              opacity: 0;
+                              transform: translateY(-8px) scale(0.95);
+                            }
+                            to {
+                              opacity: 1;
+                              transform: translateY(0) scale(1);
+                            }
+                          }
+                        `}</style>
+                        <div
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowRewardTypeDropdown(false);
+                            setTimeout(() => {
+                              setRewardTypeFilter('all');
+                            }, 150);
+                          }}
+                          style={{
+                            padding: '10px 16px',
+                            cursor: 'pointer',
+                            backgroundColor: rewardTypeFilter === 'all' ? '#f3f4f6' : 'white',
+                            color: rewardTypeFilter === 'all' ? '#1e3a5f' : '#374151',
+                            fontSize: '13px',
+                            fontWeight: rewardTypeFilter === 'all' ? '600' : '400',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (rewardTypeFilter !== 'all') {
+                              e.currentTarget.style.backgroundColor = '#f9fafb';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (rewardTypeFilter !== 'all') {
+                              e.currentTarget.style.backgroundColor = 'white';
+                            }
+                          }}
+                        >
+                          All
+                        </div>
+                        {(() => {
+                          // Get unique reward types from history
+                          const uniqueTypes = Array.from(new Set(rewardHistory.map(entry => entry.reward_type))).sort();
+                          return uniqueTypes.map((type) => (
+                            <div
+                              key={type}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setShowRewardTypeDropdown(false);
+                                setTimeout(() => {
+                                  setRewardTypeFilter(type);
+                                }, 150);
+                              }}
+                              style={{
+                                padding: '10px 16px',
+                                cursor: 'pointer',
+                                backgroundColor: rewardTypeFilter === type ? '#f3f4f6' : 'white',
+                                color: rewardTypeFilter === type ? '#1e3a5f' : '#374151',
+                                fontSize: '13px',
+                                fontWeight: rewardTypeFilter === type ? '600' : '400',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={(e) => {
+                                if (rewardTypeFilter !== type) {
+                                  e.currentTarget.style.backgroundColor = '#f9fafb';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (rewardTypeFilter !== type) {
+                                  e.currentTarget.style.backgroundColor = 'white';
+                                }
+                              }}
+                            >
+                              {type}
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+                  
             {/* Unified Table Content */}
             <div style={{ 
               maxHeight: '600px', 
@@ -1321,6 +1493,13 @@ const RewardsPage: React.FC = () => {
                             }
                           }
                         `}</style>
+                        <div style={{
+                          maxHeight: '650px',
+                          overflowY: 'auto',
+                          overflowX: 'auto',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px'
+                        }}>
                         <table style={{
                           width: '100%',
                           borderCollapse: 'collapse',
@@ -1515,6 +1694,7 @@ const RewardsPage: React.FC = () => {
                       </tbody>
                         </table>
                       </div>
+                      </div>
                     );
                   })()}
                 </>
@@ -1531,6 +1711,13 @@ const RewardsPage: React.FC = () => {
                       <div>No rewards given yet</div>
                     </div>
                   ) : (
+                    <div style={{
+                      maxHeight: '650px',
+                      overflowY: 'auto',
+                      overflowX: 'auto',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px'
+                    }}>
                     <table style={{
                       width: '100%',
                       borderCollapse: 'collapse'
@@ -1590,7 +1777,12 @@ const RewardsPage: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {rewardHistory.map((entry) => (
+                        {rewardHistory
+                          .filter((entry) => {
+                            if (rewardTypeFilter === 'all') return true;
+                            return entry.reward_type === rewardTypeFilter;
+                          })
+                          .map((entry) => (
                           <tr key={entry.id} style={{
                             borderBottom: '1px solid #f3f4f6',
                             transition: 'background-color 0.2s'
@@ -1664,6 +1856,7 @@ const RewardsPage: React.FC = () => {
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   )}
                 </>
               )}
@@ -1683,7 +1876,7 @@ const RewardsPage: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1001,
+            zIndex: 1004,
           }}
           onClick={() => setShowRewardModal(false)}
           >
@@ -2861,209 +3054,7 @@ const RewardsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Tracker Form Responses Modal */}
-        {showTrackerResponsesModal && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1003,
-            backdropFilter: 'blur(2px)',
-          }}
-          onClick={() => setShowTrackerResponsesModal(false)}
-          >
-            <div style={{
-              backgroundColor: 'white',
-              padding: '24px 32px',
-              borderRadius: '16px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-              width: '900px',
-              maxWidth: '95%',
-              maxHeight: '85vh',
-              overflow: 'auto'
-            }}
-            onClick={(e) => e.stopPropagation()}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#1e3a5f' }}>
-                  Tracker Form Responses
-                </h2>
-                <button
-                  onClick={() => setShowTrackerResponsesModal(false)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '8px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#6b7280',
-                    transition: 'all 0.2s',
-                    width: '32px',
-                    height: '32px'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = '#f3f4f6';
-                    e.currentTarget.style.color = '#1f2937';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.color = '#6b7280';
-                  }}
-                >
-                  <FaTimes size={18} />
-                </button>
-              </div>
-
-              {trackerResponsesLoading ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>Loading...</div>
-              ) : trackerResponses.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>No tracker form responses found</div>
-              ) : (() => {
-                // Group responses by graduation year
-                const groupedByYear: { [key: string]: any[] } = {};
-                trackerResponses.forEach((resp: any) => {
-                  const year = resp.year_graduated || 'Unknown';
-                  if (!groupedByYear[year]) {
-                    groupedByYear[year] = [];
-                  }
-                  groupedByYear[year].push(resp);
-                });
-
-                const sortedYears = Object.keys(groupedByYear).sort((a, b) => {
-                  if (a === 'Unknown') return 1;
-                  if (b === 'Unknown') return -1;
-                  return Number(b) - Number(a);
-                });
-
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    {sortedYears.map((year) => (
-                      <div key={year} style={{
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '12px',
-                        overflow: 'hidden'
-                      }}>
-                        <div style={{
-                          background: '#f8fafc',
-                          padding: '12px 16px',
-                          borderBottom: '1px solid #e5e7eb'
-                        }}>
-                          <h3 style={{
-                            margin: 0,
-                            fontSize: '16px',
-                            fontWeight: '600',
-                            color: '#1e3a5f'
-                          }}>
-                            Batch {year} ({groupedByYear[year].length} {groupedByYear[year].length === 1 ? 'user' : 'users'})
-                          </h3>
-                        </div>
-                        <div style={{ padding: '8px' }}>
-                          {groupedByYear[year].map((resp: any, index: number) => (
-                            <div key={resp.user_id || index} style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '12px',
-                              borderRadius: '8px',
-                              marginBottom: index < groupedByYear[year].length - 1 ? '8px' : 0,
-                              background: '#ffffff',
-                              border: '1px solid #e5e7eb'
-                            }}>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937', marginBottom: '4px' }}>
-                                  {resp.name}
-                                </div>
-                                {resp.program && (
-                                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                                    {resp.program}
-                                  </div>
-                                )}
-                              </div>
-                              <button
-                                onClick={async () => {
-                                  // Find user in leaderboard or fetch user details
-                                  const userFromLeaderboard = leaderboard.find(u => u.user_id === resp.user_id);
-                                  if (userFromLeaderboard) {
-                                    setSelectedUser(userFromLeaderboard);
-                                    setShowRewardModal(true);
-                                    await fetchInventoryItems();
-                                  } else {
-                                    // Fetch user details to get points
-                                    try {
-                                      const userDetails = await fetchAlumniDetails(resp.user_id);
-                                      if (userDetails?.success && userDetails?.alumni) {
-                                        const userEntry: LeaderboardEntry = {
-                                          rank: 0,
-                                          user_id: resp.user_id,
-                                          name: resp.name,
-                                          profile_pic: userDetails.alumni.profile_pic,
-                                          user_type: 'alumni',
-                                          year_graduated: resp.year_graduated,
-                                          program: resp.program,
-                                          total_points: userDetails.alumni.total_points || 0,
-                                          points_breakdown: {
-                                            likes: { points: 0, count: 0 },
-                                            comments: { points: 0, count: 0 },
-                                            shares: { points: 0, count: 0 },
-                                            replies: { points: 0, count: 0 },
-                                            posts: { points: 0, count: 0 },
-                                            posts_with_photos: { points: 0, count: 0 }
-                                          },
-                                          last_updated: new Date().toISOString()
-                                        };
-                                        setSelectedUser(userEntry);
-                                        setShowRewardModal(true);
-                                        await fetchInventoryItems();
-                                      } else {
-                                        alert('Unable to fetch user details');
-                                      }
-                                    } catch (error) {
-                                      console.error('Error fetching user details:', error);
-                                      alert('Error fetching user details');
-                                    }
-                                  }
-                                }}
-                                style={{
-                                  padding: '8px 16px',
-                                  background: '#1e3a5f',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '6px',
-                                  fontSize: '13px',
-                                  fontWeight: '600',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.2s'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = '#2d5a8f';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = '#1e3a5f';
-                                }}
-                              >
-                                Assign Reward
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-        )}
-
+        </div>
       </div>
     </div>
   );
