@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { ConversationSummary, getOnlineUsers, createConversation } from '../../services/api';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { ConversationSummary, getOnlineUsers, createConversation, api } from '../../services/api';
+import { getProfilePicUrl } from '../../utils/profilePicUtils';
 import './Messaging.css';
 
 interface ConversationListProps {
@@ -23,6 +24,10 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   onClick,
   isOnline = false
 }) => {
+  const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
+  const [isLoadingPic, setIsLoadingPic] = useState(false);
+  const hasFetched = useRef(false);
+
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -46,7 +51,49 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
       .slice(0, 2);
   };
 
-  // Use the passed isOnline prop instead of random
+  // Fetch profile picture
+  useEffect(() => {
+    const fetchProfilePic = async () => {
+      const otherUserId = conversation.other_participant?.user_id;
+      if (!otherUserId) return;
+
+      // Check if we have avatar_url from conversation
+      const avatarUrl = (conversation.other_participant as any)?.avatar_url;
+      if (avatarUrl) {
+        const normalizedUrl = getProfilePicUrl(avatarUrl);
+        setProfilePicUrl(normalizedUrl);
+        return;
+      }
+
+      // Fetch from API if not available and haven't fetched yet
+      if (!hasFetched.current) {
+        hasFetched.current = true;
+        setIsLoadingPic(true);
+        try {
+          console.log('🔍 ConversationList: Fetching profile pic for user:', otherUserId);
+          const response = await api.get(`alumni/profile/${otherUserId}/`);
+          if (response.data && response.data.profile_pic) {
+            const baseUrl = getProfilePicUrl(response.data.profile_pic);
+            const profilePicUrlWithBust = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}cb=${Date.now()}`;
+            console.log('🔍 ConversationList: Setting profile pic URL:', profilePicUrlWithBust);
+            setProfilePicUrl(profilePicUrlWithBust);
+          }
+        } catch (error) {
+          console.error('🔍 ConversationList: Error fetching profile pic:', error);
+        } finally {
+          setIsLoadingPic(false);
+        }
+      }
+    };
+
+    // Reset hasFetched when conversation changes
+    hasFetched.current = false;
+    fetchProfilePic();
+  }, [conversation.other_participant?.user_id, conversation.other_participant?.avatar_url]);
+
+  const firstName = conversation.other_participant?.name?.split(' ')[0] || 'U';
+  const initial = firstName.charAt(0).toUpperCase();
+  const initials = getInitials(conversation.other_participant?.name || 'Unknown');
 
   return (
     <div 
@@ -54,7 +101,22 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
       onClick={onClick}
     >
       <div className="conversation-avatar">
-        {getInitials(conversation.other_participant?.name || 'Unknown')}
+        {profilePicUrl ? (
+          <img 
+            src={profilePicUrl} 
+            alt={conversation.other_participant?.name || 'User'}
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.style.display = 'none';
+              const parent = target.parentElement;
+              if (parent) {
+                parent.textContent = initials;
+              }
+            }}
+          />
+        ) : (
+          initials
+        )}
         {isOnline && <div className="online-indicator"></div>}
       </div>
       
@@ -103,6 +165,11 @@ const ConversationList: React.FC<ConversationListProps> = ({
   const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set());
   const [onlineUsersData, setOnlineUsersData] = useState<any[]>([]);
 
+  // Calculate message request count
+  const messageRequestCount = useMemo(() => {
+    return conversations.filter(conv => conv.is_message_request).length;
+  }, [conversations]);
+
   // Load online users
   useEffect(() => {
     const loadOnlineUsers = async () => {
@@ -124,6 +191,11 @@ const ConversationList: React.FC<ConversationListProps> = ({
     const interval = setInterval(loadOnlineUsers, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Update filtered conversations when conversations prop changes
+  useEffect(() => {
+    setFilteredConversations(conversations);
+  }, [conversations]);
 
   // Filter conversations based on search query and active filter
   useEffect(() => {
@@ -230,8 +302,16 @@ const ConversationList: React.FC<ConversationListProps> = ({
             <button 
               className={`filter-segment ${activeFilter === 'request' ? 'active' : ''}`}
               onClick={() => setActiveFilter('request')}
+              style={{ position: 'relative' }}
             >
-              Message Request
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <span>Message Request</span>
+                {messageRequestCount > 0 && (
+                  <span className="message-request-badge">
+                    {messageRequestCount > 99 ? '99+' : messageRequestCount}
+                  </span>
+                )}
+              </div>
             </button>
             <button 
               className={`filter-segment ${activeFilter === 'online' ? 'active' : ''}`}

@@ -346,7 +346,7 @@ const Sidebar = () => {
     { to: '/tracker/questions', label: 'Tracker' },
     { to: '/requests', label: 'Requests' },
     { to: '/rewards', label: 'Rewards' },
-    { to: '/report-settings', label: 'Report Settings' },
+    { to: '/report-settings', label: 'Header/Footer Settings' },
   ];
 
   // Check if a link is active (either exact match or starts with, or is a child route)

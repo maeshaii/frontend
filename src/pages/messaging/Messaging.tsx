@@ -86,6 +86,44 @@ const Messaging: React.FC = () => {
     return () => window.removeEventListener('conversationRead', handler as EventListener);
   }, []);
 
+  // Listen for real-time conversation updates (new messages, message requests, etc.)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && Array.isArray(detail)) {
+        setConversations(detail);
+      }
+    };
+    window.addEventListener('conversationsUpdated', handler as EventListener);
+    
+    // Also listen for new messages to refresh conversations
+    const messageHandler = async () => {
+      try {
+        const data = await listConversations();
+        setConversations(data || []);
+      } catch (error) {
+        console.error('Failed to refresh conversations:', error);
+      }
+    };
+    window.addEventListener('newMessage', messageHandler as EventListener);
+    
+    // Periodic refresh as fallback (every 30 seconds)
+    const refreshInterval = setInterval(async () => {
+      try {
+        const data = await listConversations();
+        setConversations(data || []);
+      } catch (error) {
+        console.error('Failed to refresh conversations:', error);
+      }
+    }, 30000);
+    
+    return () => {
+      window.removeEventListener('conversationsUpdated', handler as EventListener);
+      window.removeEventListener('newMessage', messageHandler as EventListener);
+      clearInterval(refreshInterval);
+    };
+  }, []);
+
   const handleSelectConversation = (conversation: ConversationSummary) => {
     setSelectedConversation(conversation);
     // Optimistically clear unread count in the sidebar when opening a conversation

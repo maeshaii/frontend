@@ -173,7 +173,7 @@ const ReportSettingsPage: React.FC = () => {
       );
 
       if (response.data.success) {
-        setSuccessMessage('Report settings saved successfully!');
+        setSuccessMessage('Header/Footer Settings saved successfully!');
         setTimeout(() => setSuccessMessage(''), 3000);
       }
     } catch (error: any) {
@@ -282,7 +282,7 @@ const ReportSettingsPage: React.FC = () => {
       <Sidebar />
       <div style={contentStyle}>
         <div style={{ marginBottom: '32px' }}>
-          <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1c4e80', margin: 0 }}>Report Settings</h1>
+          <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1c4e80', margin: 0 }}>Header/Footer Settings</h1>
           <p style={{ fontSize: '14px', color: '#6b7280', marginTop: '8px' }}>
             Customize the header and footer for PDF, Word, and Excel export reports
           </p>

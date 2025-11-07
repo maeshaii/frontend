@@ -781,6 +781,8 @@ getPosts()
         };
         localStorage.setItem('user', JSON.stringify(updatedUser));
         setUser(updatedUser);
+        // Dispatch custom event to notify other components (like messaging) of profile update
+        window.dispatchEvent(new CustomEvent('profileUpdated'));
         setEditModalOpen(false);
         setProfilePicFile(null);
         alert('Profile updated successfully.');
