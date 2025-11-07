@@ -13,6 +13,7 @@ import { trackerApi } from '../../services/trackerApi';
 import RepostNotificationModal from '../../components/RepostNotificationModal';
 import RepostModal from '../../components/RepostModal';
 import { getProfilePicUrl } from '../../utils/profilePicUtils';
+import { HiOutlineUsers, HiOutlineHeart } from 'react-icons/hi2';
 
 interface UnifiedDashboardProps {
   userType: 'alumni' | 'peso' | 'admin' | 'ojt';
@@ -1338,7 +1339,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 >
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
-                    <div className="quick-link-icon forum-icon">C</div>
+                    <div className="quick-link-icon" style={{ fontSize: '28px', color: '#333', background: 'transparent' }}>
+                      <HiOutlineUsers />
+                    </div>
                     <div className="quick-link-text">FORUM</div>
                   </div>
                 </div>
@@ -1353,7 +1356,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 >
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
-                    <div className="quick-link-icon peso-icon">✱</div>
+                    <div className="quick-link-icon" style={{ fontSize: '28px', color: '#333', background: 'transparent' }}>
+                      <HiOutlineHeart />
+                    </div>
                     <div className="quick-link-text">DONATION</div>
                   </div>
                 </div>

@@ -290,11 +290,13 @@ const Settings: React.FC = () => {
           awards_supporting_doc: data.awards_supporting_doc || data.supporting_document_awards_recognition || '',
           employment_supporting_doc: data.employment_supporting_doc || data.supporting_document_current || '',
           employment_sector: data.employment_sector || '',
-          // Part IV fields - from academic info if available
-          study_start_date: data.study_start_date || data.q_study_start_date || '',
-          post_graduate_degree: data.post_graduate_degree || data.q_post_graduate_degree || '',
-          institution_name: data.institution_name || data.q_institution_name || '',
-          units_obtained: data.units_obtained || data.q_units_obtained || ''
+          // Part IV fields - ONLY use q_ prefixed fields (from tracker/AcademicInfo) - do NOT fallback to employment fields
+          // These fields should ONLY come from AcademicInfo, never from EmploymentHistory
+          study_start_date: data.q_study_start_date || data.study_start_date || '',
+          // Ensure we're not accidentally getting company name, position, or dates from employment fields
+          post_graduate_degree: (data.q_post_graduate_degree || data.post_graduate_degree || '').trim(),
+          institution_name: (data.q_institution_name || data.institution_name || '').trim(),
+          units_obtained: (data.q_units_obtained || data.units_obtained || '').trim()
         });
         
         // Set account type

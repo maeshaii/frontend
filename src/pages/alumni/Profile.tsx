@@ -8,7 +8,7 @@ import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, de
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
-import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye } from 'react-icons/hi2';
+import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye, HiOutlineXMark, HiOutlineInformationCircle, HiOutlineTicket } from 'react-icons/hi2';
 
 function getCurrentUserId(user: AlumniUser | null): number | null {
   if (!user) return null;
@@ -224,6 +224,8 @@ const AlumniProfile: React.FC = () => {
   const [showMonthlyLimitModal, setShowMonthlyLimitModal] = useState(false);
   const [showConfirmRequestModal, setShowConfirmRequestModal] = useState(false);
   const [pendingRewardRequest, setPendingRewardRequest] = useState<{id: number; name: string; value: string; type?: string} | null>(null);
+  const [employmentData, setEmploymentData] = useState<any>(null);
+  const [employmentLoading, setEmploymentLoading] = useState(false);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -353,6 +355,29 @@ const AlumniProfile: React.FC = () => {
           }
           
           const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+          
+          // Fetch employment data
+          if (numericUserId !== undefined && numericUserId !== null && !isNaN(Number(numericUserId))) {
+            setEmploymentLoading(true);
+            try {
+              const token = localStorage.getItem('accessToken');
+              const employmentRes = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${numericUserId}/`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+              });
+              if (employmentRes.ok) {
+                const employmentData = await employmentRes.json();
+                setEmploymentData(employmentData);
+              } else {
+                setEmploymentData(null);
+              }
+            } catch (error) {
+              console.error('Error fetching employment data:', error);
+              setEmploymentData(null);
+            } finally {
+              setEmploymentLoading(false);
+            }
+          }
+          
           if (numericUserId !== undefined && numericUserId !== null && !isNaN(Number(numericUserId))) {
             // Followers list
             fetchFollowers(Number(numericUserId))
@@ -4768,8 +4793,8 @@ getPosts()
                                     borderRadius: '4px',
                                     fontSize: '11px',
                                     fontWeight: '600',
-                                    background: didNotPushThrough ? '#fee2e2' : isPending ? '#fef3c7' : isApproved ? '#d1fae5' : isClaimed ? '#dbeafe' : '#f3f4f6',
-                                    color: didNotPushThrough ? '#991b1b' : isPending ? '#92400e' : isApproved ? '#065f46' : isClaimed ? '#1e40af' : '#374151'
+                                    background: didNotPushThrough ? '#fee2e2' : isPending ? '#fef9c3' : isApproved ? '#fee2e2' : isClaimed ? '#dbeafe' : '#f3f4f6',
+                                    color: didNotPushThrough ? '#991b1b' : isPending ? '#a16207' : isApproved ? '#991b1b' : isClaimed ? '#1e40af' : '#374151'
                                   }}>
                                     {didNotPushThrough ? 'Expired' :
                                      req.status === 'pending' ? 'Pending' : 
@@ -4857,7 +4882,7 @@ getPosts()
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -4869,13 +4894,14 @@ getPosts()
           <div
             style={{
               background: 'white',
-              borderRadius: '16px',
+              borderRadius: '20px',
               padding: '24px',
-              maxWidth: '600px',
+              maxWidth: '520px',
               width: '100%',
-              maxHeight: '80vh',
+              maxHeight: '85vh',
               overflow: 'auto',
-              boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+              boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+              position: 'relative'
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -4895,265 +4921,223 @@ getPosts()
 
                   return (
                 <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#174f84' }}>
-                      Reward Details
-                    </h2>
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '600', color: '#1e3a5f', marginBottom: '4px' }}>
+                        Reward Details
+                      </h2>
+                      <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '600', color: '#174f84', lineHeight: '1.2' }}>
+                        {req.reward_name}
+                      </h3>
+                    </div>
                     <button
                       onClick={() => setSelectedRewardDetail(null)}
                       style={{
-                        background: 'none',
+                        background: '#f5f7fa',
                         border: 'none',
-                        fontSize: '24px',
                         cursor: 'pointer',
-                        color: '#666'
+                        color: '#666',
+                        padding: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '8px',
+                        transition: 'all 0.2s',
+                        width: '36px',
+                        height: '36px',
+                        flexShrink: 0
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#e0e0e0';
+                        e.currentTarget.style.color = '#333';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#f5f7fa';
+                        e.currentTarget.style.color = '#666';
                       }}
                     >
-                      ×
+                      <HiOutlineXMark size={20} />
                     </button>
                   </div>
 
-                  <div style={{
-                        border: '1px solid #e0e0e0',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        background: isClaimed ? '#f0f9ff' : isApproved ? '#f0fdf4' : '#fef3c7'
+                  {/* Key Info Cards */}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
+                    gap: '12px',
+                    marginBottom: '20px'
                   }}>
-                    {/* Use the same detailed card structure from card view */}
-                    <div style={{ marginBottom: '16px' }}>
-                      <h3 style={{ 
-                        margin: 0, 
-                        fontSize: '20px', 
-                        fontWeight: '700', 
-                        color: '#1e293b', 
-                        marginBottom: '16px',
-                        letterSpacing: '-0.02em'
-                      }}>
-                          {req.reward_name}
-                        </h3>
-                      
-                      {/* Details Grid */}
-                      <div style={{ 
-                        display: 'grid', 
-                        gridTemplateColumns: '1fr 1fr', 
-                        gap: '12px 24px',
-                        marginBottom: '16px',
-                        padding: '16px',
-                        background: '#f8fafc',
-                        borderRadius: '10px',
-                        border: '1px solid #e2e8f0'
-                      }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ 
-                            color: '#64748b', 
-                            fontWeight: '500',
-                            fontSize: '11px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.5px'
-                          }}>
-                            Type
-                          </span>
-                          <span style={{ color: '#0f172a', fontWeight: '600', fontSize: '14px' }}>
-                            {req.reward_type}
-                          </span>
-                        </div>
-                        
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ 
-                            color: '#64748b', 
-                            fontWeight: '500',
-                            fontSize: '11px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.5px'
-                          }}>
-                            Cost
-                          </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <strong style={{ color: '#667eea', fontSize: '14px', fontWeight: '700' }}>
-                              {req.points_cost} pts
-                            </strong>
-                            <span style={{ color: '#94a3b8', fontSize: '13px' }}>
-                              ({req.reward_value})
-                            </span>
-                        </div>
-                        </div>
-                        
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ 
-                            color: '#64748b', 
-                            fontWeight: '500',
-                            fontSize: '11px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.5px'
-                          }}>
-                            Status
-                          </span>
-                          <strong style={{ 
-                            color: isPending ? '#f59e0b' : isApproved ? '#10b981' : isClaimed ? '#3b82f6' : '#64748b',
-                            fontSize: '14px',
-                            fontWeight: '600'
-                          }}>
-                            {req.status === 'pending' ? 'Pending Approval' : 
-                             req.status === 'approved' ? 'Approved - Ready to Claim' :
-                             req.status === 'ready_for_pickup' ? 'Ready for Pickup' :
-                             req.status === 'claimed' ? 'Claimed' : req.status}
-                          </strong>
-                        </div>
-                        
-                        {req.requested_at && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ 
-                              color: '#64748b', 
-                              fontWeight: '500',
-                              fontSize: '11px',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px'
-                            }}>
-                              Requested
-                            </span>
-                            <span style={{ color: '#0f172a', fontWeight: '500', fontSize: '14px' }}>
-                              {new Date(req.requested_at).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric'
-                              })}
-                            </span>
-                          </div>
-                        )}
-                        
-                        {req.approved_at && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ 
-                              color: '#64748b', 
-                              fontWeight: '500',
-                              fontSize: '11px',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px'
-                            }}>
-                              Approved
-                            </span>
-                            <span style={{ color: '#0f172a', fontWeight: '500', fontSize: '14px' }}>
-                              {new Date(req.approved_at).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric'
-                              })}
-                            </span>
-                          </div>
-                        )}
-                        
-                        {req.expires_at && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ 
-                              color: '#64748b', 
-                              fontWeight: '500',
-                              fontSize: '11px',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px'
-                            }}>
-                              Expires
-                            </span>
-                            <span style={{ 
-                              color: '#dc2626', 
-                              fontWeight: '600', 
-                              fontSize: '14px'
-                            }}>
-                              {new Date(req.expires_at).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric'
-                              })}
-                            </span>
-                          </div>
-                        )}
+                    <div style={{ 
+                      padding: '14px', 
+                      background: 'linear-gradient(135deg, #e8f0f8 0%, #d0e1f0 100%)',
+                      borderRadius: '10px',
+                      border: '1px solid #a8c5e0'
+                    }}>
+                      <div style={{ fontSize: '11px', color: '#666', fontWeight: '500', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Type
                       </div>
+                      <div style={{ fontSize: '14px', color: '#174f84', fontWeight: '600' }}>
+                        {req.reward_type}
+                      </div>
+                    </div>
+                    
+                    <div style={{ 
+                      padding: '14px', 
+                      background: 'linear-gradient(135deg, #e0ecf5 0%, #c8ddeb 100%)',
+                      borderRadius: '10px',
+                      border: '1px solid #9bb8d6'
+                    }}>
+                      <div style={{ fontSize: '11px', color: '#666', fontWeight: '500', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Cost
+                      </div>
+                      <div style={{ fontSize: '14px', color: '#174f84', fontWeight: '600' }}>
+                        {req.points_cost} pts
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#1e3a5f', marginTop: '2px' }}>
+                        ({req.reward_value})
+                      </div>
+                    </div>
+                    
+                    <div style={{ 
+                      padding: '14px', 
+                      background: isPending ? 'linear-gradient(135deg, #d8e6f2 0%, #c0d9ea 100%)' : 
+                                  isApproved ? 'linear-gradient(135deg, #c8ddeb 0%, #b0d0e2 100%)' : 
+                                  isClaimed ? 'linear-gradient(135deg, #e8f0f8 0%, #d0e1f0 100%)' : 
+                                  'linear-gradient(135deg, #e0ecf5 0%, #d0e1f0 100%)',
+                      borderRadius: '10px',
+                      border: `1px solid ${isPending ? '#8fb3d1' : isApproved ? '#7aa3c4' : isClaimed ? '#a8c5e0' : '#9bb8d6'}`
+                    }}>
+                      <div style={{ fontSize: '11px', color: '#666', fontWeight: '500', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Status
+                      </div>
+                      <div style={{ 
+                        fontSize: '14px', 
+                        color: isPending ? '#1e3a5f' : isApproved ? '#174f84' : isClaimed ? '#174f84' : '#666',
+                        fontWeight: '600'
+                      }}>
+                        {req.status === 'pending' ? 'Pending Approval' : 
+                         req.status === 'approved' ? 'Approved - Ready' :
+                         req.status === 'ready_for_pickup' ? 'Ready for Pickup' :
+                         req.status === 'claimed' ? 'Claimed' : req.status}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dates */}
+                  {(req.requested_at || req.approved_at || req.expires_at) && (
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
+                      gap: '12px',
+                      marginBottom: '20px'
+                    }}>
+                      {req.requested_at && (
+                        <div style={{ padding: '12px', background: 'linear-gradient(135deg, #e8f0f8 0%, #d8e6f2 100%)', borderRadius: '8px', border: '1px solid #a8c5e0' }}>
+                          <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Requested</div>
+                          <div style={{ fontSize: '13px', color: '#174f84', fontWeight: '500' }}>
+                            {new Date(req.requested_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {req.approved_at && (
+                        <div style={{ padding: '12px', background: 'linear-gradient(135deg, #d0e1f0 0%, #c0d9ea 100%)', borderRadius: '8px', border: '1px solid #9bb8d6' }}>
+                          <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Approved</div>
+                          <div style={{ fontSize: '13px', color: '#174f84', fontWeight: '500' }}>
+                            {new Date(req.approved_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {req.expires_at && (
+                        <div style={{ padding: '12px', background: 'linear-gradient(135deg, #e0ecf5 0%, #d0e1f0 100%)', borderRadius: '8px', border: '1px solid #a8c5e0' }}>
+                          <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Expires</div>
+                          <div style={{ fontSize: '13px', color: '#1e3a5f', fontWeight: '500' }}>
+                            {new Date(req.expires_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                       {/* Instructions Section */}
-                        {req.notes && (
+                      {req.notes && (
                         <div style={{ 
-                          marginTop: '16px',
-                          marginBottom: '16px',
-                          padding: '14px 16px', 
-                          background: 'linear-gradient(to right, #f8fafc 0%, #ffffff 100%)', 
-                          borderRadius: '10px',
-                          border: '1px solid #e2e8f0',
-                          borderLeft: '4px solid #64748b'
+                          marginBottom: '20px',
+                          padding: '16px', 
+                          background: 'linear-gradient(135deg, #e8f0f8 0%, #d0e1f0 100%)',
+                          borderRadius: '12px',
+                          border: '1px solid #a8c5e0'
                         }}>
                           <div style={{ 
-                            fontWeight: '700', 
-                            color: '#334155',
-                            marginBottom: '8px',
-                            fontSize: '11px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.8px',
                             display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
+                            alignItems: 'flex-start',
+                            gap: '10px'
                           }}>
-                            <span style={{ fontSize: '14px' }}>📋</span>
-                            Instructions
+                            <HiOutlineInformationCircle size={18} color="#174f84" style={{ marginTop: '2px', flexShrink: 0 }} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: '600', color: '#1e3a5f', fontSize: '13px', marginBottom: '8px' }}>
+                                Instructions
+                              </div>
+                              <div style={{ lineHeight: '1.6', color: '#174f84', fontSize: '13px' }}>
+                                {req.notes}
+                              </div>
+                            </div>
                           </div>
-                          <div style={{ 
-                            lineHeight: '1.6', 
-                            color: '#475569',
-                            fontSize: '14px'
-                          }}>
-                            {req.notes}
-                          </div>
-                          </div>
-                        )}
+                        </div>
+                      )}
 
                       {/* Voucher Code Section */}
-                        {req.voucher_code && (
+                      {req.voucher_code && (
                         <div style={{ 
-                          marginTop: '16px',
+                          marginBottom: '20px',
                           padding: '16px', 
-                          background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', 
-                          borderRadius: '10px',
-                          border: '1px solid #bfdbfe',
-                          borderLeft: '4px solid #3b82f6'
+                          background: 'linear-gradient(135deg, #e0ecf5 0%, #c8ddeb 100%)',
+                          borderRadius: '12px',
+                          border: '1px solid #9bb8d6'
                         }}>
                           <div style={{ 
-                            fontWeight: '700', 
-                            color: '#1e40af',
-                            marginBottom: '10px',
-                            fontSize: '11px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.8px',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '6px'
+                            gap: '8px',
+                            marginBottom: '12px'
                           }}>
-                            <span style={{ fontSize: '14px' }}>🎫</span>
-                            Voucher Code
+                            <HiOutlineTicket size={18} color="#174f84" />
+                            <span style={{ fontWeight: '600', color: '#1e3a5f', fontSize: '13px' }}>
+                              Voucher Code
+                            </span>
                           </div>
                           <div style={{ 
-                            fontSize: '20px',
-                            fontWeight: '800',
-                            color: '#1e3a8a',
+                            fontSize: '24px',
+                            fontWeight: '700',
+                            color: '#174f84',
                             fontFamily: '"SF Mono", "Monaco", "Inconsolata", "Roboto Mono", monospace',
                             letterSpacing: '2px',
-                            padding: '12px 16px',
+                            padding: '14px 16px',
                             background: 'white',
                             borderRadius: '8px',
-                            border: '2px solid #93c5fd',
                             textAlign: 'center',
-                            boxShadow: '0 2px 4px rgba(59, 130, 246, 0.1)'
+                            border: '2px solid #174f84',
+                            boxShadow: '0 2px 4px rgba(23, 79, 132, 0.2)'
                           }}>
                             {req.voucher_code}
                           </div>
-                          <div style={{
-                            fontSize: '11px',
-                            color: '#64748b',
-                            textAlign: 'center',
-                            marginTop: '8px',
-                            fontStyle: 'italic'
-                          }}>
+                          <div style={{ fontSize: '11px', color: '#1e3a5f', textAlign: 'center', marginTop: '10px', fontWeight: '500' }}>
                             Save this code for redemption
                           </div>
-                          </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
                       
                       {canClaim && (
                         <button
@@ -5161,37 +5145,47 @@ getPosts()
                           disabled={isClaiming}
                           style={{
                             width: '100%',
-                            padding: '10px',
-                            borderRadius: '8px',
+                            padding: '14px 20px',
+                            borderRadius: '10px',
                             border: 'none',
-                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                            background: 'linear-gradient(135deg, #174f84 0%, #1e3a5f 100%)',
                             color: 'white',
                             fontSize: '14px',
                             fontWeight: '600',
                             cursor: isClaiming ? 'not-allowed' : 'pointer',
                             opacity: isClaiming ? 0.6 : 1,
-                            transition: 'all 0.2s'
+                            transition: 'all 0.2s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            boxShadow: '0 4px 6px rgba(23, 79, 132, 0.3)'
                           }}
                           onMouseEnter={(e) => {
                             if (!isClaiming) {
-                              e.currentTarget.style.transform = 'translateY(-2px)';
-                              e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
+                              e.currentTarget.style.background = 'linear-gradient(135deg, #1e3a5f 0%, #15304a 100%)';
+                              e.currentTarget.style.transform = 'translateY(-1px)';
+                              e.currentTarget.style.boxShadow = '0 6px 12px rgba(23, 79, 132, 0.4)';
                             }
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = 'translateY(0)';
-                            e.currentTarget.style.boxShadow = 'none';
+                            if (!isClaiming) {
+                              e.currentTarget.style.background = 'linear-gradient(135deg, #174f84 0%, #1e3a5f 100%)';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                              e.currentTarget.style.boxShadow = '0 4px 6px rgba(23, 79, 132, 0.3)';
+                            }
                           }}
                         >
-                          {isClaiming ? 'Claiming...' : (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                              <HiOutlineGift size={16} strokeWidth={1.5} />
+                          {isClaiming ? (
+                            'Claiming...'
+                          ) : (
+                            <>
+                              <HiOutlineGift size={16} />
                               <span>Claim Reward</span>
-                            </span>
+                            </>
                           )}
                         </button>
                       )}
-                    </div>
                 </>
                   );
             })()}

@@ -1738,13 +1738,16 @@ const NotificationPage: React.FC = () => {
                   {/* Notification Icon Overlay removed */}
                   
                   
-                  <div style={{ flex: 1, marginRight: '20px' }}>
+                  <div style={{ flex: 1, marginRight: '20px', minWidth: 0 }}>
                     <div style={{ 
                       color: '#333', 
                       fontSize: '14px',
                       lineHeight: '1.4',
                       marginBottom: '4px',
-                      fontWeight: !notif.is_read ? '500' : '400'
+                      fontWeight: !notif.is_read ? '500' : '400',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
                     }}>
                       {notif.type.toLowerCase() === 'follow' ? (
                         (() => {
@@ -1778,11 +1781,13 @@ const NotificationPage: React.FC = () => {
                         })()
                       ) : (
                         <div 
-                          style={{ display: 'inline' }}
+                          style={{
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
                           dangerouslySetInnerHTML={{ 
-                            __html: notif.content.length > 80 ? 
-                              notif.content.slice(0, 80).replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ') + '...' : 
-                              notif.content.replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ')
+                            __html: notif.content.replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ')
                           }} 
                         />
                       )}
