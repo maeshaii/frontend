@@ -23,6 +23,7 @@ export interface UiMessage {
   };
   sequence_number?: number;
   microsecond_timestamp?: number;
+  reply_to?: string;
 }
 
 /**

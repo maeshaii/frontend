@@ -22,6 +22,7 @@ import { WebSocketErrorBoundary } from '../../components/ErrorBoundary';
 import { useLogger } from '../../utils/logger';
 import { renderTextWithLinks } from '../../utils/linkRenderer';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
+import { getProfilePicUrl } from '../../utils/profilePicUtils';
 import './Messaging.css';
 
 interface ModernChatInterfaceProps {
@@ -62,6 +63,24 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editMessageContent, setEditMessageContent] = useState<string>('');
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
+  const [replyingToMessageId, setReplyingToMessageId] = useState<string | null>(null);
+  const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
+  const [messageReactions, setMessageReactions] = useState<{[key: string]: Array<{emoji: string, userId: number}>}>({});
+  const [contextMenuMessageId, setContextMenuMessageId] = useState<string | null>(null);
+  const [contextMenuPosition, setContextMenuPosition] = useState<{x: number, y: number} | null>(null);
+  
+  // Profile picture state management (similar to notifications)
+  const [userProfilePics, setUserProfilePics] = useState<{[key: string]: string}>(() => {
+    try {
+      const stored = localStorage.getItem('messagingUserProfilePics');
+      return stored ? JSON.parse(stored) : {};
+    } catch (_) {
+      return {};
+    }
+  });
+  const [loadingProfilePics, setLoadingProfilePics] = useState<Set<string>>(new Set());
+  const loadedProfilePics = useRef<Set<string>>(new Set());
+  
   const navigate = useNavigate();
 
   const scrollToBottom = useCallback(() => {
@@ -77,17 +96,59 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
     });
   }, []);
 
-  // Initialize current user
+  // Initialize current user and listen for updates
   useEffect(() => {
     const initUser = async () => {
       try {
         const user = await getUserInfo();
+        console.log('🔍 Current user loaded:', user);
+        console.log('🔍 Profile pic:', user?.profile_pic);
+        console.log('🔍 Avatar URL:', user?.avatar_url);
         setCurrentUser(user);
       } catch (error) {
         console.error('Failed to get user info:', error);
       }
     };
     initUser();
+
+    // Listen for storage changes (when profile picture is updated elsewhere)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'user') {
+        try {
+          const updatedUser = e.newValue ? JSON.parse(e.newValue) : null;
+          if (updatedUser) {
+            setCurrentUser(updatedUser);
+          }
+        } catch (error) {
+          console.error('Failed to parse updated user from storage:', error);
+        }
+      }
+    };
+
+    // Listen for custom events when profile is updated
+    const handleProfileUpdate = () => {
+      initUser();
+    };
+
+    const handleUserDataUpdate = () => {
+      initUser();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('profileUpdated', handleProfileUpdate);
+    window.addEventListener('userDataUpdated', handleUserDataUpdate);
+
+    // Also refresh periodically to catch profile picture updates
+    const refreshInterval = setInterval(() => {
+      initUser();
+    }, 30000); // Refresh every 30 seconds
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
+      window.removeEventListener('userDataUpdated', handleUserDataUpdate);
+      clearInterval(refreshInterval);
+    };
   }, []);
 
   // Close emoji picker when clicking outside
@@ -99,21 +160,99 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
           setShowEmojiPicker(false);
         }
       }
+      
+      // Close context menu when clicking outside
+      if (contextMenuMessageId) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.message-context-menu')) {
+          setContextMenuMessageId(null);
+          setContextMenuPosition(null);
+        }
+      }
+      
+      // Close reaction picker when clicking outside
+      if (reactionPickerMessageId) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.reaction-picker')) {
+          setReactionPickerMessageId(null);
+        }
+      }
     };
 
-    if (showEmojiPicker) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
       };
+  }, [showEmojiPicker, contextMenuMessageId, reactionPickerMessageId]);
+
+  // Fetch profile picture from API (similar to notifications) - MUST BE DEFINED BEFORE loadMessages
+  const fetchUserProfilePic = useCallback(async (userId: number | string): Promise<string | null> => {
+    const userIdStr = String(userId);
+    
+    // Check cache first
+    if (userProfilePics[userIdStr]) {
+      return userProfilePics[userIdStr];
     }
-  }, [showEmojiPicker]);
+    
+    // Check if already loading
+    if (loadingProfilePics.has(userIdStr)) {
+      return null;
+    }
+    
+    // Check if already loaded
+    if (loadedProfilePics.current.has(userIdStr)) {
+      return null;
+    }
+    
+    // Mark as loading
+    setLoadingProfilePics(prev => new Set(prev).add(userIdStr));
+    
+    try {
+      console.log('🔍 Fetching profile pic for user:', userIdStr);
+      const response = await api.get(`alumni/profile/${userIdStr}/`);
+      console.log('🔍 Profile API response:', response.data);
+      
+      if (response.data && response.data.profile_pic) {
+        const baseUrl = getProfilePicUrl(response.data.profile_pic);
+        const profilePicUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}cb=${Date.now()}`;
+        console.log('🔍 Setting profile pic URL:', profilePicUrl);
+        
+        setUserProfilePics(prev => {
+          const newPics = { ...prev, [userIdStr]: profilePicUrl };
+          localStorage.setItem('messagingUserProfilePics', JSON.stringify(newPics));
+          return newPics;
+        });
+        loadedProfilePics.current.add(userIdStr);
+        return profilePicUrl;
+      } else {
+        console.log('🔍 No profile picture found for user:', userIdStr);
+        loadedProfilePics.current.add(userIdStr);
+      }
+    } catch (error) {
+      console.error('🔍 Error fetching profile pic:', error);
+      loadedProfilePics.current.add(userIdStr);
+    } finally {
+      setLoadingProfilePics(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(userIdStr);
+        return newSet;
+      });
+    }
+    
+    return null;
+  }, [userProfilePics, loadingProfilePics]);
 
   const loadMessages = useCallback(async (cursor?: string) => {
     if (!conversation) return;
     
     try {
       const data = await listMessages(conversation.conversation_id, { cursor, limit: 50 });
+      console.log('🔍 Loaded messages:', data.results.map((m: MessageItem) => ({
+        messageId: m.message_id,
+        senderId: m.sender.user_id,
+        senderName: m.sender.name,
+        senderAvatar: m.sender.avatar_url,
+      })));
       const mapped: UiMessage[] = data.results.map((m: MessageItem) => ({
         id: String(m.message_id),
         content: m.content,
@@ -157,10 +296,19 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
       });
       
       setNextCursor(data.next_cursor ?? null);
+      
+      // Fetch profile pictures for all unique senders in loaded messages
+      const uniqueSenders = new Set<number>();
+      mapped.forEach((msg) => {
+        if (!uniqueSenders.has(msg.sender_id) && !loadedProfilePics.current.has(String(msg.sender_id))) {
+          uniqueSenders.add(msg.sender_id);
+          fetchUserProfilePic(msg.sender_id);
+        }
+      });
     } catch (error) {
       console.error('Failed to load messages:', error);
     }
-  }, [conversation, scrollToBottom]);
+  }, [conversation, scrollToBottom, fetchUserProfilePic]);
 
   const connectWebSocket = useCallback(async () => {
     if (!conversation || isConnecting) return;
@@ -365,12 +513,25 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
     console.log('Sending message:', inputText); // Debug log
 
     try {
-      const sanitizedText = sanitizeUserInput(inputText);
+      let sanitizedText = sanitizeUserInput(inputText);
       console.log('Sanitized text:', sanitizedText); // Debug log
       
       if (!sanitizedText) {
         logger.warn('Message content is empty after sanitization');
         return;
+      }
+
+      // If replying to a message, format the reply with the original message info
+      if (replyingToMessageId) {
+        const repliedMessage = messages.find(m => m.id === replyingToMessageId);
+        if (repliedMessage) {
+          // Format: "Replying to [name]: [original message]\n\n[your reply]"
+          const originalContent = repliedMessage.content || 'Attachment';
+          const truncatedOriginal = originalContent.length > 50 
+            ? originalContent.substring(0, 50) + '...' 
+            : originalContent;
+          sanitizedText = `↩️ Replying to ${repliedMessage.sender_name}: ${truncatedOriginal}\n\n${sanitizedText}`;
+        }
       }
 
       const tempId = Date.now().toString();
@@ -383,10 +544,12 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         created_at: new Date().toISOString(),
         is_read: false,
         tempId,
+        reply_to: replyingToMessageId || undefined,
       };
 
       setMessages(prev => addMessageWithDeduplication(prev, tempMessage));
       setInputValue('');
+      setReplyingToMessageId(null); // Clear reply state after sending
       
       typingIndicatorRef.current?.sendTyping(false);
       if (typingTimeoutRef.current) {
@@ -533,17 +696,47 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
     }
   };
 
-  const getAvatarDisplay = (message: UiMessage) => {
+  const getAvatarDisplay = useCallback((message: UiMessage) => {
     const firstName = message.sender_name?.split(' ')[0] || 'U';
     const initial = firstName.charAt(0).toUpperCase();
     
-    if (message.sender_avatar) {
-      const avatarUrl = message.sender_avatar.startsWith('http') 
-        ? message.sender_avatar 
-        : `${window.location.origin}${message.sender_avatar}`;
+    // Determine if this is the current user's message
+    const myId = currentUser?.user_id ?? (currentUser as any)?.id;
+    const isOwnMsg = message.sender_id === myId;
+    
+    // Get avatar URL - prioritize cached, then message avatar, then current user's profile pic
+    const senderIdStr = String(message.sender_id);
+    let avatarUrl: string | null = null;
+    
+    // Check cache first
+    if (userProfilePics[senderIdStr]) {
+      avatarUrl = userProfilePics[senderIdStr];
+    }
+    // If not cached, try message sender_avatar
+    else if (message.sender_avatar) {
+      avatarUrl = getProfilePicUrl(message.sender_avatar);
+    }
+    // For own messages, use current user's profile picture
+    else if (isOwnMsg && currentUser) {
+      const currentUserPic = currentUser?.profile_pic || currentUser?.avatar_url;
+      if (currentUserPic) {
+        avatarUrl = getProfilePicUrl(currentUserPic);
+      }
+    }
+    
+    // Fetch profile picture if we don't have it yet
+    if (!avatarUrl && !loadedProfilePics.current.has(senderIdStr)) {
+      fetchUserProfilePic(message.sender_id);
+    }
+    
+    if (avatarUrl) {
+      // Add cache-busting parameter
+      const separator = avatarUrl.includes('?') ? '&' : '?';
+      const urlWithBust = `${avatarUrl}${separator}cb=${Date.now()}`;
+      
       return (
         <img 
-          src={avatarUrl} 
+          src={urlWithBust} 
           alt={message.sender_name}
           onError={(e) => {
             const target = e.target as HTMLImageElement;
@@ -556,8 +749,9 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         />
       );
     }
+    
     return <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 600, fontSize: '14px', borderRadius: '50%' }}>{initial}</div>;
-  };
+  }, [currentUser, userProfilePics, fetchUserProfilePic]);
 
   const isOwnMessage = useCallback((message: UiMessage) => {
     const myId = currentUser?.user_id ?? (currentUser as any)?.id;
@@ -618,7 +812,16 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
             <button onClick={onBack} className="back-btn">
               ← Back
             </button>
-            <h2 className="mobile-title">
+            <h2 
+              className="mobile-title"
+              onClick={() => {
+                const otherUserId = conversation.other_participant?.user_id;
+                if (otherUserId) {
+                  navigate(`/profile/${otherUserId}`);
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               {conversation.other_participant?.name || 'Unknown User'}
             </h2>
           </div>
@@ -627,10 +830,70 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         {/* Desktop Header */}
         {!onBack && (
           <div className="chat-header">
-            <div className="chat-header-avatar">
-              {conversation.other_participant?.name?.charAt(0) || '?'}
+            <div 
+              className="chat-header-avatar"
+              onClick={() => {
+                const otherUserId = conversation.other_participant?.user_id;
+                if (otherUserId) {
+                  navigate(`/profile/${otherUserId}`);
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              {(() => {
+                const otherParticipant = conversation.other_participant;
+                const otherUserId = otherParticipant?.user_id;
+                const otherUserIdStr = otherUserId ? String(otherUserId) : null;
+                const firstName = otherParticipant?.name?.split(' ')[0] || 'U';
+                const initial = firstName.charAt(0).toUpperCase();
+                
+                // Check cache first
+                let avatarUrl: string | null = null;
+                if (otherUserIdStr && userProfilePics[otherUserIdStr]) {
+                  avatarUrl = userProfilePics[otherUserIdStr];
+                }
+                // Try conversation other_participant avatar_url
+                else if ((otherParticipant as any)?.avatar_url) {
+                  avatarUrl = getProfilePicUrl((otherParticipant as any).avatar_url);
+                }
+                
+                // Fetch profile picture if we don't have it yet
+                if (!avatarUrl && otherUserIdStr && otherUserId && !loadedProfilePics.current.has(otherUserIdStr)) {
+                  fetchUserProfilePic(otherUserId);
+                }
+                
+                if (avatarUrl) {
+                  const separator = avatarUrl.includes('?') ? '&' : '?';
+                  const urlWithBust = `${avatarUrl}${separator}cb=${Date.now()}`;
+                  
+                  return (
+                    <img 
+                      src={urlWithBust} 
+                      alt={otherParticipant?.name || 'User'}
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.textContent = initial;
+                        }
+                      }}
+                    />
+                  );
+                }
+                return initial;
+              })()}
             </div>
-            <div className="chat-header-info">
+            <div 
+              className="chat-header-info"
+              onClick={() => {
+                const otherUserId = conversation.other_participant?.user_id;
+                if (otherUserId) {
+                  navigate(`/profile/${otherUserId}`);
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <h2 className="chat-header-name">
                 {conversation.other_participant?.name || 'Unknown User'}
               </h2>
@@ -675,10 +938,30 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                   <div key={groupIndex} className={`message-group ${isOwn ? 'sent' : 'received'}`}>
                     {group.messages.map((message, messageIndex) => {
                       const messageIsOwn = isOwnMessage(message);
-                      const showAvatar = messageIndex === 0 && isFirstOfGroup;
+                      // Show avatar on the last message of the group (last consecutive message from sender)
+                      const isLastInGroup = messageIndex === group.messages.length - 1;
+                      const showAvatar = isLastInGroup && !messageIsOwn;
                       
                       return (
-                        <div key={message.id} className={`message-item ${isOwn ? 'sent' : 'received'}`} style={{ display: 'flex', flexDirection: isOwn ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: '8px', marginBottom: '8px' }}>
+                        <div 
+                          key={message.id} 
+                          className={`message-item ${isOwn ? 'sent' : 'received'}`} 
+                          style={{ display: 'flex', flexDirection: isOwn ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: '8px', marginBottom: '8px', position: 'relative' }}
+                          onMouseEnter={(e) => {
+                            // Show action buttons for both own and received messages
+                            const actionButtons = e.currentTarget.querySelector('.message-actions') as HTMLElement;
+                            if (actionButtons) {
+                              actionButtons.style.opacity = '1';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            // Hide action buttons when leaving the message
+                            const actionButtons = e.currentTarget.querySelector('.message-actions') as HTMLElement;
+                            if (actionButtons && !actionButtons.matches(':hover')) {
+                              actionButtons.style.opacity = '0';
+                            }
+                          }}
+                        >
                           {/* Avatar - only show for received messages (not own messages) */}
                           {showAvatar && !messageIsOwn ? (
                             <div
@@ -702,11 +985,52 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                               {getAvatarDisplay(message)}
                             </div>
                           ) : (
+                            !isOwn && (
+                              // For received messages, show avatar spacer
                             <div style={{ width: '32px', flexShrink: 0 }} />
+                            )
                           )}
                           
-                          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                            <div className="message-bubble" style={{ position: 'relative' }}>
+                          <div 
+                            style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, position: 'relative' }}
+                            onMouseEnter={(e) => {
+                              // Show action buttons for both own and received messages
+                              const actionButtons = e.currentTarget.closest('.message-item')?.querySelector('.message-actions') as HTMLElement;
+                              if (actionButtons) {
+                                actionButtons.style.opacity = '1';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              // Hide action buttons when leaving the message container
+                              const actionButtons = e.currentTarget.closest('.message-item')?.querySelector('.message-actions') as HTMLElement;
+                              if (actionButtons && !actionButtons.matches(':hover')) {
+                                // Small delay to allow moving to buttons
+                                setTimeout(() => {
+                                  if (actionButtons && !actionButtons.matches(':hover')) {
+                                    actionButtons.style.opacity = '0';
+                                  }
+                                }, 100);
+                              }
+                            }}
+                          >
+                            <div 
+                              className="message-bubble" 
+                              style={{ position: 'relative' }}
+                            onMouseEnter={(e) => {
+                              // Show action buttons for both own and received messages
+                              const actionButtons = e.currentTarget.closest('.message-item')?.querySelector('.message-actions') as HTMLElement;
+                              if (actionButtons) {
+                                actionButtons.style.opacity = '1';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              // Hide action buttons when leaving the message bubble
+                              const actionButtons = e.currentTarget.closest('.message-item')?.querySelector('.message-actions') as HTMLElement;
+                              if (actionButtons && !actionButtons.matches(':hover')) {
+                                actionButtons.style.opacity = '0';
+                              }
+                            }}
+                            >
                               {editingMessageId === message.id ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                   <textarea
@@ -830,13 +1154,125 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                     </div>
                                   )}
                                   
-                                  {/* Edit/Delete buttons for own messages (only for text messages) */}
-                                  {messageIsOwn && !message.attachment_url && (
-                                    <div style={{ 
+                                  {/* Reaction Picker */}
+                                  {reactionPickerMessageId === message.id && (
+                                    <div 
+                                      className="reaction-picker"
+                                      style={{
                                       position: 'absolute', 
-                                      top: '4px', 
-                                      right: '4px', 
+                                        left: isOwn ? 'auto' : '-60px',
+                                        right: isOwn ? '-60px' : 'auto',
+                                        top: '0',
+                                        zIndex: 1000,
+                                        background: 'white',
+                                        borderRadius: '8px',
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                        padding: '8px',
+                                        display: 'flex',
+                                        gap: '4px'
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {['😊', '❤️', '👍', '😂', '😮', '😢'].map((emoji) => (
+                                        <button
+                                          key={emoji}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const userId = currentUser?.user_id ?? (currentUser as any)?.id;
+                                            setMessageReactions(prev => {
+                                              const messageId = message.id;
+                                              const existing = prev[messageId] || [];
+                                              const existingReactionIndex = existing.findIndex(r => r.userId === userId && r.emoji === emoji);
+                                              
+                                              if (existingReactionIndex >= 0) {
+                                                // Remove reaction
+                                                const updated = [...existing];
+                                                updated.splice(existingReactionIndex, 1);
+                                                if (updated.length === 0) {
+                                                  const newReactions = { ...prev };
+                                                  delete newReactions[messageId];
+                                                  console.log('Reaction removed, state:', newReactions);
+                                                  return newReactions;
+                                                }
+                                                console.log('Reaction removed (still others), state:', { ...prev, [messageId]: updated });
+                                                return { ...prev, [messageId]: updated };
+                                              } else {
+                                                // Add reaction
+                                                const newState = { ...prev, [messageId]: [...existing, { emoji, userId: userId || 0 }] };
+                                                console.log('Reaction added, messageId:', messageId, 'emoji:', emoji, 'state:', newState);
+                                                return newState;
+                                              }
+                                            });
+                                            setReactionPickerMessageId(null);
+                                          }}
+                                          style={{
+                                            width: '32px',
+                                            height: '32px',
+                                            border: 'none',
+                                            borderRadius: '50%',
+                                            background: 'transparent',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '20px',
+                                            padding: 0
+                                          }}
+                                        >
+                                          {emoji}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                  
+                                  {/* Display Reactions */}
+                                  {(() => {
+                                    const reactions = messageReactions[message.id];
+                                    if (reactions && reactions.length > 0) {
+                                      console.log('Displaying reactions for message:', message.id, reactions);
+                                      return (
+                                        <div 
+                                          style={{
+                                            position: 'absolute',
+                                            bottom: '-32px',
+                                            right: isOwn ? 'auto' : '8px',
+                                            left: isOwn ? '8px' : 'auto',
                                       display: 'flex', 
+                                            gap: '4px',
+                                            alignItems: 'center',
+                                            background: 'rgba(0,0,0,0.05)',
+                                            borderRadius: '12px',
+                                            padding: '2px 6px',
+                                            fontSize: '12px',
+                                            zIndex: 10
+                                          }}
+                                        >
+                                          {Object.entries(
+                                            reactions.reduce((acc, r) => {
+                                              acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+                                              return acc;
+                                            }, {} as Record<string, number>)
+                                          ).map(([emoji, count]) => (
+                                            <span key={emoji} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                              {emoji} {count > 1 && <span>{count}</span>}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
+                                </>
+                              )}
+                            </div>
+                            
+                            {/* Action buttons for received messages (on the RIGHT side) */}
+                            {!messageIsOwn && (
+                              <div style={{ display: 'flex', alignItems: 'center', marginLeft: '4px', position: 'absolute', right: '-90px', top: '0' }}>
+                                {/* Message actions: Reactions, Reply (for received messages) */}
+                                <div style={{ 
+                                  display: 'flex', 
+                                  flexDirection: 'row',
                                       gap: '4px',
                                       opacity: 0,
                                       transition: 'opacity 0.2s'
@@ -848,47 +1284,115 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                     }}
                                     onMouseLeave={(e) => {
                                       const target = e.currentTarget;
+                                  // Only hide if mouse is not over the message bubble
+                                  const messageItem = target.closest('.message-item');
+                                  const messageBubble = messageItem?.querySelector('.message-bubble');
+                                  if (!messageBubble?.matches(':hover') && !messageItem?.matches(':hover')) {
                                       target.style.opacity = '0';
+                                  }
                                     }}
                                     >
+                                  {/* Reply Button */}
                                       <button
-                                        onClick={() => {
-                                          setEditingMessageId(message.id);
-                                          setEditMessageContent(message.content);
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setReplyingToMessageId(message.id);
+                                      inputRef.current?.focus();
                                         }}
                                         style={{
-                                          padding: '4px 8px',
-                                          border: 'none',
-                                          borderRadius: '4px',
-                                          background: '#f0f0f0',
+                                      width: '28px',
+                                      height: '28px',
+                                      border: '1px solid #e0e0e0',
+                                      borderRadius: '50%',
+                                      background: 'white',
                                           cursor: 'pointer',
-                                          fontSize: '11px',
-                                          color: '#666'
-                                        }}
-                                        title="Edit message"
-                                      >
-                                        ✏️
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '14px',
+                                      padding: 0,
+                                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                      lineHeight: '1'
+                                    }}
+                                    title="Reply"
+                                  >
+                                    ↩️
                                       </button>
+                                  
+                                  {/* Emoji Reaction Button */}
                                       <button
-                                        onClick={() => handleDeleteMessage(message.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
+                                    }}
                                         style={{
-                                          padding: '4px 8px',
-                                          border: 'none',
-                                          borderRadius: '4px',
-                                          background: '#f0f0f0',
+                                      width: '28px',
+                                      height: '28px',
+                                      border: '1px solid #e0e0e0',
+                                      borderRadius: '50%',
+                                      background: 'white',
                                           cursor: 'pointer',
-                                          fontSize: '11px',
-                                          color: '#666'
-                                        }}
-                                        title="Delete message"
-                                      >
-                                        🗑️
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '14px',
+                                      padding: 0,
+                                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                      lineHeight: '1'
+                                    }}
+                                    title="Add reaction"
+                                  >
+                                    😊
                                       </button>
+                                </div>
                                     </div>
                                   )}
-                                </>
-                              )}
+                            
+                            {/* Context Menu for own messages */}
+                            {contextMenuMessageId === message.id && contextMenuPosition && (
+                              <div 
+                                className="message-context-menu"
+                                style={{
+                                  position: 'fixed',
+                                  top: `${contextMenuPosition.y}px`,
+                                  left: `${contextMenuPosition.x}px`,
+                                  zIndex: 2000,
+                                  background: 'white',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                  padding: '8px 0',
+                                  minWidth: '120px'
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteMessage(message.id);
+                                    setContextMenuMessageId(null);
+                                    setContextMenuPosition(null);
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 16px',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                    fontSize: '14px',
+                                    color: '#dc3545'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = '#f8f9fa';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'transparent';
+                                  }}
+                                >
+                                  Remove
+                                </button>
                             </div>
+                            )}
                             
                             {messageIndex === group.messages.length - 1 && (
                               <div className="message-time" style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11px', color: '#999' }}>
@@ -901,6 +1405,118 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                               </div>
                             )}
                           </div>
+                          
+                          {/* For own messages: Action buttons on LEFT (placed after message content for row-reverse) */}
+                          {isOwn && (
+                            <div style={{ display: 'flex', alignItems: 'center', marginLeft: '4px' }}>
+                              {/* Message actions: Reactions, Reply, Menu (for own messages) */}
+                              <div style={{ 
+                                display: 'flex', 
+                                flexDirection: 'row',
+                                gap: '4px',
+                                opacity: 0,
+                                transition: 'opacity 0.2s'
+                              }} 
+                              className="message-actions"
+                              onMouseEnter={(e) => {
+                                const target = e.currentTarget;
+                                target.style.opacity = '1';
+                              }}
+                              onMouseLeave={(e) => {
+                                const target = e.currentTarget;
+                                const messageItem = target.closest('.message-item');
+                                const messageBubble = messageItem?.querySelector('.message-bubble');
+                                if (!messageBubble?.matches(':hover') && !messageItem?.matches(':hover')) {
+                                  target.style.opacity = '0';
+                                }
+                              }}
+                              >
+                                {/* Three-dot Menu (for own messages) */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setContextMenuMessageId(message.id);
+                                    setContextMenuPosition({
+                                      x: rect.right,
+                                      y: rect.top
+                                    });
+                                  }}
+                                  style={{
+                                    width: '28px',
+                                    height: '28px',
+                                    border: '1px solid #e0e0e0',
+                                    borderRadius: '50%',
+                                    background: 'white',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '14px',
+                                    padding: 0,
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                    lineHeight: '1'
+                                  }}
+                                  title="More options"
+                                >
+                                  ⋯
+                                </button>
+                                
+                                {/* Reply Button */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setReplyingToMessageId(message.id);
+                                    inputRef.current?.focus();
+                                  }}
+                                  style={{
+                                    width: '28px',
+                                    height: '28px',
+                                    border: '1px solid #e0e0e0',
+                                    borderRadius: '50%',
+                                    background: 'white',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '14px',
+                                    padding: 0,
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                    lineHeight: '1'
+                                  }}
+                                  title="Reply"
+                                >
+                                  ↩️
+                                </button>
+                                
+                                {/* Emoji Reaction Button */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
+                                  }}
+                                  style={{
+                                    width: '28px',
+                                    height: '28px',
+                                    border: '1px solid #e0e0e0',
+                                    borderRadius: '50%',
+                                    background: 'white',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '14px',
+                                    padding: 0,
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                    lineHeight: '1'
+                                  }}
+                                  title="Add reaction"
+                                >
+                                  😊
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -934,6 +1550,51 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
 
         {/* Input Area */}
         <div className="input-container">
+            {/* Reply Preview */}
+            {replyingToMessageId && (() => {
+              const repliedMessage = messages.find(m => m.id === replyingToMessageId);
+              if (!repliedMessage) return null;
+              
+              return (
+                <div style={{
+                  padding: '8px 12px',
+                  background: '#f0f0f0',
+                  borderTop: '1px solid #e0e0e0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '13px',
+                  color: '#666'
+                }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontWeight: 600, color: '#333' }}>↩️ Replying to {repliedMessage.sender_name}:</span>
+                    <span style={{ 
+                      overflow: 'hidden', 
+                      textOverflow: 'ellipsis', 
+                      whiteSpace: 'nowrap',
+                      maxWidth: '300px'
+                    }}>
+                      {repliedMessage.content || 'Attachment'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setReplyingToMessageId(null)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      fontSize: '18px',
+                      padding: '0',
+                      color: '#999'
+                    }}
+                    title="Cancel reply"
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })()}
+            
             <div className="input-wrapper">
               <div className="input-actions">
                 <button 
@@ -961,7 +1622,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
               <textarea
                 ref={inputRef}
                 className="message-input"
-                placeholder="Type a message..."
+                placeholder={replyingToMessageId ? "Type a reply..." : "Type a message..."}
                 value={inputValue}
                 onChange={handleInputChange}
                 onKeyPress={handleKeyPress}
@@ -992,8 +1653,8 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
             className="emoji-picker-container"
             style={{
               position: 'absolute',
-              bottom: '80px',
-              right: '20px',
+              bottom: '200px',
+              left: '20px',
               zIndex: 1000,
               boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
               borderRadius: '12px',

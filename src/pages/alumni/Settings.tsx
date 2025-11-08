@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import { Box, Paper, Typography, TextField, Button, Select, MenuItem, FormControl, InputLabel, Alert, InputAdornment, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Checkbox, FormControlLabel, FormGroup } from '@mui/material';
-import { Visibility, VisibilityOff } from '@mui/icons-material';
+import PasswordVisibilityIcon from '../../components/PasswordVisibilityIcon';
 import { trackerApi } from '../../services/trackerApi';
 
 interface UserData {
@@ -1450,8 +1450,9 @@ const Settings: React.FC = () => {
                             <IconButton
                               onClick={() => setShowOldPassword(!showOldPassword)}
                               edge="end"
+                              aria-label={showOldPassword ? 'Hide password' : 'Show password'}
                             >
-                              {showOldPassword ? <VisibilityOff /> : <Visibility />}
+                              <PasswordVisibilityIcon show={showOldPassword} size={20} color="#666" />
                             </IconButton>
                           </InputAdornment>
                         )
@@ -1472,8 +1473,9 @@ const Settings: React.FC = () => {
                             <IconButton
                               onClick={() => setShowNewPassword(!showNewPassword)}
                               edge="end"
+                              aria-label={showNewPassword ? 'Hide password' : 'Show password'}
                             >
-                              {showNewPassword ? <VisibilityOff /> : <Visibility />}
+                              <PasswordVisibilityIcon show={showNewPassword} size={20} color="#666" />
                             </IconButton>
                           </InputAdornment>
                         )
@@ -1493,8 +1495,9 @@ const Settings: React.FC = () => {
                             <IconButton
                               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                               edge="end"
+                              aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
                             >
-                              {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                              <PasswordVisibilityIcon show={showConfirmPassword} size={20} color="#666" />
                             </IconButton>
                           </InputAdornment>
                         )

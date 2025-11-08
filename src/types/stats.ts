@@ -18,6 +18,8 @@ export interface QPROStats extends BaseStats {
   employed_count: number;
   unemployed_count: number;
   untracked_count: number;
+  self_employed_count?: number;
+  awards_count?: number;
 }
 
 export interface CHEDStats extends BaseStats {
@@ -27,6 +29,7 @@ export interface CHEDStats extends BaseStats {
   further_study_rate: number;
   job_aligned_count?: number;
   self_employed_count?: number;
+  awards_count?: number;
 }
 
 export interface SUCStats extends BaseStats {
@@ -37,6 +40,8 @@ export interface SUCStats extends BaseStats {
   private_count: number;
   local_count: number;
   international_count: number;
+  self_employed_count?: number;
+  awards_count?: number;
 }
 
 export interface AACUPStats extends BaseStats {
@@ -47,6 +52,8 @@ export interface AACUPStats extends BaseStats {
   employment_rate: number;
   absorption_rate: number;
   high_position_rate: number;
+  self_employed_count: number;
+  awards_count?: number;
 }
 
 export interface HighPositionStats extends BaseStats {
@@ -70,6 +77,7 @@ export interface HighPositionStats extends BaseStats {
   most_common_sector?: string;
   most_common_course?: string;
   average_salary?: number;
+  awards_count?: number;
 }
 
 export type AnyStats = AllStats | QPROStats | CHEDStats | SUCStats | AACUPStats | HighPositionStats;
