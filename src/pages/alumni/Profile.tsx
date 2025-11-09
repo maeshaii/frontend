@@ -1,4 +1,4 @@
-  import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import ctulogo from '../../images/ctulogo.png';
@@ -216,6 +216,7 @@ const AlumniProfile: React.FC = () => {
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [rewardsLoading, setRewardsLoading] = useState(false);
   const [claimingReward, setClaimingReward] = useState<number | null>(null);
+  const [recentlyClaimedRewardIds, setRecentlyClaimedRewardIds] = useState<number[]>([]);
   const [userRewardRequests, setUserRewardRequests] = useState<any[]>([]);
   const [showApprovedRewardsModal, setShowApprovedRewardsModal] = useState(false);
   const [selectedRewardDetail, setSelectedRewardDetail] = useState<any | null>(null);
@@ -870,11 +871,30 @@ getPosts()
     }
   };
 
-  const fetchUserRewardRequests = async () => {
+  const fetchUserRewardRequests = useCallback(async () => {
     try {
       const response = await getRewardRequests();
       if (response.success) {
-        setUserRewardRequests(response.requests || []);
+        const requests = response.requests || [];
+        setUserRewardRequests((prev) => {
+          const prevMap = new Map(prev.map((req: any) => [req.request_id, req]));
+          return requests.map((req: any) => {
+            const wasRecentlyClaimed = recentlyClaimedRewardIds.includes(req.request_id);
+            if (wasRecentlyClaimed) {
+              const previous = prevMap.get(req.request_id);
+              return {
+                ...req,
+                status: 'claimed',
+                claimed_at: req.claimed_at || previous?.claimed_at || new Date().toISOString()
+              };
+            }
+            const previous = prevMap.get(req.request_id);
+            if (previous && previous.status === 'claimed' && req.status !== 'claimed') {
+              return { ...req, status: 'claimed', claimed_at: previous.claimed_at };
+            }
+            return req;
+          });
+        });
         return true;
       }
       return false;
@@ -882,7 +902,7 @@ getPosts()
       console.error('Error fetching reward requests:', error);
       return false;
     }
-  };
+  }, [recentlyClaimedRewardIds]);
 
   // Check for openRewardRequests flag from notification - check when component mounts and when user loads
   useEffect(() => {
@@ -908,7 +928,7 @@ getPosts()
     
     // Check immediately and also when user loads
     checkAndOpenRewardRequests();
-  }, [user]);
+  }, [user, fetchUserRewardRequests]);
 
   // Check for openRewardDetail flag from notification - opens specific reward detail modal
   useEffect(() => {
@@ -958,6 +978,46 @@ getPosts()
     // Check immediately and also when user loads
     checkAndOpenRewardDetail();
   }, [user]);
+
+  // Auto-refresh reward requests while modal or detail view is open
+  useEffect(() => {
+    if (!showApprovedRewardsModal && !selectedRewardDetail) {
+      return;
+    }
+
+    fetchUserRewardRequests();
+
+    const intervalId = window.setInterval(() => {
+      fetchUserRewardRequests();
+    }, 5000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [showApprovedRewardsModal, selectedRewardDetail?.request_id, fetchUserRewardRequests]);
+
+  // Listen for reward request updates from other tabs/admin actions
+  useEffect(() => {
+    const handleStorageUpdate = (event: StorageEvent) => {
+      if (event.key === 'latestRewardRequestUpdate' && event.newValue) {
+        fetchUserRewardRequests();
+      }
+    };
+
+    const handleCustomUpdate = (event: Event) => {
+      if ((event as CustomEvent).detail) {
+        fetchUserRewardRequests();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageUpdate);
+    window.addEventListener('rewardRequestUpdated', handleCustomUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageUpdate);
+      window.removeEventListener('rewardRequestUpdated', handleCustomUpdate as EventListener);
+    };
+  }, [fetchUserRewardRequests]);
 
   // Listen for points updates from other components (like PostCard, PostCreate)
   useEffect(() => {
@@ -1052,6 +1112,31 @@ getPosts()
       
       if (response.success) {
         alert(response.message || 'Reward claimed successfully!');
+        setRecentlyClaimedRewardIds((prev) => prev.includes(requestId) ? prev : [...prev, requestId]);
+
+        const updatedRequestData = response.request || response.reward_request || null;
+        setUserRewardRequests((prev) =>
+          prev.map((req) => {
+            if (req.request_id !== requestId) return req;
+            const merged = {
+              ...req,
+              ...updatedRequestData,
+              status: updatedRequestData?.status || 'claimed',
+              claimed_at: updatedRequestData?.claimed_at || new Date().toISOString()
+            };
+            return merged;
+          })
+        );
+        setSelectedRewardDetail((prev: any | null) => {
+          if (!prev || prev.request_id !== requestId) return prev;
+          const merged = {
+            ...prev,
+            ...updatedRequestData,
+            status: updatedRequestData?.status || 'claimed',
+            claimed_at: updatedRequestData?.claimed_at || new Date().toISOString()
+          };
+          return merged;
+        });
         
         // Refresh points
         if (currentId) {
@@ -1078,6 +1163,44 @@ getPosts()
       setClaimingReward(null);
     }
   };
+
+  useEffect(() => {
+    setRecentlyClaimedRewardIds((prev) => {
+      if (!prev.length) return prev;
+      const filtered = prev.filter((id) => {
+        const req = userRewardRequests.find((request) => request.request_id === id);
+        return req && req.status !== 'claimed';
+      });
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [userRewardRequests]);
+
+  useEffect(() => {
+    if (!selectedRewardDetail) return;
+    const updated = userRewardRequests.find((request) => request.request_id === selectedRewardDetail.request_id);
+    if (!updated) return;
+    const recentlyClaimed = recentlyClaimedRewardIds.includes(updated.request_id);
+    setSelectedRewardDetail((prev: any | null) => {
+      if (!prev || prev.request_id !== updated.request_id) return prev;
+      const mergedStatus = recentlyClaimed ? 'claimed' : updated.status;
+      const mergedClaimedAt = updated.claimed_at || prev.claimed_at || (recentlyClaimed ? new Date().toISOString() : undefined);
+      const needsUpdate =
+        prev.status !== mergedStatus ||
+        prev.claimed_at !== mergedClaimedAt ||
+        prev.voucher_code !== updated.voucher_code ||
+        prev.notes !== updated.notes ||
+        prev.instructions !== updated.instructions;
+
+      if (!needsUpdate) return prev;
+
+      return {
+        ...prev,
+        ...updated,
+        status: mergedStatus,
+        claimed_at: mergedClaimedAt
+      };
+    });
+  }, [userRewardRequests, recentlyClaimedRewardIds, selectedRewardDetail?.request_id]);
 
   const handleEditProfile = () => {
     // Set the current user's profile picture as the initial edit value
@@ -1570,10 +1693,17 @@ getPosts()
                   ) : null}
                 </div>
               ) : isOwnProfile ? (
-                <button className="profile-add-bio-btn" onClick={() => setBioModalOpen(true)}>
-                  Add Bio
-                </button>
-              ) : null}
+                <div className="profile-bio-text">
+                  <span>Tell everyone a little about yourself by adding a bio.</span>
+                  <button className="profile-add-bio-btn" onClick={() => setBioModalOpen(true)}>
+                    Add Bio
+                  </button>
+                </div>
+              ) : (
+                <div className="profile-bio-text">
+                  <span>This user has not added a bio yet.</span>
+                </div>
+              )}
             </div>
 
             {/* Social Media and Email for Alumni/OJT accounts */}
@@ -2043,7 +2173,7 @@ getPosts()
           )}
 
           {/* Followers - Hide for admin and PESO accounts */}
-          {!user?.account_type?.peso && (!user?.account_type?.admin || isOwnProfile) && (!user?.account_type?.ccict || isOwnProfile) && (
+          {!user?.account_type?.peso && !user?.account_type?.admin && (!user?.account_type?.ccict || isOwnProfile) && (
           <div style={{ marginBottom: '24px' }}>
             <div className="profile-followers-header">
               <div className="profile-followers-title">Followers ({followers.length})</div>
@@ -2110,7 +2240,9 @@ getPosts()
           )}
 
           {/* Following - Hide for admin and PESO accounts */}
-          {!user?.account_type?.peso && (!user?.account_type?.admin || isOwnProfile) && (!user?.account_type?.ccict || isOwnProfile) && (
+          {(!user?.account_type?.peso || !isOwnProfile) &&
+           (!user?.account_type?.admin || !isOwnProfile) &&
+           (!user?.account_type?.ccict || isOwnProfile) && (
           <div style={{ marginBottom: '24px' }}>
             <div className="profile-followers-header">
               <div className="profile-followers-title">Following ({following.length})</div>
@@ -4705,14 +4837,15 @@ getPosts()
                 {/* Filtered Rewards */}
                 {(() => {
                   const filteredRewards = userRewardRequests.filter((req: any) => {
+                    const recentlyClaimed = recentlyClaimedRewardIds.includes(req.request_id);
                     if (rewardStatusFilter === 'all') return true;
-                    if (rewardStatusFilter === 'pending') return req.status === 'pending';
-                    if (rewardStatusFilter === 'approved') return req.status === 'approved' || req.status === 'ready_for_pickup';
-                    if (rewardStatusFilter === 'claimed') return req.status === 'claimed';
+                    if (rewardStatusFilter === 'pending') return req.status === 'pending' && !recentlyClaimed;
+                    if (rewardStatusFilter === 'approved') return (req.status === 'approved' || req.status === 'ready_for_pickup') && !recentlyClaimed;
+                    if (rewardStatusFilter === 'claimed') return req.status === 'claimed' || recentlyClaimed;
                     if (rewardStatusFilter === 'did_not_push_through') {
                       // Reward that was approved but expired before being claimed
                       const isApproved = req.status === 'approved' || req.status === 'ready_for_pickup';
-                      const isNotClaimed = req.status !== 'claimed';
+                      const isNotClaimed = req.status !== 'claimed' && !recentlyClaimed;
                       const hasExpired = req.expires_at && new Date(req.expires_at) < new Date();
                       return isApproved && isNotClaimed && hasExpired;
                     }
@@ -4730,8 +4863,9 @@ getPosts()
 
                   // Check if any reward can be claimed (to show Expires column)
                   const hasClaimableRewards = filteredRewards.some((req: any) => {
-                    const isApproved = req.status === 'approved' || req.status === 'ready_for_pickup';
-                    const isClaimed = req.status === 'claimed';
+                    const recentlyClaimed = recentlyClaimedRewardIds.includes(req.request_id);
+                    const isApproved = (req.status === 'approved' || req.status === 'ready_for_pickup') && !recentlyClaimed;
+                    const isClaimed = req.status === 'claimed' || recentlyClaimed;
                     return isApproved && !isClaimed;
                   });
 
@@ -4755,9 +4889,10 @@ getPosts()
                         </thead>
                         <tbody>
                           {filteredRewards.map((req: any) => {
-                  const isApproved = req.status === 'approved' || req.status === 'ready_for_pickup';
-                  const isClaimed = req.status === 'claimed';
-                  const isPending = req.status === 'pending';
+                  const recentlyClaimed = recentlyClaimedRewardIds.includes(req.request_id);
+                  const isApproved = (req.status === 'approved' || req.status === 'ready_for_pickup') && !recentlyClaimed;
+                  const isClaimed = req.status === 'claimed' || recentlyClaimed;
+                  const isPending = req.status === 'pending' && !recentlyClaimed;
                             const hasExpired = req.expires_at && new Date(req.expires_at) < new Date();
                             const didNotPushThrough = isApproved && !isClaimed && hasExpired;
                             const isMerchandise = req.reward_type?.toLowerCase().includes('merchandise') || 
@@ -4799,10 +4934,9 @@ getPosts()
                                     color: didNotPushThrough ? '#991b1b' : isPending ? '#a16207' : isApproved ? '#991b1b' : isClaimed ? '#1e40af' : '#374151'
                                   }}>
                                     {didNotPushThrough ? 'Expired' :
-                                     req.status === 'pending' ? 'Pending' : 
-                                     req.status === 'approved' ? 'Ready' :
-                                     req.status === 'ready_for_pickup' ? 'Ready' :
-                                     req.status === 'claimed' ? 'Claimed' : req.status}
+                                     isPending ? 'Pending' : 
+                                     isApproved && !isClaimed ? 'Ready' :
+                                     isClaimed ? 'Claimed' : req.status}
                                   </span>
                                 </td>
                                 <td style={{ padding: '12px', color: '#667eea', fontWeight: '600', fontSize: '13px' }}>
@@ -4910,9 +5044,10 @@ getPosts()
             {/* Render the same detailed card view for selectedRewardDetail */}
             {(() => {
               const req = selectedRewardDetail;
-              const isApproved = req.status === 'approved' || req.status === 'ready_for_pickup';
-              const isClaimed = req.status === 'claimed';
-              const isPending = req.status === 'pending';
+              const recentlyClaimed = recentlyClaimedRewardIds.includes(req.request_id);
+              const isApproved = (req.status === 'approved' || req.status === 'ready_for_pickup') && !recentlyClaimed;
+              const isClaimed = req.status === 'claimed' || recentlyClaimed;
+              const isPending = req.status === 'pending' && !recentlyClaimed;
               const isMerchandise = req.reward_type?.toLowerCase().includes('merchandise') || 
                                    req.reward_type?.toLowerCase().includes('merch') ||
                                    req.reward_type?.toLowerCase().includes('product') ||
@@ -5018,16 +5153,15 @@ getPosts()
                         color: isPending ? '#1e3a5f' : isApproved ? '#174f84' : isClaimed ? '#174f84' : '#666',
                         fontWeight: '600'
                       }}>
-                        {req.status === 'pending' ? 'Pending Approval' : 
-                         req.status === 'approved' ? 'Approved - Ready' :
-                         req.status === 'ready_for_pickup' ? 'Ready for Pickup' :
-                         req.status === 'claimed' ? 'Claimed' : req.status}
+                        {isPending ? 'Pending Approval' : 
+                         isApproved && !isClaimed ? 'Approved - Ready' :
+                         isClaimed ? 'Claimed' : req.status}
                       </div>
                     </div>
                   </div>
 
                   {/* Dates */}
-                  {(req.requested_at || req.approved_at || req.expires_at) && (
+                   {(req.requested_at || req.approved_at || (req.expires_at && !isClaimed)) && (
                     <div style={{ 
                       display: 'grid', 
                       gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
@@ -5058,7 +5192,7 @@ getPosts()
                           </div>
                         </div>
                       )}
-                      {req.expires_at && (
+                      {req.expires_at && !isClaimed && (
                         <div style={{ padding: '12px', background: 'linear-gradient(135deg, #e0ecf5 0%, #d0e1f0 100%)', borderRadius: '8px', border: '1px solid #a8c5e0' }}>
                           <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Expires</div>
                           <div style={{ fontSize: '13px', color: '#1e3a5f', fontWeight: '500' }}>
@@ -5068,6 +5202,17 @@ getPosts()
                               year: 'numeric'
                             })}
                           </div>
+                          {isApproved && !isClaimed && (
+                            <div style={{ 
+                              marginTop: '6px',
+                              fontSize: '11px',
+                              color: '#b91c1c',
+                              fontWeight: '500',
+                              lineHeight: 1.4
+                            }}>
+                              Failure to claim within 5 days of approval voids this request.
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -5101,7 +5246,7 @@ getPosts()
                       )}
 
                       {/* Voucher Code Section */}
-                      {req.voucher_code && (
+                      {req.voucher_code && (req.status === 'claimed' || recentlyClaimed) && (
                         <div style={{ 
                           marginBottom: '20px',
                           padding: '16px', 
@@ -5138,6 +5283,24 @@ getPosts()
                           <div style={{ fontSize: '11px', color: '#1e3a5f', textAlign: 'center', marginTop: '10px', fontWeight: '500' }}>
                             Save this code for redemption
                           </div>
+                        </div>
+                      )}
+                      {req.voucher_code && req.status !== 'claimed' && !recentlyClaimed && (
+                        <div style={{ 
+                          marginBottom: '20px',
+                          padding: '16px', 
+                          background: 'linear-gradient(135deg, #e0ecf5 0%, #c8ddeb 100%)',
+                          borderRadius: '12px',
+                          border: '1px solid #9bb8d6',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          color: '#174f84',
+                          fontSize: '13px',
+                          fontWeight: '500'
+                        }}>
+                          <HiOutlineTicket size={18} color="#174f84" />
+                          <span>Voucher code will be revealed once you claim this reward.</span>
                         </div>
                       )}
                       

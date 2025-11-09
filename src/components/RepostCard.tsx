@@ -7,6 +7,7 @@ import ReplyInput from './ReplyInput';
 import Reply from './Reply';
 import PostStatsRow from './PostStatsRow';
 import ctulogo from '../images/ctulogo.png';
+import './postFooterActions.css';
 
 // Minimal, reusable types for the repost card
 interface UserLite {
@@ -1185,44 +1186,24 @@ const RepostCard: React.FC<RepostCardProps> = ({
       />
 
       {/* Actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-around', borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+      <div className="post-footer-actions">
           <button
             onClick={() => liked ? handleUnlike() : handleLike()}
-            className="post-action-item"
-            style={{ 
-              color: liked ? '#1e3a8a' : '#555', 
-              background: 'transparent', 
-              border: 'none', 
-              cursor: 'pointer', 
-              padding: '8px', 
-              fontSize: 12, 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 6,
-              fontWeight: liked ? 'bold' : 'normal',
-              transition: 'color 0.3s ease, font-weight 0.3s ease'
-            }}
+            type="button"
+            className={`post-footer-action${liked ? ' active' : ''}`}
+            aria-pressed={!!liked}
           >
-            <span style={{ fontSize: 18 }}>👍</span>
-            <span>Like</span>
+            <span className="post-footer-icon">👍</span>
+            <span className="post-footer-label">Like</span>
           </button>
           <button
             onClick={() => setShowCommentInput(v => !v)}
-            className="post-action-item"
-            style={{ 
-              color: '#555', 
-              background: 'transparent', 
-              border: 'none', 
-              cursor: 'pointer', 
-              padding: '8px', 
-              fontSize: 12, 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 6 
-            }}
+            type="button"
+            className={`post-footer-action${showCommentInput ? ' active' : ''}`}
+            aria-expanded={!!showCommentInput}
           >
-            <span style={{ fontSize: 18 }}>💬</span>
-            Comment
+            <span className="post-footer-icon">💬</span>
+            <span className="post-footer-label">Comment</span>
           </button>
           <RepostButton
             originalPost={{
@@ -1248,8 +1229,6 @@ const RepostCard: React.FC<RepostCardProps> = ({
             formatTime={formatTime}
             isForum={context === 'forum'}
             isDonation={context === 'donation'}
-            style={{ color: '#555', padding: '8px', fontSize: 12 }}
-            className="post-action-item"
           />
       </div>
 

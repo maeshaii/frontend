@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import RepostModal from './RepostModal';
 import { repostPost, repostForumPost, repostDonation, getUserPoints } from '../services/api';
+import './postFooterActions.css';
 
 interface RepostButtonProps {
   originalPost: {
@@ -116,24 +117,18 @@ const RepostButton: React.FC<RepostButtonProps> = ({
     <>
       <button
         onClick={handleRepostClick}
-        style={{
-          background: 'none',
-          border: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          cursor: 'pointer',
-          color: isReposted ? '#28a745' : '#666',
-          fontSize: '14px',
-          fontWeight: '500',
-          ...style
-        }}
-        className={className}
+        type="button"
+        className={[
+          'post-footer-action',
+          isReposted ? 'active' : '',
+          className
+        ].filter(Boolean).join(' ')}
+        style={style}
       >
-        <span style={{ fontSize: '16px' }}>
+        <span className="post-footer-icon">
           {isReposted ? '🔄' : '🔄'}
         </span>
-        <span>{isReposted ? 'Reposted' : 'Repost'}</span>
+        <span className="post-footer-label">{isReposted ? 'Reposted' : 'Repost'}</span>
       </button>
 
       <RepostModal

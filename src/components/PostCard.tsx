@@ -23,6 +23,7 @@ import Reply from './Reply';
 import ReplyInput from './ReplyInput';
 import RepostButton from './RepostButton';
 import PostStatsRow from './PostStatsRow';
+import './postFooterActions.css';
 
 interface RepostItem {
   repost_id: number;
@@ -1763,58 +1764,27 @@ const PostCard: React.FC<PostCardProps> = ({
             )}
 
             {/* Repost Actions - Same as regular post actions */}
-            <div className="post-actions" style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              borderTop: '1px solid #e9ecef'
-            }}>
+            <div className="post-footer-actions">
               <button
                 onClick={() => {
                   console.log('Like button clicked for repost:', repostData?.repost_id, 'likedPosts:', likedPosts[repostData?.repost_id]);
                   likedPosts[repostData?.repost_id] ? handleUnlike() : handleLike();
                 }}
-                className="post-action-item"
-                style={{ 
-                  color: likedPosts[repostData?.repost_id] ? '#1e3a8a' : '#555', 
-                  background: 'transparent', 
-                  border: 'none', 
-                  cursor: 'pointer', 
-                  padding: '8px', 
-                  fontSize: 12, 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 6,
-                  fontWeight: likedPosts[repostData?.repost_id] ? 'bold' : 'normal'
-                }}
+                type="button"
+                className={`post-footer-action${likedPosts[repostData?.repost_id] ? ' active' : ''}`}
+                aria-pressed={!!likedPosts[repostData?.repost_id]}
               >
-                <span style={{ fontSize: 18 }}>👍</span>
-                <span>Like</span>
+                <span className="post-footer-icon">👍</span>
+                <span className="post-footer-label">Like</span>
               </button>
               <button
                 onClick={() => setShowCommentInput?.(prev => ({ ...prev, [repostData?.repost_id || post.post_id]: !prev[repostData?.repost_id || post.post_id] }))}
-                className="post-action-item"
-                style={{
-                  color: '#6c757d',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '8px 16px',
-                  borderRadius: 6,
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f8f9fa';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
+                type="button"
+                className={`post-footer-action${showCommentInput?.[repostData?.repost_id || post.post_id] ? ' active' : ''}`}
+                aria-expanded={!!showCommentInput?.[repostData?.repost_id || post.post_id]}
               >
-                <span style={{ fontSize: '14px' }}>💬</span>
-                Comment
+                <span className="post-footer-icon">💬</span>
+                <span className="post-footer-label">Comment</span>
               </button>
               <RepostButton
                 originalPost={{
@@ -1839,14 +1809,6 @@ const PostCard: React.FC<PostCardProps> = ({
                 formatTime={formatTime}
                 isForum={isForum}
                 isDonation={isDonation}
-                style={{
-                  color: repostedPosts[post.post_id] ? '#007bff' : '#6c757d',
-                  fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
-                  padding: '8px 16px',
-                  borderRadius: 6,
-                  transition: 'background-color 0.2s'
-                }}
-                className="post-action-item"
               />
             </div>
 
@@ -2607,60 +2569,28 @@ const PostCard: React.FC<PostCardProps> = ({
         animate={true}
       />
 
-      <div className="post-actions" style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        borderTop: '1px solid #e9ecef'
-      }}>
+      <div className="post-footer-actions">
         <button
           onClick={() => {
             console.log('Like button clicked for post:', post.post_id, 'likedPosts:', likedPosts[post.post_id]);
             console.log('Calling like/unlike handler');
             likedPosts[post.post_id] ? handleUnlike() : handleLike();
           }}
-          className="post-action-item"
-          style={{ 
-            color: likedPosts[post.post_id] ? '#1e3a8a' : '#555', 
-            background: 'transparent', 
-            border: 'none', 
-            cursor: 'pointer', 
-            padding: '8px', 
-            fontSize: 12, 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 6,
-            fontWeight: likedPosts[post.post_id] ? 'bold' : 'normal',
-            transition: 'color 0.3s ease, font-weight 0.3s ease'
-          }}
+          type="button"
+          className={`post-footer-action${likedPosts[post.post_id] ? ' active' : ''}`}
+          aria-pressed={!!likedPosts[post.post_id]}
         >
-          <span style={{ fontSize: 18 }}>👍</span>
-          <span>Like</span>
+          <span className="post-footer-icon">👍</span>
+          <span className="post-footer-label">Like</span>
         </button>
         <button
           onClick={() => setShowCommentInput?.(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
-          className="post-action-item"
-          style={{
-            color: '#6c757d',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '8px 16px',
-            borderRadius: 6,
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            transition: 'background-color 0.2s'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#f8f9fa';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }}
+          type="button"
+          className={`post-footer-action${showCommentInput?.[post.post_id] ? ' active' : ''}`}
+          aria-expanded={!!showCommentInput?.[post.post_id]}
         >
-          <span style={{ fontSize: '14px' }}>💬</span>
-          Comment
+          <span className="post-footer-icon">💬</span>
+          <span className="post-footer-label">Comment</span>
         </button>
         <RepostButton
           originalPost={{
@@ -2685,14 +2615,6 @@ const PostCard: React.FC<PostCardProps> = ({
           formatTime={formatTime}
           isForum={isForum}
           isDonation={isDonation}
-          style={{
-            color: repostedPosts[post.post_id] ? '#007bff' : '#6c757d',
-            fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
-            padding: '8px 16px',
-            borderRadius: 6,
-            transition: 'background-color 0.2s'
-          }}
-          className="post-action-item"
         />
       </div>
 

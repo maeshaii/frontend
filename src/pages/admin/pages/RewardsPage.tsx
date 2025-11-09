@@ -347,6 +347,25 @@ const RewardsPage: React.FC = () => {
       
       if (response.success) {
         alert('Reward request approved successfully! User will receive a notification with instructions.');
+        const requestId = selectedRequest.request_id;
+        const status = response.status || 'approved';
+        try {
+          localStorage.setItem(
+            'latestRewardRequestUpdate',
+            JSON.stringify({
+              requestId,
+              status,
+              timestamp: Date.now()
+            })
+          );
+        } catch (e) {
+          console.error('Error writing reward request update to localStorage:', e);
+        }
+        window.dispatchEvent(
+          new CustomEvent('rewardRequestUpdated', {
+            detail: { requestId, status }
+          })
+        );
         setShowApproveModal(false);
         setSelectedRequest(null);
         setInstructions('');
@@ -380,6 +399,24 @@ const RewardsPage: React.FC = () => {
       
       if (response.success) {
         alert('Merchandise released successfully! Points have been deducted and user has been notified.');
+        const status = response.request?.status || 'claimed';
+        try {
+          localStorage.setItem(
+            'latestRewardRequestUpdate',
+            JSON.stringify({
+              requestId,
+              status,
+              timestamp: Date.now()
+            })
+          );
+        } catch (e) {
+          console.error('Error writing reward request update to localStorage:', e);
+        }
+        window.dispatchEvent(
+          new CustomEvent('rewardRequestUpdated', {
+            detail: { requestId, status }
+          })
+        );
         await fetchRewardRequests();
         await fetchRewardHistory();
       } else {
