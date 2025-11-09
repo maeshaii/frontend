@@ -501,6 +501,29 @@ const NotificationPage: React.FC = () => {
               localStorage.setItem('pendingRepostId', repostId); // Store repost_id to display
               navigate('/donation');
               return;
+            } else {
+              // Default repost handling: open repost modal on dashboard
+              localStorage.removeItem('pendingPostView');
+              localStorage.setItem('pendingRepostView', repostId);
+              const userStr = localStorage.getItem('user');
+              const userData = userStr ? JSON.parse(userStr) : null;
+              const currentUserId = userData?.user_id || userData?.id || '';
+              console.log('Redirecting to dashboard for repost modal. userId:', currentUserId);
+              
+              if (currentUserId) {
+                const isPeso = !!(userData?.account_type?.peso);
+                const isAdmin = !!(userData?.account_type?.admin);
+                if (isPeso) {
+                  navigate(`/peso/dashboard/${currentUserId}`);
+                } else if (isAdmin) {
+                  navigate(`/ccict/dashboard/${currentUserId}`);
+                } else {
+                  navigate(`/dashboard/${currentUserId}`);
+                }
+              } else {
+                navigate('/dashboard');
+              }
+              return;
             }
           }
           
@@ -2288,16 +2311,17 @@ const NotificationPage: React.FC = () => {
                       if (repostIdMatch || postIdMatch) {
                         const repostId = repostIdMatch?.[1] || null;
                         const postId = postIdMatch?.[1] || null;
-                        // Detect repost context even if REPOST_ID isn't embedded
-                        const typeStr = (openNotif.type || '').toLowerCase();
-                        const contentStr = (openNotif.content || '').toLowerCase();
-                        const isRepostContext = !!repostId || typeStr.includes('repost') || contentStr.includes('your repost') || contentStr.includes('reposted');
                         setPostLoading(true);
                         
                         try {
-                          // If we have a repost ID, prioritize showing the repost UI
-                          const response = await api.get(`posts/${(postId || repostId)}/detail/`);
-                          if (response.data) {
+                          let response;
+                          if (repostId) {
+                            response = await api.get(`reposts/${repostId}/detail/`);
+                          } else if (postId) {
+                            response = await api.get(`posts/${postId}/detail/`);
+                          }
+
+                          if (response?.data) {
                             setOpenNotif(null);
                             const userStr = localStorage.getItem('user');
                             const user = userStr ? JSON.parse(userStr) : null;
