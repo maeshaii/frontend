@@ -10,6 +10,14 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Hide native password reveal icons so only our custom eye button shows */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear,
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-textfield-decoration-container {
+  display: none !important;
+}
+
 #root {
   min-height: 100vh;
   width: 100%;

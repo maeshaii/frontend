@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
 import { generateSpecificStats, fetchAlumniEmploymentStats, fetchCoordinatorRequestsCount } from '../../../services/api';
+import { normalizeStatusCounts } from '../statistics/index';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -20,34 +21,17 @@ const Dashboard = () => {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [timeAgo, setTimeAgo] = useState('');
   const [prevSnapshot, setPrevSnapshot] = useState<{ employed: number; absorb: number; unemployed: number; untracked: number; requests: number } | null>(null);
-  const [selectedYear, setSelectedYear] = useState<string>(() => {
-    try { return localStorage.getItem('dashYear') || 'ALL'; } catch { return 'ALL'; }
-  });
-  const [selectedProgram, setSelectedProgram] = useState<string>(() => {
-    try { return localStorage.getItem('dashProgram') || 'ALL'; } catch { return 'ALL'; }
-  });
+  const [selectedYear, setSelectedYear] = useState<string>('ALL');
+  const [selectedProgram, setSelectedProgram] = useState<string>('ALL');
 
+  // UNIFIED: Single effect to fetch all dashboard statistics
   useEffect(() => {
-    const fetchUntrackedCount = async () => {
+    const fetchAllStats = async () => {
+      setLoading(true);
+      setStatsLoading(true);
       try {
-        // Use the working alumni statistics endpoint directly to avoid 500 errors
+        // Fetch with selected filters for accurate display
         const data = await fetchAlumniEmploymentStats(selectedYear || 'ALL', selectedProgram || 'ALL');
-        // Get the pending count which represents untracked alumni
-        const untracked = Number(data?.status_counts?.Pending) || 0;
-        setUntrackedCount(untracked);
-      } catch (error) {
-        console.error('Error fetching untracked count:', error);
-        setUntrackedCount(0);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUntrackedCount();
-    // Listen for cross-page statistics updates (after imports)
-    const refreshAll = async () => {
-      try {
-        const data = await fetchAlumniEmploymentStats('ALL', 'ALL');
         const counts = data?.status_counts || data?.statusCounts || {};
         const employed = Number(counts.Employed) || 0;
         const unemployed = Number(counts.Unemployed) || 0;
@@ -56,31 +40,68 @@ const Dashboard = () => {
           Number((counts as any).Absorbed) ||
           Number((counts as any).Absorbed_Count) || 0;
         const pending = Number(counts.Pending) || 0;
+        
+        // Calculate employed pure (not absorbed)
         const employedPure = Math.max(employed - absorb, 0);
         const total = employedPure + absorb + unemployed + pending;
+        
+        // Store snapshot for delta calculation
+        const nextSnapshot = { 
+          employed: employedPure, 
+          absorb, 
+          unemployed, 
+          untracked: pending, 
+          requests: coordinatorReqCount 
+        };
+        setPrevSnapshot((prev) => prev ?? nextSnapshot);
+        
+        // Update all state variables in one batch
+        setUntrackedCount(pending);
         setEmployedCount(employedPure);
         setUnemployedCount(unemployed);
         setAbsorbedCount(absorb);
         setTotalAlumni(total);
+        
+        // Calculate percentages
         const denom = total > 0 ? total : 1;
         setEmployedPct((employedPure / denom) * 100);
         setUnemployedPct((unemployed / denom) * 100);
         setAbsorbedPct((absorb / denom) * 100);
-      } catch (e) {
-        console.error('Dashboard refresh after stats update failed:', e);
+        setLastUpdated(new Date());
+        
+        // Update snapshot after state updates
+        setTimeout(() => setPrevSnapshot(nextSnapshot), 0);
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+        setUntrackedCount(0);
+        setTotalAlumni(0);
+      } finally {
+        setLoading(false);
+        setStatsLoading(false);
       }
     };
+
+    // Initial fetch
+    fetchAllStats();
+    
+    // Set up auto-refresh every 60 seconds
+    const intervalId = setInterval(fetchAllStats, 60000);
+    
+    // Listen for cross-page statistics updates (after imports)
     const onStorage = (e: StorageEvent) => {
-      if (e.key === 'statsUpdatedAt') refreshAll();
+      if (e.key === 'statsUpdatedAt') fetchAllStats();
     };
-    const onCustom = () => refreshAll();
+    const onCustom = () => fetchAllStats();
+    
     window.addEventListener('storage', onStorage);
     window.addEventListener('stats-update' as any, onCustom as any);
+    
     return () => {
+      clearInterval(intervalId);
       window.removeEventListener('storage', onStorage);
       window.removeEventListener('stats-update' as any, onCustom as any);
     };
-  }, []);
+  }, [selectedYear, selectedProgram]);
 
   // Fetch coordinator requests count (Completed sent by coordinators)
   useEffect(() => {
@@ -98,47 +119,6 @@ const Dashboard = () => {
     const interval = setInterval(loadCoordinatorReq, 10000);
     return () => clearInterval(interval);
   }, []);
-
-  // Fetch employment stats for charts (employed, absorbed, unemployed)
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const data = await fetchAlumniEmploymentStats('ALL', 'ALL');
-        const counts = data?.status_counts || data?.statusCounts || {};
-        const employed = Number(counts.Employed) || 0;
-        const unemployed = Number(counts.Unemployed) || 0;
-        const absorb =
-          Number(counts.Absorb) ||
-          Number((counts as any).Absorbed) ||
-          Number((counts as any).Absorbed_Count) || 0;
-        const pending = Number(counts.Pending) || 0;
-        const employedPure = Math.max(employed - absorb, 0);
-        const total = employedPure + absorb + unemployed + pending;
-        // Store snapshot for delta calculation on next tick
-        const nextSnapshot = { employed: employedPure, absorb, unemployed, untracked: pending, requests: coordinatorReqCount };
-        setPrevSnapshot((prev) => prev ?? { employed: employedCount, absorb: absorbedCount, unemployed: unemployedCount, untracked: untrackedCount, requests: coordinatorReqCount });
-        setEmployedCount(employedPure);
-        setUnemployedCount(unemployed);
-        setAbsorbedCount(absorb);
-        setTotalAlumni(total);
-        const denom = total > 0 ? total : 1;
-        setEmployedPct((employedPure / denom) * 100);
-        setUnemployedPct((unemployed / denom) * 100);
-        setAbsorbedPct((absorb / denom) * 100);
-        setLastUpdated(new Date());
-        // After state updates, set snapshot to current for next comparison
-        setTimeout(() => setPrevSnapshot(nextSnapshot), 0);
-      } catch (e) {
-        console.error('Error fetching alumni stats:', e);
-      } finally {
-        setStatsLoading(false);
-      }
-    };
-
-    fetchStats();
-    const id = setInterval(fetchStats, 60000);
-    return () => clearInterval(id);
-  }, [selectedYear, selectedProgram]);
 
   // Update "updated ago" clock every second
   useEffect(() => {
