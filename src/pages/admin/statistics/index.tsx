@@ -40,6 +40,38 @@ const barColors: Record<string, string> = {
   // Removed 'Absorb' - now shown as indicator on 'Employed'
 };
 
+export const normalizeStatusCounts = (raw: { [key: string]: number } = {}) => {
+  const result: { [key: string]: number } = {
+    Employed: 0,
+    Unemployed: 0,
+    Absorb: 0,
+    Pending: 0,
+    Absorbed_Count: 0,
+  };
+
+  Object.entries(raw || {}).forEach(([key, value]) => {
+    const k = (key || '').toString().toLowerCase();
+    const n = Number(value) || 0;
+    if (k.includes('unemploy')) {
+      result.Unemployed += n;
+    } else if (k.includes('employ')) {
+      result.Employed += n;
+    } else if (k.includes('absorbed_count')) {
+      result.Absorbed_Count += n;
+    } else if (k.includes('absorb')) {
+      result.Absorb += n;
+    } else if (k.includes('pending')) {
+      result.Pending += n;
+    } else if (k.includes('active')) {
+      result.Pending += n;
+    } else {
+      result.Pending += n;
+    }
+  });
+
+  return result;
+};
+
 export default function Statistics() {
   const [selectedYear, setSelectedYear] = useState('ALL');
   const [selectedProgram, setSelectedProgram] = useState('ALL');
@@ -99,43 +131,6 @@ export default function Statistics() {
     loadEmploymentStats();
   }, [loadEmploymentStats]);
 
-
-  // Helper: normalize arbitrary backend status keys to canonical buckets
-  const normalizeStatusCounts = (raw: { [key: string]: number } = {}) => {
-    const result: { [key: string]: number } = {
-      Employed: 0,
-      Unemployed: 0,
-      Absorb: 0,
-      Pending: 0,
-      Absorbed_Count: 0,  // Add this for the absorbed indicator
-    };
-
-    Object.entries(raw || {}).forEach(([key, value]) => {
-      const k = (key || '').toString().toLowerCase();
-      const n = Number(value) || 0;
-      if (k.includes('unemploy')) {
-        result.Unemployed += n;
-      } else if (k.includes('employ')) {
-        // Count only non-unemployed employ terms
-        result.Employed += n;
-      } else if (k.includes('absorbed_count')) {
-        // Keep Absorbed_Count separate for the indicator
-        result.Absorbed_Count += n;
-      } else if (k.includes('absorb')) {
-        result.Absorb += n;
-      } else if (k.includes('pending')) {
-        result.Pending += n;
-      } else if (k.includes('active')) {
-        // Treat 'active' user_status as Pending for the tracker context
-        result.Pending += n;
-      } else {
-        // Unknown bucket -> Pending by default
-        result.Pending += n;
-      }
-    });
-
-    return result;
-  };
 
   // Build chart data from normalized buckets in a stable order
   const chartData = (() => {

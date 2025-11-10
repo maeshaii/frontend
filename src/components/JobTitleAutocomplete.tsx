@@ -35,6 +35,10 @@ const JobTitleAutocomplete: React.FC<JobTitleAutocompleteProps> = ({
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout>();
 
+  useEffect(() => {
+    setInputValue(value || '');
+  }, [value]);
+
   // Debounced search function
   const searchJobs = async (query: string) => {
     if (query.length < 2) {
@@ -109,6 +113,10 @@ const JobTitleAutocomplete: React.FC<JobTitleAutocompleteProps> = ({
         user_id: userId,
         from_autocomplete: fromAutocomplete
       });
+
+      const normalizedPosition = response.data.normalized_position || position;
+      setInputValue(normalizedPosition);
+      onChange?.(normalizedPosition);
 
       if (response.data.needs_confirmation) {
         setShowAlignmentConfirmation(true);

@@ -180,16 +180,6 @@ const ViewStats: React.FC = () => {
               <p style={styles.emptyText}>
                 No alumni data is available. Try importing data or generating statistics.
               </p>
-              <div style={styles.emptyActions}>
-                <button style={styles.emptyButton} onClick={() => setShowExportModal(true)}>
-                  <FaUpload style={{ marginRight: '8px' }} />
-                  Import Data
-                </button>
-                <button style={styles.emptyButton} onClick={handleGenerateClick}>
-                  <FaCog style={{ marginRight: '8px' }} />
-                  Generate Statistics
-                </button>
-              </div>
             </div>
           ) : (
             <div style={styles.cardsGrid}>
@@ -396,7 +386,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   cardsContainer: {
     padding: '8px 32px 32px 32px',
     display: 'flex',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
+    width: '100%',
   },
   cardsHeader: {
     textAlign: 'center',
@@ -519,7 +510,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '80px 20px',
+    minHeight: '50vh',
     textAlign: 'center',
+    width: '100%',
   },
   emptyIcon: {
     fontSize: '64px',
@@ -535,26 +528,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   emptyText: {
     fontSize: '16px',
     color: '#6b7280',
-    margin: '0 0 24px 0',
+    margin: 0,
     maxWidth: '400px',
-  },
-  emptyActions: {
-    display: 'flex',
-    gap: '12px',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  emptyButton: {
-    background: '#3b82f6',
-    color: 'white',
-    border: 'none',
-    padding: '12px 20px',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontWeight: '600',
-    display: 'flex',
-    alignItems: 'center',
-    transition: 'all 0.2s ease',
   },
 
   // Modal styles
