@@ -188,6 +188,23 @@ export const trackerApi = {
   async getResponsesList(): Promise<any> {
     return apiRequest('tracker/list-responses/');
   },
+
+  /**
+   * Save tracker form draft (auto-save)
+   */
+  async saveDraft(userId: string, answers: Record<string, any>): Promise<any> {
+    return apiRequest('tracker/save-draft/', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, answers }),
+    });
+  },
+
+  /**
+   * Load saved draft for a user
+   */
+  async loadDraft(userId: string): Promise<any> {
+    return apiRequest(`tracker/load-draft/?user_id=${userId}`);
+  },
 };
 
 // Utility functions for tracker logic
