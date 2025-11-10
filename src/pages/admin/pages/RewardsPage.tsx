@@ -95,7 +95,23 @@ const RewardsPage: React.FC = () => {
     reply: 2,
     post: 0,
     post_with_photo: 15,
-    tracker_form: 0
+    tracker_form: 0,
+    // Rate limiting settings
+    rate_limiting_enabled: true,
+    daily_like_limit: 100,
+    daily_comment_limit: 50,
+    daily_share_limit: 20,
+    daily_reply_limit: 50,
+    daily_post_limit: 10,
+    daily_post_with_photo_limit: 10,
+    daily_tracker_form_limit: 1,
+    hourly_like_limit: 20,
+    hourly_comment_limit: 10,
+    hourly_share_limit: 5,
+    hourly_reply_limit: 10,
+    hourly_post_limit: 2,
+    hourly_post_with_photo_limit: 2,
+    hourly_tracker_form_limit: 1,
   });
   const [pointsSettingsLoading, setPointsSettingsLoading] = useState(false);
   const [voucherCode, setVoucherCode] = useState('');
@@ -199,7 +215,23 @@ const RewardsPage: React.FC = () => {
           reply: response.settings.reply_points || 0,
           post: response.settings.post_points || 0,
           post_with_photo: response.settings.post_with_photo_points || 0,
-          tracker_form: response.settings.tracker_form_points || 0
+          tracker_form: response.settings.tracker_form_points || 0,
+          // Rate limiting settings
+          rate_limiting_enabled: response.settings.rate_limiting_enabled !== false,
+          daily_like_limit: response.settings.daily_like_limit || 100,
+          daily_comment_limit: response.settings.daily_comment_limit || 50,
+          daily_share_limit: response.settings.daily_share_limit || 20,
+          daily_reply_limit: response.settings.daily_reply_limit || 50,
+          daily_post_limit: response.settings.daily_post_limit || 10,
+          daily_post_with_photo_limit: response.settings.daily_post_with_photo_limit || 10,
+          daily_tracker_form_limit: response.settings.daily_tracker_form_limit || 1,
+          hourly_like_limit: response.settings.hourly_like_limit || 20,
+          hourly_comment_limit: response.settings.hourly_comment_limit || 10,
+          hourly_share_limit: response.settings.hourly_share_limit || 5,
+          hourly_reply_limit: response.settings.hourly_reply_limit || 10,
+          hourly_post_limit: response.settings.hourly_post_limit || 2,
+          hourly_post_with_photo_limit: response.settings.hourly_post_with_photo_limit || 2,
+          hourly_tracker_form_limit: response.settings.hourly_tracker_form_limit || 1,
         });
       } else {
         // Use default values if API fails
@@ -211,7 +243,22 @@ const RewardsPage: React.FC = () => {
           reply: 2,
           post: 0,
           post_with_photo: 15,
-          tracker_form: 0
+          tracker_form: 0,
+          rate_limiting_enabled: true,
+          daily_like_limit: 100,
+          daily_comment_limit: 50,
+          daily_share_limit: 20,
+          daily_reply_limit: 50,
+          daily_post_limit: 10,
+          daily_post_with_photo_limit: 10,
+          daily_tracker_form_limit: 1,
+          hourly_like_limit: 20,
+          hourly_comment_limit: 10,
+          hourly_share_limit: 5,
+          hourly_reply_limit: 10,
+          hourly_post_limit: 2,
+          hourly_post_with_photo_limit: 2,
+          hourly_tracker_form_limit: 1,
         });
       }
     } catch (error) {
@@ -225,7 +272,22 @@ const RewardsPage: React.FC = () => {
         reply: 2,
         post: 0,
         post_with_photo: 15,
-        tracker_form: 0
+        tracker_form: 0,
+        rate_limiting_enabled: true,
+        daily_like_limit: 100,
+        daily_comment_limit: 50,
+        daily_share_limit: 20,
+        daily_reply_limit: 50,
+        daily_post_limit: 10,
+        daily_post_with_photo_limit: 10,
+        daily_tracker_form_limit: 1,
+        hourly_like_limit: 20,
+        hourly_comment_limit: 10,
+        hourly_share_limit: 5,
+        hourly_reply_limit: 10,
+        hourly_post_limit: 2,
+        hourly_post_with_photo_limit: 2,
+        hourly_tracker_form_limit: 1,
       });
     }
   };
@@ -2766,7 +2828,7 @@ const RewardsPage: React.FC = () => {
               padding: '20px 28px',
               borderRadius: '12px',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-              width: '750px',
+              width: '900px',
               maxWidth: '95%',
               maxHeight: '75vh',
               overflow: 'auto'
@@ -2807,7 +2869,7 @@ const RewardsPage: React.FC = () => {
               </div>
 
               <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '16px' }}>
-                Configure how many points are awarded for each engagement action.
+                Configure points and rate limits to prevent spam.
               </p>
 
               {/* Enable/Disable Toggle */}
@@ -3011,6 +3073,131 @@ const RewardsPage: React.FC = () => {
                       textAlign: 'center'
                     }}
                   />
+                </div>
+              </div>
+
+              {/* Rate Limiting Section - Styled same as Points System */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between', 
+                padding: '10px 14px', 
+                background: pointsSettings.rate_limiting_enabled ? '#f0fdf4' : '#fef2f2', 
+                borderRadius: '8px', 
+                marginTop: '24px',
+                marginBottom: '20px',
+                border: `2px solid ${pointsSettings.rate_limiting_enabled ? '#10b981' : '#ef4444'}`
+              }}>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937', marginBottom: '2px' }}>
+                    Rate Limiting (Anti-Spam)
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                    {pointsSettings.rate_limiting_enabled ? 'Rate limiting is active' : 'Rate limiting is disabled'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPointsSettings({ ...pointsSettings, rate_limiting_enabled: !pointsSettings.rate_limiting_enabled })}
+                  style={{
+                    width: '56px',
+                    height: '32px',
+                    borderRadius: '16px',
+                    border: 'none',
+                    background: pointsSettings.rate_limiting_enabled ? '#10b981' : '#9ca3af',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    transition: 'all 0.3s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '4px',
+                    boxShadow: pointsSettings.rate_limiting_enabled ? '0 2px 4px rgba(16, 185, 129, 0.3)' : '0 2px 4px rgba(0, 0, 0, 0.1)'
+                  }}
+                >
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: 'white',
+                    transition: 'transform 0.3s',
+                    transform: pointsSettings.rate_limiting_enabled ? 'translateX(24px)' : 'translateX(0)',
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                  }} />
+                </button>
+              </div>
+
+              {/* Daily Limits */}
+              <div style={{ marginBottom: '20px', opacity: pointsSettings.rate_limiting_enabled ? 1 : 0.5, pointerEvents: pointsSettings.rate_limiting_enabled ? 'auto' : 'none' }}>
+                <h4 style={{ fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>
+                  Daily Limits (per 24 hours)
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                  {[
+                    { key: 'daily_like_limit', label: 'Likes', icon: '❤️' },
+                    { key: 'daily_comment_limit', label: 'Comments', icon: '💬' },
+                    { key: 'daily_share_limit', label: 'Shares', icon: '🔄' },
+                    { key: 'daily_reply_limit', label: 'Replies', icon: '↩️' },
+                    { key: 'daily_post_limit', label: 'Posts', icon: '📝' },
+                    { key: 'daily_post_with_photo_limit', label: 'Posts w/ Photo', icon: '📷' },
+                    { key: 'daily_tracker_form_limit', label: 'Tracker Forms', icon: '📋' },
+                  ].map(({ key, label, icon }) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#f9fafb', borderRadius: '6px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: '500', color: '#1f2937' }}>
+                        {icon} {label}
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={pointsSettings[key as keyof typeof pointsSettings] as number}
+                        onChange={(e) => setPointsSettings({ ...pointsSettings, [key]: parseInt(e.target.value) || 0 })}
+                        style={{
+                          width: '55px',
+                          padding: '4px 6px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          textAlign: 'center'
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Hourly Limits */}
+              <div style={{ opacity: pointsSettings.rate_limiting_enabled ? 1 : 0.5, pointerEvents: pointsSettings.rate_limiting_enabled ? 'auto' : 'none' }}>
+                <h4 style={{ fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>
+                  Hourly Limits (per hour)
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                  {[
+                    { key: 'hourly_like_limit', label: 'Likes', icon: '❤️' },
+                    { key: 'hourly_comment_limit', label: 'Comments', icon: '💬' },
+                    { key: 'hourly_share_limit', label: 'Shares', icon: '🔄' },
+                    { key: 'hourly_reply_limit', label: 'Replies', icon: '↩️' },
+                    { key: 'hourly_post_limit', label: 'Posts', icon: '📝' },
+                    { key: 'hourly_post_with_photo_limit', label: 'Posts w/ Photo', icon: '📷' },
+                    { key: 'hourly_tracker_form_limit', label: 'Tracker Forms', icon: '📋' },
+                  ].map(({ key, label, icon }) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#f9fafb', borderRadius: '6px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: '500', color: '#1f2937' }}>
+                        {icon} {label}
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={pointsSettings[key as keyof typeof pointsSettings] as number}
+                        onChange={(e) => setPointsSettings({ ...pointsSettings, [key]: parseInt(e.target.value) || 0 })}
+                        style={{
+                          width: '55px',
+                          padding: '4px 6px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          textAlign: 'center'
+                        }}
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
 

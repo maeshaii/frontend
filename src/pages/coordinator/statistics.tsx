@@ -351,144 +351,178 @@ export default function Statistics() {
   return (
     <div style={{
       padding: '32px',
-      backgroundColor: '#f3f4f6',
+      backgroundColor: '#f8fafc',
       minHeight: '100vh'
     }}>
-      {/* Header Card - Matching Import UI Style */}
+      {/* Header Section */}
       <div style={{
-        backgroundColor: 'white',
-        borderRadius: '16px',
-        padding: '28px',
-        marginBottom: '32px',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-        border: '1px solid #e5e7eb'
+        marginBottom: '32px'
       }}>
-        {/* Title */}
-        <div style={{
-          marginBottom: '24px',
-          paddingBottom: '20px',
-          borderBottom: '2px solid #f1f5f9'
+        <h1 style={{
+          margin: '0 0 8px 0',
+          fontSize: '32px',
+          fontWeight: '800',
+          color: '#0f172a',
+          letterSpacing: '-0.025em'
         }}>
-          <h2 style={{
-            margin: 0,
-            fontSize: '24px',
-            fontWeight: '800',
-            color: '#1e293b',
-            letterSpacing: '-0.025em'
-          }}>
-            COMPANIES DIRECTORY
-          </h2>
+          Companies Directory
+        </h1>
+        <p style={{
+          margin: 0,
+          fontSize: '16px',
+          color: '#64748b',
+          fontWeight: '400'
+        }}>
+          Manage and view company information and OJT student assignments
+        </p>
+      </div>
+
+      {/* Statistics Cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: '24px',
+        marginBottom: '32px'
+      }}>
+        {/* Companies Card */}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '16px',
+          padding: '24px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
+          border: '1px solid #e2e8f0',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: '-20px',
+            right: '-20px',
+            width: '120px',
+            height: '120px',
+            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%)',
+            borderRadius: '50%'
+          }}></div>
+          <div>
+            <div style={{
+              fontSize: '13px',
+              color: '#64748b',
+              fontWeight: '600',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              marginBottom: '8px'
+            }}>
+              Total Companies
+            </div>
+            <div style={{
+              fontSize: '32px',
+              fontWeight: '800',
+              color: '#1e293b',
+              lineHeight: '1'
+            }}>
+              {totalCompanies}
+            </div>
+          </div>
         </div>
 
-        {/* Filters and Action Buttons */}
-        <div style={{ 
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '20px', 
-          flexWrap: 'wrap'
+        {/* Students Card */}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '16px',
+          padding: '24px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
+          border: '1px solid #e2e8f0',
+          position: 'relative',
+          overflow: 'hidden'
         }}>
-          {/* Statistics Display */}
           <div style={{
-            display: 'flex',
-            gap: '24px',
-            alignItems: 'center',
-            flexWrap: 'wrap'
-          }}>
+            position: 'absolute',
+            top: '-20px',
+            right: '-20px',
+            width: '120px',
+            height: '120px',
+            background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%)',
+            borderRadius: '50%'
+          }}></div>
+          <div>
             <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
+              fontSize: '13px',
+              color: '#64748b',
+              fontWeight: '600',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              marginBottom: '8px'
             }}>
-              <span style={{
-                fontSize: '13px',
-                color: '#374151',
-                fontWeight: '600',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>
-                Companies
-              </span>
-              <span style={{
-                fontSize: '20px',
-                fontWeight: '800',
-                color: '#3b82f6'
-              }}>
-                {totalCompanies}
-              </span>
+              Total Students
             </div>
             <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
+              fontSize: '32px',
+              fontWeight: '800',
+              color: '#1e293b',
+              lineHeight: '1'
             }}>
-              <span style={{
-                fontSize: '13px',
-                color: '#374151',
-                fontWeight: '600',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>
-                Students
-              </span>
-              <span style={{
-                fontSize: '20px',
-                fontWeight: '800',
-                color: '#8b5cf6'
-              }}>
-                {totalStudents}
-              </span>
+              {totalStudents}
             </div>
           </div>
-          
-          {/* Action Button */}
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'flex-start', 
-            gap: '12px',
-            marginLeft: 'auto',
-            flexWrap: 'wrap',
-            paddingTop: '0'
-          }}>
-            <button
-              onClick={exportAllCompanyDetails}
-              disabled={exporting || companies.length === 0}
-              style={{
-                padding: '11px 20px',
-                backgroundColor: exporting || companies.length === 0 ? '#cbd5e1' : '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '10px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: exporting || companies.length === 0 ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s ease',
-                boxShadow: exporting || companies.length === 0 ? 'none' : '0 2px 4px rgba(59, 130, 246, 0.3)',
-                opacity: exporting || companies.length === 0 ? 0.6 : 1
-              }}
-              onMouseEnter={(e) => {
-                if (!exporting && companies.length > 0) {
-                  const target = e.currentTarget as HTMLButtonElement;
-                  target.style.backgroundColor = '#2563eb';
-                  target.style.transform = 'translateY(-2px)';
-                  target.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!exporting && companies.length > 0) {
-                  const target = e.currentTarget as HTMLButtonElement;
-                  target.style.backgroundColor = '#3b82f6';
-                  target.style.transform = 'translateY(0)';
-                  target.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
-                }
-              }}
-            >
-              {exporting ? (
-                <span>Exporting...</span>
-              ) : (
-                <span>Export Company Details</span>
-              )}
-            </button>
-          </div>
+        </div>
+
+        {/* Export Button Card */}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '16px',
+          padding: '24px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
+          border: '1px solid #e2e8f0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <button
+            onClick={exportAllCompanyDetails}
+            disabled={exporting || companies.length === 0}
+            style={{
+              padding: '14px 28px',
+              background: exporting || companies.length === 0 
+                ? 'linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%)'
+                : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '12px',
+              fontSize: '15px',
+              fontWeight: '700',
+              cursor: exporting || companies.length === 0 ? 'not-allowed' : 'pointer',
+              transition: 'all 0.3s ease',
+              boxShadow: exporting || companies.length === 0 
+                ? 'none' 
+                : '0 4px 6px rgba(59, 130, 246, 0.3), 0 2px 4px rgba(59, 130, 246, 0.2)',
+              opacity: exporting || companies.length === 0 ? 0.6 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              width: '100%',
+              justifyContent: 'center'
+            }}
+            onMouseEnter={(e) => {
+              if (!exporting && companies.length > 0) {
+                const target = e.currentTarget as HTMLButtonElement;
+                target.style.transform = 'translateY(-2px)';
+                target.style.boxShadow = '0 8px 12px rgba(59, 130, 246, 0.4), 0 4px 6px rgba(59, 130, 246, 0.3)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!exporting && companies.length > 0) {
+                const target = e.currentTarget as HTMLButtonElement;
+                target.style.transform = 'translateY(0)';
+                target.style.boxShadow = '0 4px 6px rgba(59, 130, 246, 0.3), 0 2px 4px rgba(59, 130, 246, 0.2)';
+              }
+            }}
+          >
+            {exporting ? (
+              <span>Exporting...</span>
+            ) : (
+              <span>Export Company Details</span>
+            )}
+          </button>
         </div>
       </div>
       
@@ -496,10 +530,37 @@ export default function Statistics() {
       <div style={{
         backgroundColor: 'white',
         borderRadius: '16px',
-        padding: '28px',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-        border: '1px solid #e5e7eb'
+        padding: '0',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06)',
+        border: '1px solid #e2e8f0',
+        overflow: 'hidden'
       }}>
+        {/* Table Header */}
+        <div style={{
+          padding: '24px 28px',
+          borderBottom: '2px solid #f1f5f9',
+          backgroundColor: '#fafbfc'
+        }}>
+          <h3 style={{
+            margin: 0,
+            fontSize: '18px',
+            fontWeight: '700',
+            color: '#1e293b'
+          }}>
+            Company List
+          </h3>
+          <p style={{
+            margin: '4px 0 0 0',
+            fontSize: '14px',
+            color: '#64748b'
+          }}>
+            Click on a company to view details
+          </p>
+        </div>
+
+        <div style={{
+          padding: '28px'
+        }}>
 
         {companies.length === 0 ? (
           <div style={{
@@ -509,18 +570,6 @@ export default function Statistics() {
             borderRadius: '12px',
             border: '1px solid #e5e7eb'
           }}>
-            <div style={{
-              width: '64px',
-              height: '64px',
-              backgroundColor: '#f3f4f6',
-              borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px'
-            }}>
-              <span style={{ fontSize: '32px' }}>🏢</span>
-            </div>
             <p style={{
               fontSize: '16px',
               color: '#6b7280',
@@ -560,42 +609,45 @@ export default function Statistics() {
               borderCollapse: 'separate',
               borderSpacing: '0'
             }}>
-              <thead style={{
-                position: 'sticky',
-                top: '0',
-                zIndex: 10,
-                backgroundColor: 'white'
-              }}>
+              <thead>
                 <tr style={{
-                  backgroundColor: '#f8fafc',
-                  borderBottom: '2px solid #e2e8f0'
+                  backgroundColor: '#f8fafc'
                 }}>
                   <th style={{
                     padding: '16px 20px',
                     textAlign: 'left',
-                    fontSize: '14px',
+                    fontSize: '13px',
                     fontWeight: '700',
-                    color: '#1e293b',
-                    width: '100px'
+                    color: '#475569',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    width: '80px',
+                    borderBottom: '2px solid #e2e8f0'
                   }}>
                     No.
                   </th>
                   <th style={{
                     padding: '16px 20px',
                     textAlign: 'left',
-                    fontSize: '14px',
+                    fontSize: '13px',
                     fontWeight: '700',
-                    color: '#1e293b'
+                    color: '#475569',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    borderBottom: '2px solid #e2e8f0'
                   }}>
                     Company Name
                   </th>
                   <th style={{
                     padding: '16px 20px',
                     textAlign: 'center',
-                    fontSize: '14px',
+                    fontSize: '13px',
                     fontWeight: '700',
-                    color: '#1e293b',
-                    width: '180px'
+                    color: '#475569',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    width: '180px',
+                    borderBottom: '2px solid #e2e8f0'
                   }}>
                     OJT Students
                   </th>
@@ -605,29 +657,46 @@ export default function Statistics() {
                 {companies.map((company, index) => (
                   <tr
                     key={index}
-            style={{
+                    style={{
                       borderBottom: index < companies.length - 1 ? '1px solid #f1f5f9' : 'none',
-                      transition: 'background-color 0.2s ease',
-                      cursor: 'pointer'
+                      transition: 'all 0.2s ease',
+                      cursor: 'pointer',
+                      backgroundColor: index % 2 === 0 ? 'white' : '#fafbfc'
                     }}
-            onClick={() => handleCompanyClick(company)}
-            onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#f8fafc';
-            }}
-            onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'white';
+                    onClick={() => handleCompanyClick(company)}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#eff6ff';
+                      e.currentTarget.style.transform = 'scale(1.01)';
+                      e.currentTarget.style.boxShadow = '0 4px 6px rgba(59, 130, 246, 0.1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'white' : '#fafbfc';
+                      e.currentTarget.style.transform = 'scale(1)';
+                      e.currentTarget.style.boxShadow = 'none';
                     }}
                   >
                     <td style={{
-                      padding: '20px',
+                      padding: '18px 20px',
                       fontSize: '14px',
                       color: '#64748b',
                       fontWeight: '600'
                     }}>
-                      {index + 1}
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '8px',
+                        backgroundColor: '#f1f5f9',
+                        color: '#475569',
+                        fontWeight: '700'
+                      }}>
+                        {index + 1}
+                      </div>
                     </td>
                     <td style={{
-                      padding: '20px',
+                      padding: '18px 20px',
                       fontSize: '15px',
                       color: '#1e293b',
                       fontWeight: '600'
@@ -635,17 +704,21 @@ export default function Statistics() {
                       {company.company_name}
                     </td>
                     <td style={{
-                      padding: '20px',
+                      padding: '18px 20px',
                       textAlign: 'center'
                     }}>
                       <span style={{
-                        display: 'inline-block',
-                        padding: '6px 16px',
-                        backgroundColor: '#dbeafe',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '8px 18px',
+                        background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
                         color: '#1e40af',
-                        borderRadius: '20px',
+                        borderRadius: '12px',
                         fontSize: '14px',
-                        fontWeight: '700'
+                        fontWeight: '700',
+                        boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)',
+                        minWidth: '60px'
                       }}>
                         {company.count}
                       </span>
@@ -654,8 +727,9 @@ export default function Statistics() {
                 ))}
               </tbody>
             </table>
-              </div>
+          </div>
         )}
+        </div>
       </div>
 
       {/* Company Details Modal */}
@@ -812,118 +886,6 @@ export default function Statistics() {
               </div>
             )}
 
-            {/* Students List */}
-            <div>
-              <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#1e293b' }}>
-                OJT Students ({companyStudents.length})
-              </h3>
-              {loadingStudents ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                  <p style={{ color: '#64748b', fontSize: '14px' }}>Loading students...</p>
-                </div>
-              ) : companyStudents.length === 0 ? (
-                <div style={{
-                  textAlign: 'center',
-                  padding: '40px 20px',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '12px'
-                }}>
-                  <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>No students found</p>
-                </div>
-              ) : (
-                <div style={{
-                  maxHeight: '400px',
-                  overflowY: 'auto',
-                  borderRadius: '12px',
-                  border: '1px solid #e2e8f0'
-                }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead style={{
-                      position: 'sticky',
-                      top: 0,
-                      backgroundColor: '#f8fafc',
-                      zIndex: 1
-                    }}>
-                      <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
-                        <th style={{
-                          padding: '12px 16px',
-                          textAlign: 'left',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          color: '#1e293b',
-                          width: '50px'
-                        }}>No.</th>
-                        <th style={{
-                          padding: '12px 16px',
-                          textAlign: 'left',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          color: '#1e293b'
-                        }}>CTU ID</th>
-                        <th style={{
-                          padding: '12px 16px',
-                          textAlign: 'left',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          color: '#1e293b'
-                        }}>Name</th>
-                        <th style={{
-                          padding: '12px 16px',
-                          textAlign: 'center',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          color: '#1e293b',
-                          width: '120px'
-                        }}>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {companyStudents.map((student, index) => (
-                        <tr key={index} style={{
-                          borderBottom: index < companyStudents.length - 1 ? '1px solid #f1f5f9' : 'none',
-                          backgroundColor: index % 2 === 0 ? 'white' : '#fafbfc'
-                        }}>
-                          <td style={{
-                            padding: '14px 16px',
-                            fontSize: '13px',
-                            color: '#64748b',
-                            fontWeight: '500'
-                          }}>{index + 1}</td>
-                          <td style={{
-                            padding: '14px 16px',
-                            fontSize: '13px',
-                            color: '#1e293b',
-                            fontWeight: '600'
-                          }}>{student.ctu_id}</td>
-                          <td style={{
-                            padding: '14px 16px',
-                            fontSize: '13px',
-                            color: '#1e293b',
-                            fontWeight: '500'
-                          }}>{student.first_name} {student.last_name}</td>
-                          <td style={{
-                            padding: '14px 16px',
-                            textAlign: 'center'
-                          }}>
-                            <span style={{
-                              display: 'inline-block',
-                              padding: '4px 12px',
-                              borderRadius: '12px',
-                              fontSize: '12px',
-                              fontWeight: '600',
-                              backgroundColor: student.status === 'Completed' ? '#dcfce7' : '#fef3c7',
-                              color: student.status === 'Completed' ? '#166534' : '#92400e'
-                            }}>
-                              {student.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       )}

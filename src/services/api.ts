@@ -1168,6 +1168,21 @@ export const updateEngagementPointsSettings = async (settings: {
   post: number;
   post_with_photo: number;
   tracker_form: number;
+  rate_limiting_enabled?: boolean;
+  daily_like_limit?: number;
+  daily_comment_limit?: number;
+  daily_share_limit?: number;
+  daily_reply_limit?: number;
+  daily_post_limit?: number;
+  daily_post_with_photo_limit?: number;
+  daily_tracker_form_limit?: number;
+  hourly_like_limit?: number;
+  hourly_comment_limit?: number;
+  hourly_share_limit?: number;
+  hourly_reply_limit?: number;
+  hourly_post_limit?: number;
+  hourly_post_with_photo_limit?: number;
+  hourly_tracker_form_limit?: number;
 }) => {
   const response = await api.post('engagement/points-settings/', settings);
   return response.data;
