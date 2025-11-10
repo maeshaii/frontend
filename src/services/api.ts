@@ -538,6 +538,22 @@ export const sendReminders = async (user_ids: number[], message: string, subject
   return response.data;
 };
 
+// Send email reminders to selected alumni
+export const sendEmailReminders = async (
+  user_ids: number[], 
+  message: string, 
+  subject?: string,
+  tracker_link_base?: string
+) => {
+  const response = await api.post('send-email-reminder/', { 
+    user_ids, 
+    message, 
+    subject: subject || 'CTU Alumni Tracker Form Reminder',
+    tracker_link_base: tracker_link_base || window.location.origin
+  });
+  return response.data;
+};
+
 // Fetch notifications for a user
 export const fetchNotifications = async (userId: number) => {
   const response = await api.get(`notifications/?user_id=${userId}`);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, ChangeEvent, useRef } from 'react';
 import './Tracker.css';
 import { trackerApi } from '../../../services/trackerApi';
 import ctulogo from '../../../images/ctulogo.png';
-import {  sendReminders, fetchAlumniList } from '../../../services/api';
+import {  sendReminders, sendEmailReminders, fetchAlumniList } from '../../../services/api';
 
 interface AlumniUser {
   id: number;
@@ -174,6 +174,87 @@ const Settings: React.FC = () => {
     } catch (error) {
       console.error('Error in handleSend:', error);
       alert('An error occurred while sending reminders. Please try again.');
+    }
+  };
+
+  const handleSendEmail = async () => {
+    try {
+      // Get selected users who haven't responded
+      const selectedAlumni = filteredNotResponded
+        .filter(user => selectedUserIds.includes(user.id));
+
+      if (selectedAlumni.length === 0) {
+        alert('No users selected.');
+        return;
+      }
+
+      // Confirm before sending emails
+      const confirmed = window.confirm(
+        `Send email to ${selectedAlumni.length} selected user(s)?\n\n` +
+        `Note: Only users with valid email addresses will receive the email.`
+      );
+      
+      if (!confirmed) {
+        return;
+      }
+
+      // Show loading indicator
+      const userIds = selectedAlumni.map(user => user.id);
+      
+      console.log('Sending emails to:', userIds);
+      
+      // Send emails via API
+      const result = await sendEmailReminders(
+        userIds,
+        message,
+        title,
+        window.location.origin
+      );
+
+      // Build detailed result message
+      let resultMessage = '';
+      
+      if (result.sent > 0) {
+        resultMessage += `✅ Successfully sent ${result.sent} email(s)\n`;
+      }
+      
+      if (result.no_email > 0) {
+        resultMessage += `⚠️ ${result.no_email} user(s) without email addresses\n`;
+      }
+      
+      if (result.failed > 0) {
+        resultMessage += `❌ ${result.failed} email(s) failed to send\n`;
+      }
+
+      // Show errors if any
+      if (result.errors && result.errors.length > 0) {
+        resultMessage += `\nDetails:\n`;
+        result.errors.slice(0, 5).forEach((error: any) => {
+          resultMessage += `- ${error.user}: ${error.reason}\n`;
+        });
+        
+        if (result.errors.length > 5) {
+          resultMessage += `... and ${result.errors.length - 5} more\n`;
+        }
+      }
+
+      alert(resultMessage || 'Email sending completed');
+
+    } catch (error: any) {
+      console.error('Error in handleSendEmail:', error);
+      
+      // Show more specific error messages
+      let errorMsg = 'An error occurred while sending emails. ';
+      
+      if (error.response?.data?.message) {
+        errorMsg += error.response.data.message;
+      } else if (error.message) {
+        errorMsg += error.message;
+      } else {
+        errorMsg += 'Please try again.';
+      }
+      
+      alert(errorMsg);
     }
   };
 
@@ -606,6 +687,18 @@ const Settings: React.FC = () => {
                 </button>
                 <button className="border-button" onClick={handleSend}>
                     Send Form
+                  </button>
+                <button 
+                  className="border-button" 
+                  onClick={handleSendEmail}
+                  style={{
+                    background: '#1e4c7a',
+                    color: '#fff',
+                    fontWeight: '600'
+                  }}
+                  title="Send tracker form link via email to selected users"
+                >
+                    📧 Send via Email
                   </button>
             </div>
             </div>

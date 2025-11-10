@@ -75,6 +75,12 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const newCategoryRef = useRef<HTMLDivElement>(null);
+  
+  // Auto-save states
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved' | null>(null);
+  const [draftCheckComplete, setDraftCheckComplete] = useState(false); // Whether we checked for draft
+  const [hasDraftData, setHasDraftData] = useState(false); // Whether draft had data
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (questionsQuery.data) {
@@ -102,10 +108,117 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
     console.log('🔍 Categories state updated:', categories);
   }, [categories]);
 
-  // Load existing user data into formResponses when userId is available
+  // Helper function to sanitize loaded draft data
+  const sanitizeDraftData = (answers: Record<string, any>): Record<string, any> => {
+    const sanitized: Record<string, any> = {};
+    
+    for (const [key, value] of Object.entries(answers)) {
+      // Skip null, undefined
+      if (value === null || value === undefined) continue;
+      
+      // Skip empty objects (the main culprit!)
+      if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0) {
+        console.warn(`⚠️ Skipping empty object for question ${key}`);
+        continue;
+      }
+      
+      // Skip empty strings (but keep "0", spaces, etc.)
+      if (typeof value === 'string' && value.trim() === '') continue;
+      
+      // Keep valid values (strings, numbers, booleans, arrays, non-empty objects)
+      sanitized[key] = value;
+    }
+    
+    return sanitized;
+  };
+
+  // Load saved draft on mount (only in preview mode with userId)
   useEffect(() => {
-    if (userId && userDetails && categories.length > 0) {
-      console.log('🔍 Loading user data into formResponses for user:', userId);
+    if (previewMode && userId && !draftCheckComplete && categories.length > 0) {
+      const loadDraft = async () => {
+        try {
+          console.log('🔄 Checking for saved draft for user:', userId);
+          const response = await trackerApi.loadDraft(userId);
+          
+          if (response.success && response.has_draft && Object.keys(response.answers).length > 0) {
+            console.log('✅ Draft found with', Object.keys(response.answers).length, 'answers - loading...');
+            
+            // SANITIZE: Clean any invalid values before setting state
+            const sanitizedAnswers = sanitizeDraftData(response.answers);
+            console.log(`🧹 Sanitized ${Object.keys(response.answers).length - Object.keys(sanitizedAnswers).length} invalid values`);
+            
+            setFormResponses(sanitizedAnswers);
+            setSaveStatus('saved');
+            setHasDraftData(true); // Prevents user data from overwriting
+          } else {
+            console.log('ℹ️ No saved draft found');
+            setHasDraftData(false); // Will allow user data to load
+          }
+          setDraftCheckComplete(true); // Mark check as complete
+        } catch (error) {
+          console.error('❌ Error loading draft:', error);
+          setHasDraftData(false);
+          setDraftCheckComplete(true); // Mark check as complete even on error
+        }
+      };
+      
+      loadDraft();
+    }
+  }, [previewMode, userId, draftCheckComplete, categories]);
+
+  // Auto-save formResponses (debounced - saves 3 seconds after last change)
+  useEffect(() => {
+    if (!previewMode || !userId || !draftCheckComplete) {
+      return; // Don't auto-save in edit mode or before draft check is complete
+    }
+
+    // Clear existing timer
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    // Don't auto-save if there are no responses
+    if (Object.keys(formResponses).length === 0) {
+      return;
+    }
+
+    // Set status to unsaved
+    setSaveStatus('unsaved');
+
+    // Debounce: save 3 seconds after last change
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        setSaveStatus('saving');
+        console.log('💾 Auto-saving draft...');
+        
+        await trackerApi.saveDraft(userId, formResponses);
+        
+        setSaveStatus('saved');
+        console.log('✅ Draft auto-saved successfully');
+        
+        // Reset to null after 2 seconds
+        setTimeout(() => {
+          setSaveStatus(null);
+        }, 2000);
+      } catch (error) {
+        console.error('❌ Auto-save failed:', error);
+        setSaveStatus('unsaved');
+      }
+    }, 3000); // 3 second debounce
+
+    // Cleanup
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [formResponses, previewMode, userId, draftCheckComplete]);
+
+  // Load existing user data into formResponses when userId is available
+  // BUT: Don't overwrite if draft data was found!
+  useEffect(() => {
+    if (userId && userDetails && categories.length > 0 && draftCheckComplete && !hasDraftData) {
+      console.log('🔍 No draft found, loading user profile data into form for user:', userId);
       
       const initialResponses: Record<string, any> = {};
       
@@ -182,10 +295,10 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         }
       }
       
-      console.log('🔍 Initial responses loaded:', initialResponses);
+      console.log('🔍 User profile data loaded:', Object.keys(initialResponses).length, 'fields');      
       setFormResponses(initialResponses);
     }
-  }, [userId, userDetails, categories]);
+  }, [userId, userDetails, categories, draftCheckComplete, hasDraftData]);
 
   // Show privacy modal when component loads in preview mode
   useEffect(() => {
@@ -1025,6 +1138,35 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
               handleSubmit();
             }}
           >
+            {/* Auto-save status indicator */}
+            {userId && saveStatus && (
+              <div style={{
+                position: 'fixed',
+                top: '80px',
+                right: '20px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                background: saveStatus === 'saved' ? '#4CAF50' : saveStatus === 'saving' ? '#2196F3' : '#FF9800',
+                color: 'white',
+                fontSize: '14px',
+                fontWeight: '500',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                zIndex: 1000,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                animation: 'fadeIn 0.2s ease-in'
+              }}>
+                {saveStatus === 'saved' && '✓ Saved'}
+                {saveStatus === 'saving' && (
+                  <>
+                    <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span>
+                    Saving...
+                  </>
+                )}
+                {saveStatus === 'unsaved' && '● Unsaved changes'}
+              </div>
+            )}
             {categories.length === 0 && (
               <p style={{ color: '#888' }}>No categories/questions to display.</p>
             )}
