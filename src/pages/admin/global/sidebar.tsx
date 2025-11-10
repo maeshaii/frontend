@@ -17,10 +17,14 @@ import { MdSettingsSuggest } from 'react-icons/md';
 import logoLogin from '../../../images/logo_login.png';
 import ConfirmModal from '../../../components/ConfirmModal';
 import './sidebar.css';
+import { getRewardRequests } from '../../../services/api';
+import { useRealTimeNotifications } from '../../../hooks/useRealTimeNotifications';
 
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const isMountedRef = useRef(true);
+  const notificationPendingIdsRef = useRef<Set<number>>(new Set());
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   // Responsive state - initialize based on current window width
   const initialWidth = window.innerWidth;
@@ -42,6 +46,66 @@ const Sidebar = () => {
   const [pendingRewardRequests, setPendingRewardRequests] = useState<number>(() => {
     try { return Number(localStorage.getItem('rewardReqCount')) || 0; } catch { return 0; }
   });
+  const { notifications: realtimeNotifications } = useRealTimeNotifications({
+    enablePolling: true,
+    pollingInterval: 60000,
+    autoConnect: true
+  });
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const updateRewardRequestCount = React.useCallback(async () => {
+    try {
+      const response = await getRewardRequests();
+      if (!isMountedRef.current) return;
+
+      if (response?.success && Array.isArray(response.requests)) {
+        const pendingRequests = response.requests.filter((req: any) => {
+          const status = (req?.status || '').toString().toLowerCase();
+          return status === 'pending';
+        });
+
+        const pendingCount = pendingRequests.length;
+
+        notificationPendingIdsRef.current = new Set(
+          pendingRequests
+            .map((req: any) => Number(req?.request_id))
+            .filter((id: number) => !Number.isNaN(id))
+        );
+
+        setPendingRewardRequests(pendingCount);
+        try {
+          localStorage.setItem('rewardReqCount', String(pendingCount));
+          window.dispatchEvent(new CustomEvent('rewardRequestCountUpdated'));
+        } catch {}
+      }
+    } catch (error) {
+      console.error('Error updating reward request count:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    updateRewardRequestCount();
+  }, [updateRewardRequestCount]);
+
+  useEffect(() => {
+    const handleRealtimeNotifications = () => {
+      const latestPending = realtimeNotifications.filter((notif: any) => {
+        const type = (notif?.type || '').toString().toLowerCase();
+        return type.includes('reward') && type.includes('request') && !notif.is_read;
+      }).length;
+
+      if (latestPending !== pendingRewardRequests) {
+        updateRewardRequestCount();
+      }
+    };
+
+    handleRealtimeNotifications();
+  }, [realtimeNotifications, pendingRewardRequests, updateRewardRequestCount]);
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
@@ -60,6 +124,41 @@ const Sidebar = () => {
   }, []);
 
   // Also listen for custom events from other tabs/windows
+  const handleRewardSignal = React.useCallback((event: Event) => {
+    const customEvent = event as CustomEvent<{ notification?: any }>;
+    const notification = customEvent.detail?.notification;
+
+    let fallbackCount = Math.max(notificationPendingIdsRef.current.size, 1);
+
+    if (notification) {
+      const requestIdMatch =
+        notification.content?.match(/<!--REQUEST_ID:(\d+)-->/) ||
+        notification.subject?.match(/REQUEST_ID:(\d+)/i);
+
+      if (requestIdMatch && requestIdMatch[1]) {
+        const requestId = Number(requestIdMatch[1]);
+        if (!Number.isNaN(requestId)) {
+          notificationPendingIdsRef.current.add(requestId);
+        }
+      }
+
+      fallbackCount = Math.max(notificationPendingIdsRef.current.size, fallbackCount);
+    }
+
+    setPendingRewardRequests(prev => {
+      const next = Math.max(prev, fallbackCount);
+      try {
+        localStorage.setItem('rewardReqCount', String(next));
+        window.dispatchEvent(new CustomEvent('rewardRequestCountUpdated'));
+      } catch {}
+      return next;
+    });
+
+    setTimeout(() => {
+      updateRewardRequestCount();
+    }, 700);
+  }, [updateRewardRequestCount]);
+
   useEffect(() => {
     const handleRewardRequestUpdate = () => {
       try {
@@ -70,6 +169,8 @@ const Sidebar = () => {
     
     // Listen for custom events
     window.addEventListener('rewardRequestCountUpdated', handleRewardRequestUpdate);
+    window.addEventListener('rewardRequestNotificationReceived', handleRewardSignal as EventListener);
+    window.addEventListener('rewardRequestUpdated', updateRewardRequestCount as EventListener);
     
     // Also check localStorage periodically for same-tab updates
     const interval = setInterval(() => {
@@ -83,9 +184,11 @@ const Sidebar = () => {
     
     return () => {
       window.removeEventListener('rewardRequestCountUpdated', handleRewardRequestUpdate);
+      window.removeEventListener('rewardRequestNotificationReceived', handleRewardSignal as EventListener);
+      window.removeEventListener('rewardRequestUpdated', updateRewardRequestCount as EventListener);
       clearInterval(interval);
     };
-  }, [pendingRewardRequests]);
+  }, [pendingRewardRequests, updateRewardRequestCount, handleRewardSignal]);
   // On small screens, start CLOSED (hamburger state)
   const [mobileOpen, setMobileOpen] = useState(initialSmall ? false : false);
   // Use ref to persist mobileOpen state across route changes
@@ -381,7 +484,7 @@ const Sidebar = () => {
     { to: '/tracker/questions', label: 'Tracker' },
     { to: '/requests', label: 'Requests' },
     { to: '/rewards', label: 'Rewards' },
-    { to: '/report-settings', label: 'Report Settings' },
+    { to: '/report-settings', label: 'Header/Footer Settings' },
   ];
 
   // Check if a link is active (either exact match or starts with, or is a child route)
@@ -561,3 +664,4 @@ const Sidebar = () => {
 };
 
 export default Sidebar;
+

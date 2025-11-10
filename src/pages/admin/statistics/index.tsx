@@ -745,14 +745,21 @@ export default function Statistics() {
                   />
                   <div style={{ fontSize: '48px', color: '#6b7280', marginBottom: '12px' }}>📄</div>
                   <div style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                    Choose Excel File
+                    {selectedFile ? selectedFile.name : 'Choose Excel File'}
                   </div>
                   <div style={{ fontSize: '14px', color: '#6b7280' }}>
-                    Click to browse or drag and drop
+                    {selectedFile ? 'File selected - Click to change' : 'Click to browse or drag and drop'}
                   </div>
-                  <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '8px' }}>
-                    Supports .xlsx and .xls files
-                  </div>
+                  {selectedFile && (
+                    <div style={{ fontSize: '12px', color: '#10b981', marginTop: '8px', fontWeight: '600' }}>
+                      ✓ Ready to import
+                    </div>
+                  )}
+                  {!selectedFile && (
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '8px' }}>
+                      Supports .xlsx and .xls files
+                    </div>
+                  )}
                 </div>
                 <small style={{ 
                   color: '#6b7280', 

@@ -41,6 +41,7 @@ import { PrivateRoute } from './components/PrivateRoute';
 import AlumniProfile from './pages/alumni/Profile';
 import UnifiedDashboard from './pages/shared/UnifiedDashboard';
 import MobileDetector from './components/MobileDetector';
+import PopupNotifications from './components/PopupNotifications';
 
 const App: React.FC = () => {
   return (
@@ -48,6 +49,7 @@ const App: React.FC = () => {
       <QueryClientProvider client={queryClient}>
         <MobileDetector>
           <Router>
+            <PopupNotifications />
             <Routes>
           {/* Redirect root URL to /login */}
           <Route path="/" element={<Navigate to="/login" replace />} />
@@ -202,7 +204,7 @@ const App: React.FC = () => {
           <Route
             path="/peso/profile/:id"
             element={
-              <PrivateRoute roles={['peso']}>
+              <PrivateRoute roles={['peso','user', 'ojt', 'admin']}>
                 <PesoProfile />
               </PrivateRoute>
             }
@@ -250,7 +252,7 @@ const App: React.FC = () => {
           <Route
             path="/ccict/profile/:id"
             element={
-              <PrivateRoute roles={['admin']}>
+              <PrivateRoute roles={['admin','user', 'ojt', 'peso']}>
                 <AdminProfilePage />
               </PrivateRoute>
             }
@@ -268,7 +270,7 @@ const App: React.FC = () => {
           <Route
             path="/profile/:id"
             element={
-              <PrivateRoute roles={['user', 'ojt']}>
+              <PrivateRoute roles={['user', 'ojt','peso', 'admin']}>
                 <AlumniProfile />
               </PrivateRoute>
             }
@@ -285,7 +287,7 @@ const App: React.FC = () => {
           <Route
             path="/ojt/profile/:id"
             element={
-              <PrivateRoute roles={['ojt']}>
+              <PrivateRoute roles={['ojt','user', 'peso', 'admin']}>
                 <AlumniProfile />
               </PrivateRoute>
             }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Card, Typography, Avatar, TextField } from '@mui/material';
 import AlumniTopBar from './AlumniTopBar';
@@ -96,6 +96,9 @@ const DonationPage: React.FC = () => {
   const [showOriginalDonationModal, setShowOriginalDonationModal] = useState(false);
   const [originalDonationModalData, setOriginalDonationModalData] = useState<any | null>(null);
   const [donationLoading, setDonationLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const isRefreshingRef = useRef(false);
 
   // Get current user info
   const userObj = JSON.parse(localStorage.getItem('user') || '{}');
@@ -263,6 +266,39 @@ const DonationPage: React.FC = () => {
       if (showLoading) setLoading(false);
     }
   };
+
+  const handlePullToRefresh = async () => {
+    if (isRefreshingRef.current || isRefreshing) return;
+
+    isRefreshingRef.current = true;
+    setIsRefreshing(true);
+    try {
+      await fetchDonationPosts(false);
+      console.log('✅ Donations refreshed via pull-to-refresh');
+    } catch (error) {
+      console.error('❌ Error refreshing donations:', error);
+    } finally {
+      isRefreshingRef.current = false;
+      setIsRefreshing(false);
+      setPullDistance(0);
+    }
+  };
+
+  useEffect(() => {
+    if (!isRefreshing && pullDistance > 0) {
+      const interval = setInterval(() => {
+        setPullDistance(prev => {
+          if (prev <= 0) {
+            clearInterval(interval);
+            return 0;
+          }
+          return Math.max(prev - 3, 0);
+        });
+      }, 16);
+
+      return () => clearInterval(interval);
+    }
+  }, [isRefreshing, pullDistance]);
 
   // Handle view original donation
   const handleViewOriginalDonation = async (originalPost: any) => {
@@ -490,6 +526,10 @@ const DonationPage: React.FC = () => {
           *::-webkit-scrollbar {
             display: none;
           }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
         `}
       </style>
       <AlumniTopBar 
@@ -694,6 +734,50 @@ const DonationPage: React.FC = () => {
               </Box>
             </Card>
 
+          {/* Pull-to-Refresh Indicator */}
+            {pullDistance > 0 && (
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  px: 1,
+                  py: `${Math.min(pullDistance * 0.15, 15)}px`,
+                  background: 'linear-gradient(180deg, #e3f2fd 0%, #f8f9fa 100%)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)',
+                  opacity: Math.min(pullDistance / 40, 1),
+                  borderBottom: pullDistance >= 50 ? '2px solid #1e3a8a' : '2px solid #e0e0e0',
+                  boxShadow: pullDistance >= 50 ? '0 2px 8px rgba(30, 58, 138, 0.15)' : 'none',
+                  borderRadius: 2,
+                  mb: 1
+                }}
+              >
+                {isRefreshing ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: '16px',
+                        height: '16px',
+                        border: '2px solid #e0e0e0',
+                        borderTopColor: '#1e3a8a',
+                        borderRadius: '50%',
+                        animation: 'spin 0.6s linear infinite'
+                      }}
+                    />
+                    <Typography sx={{ color: '#1e3a8a', fontSize: '14px', fontWeight: 500 }}>
+                      Refreshing...
+                    </Typography>
+                  </Box>
+                ) : pullDistance >= 50 ? (
+                  <Typography sx={{ color: '#1e3a8a', fontSize: '14px', fontWeight: 500 }}>
+                    ↓ Release to refresh
+                  </Typography>
+                ) : (
+                  <Typography sx={{ color: '#666', fontSize: '14px' }}>
+                    ↓ Pull down to refresh
+                  </Typography>
+                )}
+              </Box>
+            )}
+
           {/* Donations Feed */}
             <Box sx={{ 
               maxHeight: 'calc(100vh - 250px)',
@@ -703,7 +787,34 @@ const DonationPage: React.FC = () => {
               '&::-webkit-scrollbar': {
                 display: 'none', /* Chrome, Safari and Opera */
               },
-            }}>
+              transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.4, 70)}px)` : 'translateY(0)',
+              transition: isRefreshing 
+                ? 'transform 0.4s cubic-bezier(0.4, 0.0, 0.2, 1)' 
+                : 'transform 0.15s cubic-bezier(0.4, 0.0, 0.2, 1)',
+              willChange: 'transform'
+            }}
+              onWheel={(e) => {
+                if (isRefreshingRef.current || isRefreshing) return;
+                const container = e.currentTarget;
+                if (container.scrollTop === 0 && e.deltaY < 0) {
+                  setPullDistance(prev => {
+                    const newDistance = Math.min(prev + Math.abs(e.deltaY) * 0.8, 100);
+                    if (newDistance >= 50 && prev < 50 && !isRefreshingRef.current) {
+                      setTimeout(() => handlePullToRefresh(), 50);
+                    }
+                    return newDistance;
+                  });
+                } else if (container.scrollTop > 0 && pullDistance > 0) {
+                  setPullDistance(0);
+                }
+              }}
+              onScroll={(e) => {
+                const container = e.currentTarget;
+                if (container.scrollTop > 0) {
+                  setPullDistance(0);
+                }
+              }}
+            >
               {loading ? (
                 <Box sx={{ textAlign: 'center', py: 4 }}>
                   <Typography>Loading donation requests...</Typography>

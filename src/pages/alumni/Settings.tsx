@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import { Box, Paper, Typography, TextField, Button, Select, MenuItem, FormControl, InputLabel, Alert, InputAdornment, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Checkbox, FormControlLabel, FormGroup } from '@mui/material';
-import { Visibility, VisibilityOff } from '@mui/icons-material';
+import PasswordVisibilityIcon from '../../components/PasswordVisibilityIcon';
 import { trackerApi } from '../../services/trackerApi';
 
 interface UserData {
@@ -740,7 +740,7 @@ const Settings: React.FC = () => {
         isPeso={isPeso}
       />
       
-      <Box sx={{ py: 3, px: 6, flex: 1, width: '100%', overflow: 'auto', boxSizing: 'border-box' }}>
+      <Box sx={{ py: 3, px: 6, flex: 1, width: '100%', overflow: 'hidden', boxSizing: 'border-box' }}>
 
 
         <Box sx={{ display: 'flex', gap: 3, height: '100%' }}>
@@ -818,7 +818,19 @@ const Settings: React.FC = () => {
           </Box>
 
           {/* Right Content Area */}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              height: '100%',
+              overflowY: 'auto',
+              pr: 1,
+              scrollbarWidth: 'none',
+              '&::-webkit-scrollbar': {
+                display: 'none'
+              }
+            }}
+          >
             <Paper elevation={2} sx={{ p: 4 }}>
               {activeSection === 'personal' && (
                 <>
@@ -1054,320 +1066,17 @@ const Settings: React.FC = () => {
 
                     {/* Alumni Account: Use the flow with Part III/IV */}
                     {accountType === 'alumni' && (
-                      <>
-                        {/* If user has no tracker data in DB, ask "Are you employed?" */}
-                        {hasJobInDB === false && isEmployed === null && (
-                          <Box sx={{ mb: 3 }}>
-                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-                              Are you employed?
-                            </Typography>
-                            <Box sx={{ display: 'flex', gap: 2 }}>
-                              <Button
-                                variant="outlined"
-                                onClick={() => {
-                                  setIsEmployed(true);
-                                  setIsEditingEmployment(true);
-                                }}
-                                sx={{
-                                  borderColor: '#174f84',
-                                  color: '#174f84',
-                                  '&:hover': { backgroundColor: '#f5f5f5', borderColor: '#174f84' }
-                                }}
-                              >
-                                Yes
-                              </Button>
-                              <Button
-                                variant="outlined"
-                                onClick={async () => {
-                                  setIsEmployed(false);
-                                  setIsEditingEmployment(true);
-                                  // Fetch unemployment questions from tracker
-                                  try {
-                                    const questionsData = await trackerApi.getQuestions();
-                                    const categories = questionsData?.categories || [];
-                                    const unemployedCategory = categories.find((cat: any) => 
-                                      cat.title.toLowerCase().includes('unemployed')
-                                    );
-                                    if (unemployedCategory) {
-                                      setUnemploymentQuestions(unemployedCategory.questions || []);
-                                    }
-                                  } catch (error) {
-                                    console.error('Error fetching unemployment questions:', error);
-                                  }
-                                }}
-                                sx={{
-                                  borderColor: '#174f84',
-                                  color: '#174f84',
-                                  '&:hover': { backgroundColor: '#f5f5f5', borderColor: '#174f84' }
-                                }}
-                              >
-                                No
-                              </Button>
-                            </Box>
-                          </Box>
-                        )}
-
-                        {/* If unemployed, show unemployment questions */}
-                        {isEmployed === false && unemploymentQuestions.length > 0 && (
-                          <Box sx={{ mb: 3 }}>
-                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-                              IF UNEMPLOYED
-                            </Typography>
-                            {unemploymentQuestions.map((question: any) => (
-                              <Box key={question.id} sx={{ mb: 3 }}>
-                                <Typography variant="body1" sx={{ mb: 1, fontWeight: 'medium' }}>
-                                  {question.text} {question.required && <span style={{ color: 'red' }}>*</span>}
-                                </Typography>
-                                {question.type === 'checkbox' && (
-                                  <FormGroup>
-                                    {question.options?.map((option: string) => (
-                                      <FormControlLabel
-                                        key={option}
-                                        control={
-                                          <Checkbox
-                                            checked={(unemploymentResponses[question.id] || []).includes(option)}
-                                            onChange={(e) => {
-                                              const current = unemploymentResponses[question.id] || [];
-                                              const updated = e.target.checked
-                                                ? [...current, option]
-                                                : current.filter((item: string) => item !== option);
-                                              setUnemploymentResponses({
-                                                ...unemploymentResponses,
-                                                [question.id]: updated
-                                              });
-                                            }}
-                                          />
-                                        }
-                                        label={option}
-                                      />
-                                    ))}
-                                  </FormGroup>
-                                )}
-                              </Box>
-                            ))}
-                          </Box>
-                        )}
-
-                        {/* Part III: Employment Status - Show when user is employed */}
-                        {/* If hasJobInDB: pre-populated, else: empty form */}
-                        {(hasJobInDB === true || isEmployed === true) && (
-                          <>
-                            {/* Part III: Employment Status Questions */}
-                            <Typography variant="h6" sx={{ mt: 3, mb: 2, fontWeight: 'bold' }}>
-                              PART III: EMPLOYMENT STATUS
-                            </Typography>
-
-                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
-                          <InputLabel>Are you employed by a company/organization or are you self employed?</InputLabel>
-                          <Select
-                            value={employmentData.employment_type}
-                            onChange={(e) => handleEmploymentChange('employment_type', e.target.value)}
-                            label="Are you employed by a company/organization or are you self employed?"
-                            disabled={!isEditingEmployment}
-                          >
-                            {employmentTypeOptions.map((option) => (
-                              <MenuItem key={option} value={option}>
-                                {option}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-
-                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
-                          <InputLabel>Status of your current employment</InputLabel>
-                          <Select
-                            value={employmentData.current_employment_status}
-                            onChange={(e) => handleEmploymentChange('current_employment_status', e.target.value)}
-                            label="Status of your current employment"
-                            disabled={!isEditingEmployment}
-                          >
-                            {currentEmploymentStatusOptions.map((option) => (
-                              <MenuItem key={option} value={option}>
-                                {option}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-
-                        <TextField
-                          label="Current Company Name"
-                          value={employmentData.current_company_name}
-                          onChange={(e) => handleEmploymentChange('current_company_name', e.target.value)}
-                          variant="outlined"
-                          fullWidth
-                          disabled={!isEditingEmployment}
-                          sx={{ mb: 2 }}
-                        />
-
-                        <TextField
-                          label="Current Position"
-                          value={employmentData.current_position}
-                          onChange={(e) => handleEmploymentChange('current_position', e.target.value)}
-                          variant="outlined"
-                          fullWidth
-                          disabled={!isEditingEmployment}
-                          sx={{ mb: 2 }}
-                        />
-
-                        <TextField
-                          label="Date Started"
-                          value={employmentData.date_hired}
-                          onChange={(e) => handleEmploymentChange('date_hired', e.target.value)}
-                          variant="outlined"
-                          type="date"
-                          InputLabelProps={{ shrink: true }}
-                          fullWidth
-                          disabled={!isEditingEmployment}
-                          sx={{ mb: 2 }}
-                        />
-
-                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
-                          <InputLabel>Current Sector of your Job</InputLabel>
-                          <Select
-                            value={employmentData.current_sector}
-                            onChange={(e) => handleEmploymentChange('current_sector', e.target.value)}
-                            label="Current Sector of your Job"
-                            disabled={!isEditingEmployment}
-                          >
-                            {sectorRadioOptions.map((option) => (
-                              <MenuItem key={option} value={option}>
-                                {option}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-
-                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
-                          <InputLabel>Current Scope of your Job</InputLabel>
-                          <Select
-                            value={employmentData.current_scope}
-                            onChange={(e) => handleEmploymentChange('current_scope', e.target.value)}
-                            label="Current Scope of your Job"
-                            disabled={!isEditingEmployment}
-                          >
-                            {scopeOptions.map((option) => (
-                              <MenuItem key={option} value={option}>
-                                {option}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-
-                        <TextField
-                          label="How long have you been employed?"
-                          value={employmentData.employment_duration}
-                          onChange={(e) => handleEmploymentChange('employment_duration', e.target.value)}
-                          variant="outlined"
-                          fullWidth
-                          disabled={!isEditingEmployment}
-                          sx={{ mb: 2 }}
-                        />
-
-                        <TextField
-                          label="Current Salary range"
-                          value={employmentData.salary_range}
-                          onChange={(e) => handleEmploymentChange('salary_range', e.target.value)}
-                          variant="outlined"
-                          fullWidth
-                          disabled={!isEditingEmployment}
-                          sx={{ mb: 2 }}
-                        />
-
-                        <FormControl variant="outlined" fullWidth sx={{ mb: 2 }}>
-                          <InputLabel>Have you received any awards or recognition during your employment?</InputLabel>
-                          <Select
-                            value={employmentData.received_awards}
-                            onChange={(e) => handleEmploymentChange('received_awards', e.target.value)}
-                            label="Have you received any awards or recognition during your employment?"
-                            disabled={!isEditingEmployment}
-                          >
-                            {awardsOptions.map((option) => (
-                              <MenuItem key={option} value={option}>
-                                {option}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-
-                        {/* Did you pursue further study? - At the end of Part III */}
-                        <FormControl variant="outlined" fullWidth sx={{ mb: 2, mt: 3 }}>
-                          <InputLabel>Did you pursue further study?</InputLabel>
-                          <Select
-                            value={pursueFurtherStudy === true ? 'Yes' : pursueFurtherStudy === false ? 'No' : ''}
-                            onChange={(e) => {
-                              const value = e.target.value === 'Yes';
-                              setPursueFurtherStudy(value);
-                            }}
-                            label="Did you pursue further study?"
-                            disabled={!isEditingEmployment}
-                          >
-                            {awardsOptions.map((option) => (
-                              <MenuItem key={option} value={option}>
-                                {option}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-
-                        {/* Part IV: Further Study Questions - Show only if pursueFurtherStudy is Yes */}
-                        {pursueFurtherStudy === true && (
-                          <>
-                            <Typography variant="h6" sx={{ mt: 3, mb: 2, fontWeight: 'bold' }}>
-                              PART IV: FURTHER STUDY
-                            </Typography>
-
-                            <TextField
-                              label="Date Started"
-                              value={employmentData.study_start_date}
-                              onChange={(e) => handleEmploymentChange('study_start_date', e.target.value)}
-                              variant="outlined"
-                              type="date"
-                              InputLabelProps={{ shrink: true }}
-                              fullWidth
-                              disabled={!isEditingEmployment}
-                              sx={{ mb: 2 }}
-                            />
-
-                            <TextField
-                              label="Please specify post graduate/degree"
-                              value={employmentData.post_graduate_degree}
-                              onChange={(e) => handleEmploymentChange('post_graduate_degree', e.target.value)}
-                              variant="outlined"
-                              fullWidth
-                              disabled={!isEditingEmployment}
-                              sx={{ mb: 2 }}
-                            />
-
-                            <TextField
-                              label="Name of Institution/University"
-                              value={employmentData.institution_name}
-                              onChange={(e) => handleEmploymentChange('institution_name', e.target.value)}
-                              variant="outlined"
-                              fullWidth
-                              disabled={!isEditingEmployment}
-                              sx={{ mb: 2 }}
-                            />
-
-                            <TextField
-                              label="Total number of units obtain"
-                              value={employmentData.units_obtained}
-                              onChange={(e) => handleEmploymentChange('units_obtained', e.target.value)}
-                              variant="outlined"
-                              fullWidth
-                              disabled={!isEditingEmployment}
-                              sx={{ mb: 2 }}
-                            />
-                          </>
-                        )}
-                          </>
-                        )}
-                      </>
+                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#64748b' }}>
+                          Coming soon
+                        </Typography>
+                      </Box>
                     )}
 
                   </Box>
                   
                   {/* Save/Cancel buttons - Only show for alumni accounts (OJT is view-only) */}
-                  {accountType === 'alumni' && isEditingEmployment && (
+                  {accountType === 'alumni' && false && isEditingEmployment && (
                     <Box sx={{ display: 'flex', gap: 2, mt: 4, justifyContent: 'center' }}>
                       <Button
                         variant="contained"
@@ -1450,8 +1159,9 @@ const Settings: React.FC = () => {
                             <IconButton
                               onClick={() => setShowOldPassword(!showOldPassword)}
                               edge="end"
+                              aria-label={showOldPassword ? 'Hide password' : 'Show password'}
                             >
-                              {showOldPassword ? <VisibilityOff /> : <Visibility />}
+                              <PasswordVisibilityIcon show={showOldPassword} size={20} color="#666" />
                             </IconButton>
                           </InputAdornment>
                         )
@@ -1472,8 +1182,9 @@ const Settings: React.FC = () => {
                             <IconButton
                               onClick={() => setShowNewPassword(!showNewPassword)}
                               edge="end"
+                              aria-label={showNewPassword ? 'Hide password' : 'Show password'}
                             >
-                              {showNewPassword ? <VisibilityOff /> : <Visibility />}
+                              <PasswordVisibilityIcon show={showNewPassword} size={20} color="#666" />
                             </IconButton>
                           </InputAdornment>
                         )
@@ -1493,8 +1204,9 @@ const Settings: React.FC = () => {
                             <IconButton
                               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                               edge="end"
+                              aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
                             >
-                              {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                              <PasswordVisibilityIcon show={showConfirmPassword} size={20} color="#666" />
                             </IconButton>
                           </InputAdornment>
                         )

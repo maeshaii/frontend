@@ -60,6 +60,30 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     return t > 0 ? `${((p / t) * 100).toFixed(2)}%` : '0.00%';
   };
 
+  const toNumericValue = (value: any): number | null => {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+    const sanitized = Number(String(value).replace(/[^0-9.-]+/g, ''));
+    return Number.isFinite(sanitized) ? sanitized : null;
+  };
+
+  const formatCurrency = (value: any) => {
+    const numeric = toNumericValue(value);
+    if (numeric === null) return 'N/A';
+    try {
+      return new Intl.NumberFormat('en-PH', {
+        style: 'currency',
+        currency: 'PHP',
+        minimumFractionDigits: 2,
+      }).format(numeric);
+    } catch (error) {
+      console.warn('Currency format fallback triggered:', error);
+      return `₱${numeric.toFixed(2)}`;
+    }
+  };
+
   // Utility function to convert image to base64 for PDF
   const getImageAsBase64 = async (imagePath: string): Promise<string> => {
     try {
@@ -603,7 +627,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     if (yearsQuery.data) setAvailableYears(yearsQuery.data);
   }, [yearsQuery.data]);
 
-  // Load report settings on mount
+  // Load header/footer settings on mount
   useEffect(() => {
     const loadReportSettings = async () => {
       try {
@@ -612,7 +636,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           setReportSettings(response.data.settings);
         }
       } catch (error) {
-        console.error('Error loading report settings:', error);
+        console.error('Error loading header/footer settings:', error);
         // Use defaults if settings can't be loaded
       }
     };
@@ -1608,8 +1632,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
         ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
         ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+        ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
+        ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)],
         ['Employment Rate', '', `${stats.employment_rate || 0}%`],
         ['Absorption Rate', '', `${stats.absorption_rate || 0}%`],
+        ['High Position Rate', '', `${stats.high_position_rate || 0}%`],
       ];
 
       autoTable(doc, {
@@ -1665,6 +1692,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Total Alumni', String(stats.total_alumni || 0), '100%'],
         ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
         ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
+        ['Average Salary', formatCurrency(stats.average_salary), '--'],
         ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
         ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
         ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
@@ -1870,6 +1898,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
             ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
             ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
+            ['Average Salary', formatCurrency(stats.average_salary), '--'],
             ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
             ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
             ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
@@ -1881,6 +1910,8 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
             ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
             ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+            ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
+            ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)],
             ['Employment Rate', '', `${stats.employment_rate || 0}%`],
             ['Absorption Rate', '', `${stats.absorption_rate || 0}%`],
             ['High Position Rate', '', `${stats.high_position_rate || 0}%`]
@@ -2676,7 +2707,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
         ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
         ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+        ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
+        ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)],
         ['Employment Rate', '', `${stats.employment_rate || 0}%`],
+        ['Absorption Rate', '', `${stats.absorption_rate || 0}%`],
+        ['High Position Rate', '', `${stats.high_position_rate || 0}%`],
       ];
       children.push(...createSummaryTable('AACUP Statistics Summary', summaryData));
       
@@ -2689,6 +2724,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Metric', 'Value', 'Percentage'],
         ['Total Alumni', String(stats.total_alumni || 0), '100%'],
         ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+        ['Average Salary', formatCurrency(stats.average_salary), '--'],
         ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
         ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
       ];
@@ -2740,6 +2776,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
             ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
             ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
+            ['Average Salary', formatCurrency(stats.average_salary), '--'],
             ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
             ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
             ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
@@ -3534,6 +3571,16 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'High Position';
         sheet.getCell(`B${r}`).value = highPos;
         sheet.getCell(`C${r}`).value = `${pct(highPos, generatedStats.total_alumni)}`; r++;
+        // Self-Employed
+        const selfEmployed = Number(generatedStats.self_employed_count) || 0;
+        sheet.getCell(`A${r}`).value = 'Self-Employed';
+        sheet.getCell(`B${r}`).value = selfEmployed;
+        sheet.getCell(`C${r}`).value = `${pct(selfEmployed, generatedStats.total_alumni)}`; r++;
+        // Awards Received
+        const awards = Number(generatedStats.awards_count) || 0;
+        sheet.getCell(`A${r}`).value = 'Awards Received';
+        sheet.getCell(`B${r}`).value = awards;
+        sheet.getCell(`C${r}`).value = `${pct(awards, generatedStats.total_alumni)}`; r++;
         // Employment/Absorption/High Position Rates (percent only)
         sheet.getCell(`A${r}`).value = 'Employment Rate';
         sheet.getCell(`C${r}`).value = `${generatedStats.employment_rate || pct(employed, generatedStats.total_alumni)}%`; r++;
@@ -3724,6 +3771,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         // Leadership Rate (percent only)
         sheet.getCell(`A${r}`).value = 'Leadership Rate';
         sheet.getCell(`C${r}`).value = `${pct(highPos, generatedStats.total_alumni)}`; r++;
+        const avgSalary = toNumericValue(generatedStats.average_salary);
+        sheet.getCell(`A${r}`).value = 'Average Salary';
+        if (avgSalary !== null) {
+          sheet.getCell(`B${r}`).value = avgSalary;
+          sheet.getCell(`B${r}`).numFmt = '"₱"#,##0.00';
+        } else {
+          sheet.getCell(`B${r}`).value = 'N/A';
+        }
+        sheet.getCell(`C${r}`).value = '--'; r++;
         // Government/Private/Local/International
         const publicCnt = Number(generatedStats.public_count) || 0;
         const privateCnt = Number(generatedStats.private_count) || 0;
@@ -3989,6 +4045,16 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.getCell(`B${rowIdx}`).value =
               `${pct(stats.high_position_count, stats.total_alumni)}`;
             rowIdx++;
+          const avgSalary = toNumericValue(stats.average_salary);
+          worksheet.getCell(`A${rowIdx}`).value = 'Average Salary';
+          if (avgSalary !== null) {
+            worksheet.getCell(`B${rowIdx}`).value = avgSalary;
+            worksheet.getCell(`B${rowIdx}`).numFmt = '"₱"#,##0.00';
+          } else {
+            worksheet.getCell(`B${rowIdx}`).value = 'N/A';
+          }
+          worksheet.getCell(`C${rowIdx}`).value = '--';
+          rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Government Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.public_count;
             worksheet.getCell(`C${rowIdx}`).value =
@@ -4028,6 +4094,16 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.getCell(`B${rowIdx}`).value = stats.high_position_count;
             worksheet.getCell(`C${rowIdx}`).value =
               `${pct(stats.high_position_count, stats.total_alumni)}`;
+            rowIdx++;
+            worksheet.getCell(`A${rowIdx}`).value = 'Self-Employed Count';
+            worksheet.getCell(`B${rowIdx}`).value = stats.self_employed_count;
+            worksheet.getCell(`C${rowIdx}`).value =
+              `${pct(stats.self_employed_count, stats.total_alumni)}`;
+            rowIdx++;
+            worksheet.getCell(`A${rowIdx}`).value = 'Awards Received Count';
+            worksheet.getCell(`B${rowIdx}`).value = stats.awards_count || 0;
+            worksheet.getCell(`C${rowIdx}`).value =
+              `${pct(stats.awards_count || 0, stats.total_alumni)}`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Others';
             worksheet.getCell(`B${rowIdx}`).value =
@@ -4927,6 +5003,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                   <td style={td}>{(Number(stats.high_position_rate) || 0).toFixed(2)}%</td>
                 </tr>
                 <tr>
+                  <td style={td}>Average Salary</td>
+                  <td style={td}>{formatCurrency(stats.average_salary)}</td>
+                  <td style={td}>--</td>
+                </tr>
+                <tr>
                   <td style={td}>Government</td>
                   <td style={td}>{Number(stats.public_count) || 0}</td>
                   <td style={td}>{pct(Number(stats.public_count) || 0, Number(stats.total_alumni) || 0)}</td>
@@ -4969,6 +5050,16 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                   <td style={td}>High Position</td>
                   <td style={td}>{Number(stats.high_position_count) || 0}</td>
                   <td style={td}>{pct(Number(stats.high_position_count) || 0, Number(stats.total_alumni) || 0)}</td>
+                </tr>
+                <tr>
+                  <td style={td}>Self-Employed</td>
+                  <td style={td}>{Number(stats.self_employed_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.self_employed_count) || 0, Number(stats.total_alumni) || 0)}</td>
+                </tr>
+                <tr>
+                  <td style={td}>Awards Received</td>
+                  <td style={td}>{Number(stats.awards_count) || 0}</td>
+                  <td style={td}>{pct(Number(stats.awards_count) || 0, Number(stats.total_alumni) || 0)}</td>
                 </tr>
                 <tr>
                   <td style={td}>Employment Rate</td>
