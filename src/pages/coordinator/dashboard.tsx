@@ -39,7 +39,20 @@ export default function Dashboard() {
     if (user) {
       const userData = JSON.parse(user);
       // Use username instead of full name for coordinator
-      setCoordinatorUsername(userData.username || userData.name || '');
+      const username = userData.username || userData.name || '';
+      setCoordinatorUsername(username);
+      
+      // Set program based on coordinator username
+      if (username === 'ITCOORDINATOR') {
+        setProgram('BSIT');
+      } else if (username === 'CTCOORDINATOR') {
+        setProgram('BIT-CT');
+      } else if (username === 'ISCOORDINATOR') {
+        setProgram('BSIS');
+      } else {
+        // Default fallback
+        setProgram('BSIT');
+      }
     }
   }, []);
 
@@ -806,7 +819,7 @@ export default function Dashboard() {
                   letterSpacing: '0.5px',
                   border: 'none'
                 }}>
-                  BSIT
+                  {program}
                 </div>
               </div>
             
