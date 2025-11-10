@@ -475,6 +475,7 @@ const RequestDetailsPage: React.FC = () => {
         )}
       </div>
     </div>
+  </div>
   );
 };
 
