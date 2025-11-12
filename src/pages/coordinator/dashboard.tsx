@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
 import { fetchOJTStatistics, importOJT, setSendDate, getSendDates, checkAllSentStatus, deleteSendDate } from '../../services/api';
-import logoLogin from '../../images/logo_login.png';
+import logoLogin from '../../images/logo.png';
 import { FaUpload, FaChartBar, FaSignOutAlt, FaDownload, FaCalendarAlt, FaUsers } from 'react-icons/fa';
 
 export default function Dashboard() {
@@ -21,7 +21,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [importLoading, setImportLoading] = useState(false);
   const [coordinatorUsername, setCoordinatorUsername] = useState('');
-  const [activePage, setActivePage] = useState('dashboard'); // 'dashboard' or 'imports'
+  const [activePage, setActivePage] = useState('imports'); // 'imports' or 'statistics'
   const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('ALL');
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
   const [showDateModal, setShowDateModal] = useState(false);
@@ -418,19 +418,21 @@ export default function Dashboard() {
       display: 'flex',
       height: '100vh',
       fontFamily: 'Arial, sans-serif',
+      overflow: 'hidden',
     },
     sidebar: {
-      width: '220px',
+      width: '240px',
       height: '100vh',
-      backgroundColor: '#1e3a5f',
+      background: 'linear-gradient(180deg, #1C4E80 0%, #1b3f6b 100%)',
       display: 'flex',
       flexDirection: 'column' as const,
       justifyContent: 'space-between',
-      color: 'white',
-      padding: '16px 12px',
+      color: '#ffffff',
+      padding: '24px 18px',
       overflow: 'hidden' as const,
       position: 'relative' as const,
-      boxShadow: '2px 0 8px rgba(0, 0, 0, 0.1)',
+      boxShadow: '2px 0 10px rgba(15, 35, 60, 0.35)',
+      borderRight: '1px solid rgba(255, 255, 255, 0.08)',
     },
     topSection: {
       display: 'flex',
@@ -438,30 +440,43 @@ export default function Dashboard() {
       flex: '0 1 auto',
       minHeight: 0,
       overflow: 'hidden' as const,
+      gap: '28px',
+    },
+    bottomSection: {
+      marginTop: 'auto',
+      paddingTop: '12px',
     },
     logo: {
       display: 'flex',
       flexDirection: 'column' as const,
       alignItems: 'center',
-      marginBottom: '16px',
+      marginBottom: '12px',
       flexShrink: 0,
-      paddingBottom: '12px',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      gap: '16px',
+    },
+    logoContainer: {
+      width: '100%',
+      maxWidth: '180px',
+      height: '64px',
+      background: '#ffffff',
+      borderRadius: '12px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      boxShadow: '0 6px 18px rgba(12, 32, 55, 0.18)',
+      padding: '6px 12px',
     },
     logoImage: {
-      width: '56px',
-      height: '56px',
-      borderRadius: '8px',
-      background: 'white',
-      padding: '6px',
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+      height: '100%',
+      width: 'auto',
+      objectFit: 'contain' as const,
     },
     logoText: {
-      fontSize: '12px',
-      marginTop: '6px',
+      fontSize: '16px',
       textAlign: 'center' as const,
       fontWeight: '700' as const,
-      letterSpacing: '0.5px',
+      letterSpacing: '0.4px',
+      color: '#ffffff',
     },
     navList: {
       listStyleType: 'none' as const,
@@ -471,21 +486,21 @@ export default function Dashboard() {
     navItem: {
       display: 'flex',
       alignItems: 'center',
-      padding: '10px 14px',
-      margin: '3px 0',
+      padding: '12px 18px',
+      margin: '6px 0',
       cursor: 'pointer',
-      borderRadius: '8px',
-      transition: 'all 0.2s ease',
+      borderRadius: '10px',
+      transition: 'all 0.25s ease',
       textDecoration: 'none',
-      color: 'rgba(255, 255, 255, 0.9)',
-      fontSize: '13px',
-      fontWeight: '500',
+      color: '#f8fbff',
+      fontSize: '14px',
+      fontWeight: 600,
+      backgroundColor: 'transparent',
     },
     activeNavItem: {
-      backgroundColor: 'rgba(255, 255, 255, 0.15)',
-      color: 'white',
-      fontWeight: '600',
-      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+      backgroundColor: 'rgba(248, 251, 255, 0.18)',
+      color: '#ffffff',
+      boxShadow: '0 6px 14px rgba(13, 42, 72, 0.3)',
     },
     icon: {
       marginRight: '12px',
@@ -493,26 +508,37 @@ export default function Dashboard() {
       display: 'flex',
       alignItems: 'center',
     },
+    navItemText: {
+      letterSpacing: '0.2px',
+      whiteSpace: 'nowrap' as const,
+    },
     logout: {
       display: 'flex',
       alignItems: 'center',
-      padding: '10px 14px',
+      padding: '12px 16px',
       cursor: 'pointer',
       textDecoration: 'none',
-      color: 'rgba(255, 255, 255, 0.9)',
-      flexShrink: 0,
-      marginTop: '8px',
+      color: '#f8fbff',
+      width: '100%',
       borderRadius: '8px',
-      borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-      paddingTop: '12px',
-      fontSize: '13px',
-      fontWeight: '500',
-      transition: 'all 0.2s ease',
+      fontSize: '14px',
+      fontWeight: 600,
+      transition: 'all 0.25s ease',
+      background: 'transparent',
+      border: 'none',
+      outline: 'none',
+      justifyContent: 'flex-start',
+      marginBottom: '24px',
     },
     main: {
       flex: 1,
-      padding: '30px 50px',
-      background: 'white',
+      padding: '20px',
+      background: '#f3f4f6',
+      height: '100%',
+      boxSizing: 'border-box' as const,
+      overflow: 'hidden' as const,
+      display: 'flex',
+      flexDirection: 'column' as const,
     },
     header: {
       display: 'flex',
@@ -674,14 +700,14 @@ export default function Dashboard() {
       <div style={styles.sidebar}>
         <div style={styles.topSection}>
           <div style={styles.logo}>
-            <img src={logoLogin} alt="Logo" style={styles.logoImage} />
-            <h1 style={styles.logoText}>WhereNa You</h1>
+            <div style={styles.logoContainer}>
+              <img src={logoLogin} alt="WhereNa You logo" style={styles.logoImage} />
+            </div>
           </div>
 
           <ul style={styles.navList}>
             {links.map((link) => {
               const isActive = (link.label === 'Imports' && activePage === 'imports') ||
-                              (link.label === 'Dashboard' && activePage === 'dashboard') ||
                               (link.label === 'Statistics' && activePage === 'statistics');
               return (
                 <li key={link.to}>
@@ -691,12 +717,9 @@ export default function Dashboard() {
                       ...(isActive ? styles.activeNavItem : {}),
                     }}
                     onClick={() => {
-                      if (link.label === 'Dashboard') {
-                        setActivePage('dashboard');
-                        setSelectedCard(null);
-                        setShowStats(false);
-                      } else if (link.label === 'Imports') {
+                      if (link.label === 'Imports') {
                         setActivePage('imports');
+                        setSelectedCard(null);
                         setShowStats(false);
                         refreshOJTData();
                       } else if (link.label === 'Statistics') {
@@ -706,19 +729,19 @@ export default function Dashboard() {
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {
-                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                        e.currentTarget.style.backgroundColor = 'rgba(248, 251, 255, 0.12)';
                         e.currentTarget.style.color = 'white';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isActive) {
                         e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.color = 'rgba(255, 255, 255, 0.9)';
+                        e.currentTarget.style.color = '#f8fbff';
                       }
                     }}
                   >
                     <span style={styles.icon}>{link.icon}</span>
-                    {link.label}
+                    <span style={styles.navItemText}>{link.label}</span>
                   </div>
                 </li>
               );
@@ -726,31 +749,27 @@ export default function Dashboard() {
           </ul>
         </div>
 
-        <div 
-          style={styles.logout} 
-          onClick={handleLogout}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-            e.currentTarget.style.color = 'white';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-            e.currentTarget.style.color = 'rgba(255, 255, 255, 0.9)';
-          }}
-        >
-          <span style={styles.icon}><FaSignOutAlt /></span>
-          <span>Logout</span>
+        <div style={styles.bottomSection}>
+          <button
+            type="button"
+            style={styles.logout}
+            onClick={handleLogout}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.10)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            <span style={styles.icon}><FaSignOutAlt /></span>
+            <span style={styles.navItemText}>Logout</span>
+          </button>
         </div>
       </div>
 
       {/* ===================== Modern Main Content ===================== */}
-      <main style={{
-        flex: 1,
-        padding: '20px',
-        backgroundColor: '#f3f4f6',
-        minHeight: '100vh',
-        overflowY: 'auto' as const
-      }}>
+      <main style={styles.main}>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
 
         {/* Modern Filters & Actions */}
         {!showStats && !selectedCard && (
@@ -1223,6 +1242,7 @@ export default function Dashboard() {
         ) : (
           <Statistics />
         )}
+        </div>
       </main>
 
       {/* ===================== Logout Confirm Modal ===================== */}

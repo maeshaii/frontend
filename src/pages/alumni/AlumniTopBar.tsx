@@ -2,8 +2,9 @@ import React, { useRef, useEffect } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
-import wherenayouLogo from '../../images/logo_login.png';
+import wherenayouLogo from '../../images/logo.png';
 import { api, getAdminPesoUsers, getUserInfo, fetchNotificationCount, saveRecentSearch, getRecentSearches, deleteRecentSearch } from '../../services/api';
+import { RecentSearchWebSocket } from '../../services/recentSearchWebSocket';
 import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
 import { useRealTimeMessages } from '../../hooks/useRealTimeMessages';
 import 'primeicons/primeicons.css';
@@ -36,6 +37,24 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   const [showSuggestions, setShowSuggestions] = React.useState(false);
   const [recentSearches, setRecentSearches] = React.useState<any[]>([]);
   const [showRecentSearches, setShowRecentSearches] = React.useState(false);
+  const [isSearchFocused, setIsSearchFocused] = React.useState(false);
+  const recentSearchWsRef = React.useRef<RecentSearchWebSocket | null>(null);
+  const isSearchFocusedRef = React.useRef(false);
+  const latestSearchValueRef = React.useRef('');
+  const [isCompactTopBar, setIsCompactTopBar] = React.useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 1024;
+  });
+
+  React.useEffect(() => {
+    const handleResize = () => {
+      setIsCompactTopBar(window.innerWidth <= 1024);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Use real-time notifications hook
   const { notificationCount, isConnected: notificationConnected } = useRealTimeNotifications({
@@ -90,20 +109,199 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
   };
 
   // Load recent searches
+  const buildFullName = React.useCallback((user: any) => {
+    const primaryParts = [
+      user?.f_name,
+      user?.m_name,
+      user?.l_name,
+    ];
+
+    const fallbackParts = [
+      user?.first_name,
+      user?.middle_name,
+      user?.last_name,
+    ];
+
+    const baseParts = primaryParts.some((part) => part && String(part).trim())
+      ? primaryParts
+      : fallbackParts;
+
+    const cleaned = baseParts
+      .map((part) => (part ? String(part).trim() : ''))
+      .filter(Boolean);
+
+    if (cleaned.length > 0) {
+      return cleaned.join(' ');
+    }
+
+    if (user?.name) {
+      return String(user.name);
+    }
+
+    if (user?.full_name) {
+      return String(user.full_name);
+    }
+
+    return '';
+  }, []);
+
+  const normalizeRecentSearchData = React.useCallback((detailed?: any[], legacy?: any[]) => {
+    const detailedList = Array.isArray(detailed) ? detailed : [];
+    const legacyList = Array.isArray(legacy) ? legacy : [];
+
+    const idLookup = new Map<number, number>();
+    detailedList.forEach((entry: any) => {
+      const searchedUser = entry?.searched_user ?? {};
+      const userId = Number(
+        searchedUser.user_id ??
+          searchedUser.id ??
+          entry?.searched_user_id ??
+          entry?.user_id ??
+          entry?.id
+      );
+      const recordId = Number(entry?.id);
+      if (
+        Number.isFinite(userId) &&
+        userId > 0 &&
+        Number.isFinite(recordId) &&
+        recordId > 0
+      ) {
+        idLookup.set(userId, recordId);
+      }
+    });
+
+    const normalized = (Array.isArray(detailedList) && detailedList.length > 0 ? detailedList : legacyList)
+      .map((item: any, index: number) => {
+        const userData = item?.searched_user ?? item ?? {};
+        const userId = Number(userData.user_id ?? userData.id ?? item?.user_id ?? item?.id);
+        if (!Number.isFinite(userId) || userId <= 0) {
+          return null;
+        }
+
+        const recordIdRaw = item?.id ?? item?.recent_id ?? idLookup.get(userId) ?? null;
+        let recordId: number | null = null;
+        if (recordIdRaw !== null && recordIdRaw !== undefined) {
+          const numericId = Number(recordIdRaw);
+          if (!Number.isNaN(numericId) && Number.isFinite(numericId) && numericId > 0) {
+            recordId = numericId;
+          }
+        }
+
+        return {
+          id: recordId ?? `${userId}-${index}`,
+          searched_user: {
+            user_id: userId,
+            f_name: userData.f_name ?? item?.f_name ?? '',
+            m_name: userData.m_name ?? item?.m_name ?? '',
+            l_name: userData.l_name ?? item?.l_name ?? '',
+            profile_pic: userData.profile_pic ?? item?.profile_pic ?? null,
+            full_name: buildFullName({
+              ...userData,
+              f_name: userData.f_name ?? item?.f_name ?? '',
+              m_name: userData.m_name ?? item?.m_name ?? '',
+              l_name: userData.l_name ?? item?.l_name ?? '',
+            }),
+          },
+          created_at: item?.created_at ?? null,
+          canDelete: recordId !== null,
+        };
+      })
+      .filter(Boolean) as any[];
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Normalized recent searches:', normalized);
+    }
+    return normalized;
+  }, []);
+
   const loadRecentSearches = React.useCallback(async () => {
     try {
       const response = await getRecentSearches();
-      if (response.success) {
-        setRecentSearches(response.recent_searches || []);
-        return response.recent_searches || [];
-      }
-      return [];
+      const normalized = normalizeRecentSearchData(
+        response?.recent_searches,
+        response?.recent
+      );
+      setRecentSearches(normalized);
+      return normalized;
     } catch (error) {
       console.error('Error loading recent searches:', error);
       setRecentSearches([]);
       return [];
     }
   }, []);
+
+  // Preload recent searches so dropdown is ready on first focus
+  React.useEffect(() => {
+    loadRecentSearches();
+  }, [loadRecentSearches]);
+
+  // Refresh recent searches whenever the window regains focus (e.g., user came back from mobile)
+  React.useEffect(() => {
+    const handleWindowFocus = () => {
+      loadRecentSearches();
+    };
+    window.addEventListener('focus', handleWindowFocus);
+    return () => window.removeEventListener('focus', handleWindowFocus);
+  }, [loadRecentSearches]);
+
+  // Poll while the recent searches dropdown is visible to keep in sync with other clients (e.g., mobile)
+  React.useEffect(() => {
+    if (!showRecentSearches) {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      loadRecentSearches();
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [showRecentSearches, loadRecentSearches]);
+
+  React.useEffect(() => {
+    isSearchFocusedRef.current = isSearchFocused;
+  }, [isSearchFocused]);
+
+  React.useEffect(() => {
+    latestSearchValueRef.current = searchValue;
+  }, [searchValue]);
+
+  React.useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    const ws = new RecentSearchWebSocket(token);
+    recentSearchWsRef.current = ws;
+
+    ws.onEvent((event) => {
+      if (event.type === 'recent_search_update') {
+        const normalized = normalizeRecentSearchData(
+          event.recent_searches,
+          event.recent
+        );
+        setRecentSearches(normalized);
+
+        if (
+          isSearchFocusedRef.current &&
+          latestSearchValueRef.current.trim() === ''
+        ) {
+          setShowRecentSearches(normalized.length > 0);
+        }
+      }
+    });
+
+    ws.connect().catch((error) => {
+      console.warn('RecentSearchWebSocket connection failed:', error);
+    });
+
+    return () => {
+      ws.disconnect();
+      recentSearchWsRef.current = null;
+    };
+  }, [normalizeRecentSearchData]);
+
+  // Auto-toggle recent searches dropdown when focused with no query
+  React.useEffect(() => {
+    if (isSearchFocused && searchValue.trim() === '' && recentSearches.length > 0) {
+      setShowRecentSearches(true);
+    }
+  }, [isSearchFocused, searchValue, recentSearches]);
 
   // Handle click outside to close profile dropdown
   useEffect(() => {
@@ -136,6 +334,20 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     };
   }, []);
 
+  React.useEffect(() => {
+    const handleRecentSearchUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const normalized = normalizeRecentSearchData(
+        customEvent.detail?.recent_searches,
+        customEvent.detail?.recent
+      );
+      setRecentSearches(normalized);
+    };
+
+    window.addEventListener('recentSearchUpdate', handleRecentSearchUpdate);
+    return () => window.removeEventListener('recentSearchUpdate', handleRecentSearchUpdate);
+  }, [normalizeRecentSearchData]);
+
 
   React.useEffect(() => {
     const delayDebounce = setTimeout(() => {
@@ -153,12 +365,36 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                 const userIdInResult = user.user_id ?? user.id;
                 const userIdInStorage = userObj.user_id ?? userObj.id;
                 // Exclude current user, admin accounts, and PESO accounts by ID
-                return userIdInResult !== userIdInStorage && 
-                       !adminUserIds.includes(Number(userIdInResult)) && 
-                       !pesoUserIds.includes(Number(userIdInResult));
+                return (
+                  userIdInResult !== userIdInStorage &&
+                  !adminUserIds.includes(Number(userIdInResult)) &&
+                  !pesoUserIds.includes(Number(userIdInResult))
+                );
               });
             }
-            setSearchResults(filteredData);
+
+            const normalizedWithDisplayName = filteredData.map((user: any) => {
+              const fName = user.f_name ?? user.first_name ?? '';
+              const mName = user.m_name ?? user.middle_name ?? '';
+              const lName = user.l_name ?? user.last_name ?? '';
+              const displayName = buildFullName({
+                f_name: fName,
+                m_name: mName,
+                l_name: lName,
+                name: user.name,
+                full_name: user.full_name,
+              });
+
+              return {
+                ...user,
+                displayName,
+                f_name: fName,
+                m_name: mName,
+                l_name: lName,
+              };
+            });
+
+            setSearchResults(normalizedWithDisplayName);
             setShowSuggestions(true);
           })
           .catch(() => {
@@ -374,19 +610,31 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
     <div
       style={{
         background: '#174f84',
-        padding: '14px 32px',
+        padding: isCompactTopBar ? '12px 20px' : '14px 32px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        flexWrap: isCompactTopBar ? 'wrap' : 'nowrap',
+        gap: isCompactTopBar ? 12 : 0,
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
         backdropFilter: 'blur(10px)',
         position: 'sticky',
         top: 0,
         zIndex: 1000,
+        boxSizing: 'border-box',
       }}
     >
       {/* Logo and Search */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: isCompactTopBar ? 12 : 16,
+          flexWrap: isCompactTopBar ? 'wrap' : 'nowrap',
+          width: isCompactTopBar ? '100%' : 'auto',
+          flex: isCompactTopBar ? '1 1 100%' : '0 1 auto',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div
             style={{
@@ -412,7 +660,14 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             />
           </div>
         </div>
-        <div style={{ position: 'relative' }}>
+        <div
+          style={{
+            position: 'relative',
+            flex: isCompactTopBar ? '1 1 240px' : '0 0 auto',
+            maxWidth: isCompactTopBar ? 'min(320px, 100%)' : '320px',
+            width: isCompactTopBar ? '100%' : 'auto',
+          }}
+        >
           <input
             type="text"
             placeholder="Search users..."
@@ -428,7 +683,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               borderRadius: 24,
               border: '1px solid rgba(255, 255, 255, 0.2)',
               padding: '10px 18px 10px 42px',
-              width: 320,
+            width: isCompactTopBar ? '100%' : 320,
               fontSize: 14,
               background: 'rgba(255, 255, 255, 0.95)',
               backdropFilter: 'blur(10px)',
@@ -437,9 +692,13 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               transition: 'all 0.3s ease',
             }}
             onFocus={async (e) => {
+              setIsSearchFocused(true);
               if (searchValue.trim() === '') {
-                const recentSearchesData = await loadRecentSearches();
-                setShowRecentSearches(recentSearchesData.length > 0);
+              const recentSearchesData = await loadRecentSearches();
+              if (process.env.NODE_ENV === 'development') {
+                console.log('Recent searches on focus:', recentSearchesData);
+              }
+              setShowRecentSearches(recentSearchesData.length > 0);
               } else {
                 setShowSuggestions(searchResults.length > 0);
               }
@@ -452,6 +711,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               setTimeout(() => {
                 setShowSuggestions(false);
                 setShowRecentSearches(false);
+                setIsSearchFocused(false);
               }, 200);
               if (e.currentTarget) {
                 e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
@@ -530,7 +790,21 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                       fontWeight: '600',
                       color: '#003366',
                       fontSize: '14px',
-                    }}>{user.name}</div>
+                    }}>
+                      {(() => {
+                        if (user.displayName) return user.displayName;
+                        return buildFullName({
+                          f_name: user.f_name,
+                          m_name: user.m_name,
+                          l_name: user.l_name,
+                          first_name: user.first_name,
+                          middle_name: user.middle_name,
+                          last_name: user.last_name,
+                          name: user.name,
+                          full_name: user.full_name,
+                        });
+                      })()}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -563,9 +837,16 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               }}>
                 Recent Searches
               </div>
-              {recentSearches.map((search) => (
+              {recentSearches.map((search, index) => {
+                const numericId =
+                  typeof search.id === 'number'
+                    ? search.id
+                    : Number(search.id);
+                const canDelete = Number.isFinite(numericId) && numericId > 0;
+                
+                return (
                 <div
-                  key={search.id}
+                  key={String(search.id ?? search.searched_user?.user_id ?? index)}
                   style={{
                     padding: 12,
                     display: 'flex',
@@ -611,10 +892,13 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
 
                   </div>
                   <button
+                    disabled={!canDelete}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      handleDeleteRecentSearch(search.id);
+                      if (canDelete) {
+                        handleDeleteRecentSearch(numericId as number);
+                      }
                     }}
                     onMouseDown={(e) => {
                       e.preventDefault();
@@ -623,7 +907,6 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                     style={{
                       background: 'none',
                       border: 'none',
-                      cursor: 'pointer',
                       padding: '4px',
                       borderRadius: '4px',
                       color: '#999',
@@ -632,6 +915,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      opacity: canDelete ? 1 : 0.4,
+                      cursor: canDelete ? 'pointer' : 'not-allowed',
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background = 'rgba(255, 0, 0, 0.1)';
@@ -641,19 +926,30 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
                       e.currentTarget.style.background = 'none';
                       e.currentTarget.style.color = '#999';
                     }}
-                    title="Delete this recent search"
+                    title={canDelete ? 'Delete this recent search' : 'Cannot delete – missing identifier'}
                   >
                     <i className="pi pi-times" style={{ fontSize: '12px' }}></i>
                   </button>
                 </div>
-              ))}
+              );
+              })}
             </div>
           )}
         </div>
       </div>
 
       {/* Navigation Icons */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: isCompactTopBar ? 16 : 24,
+          flexWrap: isCompactTopBar ? 'wrap' : 'nowrap',
+          justifyContent: isCompactTopBar ? 'flex-end' : 'flex-start',
+          width: isCompactTopBar ? '100%' : 'auto',
+          flex: isCompactTopBar ? '1 1 100%' : '0 1 auto',
+        }}
+      >
         <div
           style={{
             display: 'flex',
@@ -661,8 +957,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             alignItems: 'center',
             gap: 6,
             cursor: 'pointer',
-            padding: '10px 16px',
-            borderRadius: '16px',
+            padding: isCompactTopBar ? '8px 12px' : '10px 16px',
+            borderRadius: isCompactTopBar ? '14px' : '16px',
             transition: 'all 0.3s ease',
             background: location.pathname.includes('/dashboard') 
               ? 'rgba(255, 255, 255, 0.2)'
@@ -690,7 +986,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           <i className="pi pi-home" style={{ color: 'white', fontSize: 20 }}></i>
           <span style={{ 
             color: 'white', 
-            fontSize: 12, 
+            fontSize: isCompactTopBar ? 11 : 12, 
             fontWeight: location.pathname.includes('/dashboard') ? '600' : '500',
             letterSpacing: '0.2px',
           }}>Home</span>
@@ -702,8 +998,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             alignItems: 'center',
             gap: 6,
             cursor: 'pointer',
-            padding: '10px 16px',
-            borderRadius: '16px',
+            padding: isCompactTopBar ? '8px 12px' : '10px 16px',
+            borderRadius: isCompactTopBar ? '14px' : '16px',
             transition: 'all 0.3s ease',
             background: location.pathname.includes('/message') 
               ? 'rgba(255, 255, 255, 0.2)'
@@ -755,7 +1051,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           )}
           <span style={{ 
             color: 'white', 
-            fontSize: 12, 
+            fontSize: isCompactTopBar ? 11 : 12, 
             fontWeight: location.pathname.includes('/message') ? '600' : '500',
             letterSpacing: '0.2px',
           }}>Messages</span>
@@ -768,8 +1064,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           gap: 6,
           cursor: 'pointer',
           position: 'relative',
-          padding: '10px 16px',
-          borderRadius: '16px',
+          padding: isCompactTopBar ? '8px 12px' : '10px 16px',
+          borderRadius: isCompactTopBar ? '14px' : '16px',
           transition: 'all 0.3s ease',
           background: location.pathname.includes('/notification') 
             ? 'rgba(255, 255, 255, 0.2)'
@@ -800,7 +1096,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             style={{
               position: 'absolute',
               top: 4,
-              right: 8,
+              right: isCompactTopBar ? 6 : 8,
               backgroundColor: '#ff3b3b',
               color: 'white',
               borderRadius: '12px',
@@ -832,7 +1128,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
           }} title="Real-time notifications connected" /> */}
         <span style={{ 
           color: 'white', 
-          fontSize: 12, 
+          fontSize: isCompactTopBar ? 11 : 12, 
           fontWeight: location.pathname.includes('/notification') ? '600' : '500',
           letterSpacing: '0.2px',
         }}>Notification</span>
@@ -845,8 +1141,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               alignItems: 'center',
               gap: 6,
               cursor: 'pointer',
-              padding: '10px 16px',
-              borderRadius: '16px',
+              padding: isCompactTopBar ? '8px 12px' : '10px 16px',
+              borderRadius: isCompactTopBar ? '14px' : '16px',
               transition: 'all 0.3s ease',
               background: location.pathname.includes('/tracker') 
                 ? 'rgba(255, 255, 255, 0.2)'
@@ -874,7 +1170,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             <i className="pi pi-clipboard" style={{ color: 'white', fontSize: 20 }}></i>
             <span style={{ 
               color: 'white', 
-              fontSize: 12, 
+              fontSize: isCompactTopBar ? 11 : 12, 
               fontWeight: location.pathname.includes('/tracker') ? '600' : '500',
               letterSpacing: '0.2px',
             }}>Tracker</span>
@@ -888,8 +1184,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               alignItems: 'center',
               gap: 6,
               cursor: 'pointer',
-              padding: '8px 12px',
-              borderRadius: '12px',
+              padding: isCompactTopBar ? '6px 10px' : '8px 12px',
+              borderRadius: isCompactTopBar ? '10px' : '12px',
               transition: 'all 0.3s ease',
               background: showProfile ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
             }}
@@ -914,7 +1210,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             }}></i>
             <span style={{ 
               color: 'white', 
-              fontSize: 12, 
+              fontSize: isCompactTopBar ? 11 : 12, 
               fontWeight: '500',
               letterSpacing: '0.2px',
             }}>Menu ▼</span>

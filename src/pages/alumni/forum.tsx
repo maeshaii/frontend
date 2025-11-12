@@ -159,12 +159,20 @@ const ForumPage: React.FC = () => {
       const response = await api.get('alumni/all/');
       
       if (response.data.success && response.data.alumni) {
+        const allAlumni = response.data.alumni ?? [];
+        
         // Filter to only show users from the same batch
         const currentUserBatch = userObj.year_graduated || userObj.batch;
-        const batchMembers = response.data.alumni.filter((member: any) => {
+        let batchMembers = allAlumni.filter((member: any) => {
           const memberBatch = member.batch;
-          return memberBatch === currentUserBatch;
+          return memberBatch && currentUserBatch && memberBatch === currentUserBatch;
         });
+
+        // Fallback: if no batch match, show the first few alumni instead of an empty list
+        if (batchMembers.length === 0) {
+          batchMembers = allAlumni.filter((member: any) => Number(member.id) !== Number(currentUserId));
+        }
+
         setAllMembers(batchMembers);
         
         // Check follow status for each member
@@ -631,9 +639,16 @@ const ForumPage: React.FC = () => {
 
 
       {/* Main Content */}
-      <Box sx={{ maxWidth: '1400px', mx: 'auto', px: 2, py: 3 }}>
+      <Box
+        sx={{
+          maxWidth: { xs: '100%', lg: '1600px', xl: '1800px' },
+          mx: 'auto',
+          px: { xs: 2, md: 3 },
+          py: 3
+        }}
+      >
         {/* Header Section */}
-        <Box sx={{ mb: 4 }}>
+        <Box sx={{ mb: 4, px: { xs: 0, md: 3 } }}>
           <Card
             sx={{
               display: 'flex',
@@ -667,9 +682,23 @@ const ForumPage: React.FC = () => {
         </Box>
 
         {/* Three Column Layout */}
-        <Box sx={{ display: 'flex', gap: 3 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
+            gap: { xs: 2, md: 3.5 },
+            px: { xs: 0, md: 3 },
+          }}
+        >
           {/* Left Sidebar - Members */}
-          <Box sx={{ flex: '0 0 300px' }}>
+          <Box
+            sx={{
+              flex: { xs: '1 1 100%', md: '0 0 260px' },
+              width: '100%',
+              maxWidth: { xs: '100%', md: 260 },
+              order: { xs: 2, md: 1 }
+            }}
+          >
             <Card sx={{ 
               p: 3, 
               borderRadius: 3, 
@@ -774,14 +803,18 @@ const ForumPage: React.FC = () => {
           </Box>
 
           {/* Center Content */}
-          <Box sx={{ 
-            flex: '1 1 600px',
+          <Box
+            sx={{ 
+              flex: { xs: '1 1 auto', md: '1 1 720px' },
             display: 'flex',
             flexDirection: 'column',
             minHeight: 0,
             maxHeight: { xs: 'none', md: 'calc(100vh - 260px)' },
-            overflow: { xs: 'visible', md: 'hidden' }
-          }}>
+              overflow: { xs: 'visible', md: 'hidden' },
+              order: { xs: 1, md: 2 },
+              width: '100%'
+            }}
+          >
               {/* Start a post */}
             <Card sx={{ 
               mb: 3, 
@@ -1244,7 +1277,15 @@ const ForumPage: React.FC = () => {
           </Box>
 
           {/* Right Sidebar - About */}
-          <Box sx={{ flex: '0 0 300px' }}>
+          <Box
+            sx={{
+              flex: { xs: '1 1 100%', md: '0 0 260px' },
+              width: '100%',
+              maxWidth: { xs: '100%', md: 260 },
+              order: { xs: 3, md: 3 },
+              mt: { xs: 3, md: 0 }
+            }}
+          >
               <Card sx={{ 
                 p: 3, 
                 borderRadius: 3, 

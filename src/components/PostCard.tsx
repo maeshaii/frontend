@@ -382,7 +382,7 @@ const PostCard: React.FC<PostCardProps> = ({
     if (!text) return null;
     
     const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const mentionRegex = /@(\w+)/g;
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
     
     // Enhanced regex to detect names (First Last format)
     const nameRegex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
@@ -415,17 +415,18 @@ const PostCard: React.FC<PostCardProps> = ({
       // Handle mentions (@username)
       const mentionParts = part.split(mentionRegex);
       const processedMentionParts = mentionParts.map((mentionPart, mentionIndex) => {
-        if (mentionRegex.test(mentionPart)) {
-          // Extract username from @username
-          const username = mentionPart.substring(1); // Remove @
+        const isMentionSegment = mentionIndex % 2 === 1;
+        if (isMentionSegment) {
+          const mentionText = mentionPart.trim();
+          if (!mentionText) return null;
+          const display = `@${mentionText}`;
           
           return (
             <button
               key={`${index}-${mentionIndex}`}
               onClick={(e) => {
                 e.stopPropagation();
-                // Search for the user and redirect to their profile
-                handleUserSearch(username);
+                handleUserSearch(mentionText);
               }}
               style={{ 
                 color: '#007bff', 
@@ -443,22 +444,23 @@ const PostCard: React.FC<PostCardProps> = ({
                 e.currentTarget.style.textDecoration = 'none';
               }}
             >
-              {mentionPart}
+              {display}
             </button>
           );
         }
         
-        // Handle names (First Last format)
         const nameParts = mentionPart.split(nameRegex);
         return nameParts.map((namePart, nameIndex) => {
-          if (nameRegex.test(namePart)) {
+          const isNameSegment = nameIndex % 2 === 1;
+          if (isNameSegment) {
+            const displayName = namePart.trim();
+            if (!displayName) return null;
             return (
               <button
                 key={`${index}-${mentionIndex}-${nameIndex}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  // Search for the user and redirect to their profile
-                  handleUserSearch(namePart);
+                  handleUserSearch(displayName);
                 }}
                 style={{ 
                   color: '#007bff', 
@@ -476,7 +478,7 @@ const PostCard: React.FC<PostCardProps> = ({
                   e.currentTarget.style.textDecoration = 'none';
                 }}
               >
-                {namePart}
+                {displayName}
               </button>
             );
           }

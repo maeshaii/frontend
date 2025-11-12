@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate, Link, useParams } from 'react-router-dom';
 import AlumniTopBar from '../alumni/AlumniTopBar';
 import PostCreate from '../alumni/PostCreate';
@@ -248,16 +248,29 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
   const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
   const [showTrackerModal, setShowTrackerModal] = useState(false);
+  const [trackerReminderSuppressed, setTrackerReminderSuppressed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('suppressTrackerModal') === 'true';
+    } catch (_) {
+      return false;
+    }
+  });
   const [showRepostModal, setShowRepostModal] = useState(false);
   const [repostModalData, setRepostModalData] = useState<{repostId: string, reposterName?: string} | null>(null);
   const [showRepostNotificationModal, setShowRepostNotificationModal] = useState(false);
-  const [repostNotificationModalData, setRepostNotificationModalData] = useState<{repostId: string; reposterName?: string; commentId?: string} | null>(null);
+  const [repostNotificationModalData, setRepostNotificationModalData] = useState<{repostId: string; reposterName?: string; commentId?: string; replyId?: string} | null>(null);
   const [showPhotoGalleryModal, setShowPhotoGalleryModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [startY, setStartY] = useState(0);
   const isRefreshingRef = React.useRef(false);
+  const trackerReminderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trackerReminderSuppressedRef = useRef(trackerReminderSuppressed);
+
+  useEffect(() => {
+    trackerReminderSuppressedRef.current = trackerReminderSuppressed;
+  }, [trackerReminderSuppressed]);
   const navigate = useNavigate();
 
   // Determine user type from localStorage instead of props
@@ -323,15 +336,35 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     // Check tracker status for alumni users
     const currentUserId = userObj.user_id || userObj.id;
     if (currentUserId && (userObj.account_type?.user || userObj.account_type?.alumni)) {
-      // Only show tracker modal for alumni users
       trackerApi.checkSubmissionStatus(String(currentUserId))
         .then((response) => {
           console.log('🔍 Tracker status:', response);
           if (!response.has_submitted) {
-            // Show modal after a short delay to let the dashboard load
-            setTimeout(() => {
-              setShowTrackerModal(true);
-            }, 2000);
+            const shouldSuppressTrackerModal =
+              trackerReminderSuppressedRef.current ||
+              (() => {
+                try {
+                  return localStorage.getItem('suppressTrackerModal') === 'true';
+                } catch (_) {
+                  return false;
+                }
+              })();
+
+            if (!shouldSuppressTrackerModal) {
+              if (trackerReminderTimeoutRef.current) {
+                clearTimeout(trackerReminderTimeoutRef.current);
+              }
+              trackerReminderTimeoutRef.current = setTimeout(() => {
+                setTrackerReminderSuppressed(false);
+                setShowTrackerModal(true);
+                try {
+                  localStorage.removeItem('suppressTrackerModal');
+                } catch (_) {}
+                trackerReminderTimeoutRef.current = null;
+              }, 2000);
+            } else {
+              setTrackerReminderSuppressed(true);
+            }
           }
         })
         .catch((error) => {
@@ -381,6 +414,37 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         .catch((error) => console.error('Error fetching users:', error));
     });
   }, [navigate]);
+
+  useEffect(() => {
+    const handleSuppressTrackerModal = (_event?: Event) => {
+      if (trackerReminderTimeoutRef.current) {
+        clearTimeout(trackerReminderTimeoutRef.current);
+        trackerReminderTimeoutRef.current = null;
+      }
+      setTrackerReminderSuppressed(true);
+      setShowTrackerModal(false);
+      try {
+        localStorage.removeItem('suppressTrackerModal');
+      } catch (_) {}
+    };
+
+    window.addEventListener('suppressTrackerModal', handleSuppressTrackerModal as EventListener);
+    if (localStorage.getItem('suppressTrackerModal') === 'true') {
+      handleSuppressTrackerModal();
+    }
+
+    return () => {
+      window.removeEventListener('suppressTrackerModal', handleSuppressTrackerModal as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (trackerReminderTimeoutRef.current) {
+        clearTimeout(trackerReminderTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Fetch admin and PESO user IDs dynamically
   const fetchAdminPesoUsers = async () => {
@@ -799,6 +863,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     // PRIORITIZE REPOSTS FIRST
     const pendingRepostId = localStorage.getItem('pendingRepostView');
     const pendingRepostCommentId = localStorage.getItem('pendingRepostCommentId');
+    const pendingRepostReplyId = localStorage.getItem('pendingRepostReplyId');
     if (pendingRepostId) {
       console.log('Found pending repost view:', pendingRepostId);
       localStorage.removeItem('pendingRepostView');
@@ -806,8 +871,15 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         console.log('Found pending repost comment view:', pendingRepostCommentId);
         localStorage.removeItem('pendingRepostCommentId');
       }
-      // Set the modal data with repostId (which will be used to fetch the repost data)
-      setRepostNotificationModalData({ repostId: pendingRepostId, commentId: pendingRepostCommentId || undefined });
+      if (pendingRepostReplyId) {
+        console.log('Found pending repost reply view:', pendingRepostReplyId);
+        localStorage.removeItem('pendingRepostReplyId');
+      }
+      setRepostNotificationModalData({
+        repostId: pendingRepostId,
+        commentId: pendingRepostCommentId || undefined,
+        replyId: pendingRepostReplyId || undefined
+      });
       setShowRepostNotificationModal(true);
       console.log('Opening repost notification modal for repost:', pendingRepostId);
     }
@@ -2665,6 +2737,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         repostId={repostNotificationModalData?.repostId || ''}
         reposterName={repostNotificationModalData?.reposterName}
         commentId={repostNotificationModalData?.commentId}
+        replyId={repostNotificationModalData?.replyId}
       />
     </div>
   );

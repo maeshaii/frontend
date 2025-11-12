@@ -22,6 +22,9 @@ interface ReplyProps {
   onReplyUpdate: () => void;
   displayName?: string;
   displayAvatar?: string;
+  registerHighlightRef?: (replyId: number, element: HTMLDivElement | null) => void;
+  isHighlighted?: boolean;
+  highlightColor?: string;
 }
 
 const Reply: React.FC<ReplyProps> = ({ 
@@ -31,7 +34,10 @@ const Reply: React.FC<ReplyProps> = ({
   formatTime, 
   onReplyUpdate,
   displayName,
-  displayAvatar
+  displayAvatar,
+  registerHighlightRef,
+  isHighlighted = false,
+  highlightColor
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(reply.reply_content);
@@ -40,6 +46,15 @@ const Reply: React.FC<ReplyProps> = ({
   const [replyContent, setReplyContent] = useState('');
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
   const optionsRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!registerHighlightRef) return;
+    registerHighlightRef(reply.reply_id, containerRef.current);
+    return () => {
+      registerHighlightRef(reply.reply_id, null);
+    };
+  }, [registerHighlightRef, reply.reply_id]);
 
   const isOwnReply = currentUserId === reply.user.user_id;
   const userName = `${reply.user.f_name} ${reply.user.m_name || ''} ${reply.user.l_name}`.trim();
@@ -151,7 +166,7 @@ const Reply: React.FC<ReplyProps> = ({
 
   const renderTextWithLinks = (text: string) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const mentionRegex = /@(\w+)/g;
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
     
     // Enhanced regex to detect names (First Last format)
     const nameRegex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
@@ -176,24 +191,25 @@ const Reply: React.FC<ReplyProps> = ({
       // Handle mentions (@username)
       const mentionParts = part.split(mentionRegex);
       const processedMentionParts = mentionParts.map((mentionPart, mentionIndex) => {
-        if (mentionRegex.test(mentionPart)) {
-          // Extract username from @username
-          const username = mentionPart.substring(1); // Remove @
-          
-          // Check if this mention matches the reply author's name
+        const isMentionSegment = mentionIndex % 2 === 1;
+        if (isMentionSegment) {
+          const mentionText = mentionPart.trim();
+          if (!mentionText) return null;
+
           const replyAuthorName = `${reply.user.f_name} ${reply.user.m_name || ''} ${reply.user.l_name}`.trim();
-          const isReplyAuthor = username.toLowerCase() === replyAuthorName.toLowerCase().replace(/\s+/g, '');
+          const normalizedReplyAuthor = replyAuthorName.toLowerCase().replace(/\s+/g, '');
+          const isReplyAuthor = mentionText.toLowerCase().replace(/\s+/g, '') === normalizedReplyAuthor;
+
+          const display = `@${mentionText}`;
           
           return (
             <button
               key={`${index}-${mentionIndex}`}
               onClick={() => {
                 if (isReplyAuthor) {
-                  // If it's the reply author, go directly to their profile
                   window.location.href = getProfilePath(reply.user.user_id);
                 } else {
-                  // Search for the user and redirect to their profile
-                  handleUserSearch(username);
+                  handleUserSearch(mentionText);
                 }
               }}
               style={{ 
@@ -212,29 +228,29 @@ const Reply: React.FC<ReplyProps> = ({
                 e.currentTarget.style.textDecoration = 'none';
               }}
             >
-              {mentionPart}
+              {display}
             </button>
           );
         }
         
-        // Handle names (First Last format)
         const nameParts = mentionPart.split(nameRegex);
         return nameParts.map((namePart, nameIndex) => {
-          if (nameRegex.test(namePart)) {
-            // Check if this name matches the reply author's name
+          const isNameSegment = nameIndex % 2 === 1;
+          if (isNameSegment) {
+            const displayName = namePart.trim();
+            if (!displayName) return null;
+
             const replyAuthorName = `${reply.user.f_name} ${reply.user.m_name || ''} ${reply.user.l_name}`.trim();
-            const isReplyAuthor = namePart.toLowerCase() === replyAuthorName.toLowerCase();
+            const isReplyAuthor = displayName.toLowerCase() === replyAuthorName.toLowerCase();
             
             return (
               <button
                 key={`${index}-${mentionIndex}-${nameIndex}`}
                 onClick={() => {
                   if (isReplyAuthor) {
-                    // If it's the reply author, go directly to their profile
                     window.location.href = getProfilePath(reply.user.user_id);
                   } else {
-                    // Search for the user and redirect to their profile
-                    handleUserSearch(namePart);
+                    handleUserSearch(displayName);
                   }
                 }}
                 style={{ 
@@ -253,7 +269,7 @@ const Reply: React.FC<ReplyProps> = ({
                   e.currentTarget.style.textDecoration = 'none';
                 }}
               >
-                {namePart}
+                {displayName}
               </button>
             );
           }
@@ -266,12 +282,16 @@ const Reply: React.FC<ReplyProps> = ({
   };
 
   return (
-    <div style={{ 
-      marginTop: '4px', 
-      marginLeft: '32px',
-      display: 'flex',
-      gap: '8px'
-    }}>
+    <div
+      ref={containerRef}
+      style={{ 
+        marginTop: '4px', 
+        marginLeft: '32px',
+        display: 'flex',
+        gap: '8px',
+        scrollMarginTop: '96px'
+      }}
+    >
       {/* User Avatar */}
       <img
         src={userAvatar}
@@ -290,7 +310,9 @@ const Reply: React.FC<ReplyProps> = ({
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Reply Content Container */}
         <div style={{
-          backgroundColor: '#f0f2f5',
+          backgroundColor: isHighlighted ? (highlightColor || '#fff2e6') : '#f0f2f5',
+          boxShadow: isHighlighted ? '0 0 0 2px rgba(255,137,33,0.25)' : 'none',
+          transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
           borderRadius: '18px',
           padding: '6px 10px',
           display: 'inline-block',

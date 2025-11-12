@@ -23,6 +23,7 @@ export type NotificationWsEvent =
   | { type: 'connection_established'; user_id: number; timestamp: string }
   | { type: 'connection_denied'; reason: string; message: string }
   | { type: 'rate_limit_exceeded'; reason: string; retry_after?: number }
+  | { type: 'recent_search_update'; recent_searches?: any[]; recent?: any[] }
   | { type: 'pong'; timestamp: string }
   | { type: 'error'; message: string };
 

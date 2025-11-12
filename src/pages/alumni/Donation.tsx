@@ -539,9 +539,16 @@ const DonationPage: React.FC = () => {
       />
 
       {/* Main Content */}
-      <Box sx={{ maxWidth: '1400px', mx: 'auto', px: 2, py: 3 }}>
+      <Box
+        sx={{
+          maxWidth: { xs: '100%', lg: '1600px', xl: '1800px' },
+          mx: 'auto',
+          px: { xs: 2, md: 3 },
+          py: 3
+        }}
+      >
         {/* Header Section */}
-        <Box sx={{ mb: 4 }}>
+        <Box sx={{ mb: 4, px: { xs: 0, md: 3 } }}>
           <Card
             sx={{
               display: 'flex',
@@ -575,9 +582,25 @@ const DonationPage: React.FC = () => {
         </Box>  
 
         {/* Three Column Layout */}
-      <Box sx={{ display: 'flex', gap: 3, px: 3, pb: 3, alignItems: 'flex-start' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          gap: { xs: 2, md: 3.5 },
+          px: { xs: 0, md: 3 },
+          pb: 3,
+          alignItems: { xs: 'stretch', md: 'flex-start' }
+        }}
+      >
         {/* Left Sidebar - About */}
-          <Box sx={{ flex: '0 0 300px' }}>
+          <Box
+            sx={{
+              flex: { xs: '1 1 100%', md: '0 0 260px' },
+              width: '100%',
+              maxWidth: { xs: '100%', md: 260 },
+              order: { xs: 2, md: 1 }
+            }}
+          >
           <Card sx={{ 
             borderRadius: 3, 
             boxShadow: '0 4px 16px rgba(0,0,0,0.06)', 
@@ -666,7 +689,16 @@ const DonationPage: React.FC = () => {
         </Box>
 
           {/* Center Content */}
-          <Box sx={{ flex: '1 1 600px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <Box
+            sx={{
+              flex: { xs: '1 1 auto', md: '1 1 720px' },
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              width: '100%',
+              order: { xs: 1, md: 2 }
+            }}
+          >
             {/* Start a post */}
             <Card sx={{ 
               mb: 3, 
@@ -917,7 +949,18 @@ const DonationPage: React.FC = () => {
           </Box>
 
         {/* Right Sidebar - Stats */}
-          <Box sx={{ flex: '0 0 300px', display: 'flex', flexDirection: 'column' }}>
+          <Box
+            sx={{
+              flex: { xs: '1 1 100%', md: '0 0 260px' },
+              maxWidth: { xs: '100%', md: 260 },
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: { xs: 2, md: 3 },
+              mt: { xs: 3, md: 0 },
+              order: { xs: 3, md: 3 }
+            }}
+          >
           {/* Tips Card */}
           <Card sx={{ 
             p: 3, 
@@ -995,7 +1038,6 @@ const DonationPage: React.FC = () => {
 
           {/* Support Card */}
           <Card sx={{ 
-            mt: 3,
             p: 3, 
             borderRadius: 3, 
             boxShadow: '0 4px 16px rgba(0,0,0,0.06)',

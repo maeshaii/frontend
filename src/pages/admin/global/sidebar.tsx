@@ -14,7 +14,7 @@ import {
   FaSignOutAlt
 } from 'react-icons/fa';
 import { MdSettingsSuggest } from 'react-icons/md';
-import logoLogin from '../../../images/logo_login.png';
+import logoLogin from '../../../images/logo.png';
 import ConfirmModal from '../../../components/ConfirmModal';
 import './sidebar.css';
 import { getRewardRequests } from '../../../services/api';
@@ -316,20 +316,32 @@ const Sidebar = () => {
       display: 'flex',
       flexDirection: 'column' as const,
       alignItems: 'center',
-      marginBottom: '20px',
+      marginBottom: '60px',
       opacity: 1,
       transition: 'opacity 0.3s ease',
       overflow: 'hidden',
       whiteSpace: 'nowrap' as const,
+      gap: '10px',
+    },
+    logoContainer: {
+      width: '100%',
+      maxWidth: isCollapsed ? '60px' : '180px',
+      height: isCollapsed ? 54 : 60,
+      background: '#ffffff',
+      margin: '0 auto',
+      borderRadius: '8px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+      overflow: 'hidden',
+      padding: '4px 8px',
+      transition: 'all 0.3s ease',
     },
     logoImage: {
-      width: isCollapsed ? '50px' : '80px',
-      height: isCollapsed ? '50px' : '80px',
-      borderRadius: '8px',
-      background: 'white',
-      padding: '8px',
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-      transition: 'all 0.3s ease',
+      height: '100%',
+      width: 'auto',
+      objectFit: 'contain' as const,
     },
     logoText: {
       fontSize: '14px',
@@ -559,8 +571,9 @@ const Sidebar = () => {
       >
         <div style={styles.topSection}>
           <div style={styles.logo}>
-            <img src={logoLogin} alt="Logo" style={styles.logoImage} />
-            <h1 style={styles.logoText}>WhereNa You</h1>
+            <div style={styles.logoContainer}>
+              <img src={logoLogin} alt="WhereNaYou Logo" style={styles.logoImage} />
+            </div>
           </div>
 
           <ul style={styles.navList}>

@@ -269,6 +269,15 @@ export function useRealTimeNotifications(
             void fetchNotificationsData();
             break;
 
+          case 'recent_search_update':
+            window.dispatchEvent(new CustomEvent('recentSearchUpdate', {
+              detail: {
+                recent_searches: event.recent_searches ?? [],
+                recent: event.recent ?? []
+              }
+            }));
+            break;
+
           case 'connection_established':
             console.log('Notification WebSocket connected');
             setError(null);

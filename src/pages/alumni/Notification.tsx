@@ -46,6 +46,7 @@ const NotificationPage: React.FC = () => {
   });
 
   const [selected, setSelected] = useState<number[]>([]);
+  const [hoveredCheckboxId, setHoveredCheckboxId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [showProfile, setShowProfile] = useState(false);
   const [openNotif, setOpenNotif] = useState<any | null>(null);
@@ -67,6 +68,34 @@ const NotificationPage: React.FC = () => {
   const [adminProfilePic, setAdminProfilePic] = useState<string | null>(null);
   const navigate = useNavigate();
 
+  const storeRepostHighlightIds = (commentId?: string | null, replyId?: string | null) => {
+    if (commentId) {
+      localStorage.setItem('pendingRepostCommentId', commentId);
+    } else {
+      localStorage.removeItem('pendingRepostCommentId');
+    }
+
+    if (replyId) {
+      localStorage.setItem('pendingRepostReplyId', replyId);
+    } else {
+      localStorage.removeItem('pendingRepostReplyId');
+    }
+  };
+
+  const suppressTrackerReminderForRedirect = () => {
+    try {
+      localStorage.setItem('suppressTrackerModal', 'true');
+    } catch (_) {
+      // ignore storage write issues (private mode, etc.)
+    }
+
+    try {
+      window.dispatchEvent(new Event('suppressTrackerModal'));
+    } catch (_) {
+      // event dispatch failure should not break notification flow
+    }
+  };
+
   // Debug profile picture updates
   React.useEffect(() => {
     console.log('Profile pictures updated:', userProfilePics);
@@ -75,6 +104,14 @@ const NotificationPage: React.FC = () => {
       localStorage.setItem('notifUserProfilePics', JSON.stringify(userProfilePics));
     } catch (_) {}
   }, [userProfilePics]);
+
+  React.useEffect(() => {
+    if (selected.length === 0) {
+      setHoveredCheckboxId(null);
+    }
+  }, [selected.length]);
+
+  const deleteDisabled = selected.length === 0;
 
   // Load profile pictures for notifications
   React.useEffect(() => {
@@ -493,18 +530,24 @@ const NotificationPage: React.FC = () => {
               console.log('Forum repost notification - redirecting to forum page with repost_id:', repostId);
               localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Store forum_id for reference
               localStorage.setItem('pendingRepostId', repostId); // Store repost_id to display
+              storeRepostHighlightIds(commentId, replyId);
+              suppressTrackerReminderForRedirect();
               navigate('/forum');
               return;
             } else if (donationIdMatch) {
               console.log('Donation repost notification - redirecting to donation page with repost_id:', repostId);
               localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Store donation_id for reference
               localStorage.setItem('pendingRepostId', repostId); // Store repost_id to display
+              storeRepostHighlightIds(commentId, replyId);
+              suppressTrackerReminderForRedirect();
               navigate('/donation');
               return;
             } else {
               // Default repost handling: open repost modal on dashboard
               localStorage.removeItem('pendingPostView');
               localStorage.setItem('pendingRepostView', repostId);
+              storeRepostHighlightIds(commentId, replyId);
+              suppressTrackerReminderForRedirect();
               const userStr = localStorage.getItem('user');
               const userData = userStr ? JSON.parse(userStr) : null;
               const currentUserId = userData?.user_id || userData?.id || '';
@@ -514,10 +557,13 @@ const NotificationPage: React.FC = () => {
                 const isPeso = !!(userData?.account_type?.peso);
                 const isAdmin = !!(userData?.account_type?.admin);
                 if (isPeso) {
+                  suppressTrackerReminderForRedirect();
                   navigate(`/peso/dashboard/${currentUserId}`);
                 } else if (isAdmin) {
+                  suppressTrackerReminderForRedirect();
                   navigate(`/ccict/dashboard/${currentUserId}`);
                 } else {
+                  suppressTrackerReminderForRedirect();
                   navigate(`/dashboard/${currentUserId}`);
                 }
               } else {
@@ -532,11 +578,13 @@ const NotificationPage: React.FC = () => {
           if (forumIdMatch) {
             console.log('Forum notification detected - redirecting to forum page with forum_id:', forumIdMatch[1]);
             localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
+            suppressTrackerReminderForRedirect();
             navigate('/forum');
             return;
           } else if (donationIdMatch) {
             console.log('Donation notification detected - redirecting to donation page with donation_id:', donationIdMatch[1]);
             localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
+            suppressTrackerReminderForRedirect();
             navigate('/donation');
             return;
           }
@@ -550,24 +598,30 @@ const NotificationPage: React.FC = () => {
               if (forumIdMatch) {
                 console.log('Forum mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
                 localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
+                suppressTrackerReminderForRedirect();
                 navigate('/forum');
                 return;
               } else if (donationIdMatch) {
                 console.log('Donation mention - redirecting to donation page with donation_id:', donationIdMatch[1]);
                 localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
+                suppressTrackerReminderForRedirect();
                 navigate('/donation');
                 return;
               } else {
                 // Regular post mention
                 localStorage.setItem('pendingPostView', originalPostId);
+                storeRepostHighlightIds(null, null);
               
                 // Redirect to dashboard
                 const currentPath = window.location.pathname;
                 if (currentPath.startsWith('/peso')) {
+                  suppressTrackerReminderForRedirect();
                   window.location.href = `/peso/dashboard/${originalPostId}`;
                 } else if (currentPath.startsWith('/ccict')) {
+                  suppressTrackerReminderForRedirect();
                   window.location.href = `/ccict/dashboard/${originalPostId}`;
                 } else {
+                  suppressTrackerReminderForRedirect();
                   window.location.href = `/dashboard/${originalPostId}`;
                 }
                 return;
@@ -586,25 +640,33 @@ const NotificationPage: React.FC = () => {
                   if (resolvedPostType === 'repost') {
                     console.log('Repost comment mention - redirecting to repost modal');
                     localStorage.setItem('pendingRepostView', resolvedPostId);
+                    storeRepostHighlightIds(commentId, replyId);
+                    suppressTrackerReminderForRedirect();
                     
                     // Redirect to dashboard
                     const currentPath = window.location.pathname;
                     if (currentPath.startsWith('/peso')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/peso/dashboard/${resolvedPostId}`;
                     } else if (currentPath.startsWith('/ccict')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/ccict/dashboard/${resolvedPostId}`;
                     } else {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/dashboard/${resolvedPostId}`;
                     }
+                    return;
                   }
                   // Check if this is a forum or donation post
                   else if (forumIdMatch) {
                     console.log('Forum comment mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
                     localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
+                    suppressTrackerReminderForRedirect();
                     navigate('/forum');
                   } else if (donationIdMatch) {
                     console.log('Donation comment mention - redirecting to donation page with donation_id:', donationIdMatch[1]);
                     localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
+                    suppressTrackerReminderForRedirect();
                     navigate('/donation');
                   } else {
                     // Regular post
@@ -613,10 +675,13 @@ const NotificationPage: React.FC = () => {
                     // Redirect to dashboard with resolved post ID
                     const currentPath = window.location.pathname;
                     if (currentPath.startsWith('/peso')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/peso/dashboard/${resolvedPostId}`;
                     } else if (currentPath.startsWith('/ccict')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/ccict/dashboard/${resolvedPostId}`;
                     } else {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/dashboard/${resolvedPostId}`;
                     }
                   }
@@ -642,25 +707,33 @@ const NotificationPage: React.FC = () => {
                   if (resolvedPostType === 'repost') {
                     console.log('Repost reply mention - redirecting to repost modal');
                     localStorage.setItem('pendingRepostView', resolvedPostId);
+                    storeRepostHighlightIds(commentId, replyId);
+                    suppressTrackerReminderForRedirect();
                     
                     // Redirect to dashboard
                     const currentPath = window.location.pathname;
                     if (currentPath.startsWith('/peso')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/peso/dashboard/${resolvedPostId}`;
                     } else if (currentPath.startsWith('/ccict')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/ccict/dashboard/${resolvedPostId}`;
                     } else {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/dashboard/${resolvedPostId}`;
                     }
+                    return;
                   }
                   // Check if this is a forum or donation post
                   else if (forumIdMatch) {
                     console.log('Forum reply mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
                     localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
+                    suppressTrackerReminderForRedirect();
                     navigate('/forum');
                   } else if (donationIdMatch) {
                     console.log('Donation reply mention - redirecting to donation page with donation_id:', donationIdMatch[1]);
                     localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
+                    suppressTrackerReminderForRedirect();
                     navigate('/donation');
                   } else {
                     // Regular post
@@ -669,10 +742,13 @@ const NotificationPage: React.FC = () => {
                     // Redirect to dashboard with resolved post ID
                     const currentPath = window.location.pathname;
                     if (currentPath.startsWith('/peso')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/peso/dashboard/${resolvedPostId}`;
                     } else if (currentPath.startsWith('/ccict')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/ccict/dashboard/${resolvedPostId}`;
                     } else {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/dashboard/${resolvedPostId}`;
                     }
                   }
@@ -701,6 +777,7 @@ const NotificationPage: React.FC = () => {
               if (repostId) {
                 localStorage.setItem('pendingRepostId', repostId);
               }
+              suppressTrackerReminderForRedirect();
               navigate('/forum');
               return;
             } 
@@ -711,6 +788,7 @@ const NotificationPage: React.FC = () => {
               if (repostId) {
                 localStorage.setItem('pendingRepostId', repostId);
               }
+              suppressTrackerReminderForRedirect();
               navigate('/donation');
               return;
             }
@@ -736,14 +814,19 @@ const NotificationPage: React.FC = () => {
                   if (resolvedPostType === 'repost') {
                     console.log('Comment is on a repost - redirecting to repost modal');
                     localStorage.setItem('pendingRepostView', resolvedPostId);
+                    storeRepostHighlightIds(commentId, replyId);
+                    suppressTrackerReminderForRedirect();
                     
                     // Redirect to dashboard
                     const currentPath = window.location.pathname;
                     if (currentPath.startsWith('/peso')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/peso/dashboard/${resolvedPostId}`;
                     } else if (currentPath.startsWith('/ccict')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/ccict/dashboard/${resolvedPostId}`;
                     } else {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/dashboard/${resolvedPostId}`;
                     }
                     return;
@@ -772,9 +855,12 @@ const NotificationPage: React.FC = () => {
             if (repostId) {
               // Open the repost modal directly when we have a valid repost ID
               localStorage.setItem('pendingRepostView', repostId);
+              storeRepostHighlightIds(commentId, replyId);
+              suppressTrackerReminderForRedirect();
             } else {
               // Otherwise open the original post modal
               localStorage.setItem('pendingPostView', postId);
+              storeRepostHighlightIds(null, null);
             }
             
             // Store profile picture information from notification for peso posts
@@ -812,11 +898,11 @@ const NotificationPage: React.FC = () => {
             if (userId) {
               const currentPath = window.location.pathname;
               if (currentPath.startsWith('/peso')) {
-                window.location.href = `/peso/dashboard/${userId}`;
+                navigate(`/peso/dashboard/${userId}`);
               } else if (currentPath.startsWith('/ccict')) {
-                window.location.href = `/ccict/dashboard/${userId}`;
+                navigate(`/ccict/dashboard/${userId}`);
               } else {
-                window.location.href = `/dashboard/${userId}`;
+                navigate(`/dashboard/${userId}`);
               }
               return;
             }
@@ -860,13 +946,18 @@ const NotificationPage: React.FC = () => {
         
         // Store and redirect
         localStorage.setItem('pendingPostView', postId);
+        storeRepostHighlightIds(null, null);
+        suppressTrackerReminderForRedirect();
         
         const currentPath = window.location.pathname;
         if (currentPath.startsWith('/peso')) {
+          suppressTrackerReminderForRedirect();
           window.location.href = `/peso/dashboard/${postId}`;
         } else if (currentPath.startsWith('/ccict')) {
+          suppressTrackerReminderForRedirect();
           window.location.href = `/ccict/dashboard/${postId}`;
         } else {
+          suppressTrackerReminderForRedirect();
           window.location.href = `/dashboard/${postId}`;
         }
         return;
@@ -1303,7 +1394,7 @@ const NotificationPage: React.FC = () => {
 
   return (
     <div style={{ 
-      background: 'white', 
+      background: '#f0f4f8', 
       minHeight: '100vh', 
       fontFamily: 'Arial, sans-serif'
     }}>
@@ -1323,7 +1414,15 @@ const NotificationPage: React.FC = () => {
         );
       })()}
       
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '30px 50px' }}>
+      <div
+        style={{
+          width: '80%',
+          maxWidth: '1800px',
+          margin: '0 auto',
+          padding: '24px 16px',
+          boxSizing: 'border-box'
+        }}
+      >
         {/* Header */}
         <div style={{ 
           background: 'white', 
@@ -1440,21 +1539,25 @@ const NotificationPage: React.FC = () => {
                       handleDelete(false);
                     }
                   }}
+                  disabled={deleteDisabled}
                   style={{
-                    background: '#dc3545',
-                    color: 'white',
+                    background: deleteDisabled ? '#adb5bd' : '#dc3545',
+                    color: deleteDisabled ? '#f8f9fa' : 'white',
                     border: 'none',
-                    cursor: 'pointer',
+                    cursor: deleteDisabled ? 'not-allowed' : 'pointer',
                     padding: '8px 12px',
                     borderRadius: '8px',
                     fontSize: '14px',
                     fontWeight: '500',
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s ease',
+                    opacity: deleteDisabled ? 0.7 : 1
                   }}
                   onMouseEnter={(e) => {
+                    if (deleteDisabled) return;
                     e.currentTarget.style.background = '#c82333';
                   }}
                   onMouseLeave={(e) => {
+                    if (deleteDisabled) return;
                     e.currentTarget.style.background = '#dc3545';
                   }}
                   title={selected.length > 1 ? "Delete All" : "Delete"}
@@ -1500,6 +1603,7 @@ const NotificationPage: React.FC = () => {
             filteredNotifications.map((notif: any, index: number) => {
               const isTrackerNotification = notif.type.toLowerCase().includes('tracker') || notif.content.includes('Tracker Form');
               const isRewardNotification = notif.type?.toLowerCase() === 'reward';
+              const shouldShowCheckbox = selected.length > 0 || hoveredCheckboxId === notif.id;
               
               return (
                 <div
@@ -1524,6 +1628,17 @@ const NotificationPage: React.FC = () => {
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: '12px'
+                    }}
+                    onMouseMove={(e) => {
+                      const bounds = e.currentTarget.getBoundingClientRect();
+                      const relativeX = e.clientX - bounds.left;
+                      if (relativeX <= 60) {
+                        if (hoveredCheckboxId !== notif.id) {
+                          setHoveredCheckboxId(notif.id);
+                        }
+                      } else if (hoveredCheckboxId === notif.id && selected.length === 0) {
+                        setHoveredCheckboxId(null);
+                      }
                     }}
                     onClick={async () => {
                     const isRewardNotification = notif.type?.toLowerCase() === 'reward';
@@ -1556,6 +1671,9 @@ const NotificationPage: React.FC = () => {
                     e.currentTarget.style.boxShadow = !notif.is_read 
                       ? '0 2px 8px rgba(0, 102, 204, 0.2)' 
                       : '0 1px 3px rgba(0, 0, 0, 0.1)';
+                    if (selected.length === 0) {
+                      setHoveredCheckboxId(null);
+                    }
                   }}
                 >
                   {/* Checkbox */}
@@ -1563,7 +1681,10 @@ const NotificationPage: React.FC = () => {
                     position: 'absolute', 
                     top: '12px', 
                     left: '12px',
-                    zIndex: 2
+                    zIndex: 2,
+                    opacity: shouldShowCheckbox ? 1 : 0,
+                    pointerEvents: shouldShowCheckbox ? 'auto' : 'none',
+                    transition: 'opacity 0.2s ease'
                   }}>
                       <input
                         type="checkbox"
@@ -2307,6 +2428,10 @@ const NotificationPage: React.FC = () => {
                       // Extract repost ID and/or original post ID
                       const repostIdMatch = openNotif.content.match(/<!--REPOST_ID:(\d+)-->/);
                       const postIdMatch = openNotif.content.match(/<!--POST_ID:(\d+)-->/);
+                      const commentIdMatch = openNotif.content.match(/<!--COMMENT_ID:(\d+)-->/);
+                      const replyIdMatch = openNotif.content.match(/<!--REPLY_ID:(\d+)-->/);
+                      const commentId = commentIdMatch?.[1] || null;
+                      const replyId = replyIdMatch?.[1] || null;
                       
                       if (repostIdMatch || postIdMatch) {
                         const repostId = repostIdMatch?.[1] || null;
@@ -2348,8 +2473,10 @@ const NotificationPage: React.FC = () => {
                               localStorage.removeItem('pendingRepostView');
                               if (repostId) {
                                 localStorage.setItem('pendingRepostView', repostId);
+                                storeRepostHighlightIds(commentId, replyId);
                               } else if (postId) {
                                 localStorage.setItem('pendingPostView', postId);
+                                storeRepostHighlightIds(null, null);
                               }
                               navigate(dashboardPath);
                             }
@@ -2511,10 +2638,15 @@ const NotificationPage: React.FC = () => {
                           
                           // If this is a comment ID, we need to get the post from the comment
                           const commentIdMatch = openNotif.content.match(/<!--COMMENT_ID:(\d+)-->/);
+                          const replyIdMatch = openNotif.content.match(/<!--REPLY_ID:(\d+)-->/);
+                          const commentId = commentIdMatch?.[1] || null;
+                          const replyId = replyIdMatch?.[1] || null;
+                          
+                          // If this is a comment ID, we need to get the post from the comment
                           if (commentIdMatch && !postIdMatch && !forumIdMatch && !donationIdMatch) {
                             console.log('Comment-only notification - resolving to post');
-                            const commentId = parseInt(commentIdMatch[1]);
-                            const commentResponse = await getPostFromComment(commentId);
+                            const commentIdNum = parseInt(commentIdMatch[1]);
+                            const commentResponse = await getPostFromComment(commentIdNum);
                             if (commentResponse.success && commentResponse.post_id) {
                               actualPostId = commentResponse.post_id.toString();
                             } else {
@@ -2551,8 +2683,10 @@ const NotificationPage: React.FC = () => {
                               // Store repost or post ID for dashboard to open
                               if (repostId) {
                                 localStorage.setItem('pendingRepostView', repostId);
+                                storeRepostHighlightIds(commentId, replyId);
                               } else if (postId) {
                                 localStorage.setItem('pendingPostView', postId);
+                                storeRepostHighlightIds(null, null);
                               }
                               navigate(dashboardPath);
                             }

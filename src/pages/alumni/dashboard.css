@@ -88,9 +88,19 @@
 
 /* Quick links container */
 .quick-links {
-  display: flex !important;
+  display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.quick-links-row {
+  display: flex;
+  gap: 8px;
+}
+
+.quick-links-row .quick-link-card {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Quick link card */
@@ -405,4 +415,141 @@
 /* Hide scrollbar for scrollable feed */
 .scrollable-feed::-webkit-scrollbar {
   display: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1280px) {
+  .main-content {
+    gap: 20px;
+    padding: 0 20px;
+  }
+
+  .left-sidebar,
+  .right-sidebar {
+    max-width: 260px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .main-content {
+    gap: 16px;
+    padding: 0 16px;
+  }
+
+  .left-sidebar,
+  .right-sidebar {
+    max-width: 240px;
+  }
+
+  .profile-card,
+  .quick-link-card,
+  .post-start,
+  .post-feed-card,
+  .people-you-may-know-card {
+    border-radius: 14px;
+    padding: 18px;
+  }
+
+  .quick-link-card {
+    height: auto;
+  }
+
+  .quick-link-content {
+    height: auto;
+    padding: 16px 12px;
+  }
+}
+
+@media (max-width: 900px) {
+  .main-content {
+    padding: 0 14px;
+    gap: 12px;
+  }
+
+  .left-sidebar,
+  .right-sidebar {
+    max-width: 220px;
+  }
+
+  .quick-links-row {
+    gap: 6px;
+  }
+
+  .quick-link-card {
+    padding: 14px;
+  }
+
+  .quick-link-content {
+    padding: 12px 10px;
+    align-items: center;
+    text-align: center;
+  }
+}
+
+@media (max-width: 820px) {
+  .page-container {
+    padding-bottom: 24px;
+  }
+
+  .main-content {
+    gap: 10px;
+    padding: 0 12px;
+  }
+
+  .left-sidebar,
+  .right-sidebar {
+    max-width: 200px;
+    flex: 0 0 200px;
+  }
+
+  .center-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .profile-card,
+  .quick-link-card,
+  .post-start,
+  .post-feed-card,
+  .people-you-may-know-card {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .post-start {
+    padding: 16px;
+  }
+
+  .post-actions {
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .post-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .quick-link-content {
+    padding: 12px 8px;
+  }
+
+  .quick-link-icon {
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+  }
+
+  .quick-link-text {
+    font-size: 13px;
+  }
+
+  .people-you-may-know-card {
+    margin-top: 0;
+  }
+
+  .post-feed-card {
+    margin-bottom: 12px;
+  }
 }
