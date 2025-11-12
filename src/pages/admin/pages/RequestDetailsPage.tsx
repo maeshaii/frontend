@@ -136,6 +136,9 @@ const RequestDetailsPage: React.FC = () => {
       padding: '32px 40px',
       backgroundColor: '#f8f9fa',
       minHeight: '100vh',
+      width: '100%',
+      boxSizing: 'border-box' as const,
+      marginLeft: 'var(--sidebar-width, 220px)',
     },
     header: {
       marginBottom: '28px',
@@ -275,18 +278,7 @@ const RequestDetailsPage: React.FC = () => {
             Review and approve completed OJT students
           </div>
         </div>
-      <div
-        className="admin-content-page"
-        style={{
-          flex: 1,
-          padding: '24px 32px',
-          backgroundColor: '#f5f6fa',
-          marginLeft: 'var(--sidebar-width, 220px)'
-        }}
-      >
-        <h2 style={{ margin: 0, color: '#0b2a55' }}>Class of {year} - OJT Details</h2>
-        
-        {/* Search and Course Info */}
+
         <div style={styles.toolbar}>
           <div style={styles.courseBadge}>
             {selectedCourse !== 'ALL' ? `Filtered by: ${selectedCourse}` : 'All Courses'}
@@ -475,7 +467,6 @@ const RequestDetailsPage: React.FC = () => {
         )}
       </div>
     </div>
-  </div>
   );
 };
 

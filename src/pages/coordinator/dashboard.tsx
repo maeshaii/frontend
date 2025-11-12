@@ -1134,108 +1134,76 @@ export default function Dashboard() {
                   const batchMatch = selectedBatchFilter === 'ALL' || yearData.year.toString() === selectedBatchFilter;
                   const sectionMatch = selectedSectionFilter === 'ALL' || yearData.section === selectedSectionFilter;
                   return batchMatch && sectionMatch;
-                }).map((yearData) => (
-                  <div
-                    key={`${yearData.year}-${yearData.section || 'default'}`}
-                    style={{
-                      backgroundColor: 'white',
-                      borderRadius: '20px',
-                      padding: '24px',
-                      boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.1)',
-                      border: '1px solid #e2e8f0',
-                      cursor: 'pointer',
-                      transition: 'all 0.3s ease',
-                      position: 'relative',
-                      overflow: 'hidden'
-                    }}
-                    onClick={() => setSelectedCard({ year: yearData.year, section: yearData.section })}
-                    onMouseEnter={(e) => {
-                      const target = e.currentTarget as HTMLDivElement;
-                      target.style.transform = 'translateY(-4px)';
-                      target.style.boxShadow = '0 16px 32px -8px rgba(0, 0, 0, 0.15)';
-                    }}
-                    onMouseLeave={(e) => {
-                      const target = e.currentTarget as HTMLDivElement;
-                      target.style.transform = 'translateY(0)';
-                      target.style.boxShadow = '0 8px 16px -4px rgba(0, 0, 0, 0.1)';
-                    }}
-                  >
-                    {/* Decorative gradient */}
-                    <div style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: '4px',
-                      background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
-                      borderRadius: '20px 20px 0 0'
-                    }}></div>
-                    
-                    {/* Card content */}
-                    <div style={{ position: 'relative', zIndex: 1 }}>
-                      <div style={{
+                }).map((yearData) => {
+                  const classLabel = `CLASS OF ${yearData.year}`;
+                  const courseLabel = `Course : ${program}`;
+                  const studentLabel = `${yearData.count} Student${yearData.count === 1 ? '' : 's'}`;
+                  return (
+                    <div
+                      key={`${yearData.year}-${yearData.section || 'default'}`}
+                      style={{
+                        backgroundColor: 'white',
+                        borderRadius: '16px',
+                        padding: '20px',
+                        boxShadow: '0 6px 12px rgba(15, 23, 42, 0.08)',
+                        border: '1px solid #e2e8f0',
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                         display: 'flex',
-                        alignItems: 'flex-start',
-                        justifyContent: 'space-between',
-                        marginBottom: '20px'
-                      }}>
-                        <div style={{ flex: 1 }}>
-                          {yearData.section && (
-                            <div style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '4px 12px',
-                              backgroundColor: '#dbeafe',
-                              borderRadius: '6px',
-                              fontSize: '13px',
-                              color: '#1e40af',
-                              fontWeight: '600'
-                            }}>
-                              Section: {yearData.section}
-                            </div>
-                          )}
-                        </div>
-                        <div style={{
-                          width: '48px',
-                          height: '48px',
-                          backgroundColor: '#eff6ff',
-                          borderRadius: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#3b82f6',
-                          fontSize: '20px'
-                        }}>
-                          <FaUsers />
-                        </div>
-                      </div>
-                      
+                        flexDirection: 'column',
+                        gap: '12px'
+                      }}
+                      onClick={() => setSelectedCard({ year: yearData.year, section: yearData.section })}
+                      onMouseEnter={(e) => {
+                        const target = e.currentTarget as HTMLDivElement;
+                        target.style.transform = 'translateY(-3px)';
+                        target.style.boxShadow = '0 12px 24px rgba(15, 23, 42, 0.12)';
+                      }}
+                      onMouseLeave={(e) => {
+                        const target = e.currentTarget as HTMLDivElement;
+                        target.style.transform = 'translateY(0)';
+                        target.style.boxShadow = '0 6px 12px rgba(15, 23, 42, 0.08)';
+                      }}
+                    >
                       <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '16px',
+                        background: 'linear-gradient(145deg, #1C4E80, #225A96)',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px',
-                        marginTop: '20px'
+                        justifyContent: 'center',
+                        color: '#ffffff',
+                        fontSize: '22px'
                       }}>
-                        <span style={{
-                          fontSize: '14px',
-                          color: '#64748b',
-                          fontWeight: '500'
-                        }}>
-                          OJT Students:
-                        </span>
-                        <span style={{
-                          fontSize: '28px',
-                          fontWeight: '800',
-                          color: '#3b82f6',
-                          lineHeight: '1'
-                        }}>
-                          {yearData.count}
-                        </span>
+                        <FaUsers />
+                      </div>
+                      <div>
+                        <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 700, color: '#1f2937' }}>
+                          {classLabel}
+                        </h3>
+                        <p style={{ margin: 0, fontSize: '14px', color: '#4b5563', fontWeight: 500 }}>
+                          {courseLabel}
+                        </p>
+                      </div>
+                      <div style={{
+                        marginTop: 'auto',
+                        backgroundColor: '#F1F5FB',
+                        border: '1px solid #BFDBFE',
+                        borderRadius: '10px',
+                        padding: '12px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        color: '#1D4ED8',
+                        fontWeight: 600
+                      }}>
+                        <span style={{ fontSize: '14px' }}>Students</span>
+                        <span style={{ fontSize: '20px' }}>{studentLabel}</span>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           )
@@ -1661,7 +1629,7 @@ export default function Dashboard() {
                   fontWeight: '800',
                   lineHeight: '1.2',
                   letterSpacing: '-0.025em',
-                  color: 'white'
+                  color: '#1e293b'
                 }}>
                   Auto-Process Batch
             </h3>

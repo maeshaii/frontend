@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Sidebar from '../global/sidebar';
 import { fetchCoordinatorRequestsList } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
+import { FaGraduationCap, FaUsers } from 'react-icons/fa';
 
 const RequestsPage: React.FC = () => {
   const [items, setItems] = useState<{ batch_year: number; course: string; count: number }[]>([]);
@@ -262,118 +263,101 @@ const RequestsPage: React.FC = () => {
             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
             gap: '24px'
           }}>
-            {filteredItems.map((item) => (
-              <div
-                key={`${item.batch_year}-${item.course}`}
-                onClick={() => openDetails(item.batch_year, item.course)}
-                style={{ 
-                  backgroundColor: 'white',
-                  borderRadius: '20px',
-                  padding: '0',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                  border: '1px solid #e2e8f0',
-                  overflow: 'hidden',
-                  position: 'relative'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-4px)';
-                  e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)';
-                }}
-              >
-                {/* Gradient Header */}
-                <div style={{
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  height: '120px',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}>
+            {filteredItems.map((item) => {
+              const studentLabel = `${item.count} Student${item.count === 1 ? '' : 's'}`;
+              return (
+                <div
+                  key={`${item.batch_year}-${item.course}`}
+                  onClick={() => openDetails(item.batch_year, item.course)}
+                  style={{ 
+                    backgroundColor: 'white',
+                    borderRadius: '18px',
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    boxShadow: '0 8px 18px rgba(15, 23, 42, 0.12)',
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}
+                  onMouseEnter={(e) => {
+                    const target = e.currentTarget as HTMLDivElement;
+                    target.style.transform = 'translateY(-4px)';
+                    target.style.boxShadow = '0 16px 24px rgba(15, 23, 42, 0.18)';
+                  }}
+                  onMouseLeave={(e) => {
+                    const target = e.currentTarget as HTMLDivElement;
+                    target.style.transform = 'translateY(0)';
+                    target.style.boxShadow = '0 8px 18px rgba(15, 23, 42, 0.12)';
+                  }}
+                >
                   <div style={{
-                    position: 'absolute',
-                    top: '-20px',
-                    right: '-20px',
-                    width: '100px',
-                    height: '100px',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    borderRadius: '50%'
-                  }}></div>
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '-30px',
-                    left: '-30px',
-                    width: '120px',
-                    height: '120px',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    borderRadius: '50%'
-                  }}></div>
-                </div>
-                
-                {/* Card Content */}
-                <div style={{ padding: '24px' }}>
-                  <h3 style={{ 
-                    margin: '0 0 8px 0',
-                    fontSize: '20px',
-                    fontWeight: '700',
-                    color: '#1e293b',
-                    letterSpacing: '-0.025em'
-                  }}>
-                    CLASS OF {item.batch_year}
-                  </h3>
-                  <div style={{
+                    background: 'linear-gradient(140deg, #1C4E80 0%, #205B98 100%)',
+                    padding: '20px 22px',
+                    color: '#ffffff',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    marginBottom: '16px'
+                    gap: '16px'
                   }}>
-                    <span style={{
-                      fontSize: '13px',
-                      color: '#64748b',
-                      fontWeight: '500'
+                    <div style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '14px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.18)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '20px'
                     }}>
-                      📚 Course:
-                    </span>
-                    <span style={{
-                      fontSize: '14px',
-                      color: '#1e293b',
-                      fontWeight: '600'
-                    }}>
-                      {item.course || 'N/A'}
-                    </span>
+                      <FaGraduationCap />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.015em' }}>
+                        CLASS OF {item.batch_year}
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: 500, opacity: 0.9, marginTop: '4px' }}>
+                        Course : {item.course || 'N/A'}
+                      </div>
+                    </div>
                   </div>
-                  
-                  {/* OJT Count Badge */}
+
                   <div style={{
-                    backgroundColor: '#f0f9ff',
-                    border: '2px solid #bae6fd',
-                    borderRadius: '12px',
-                    padding: '12px 16px',
+                    backgroundColor: '#ffffff',
+                    padding: '20px 22px',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between'
+                    justifyContent: 'space-between',
+                    gap: '12px'
                   }}>
-                    <span style={{
-                      fontSize: '13px',
-                      color: '#0369a1',
-                      fontWeight: '600'
-                    }}>
-                      OJT Students
-                    </span>
-                    <span style={{
-                      fontSize: '24px',
-                      fontWeight: '800',
-                      color: '#0284c7'
-                    }}>
-                      {item.count}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#1D4ED8' }}>
+                      <div style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '12px',
+                        backgroundColor: '#E0EAFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '18px'
+                      }}>
+                        <FaUsers />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '20px', fontWeight: 700, color: '#1E3A8A' }}>
+                          {studentLabel}
+                        </span>
+                        <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
+                          OJT Submissions
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', color: '#1e3a8a', fontWeight: 600, fontSize: '13px' }}>
+                      <span>Open details</span>
+                      <span style={{ marginLeft: 8, fontSize: '16px', transition: 'transform .2s ease' }}>→</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
