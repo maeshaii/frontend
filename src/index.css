@@ -1,13 +1,89 @@
-body {
+html, body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  padding: 0;
+  height: 100%;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  background-color: #f5f5f5;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell',
+    'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Hide native password reveal icons so only our custom eye button shows */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear,
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-textfield-decoration-container {
+  display: none !important;
+}
+
+#root {
+  min-height: 100vh;
+  width: 100%;
+}
+
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+/* Responsive breakpoints */
+/* Mobile: < 768px (handled by MobileDetector - shows download message) */
+/* Tablet: 768px - 1024px */
+/* Desktop: > 1024px */
+
+/* Tablet responsive styles */
+@media (max-width: 1024px) and (min-width: 768px) {
+  /* Adjust container padding for tablets */
+  body {
+    font-size: 14px;
+  }
+  
+  /* Ensure content doesn't overflow on tablets */
+  * {
+    box-sizing: border-box;
+  }
+}
+
+/* Responsive containers for tablet */
+@media (max-width: 1024px) {
+  /* General container adjustments */
+  .container,
+  [class*="container"] {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  
+  /* Adjust grid layouts for tablets */
+  .grid,
+  [class*="grid"] {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  
+  /* Responsive tables */
+  table {
+    font-size: 14px;
+  }
+  
+  /* Responsive forms */
+  form {
+    max-width: 100%;
+  }
+  
+  /* Responsive modals/dialogs */
+  [class*="modal"],
+  [class*="dialog"] {
+    max-width: 90%;
+    margin: 20px auto;
+  }
+}
+
+/* Ensure minimum width for tablets */
+@media (min-width: 768px) {
+  body {
+    min-width: 768px;
+  }
 }

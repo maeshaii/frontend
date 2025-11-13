@@ -1,0 +1,127 @@
+.mobile-message-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+}
+
+.mobile-message-content {
+  background: white;
+  border-radius: 16px;
+  padding: 40px 30px;
+  max-width: 500px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.mobile-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.mobile-message-content h2 {
+  color: #333;
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.mobile-message-content > p {
+  color: #666;
+  font-size: 16px;
+  line-height: 1.6;
+  margin-bottom: 30px;
+}
+
+.mobile-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.mobile-download-btn {
+  display: block;
+  padding: 14px 24px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  color: white;
+}
+
+.mobile-download-btn.android {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.mobile-download-btn.android:hover {
+  background: linear-gradient(135deg, #5568d3 0%, #653a91 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.mobile-download-btn.ios {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+}
+
+.mobile-download-btn.ios:hover {
+  background: linear-gradient(135deg, #653a91 0%, #5568d3 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(118, 75, 162, 0.4);
+}
+
+.mobile-note {
+  font-size: 14px;
+  color: #888;
+  margin-top: 20px;
+  line-height: 1.5;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .mobile-message-content {
+    padding: 30px 20px;
+  }
+
+  .mobile-icon {
+    font-size: 48px;
+  }
+
+  .mobile-message-content h2 {
+    font-size: 20px;
+  }
+
+  .mobile-message-content > p {
+    font-size: 14px;
+  }
+
+  .mobile-download-btn {
+    padding: 12px 20px;
+    font-size: 14px;
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

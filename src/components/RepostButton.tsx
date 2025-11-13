@@ -1,0 +1,146 @@
+import React, { useState } from 'react';
+import RepostModal from './RepostModal';
+import { repostPost, repostForumPost, repostDonation, getUserPoints } from '../services/api';
+import './postFooterActions.css';
+
+interface RepostButtonProps {
+  originalPost: {
+    post_id: number;
+    post_content: string;
+    post_image?: string | null;
+    post_images?: Array<{
+      image_id: number;
+      image_url: string;
+      order: number;
+    }>;
+    user: {
+      user_id: number;
+      f_name: string;
+      m_name?: string;
+      l_name: string;
+      profile_pic?: string;
+    };
+    created_at: string;
+  };
+  currentUser: {
+    name: string;
+    profile_pic?: string;
+  };
+  isReposted?: boolean;
+  onRepost?: () => void;
+  formatTime: (iso?: string | null) => string;
+  style?: React.CSSProperties;
+  className?: string;
+  isForum?: boolean; // New prop to indicate if this is a forum post
+  isDonation?: boolean; // New prop to indicate if this is a donation post
+}
+
+const RepostButton: React.FC<RepostButtonProps> = ({
+  originalPost,
+  currentUser,
+  isReposted = false,
+  onRepost,
+  formatTime,
+  style,
+  className,
+  isForum = false,
+  isDonation = false
+}) => {
+  const [showRepostModal, setShowRepostModal] = useState(false);
+
+  const handleRepostClick = () => {
+    console.log('RepostButton - Opening modal with originalPost:', originalPost);
+    console.log('RepostButton - post_images:', originalPost.post_images);
+    console.log('RepostButton - post_image:', originalPost.post_image);
+    setShowRepostModal(true);
+  };
+
+  const handleRepostSubmit = async (caption: string) => {
+    try {
+      console.log('Creating repost for post:', originalPost.post_id, 'with caption:', caption);
+      console.log('Post ID type:', typeof originalPost.post_id);
+      console.log('Post ID value:', originalPost.post_id);
+      console.log('Is Forum:', isForum);
+      
+      // Ensure post_id is a valid number
+      const postId = Number(originalPost.post_id);
+      if (isNaN(postId)) {
+        throw new Error(`Invalid post ID: ${originalPost.post_id}`);
+      }
+      
+      let result;
+      if (isForum) {
+        // Use forum repost API
+        console.log('Using forum repost API');
+        result = await repostForumPost(postId, caption);
+      } else if (isDonation) {
+        // Use donation repost API
+        console.log('Using donation repost API');
+        result = await repostDonation(postId, caption);
+      } else {
+        // Use regular post repost API
+        console.log('Using regular post repost API');
+        result = await repostPost(postId, caption);
+      }
+      
+      console.log('Repost result:', result);
+      setShowRepostModal(false);
+      onRepost?.(); // This will refresh the posts to show the new repost
+      
+      // Refresh points after reposting (for Alumni and OJT users)
+      const raw = localStorage.getItem('user');
+      const storedUser = raw ? JSON.parse(raw) : null;
+      if (storedUser && storedUser.account_type && (storedUser.account_type.user || storedUser.account_type.ojt)) {
+        const userId = storedUser.user_id || storedUser.id;
+        if (userId) {
+          // Add a small delay to ensure backend has processed points update
+          setTimeout(async () => {
+            try {
+              const points = await getUserPoints(userId);
+              // Dispatch event to notify Profile component
+              window.dispatchEvent(new CustomEvent('pointsUpdated', { 
+                detail: { userId, points } 
+              }));
+            } catch (error) {
+              console.error('Error refreshing points after repost:', error);
+            }
+          }, 500); // 500ms delay to ensure backend has processed
+        }
+      }
+    } catch (error: any) {
+      console.error('Error creating repost:', error);
+      alert('Failed to create repost. Please try again.');
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={handleRepostClick}
+        type="button"
+        className={[
+          'post-footer-action',
+          isReposted ? 'active' : '',
+          className
+        ].filter(Boolean).join(' ')}
+        style={style}
+      >
+        <span className="post-footer-icon">
+          {isReposted ? '🔄' : '🔄'}
+        </span>
+        <span className="post-footer-label">{isReposted ? 'Reposted' : 'Repost'}</span>
+      </button>
+
+      <RepostModal
+        isOpen={showRepostModal}
+        onClose={() => setShowRepostModal(false)}
+        onRepost={handleRepostSubmit}
+        originalPost={originalPost}
+        currentUser={currentUser}
+        formatTime={formatTime}
+      />
+    </>
+  );
+};
+
+export default RepostButton;

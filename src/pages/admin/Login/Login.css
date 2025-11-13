@@ -1,0 +1,233 @@
+/* Responsive styles for login page */
+@media (max-width: 1200px) {
+  .login-form-container {
+    max-width: 85% !important;
+    padding: 1.8rem !important;
+  }
+}
+
+@media (max-width: 992px) {
+  .login-form-container {
+    max-width: 90% !important;
+    padding: 1.5rem !important;
+  }
+  
+  .login-brand-title {
+    font-size: 2rem !important;
+  }
+  
+  .login-main-title {
+    font-size: 2rem !important;
+  }
+}
+
+@media (max-width: 992px) {
+  .login-left-section {
+    display: none !important;
+  }
+  
+  .login-right-section {
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .login-container {
+    flex-direction: column !important;
+  }
+  
+  .login-left-section {
+    display: none !important;
+  }
+  
+  .login-right-section {
+    width: 100% !important;
+    height: 100vh !important;
+  }
+  
+  .login-background-image {
+    display: none !important;
+  }
+  
+  .login-form-container {
+    padding: 1.5rem !important;
+    max-width: 85% !important;
+    margin: 1rem !important;
+  }
+  
+  .login-brand-title {
+    font-size: 1.8rem !important;
+  }
+  
+  .login-main-title {
+    font-size: 1.8rem !important;
+  }
+  
+  .login-logo {
+    width: 70px !important;
+    height: 70px !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .login-form-container {
+    padding: 1.2rem !important;
+    max-width: 90% !important;
+    margin: 0.5rem !important;
+  }
+  
+  .login-brand-title {
+    font-size: 1.6rem !important;
+  }
+  
+  .login-main-title {
+    font-size: 1.6rem !important;
+  }
+  
+  .login-logo {
+    width: 60px !important;
+    height: 60px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-form-container {
+    padding: 1rem !important;
+    max-width: 95% !important;
+    margin: 0.25rem !important;
+  }
+  
+  .login-brand-title {
+    font-size: 1.4rem !important;
+  }
+  
+  .login-main-title {
+    font-size: 1.4rem !important;
+  }
+  
+  .login-logo {
+    width: 50px !important;
+    height: 50px !important;
+  }
+}
+
+/* Input focus styles */
+.login-input:focus {
+  border: 1px solid rgba(0, 102, 204, 0.6) !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.2) !important;
+}
+
+/* Password input specific styles */
+#password.login-input {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  color: #000000 !important;
+}
+
+#password.login-input:focus {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 102, 204, 0.6) !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.2) !important;
+}
+
+.login-input::placeholder {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+#password.login-input::placeholder {
+  color: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Button hover effects */
+.login-button:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2) !important;
+  background: linear-gradient(135deg, #f0f8ff 0%, #e6f3ff 100%) !important;
+}
+
+.login-button:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.login-button:disabled {
+  opacity: 0.7 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+/* Password toggle hover */
+.login-password-toggle:hover {
+  color: rgba(0, 102, 204, 1) !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Forgot password link hover */
+.login-forgot-password:hover {
+  color: rgba(0, 102, 204, 1) !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+  text-decoration: underline !important;
+}
+
+/* Collaboration section responsive styles */
+@media (max-width: 768px) {
+  .login-collaboration-container {
+    margin-top: 1.5rem !important;
+    padding: 1rem !important;
+  }
+  
+  .login-collaboration-title {
+    font-size: 1rem !important;
+    margin-bottom: 1rem !important;
+  }
+  
+  .login-partners-container {
+    gap: 1rem !important;
+  }
+  
+  .login-partner-logo {
+    width: 50px !important;
+    height: 50px !important;
+  }
+  
+  .login-partner-logo-image {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  
+  
+  .login-partner-name {
+    font-size: 0.8rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-collaboration-container {
+    margin-top: 1rem !important;
+    padding: 0.8rem !important;
+  }
+  
+  .login-collaboration-title {
+    font-size: 0.9rem !important;
+    letter-spacing: 0.5px !important;
+  }
+  
+  .login-partners-container {
+    gap: 0.8rem !important;
+  }
+  
+  .login-partner-logo {
+    width: 45px !important;
+    height: 45px !important;
+  }
+  
+  .login-partner-logo-image {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  
+  
+  .login-partner-name {
+    font-size: 0.75rem !important;
+  }
+}

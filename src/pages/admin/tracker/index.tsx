@@ -12,12 +12,11 @@ const Tracker: React.FC = () => {
   const isActive = (path: string): boolean => location.pathname === path;
 
   return (
-    <div style={{ display: 'flex'}}>
+    <div style={{ display: 'flex' }}>
       <Sidebar />
 
-      <div className="tracker-container" style={{ flex: 1, padding: '20px' }}>
+      <div className="tracker-container admin-content-page" style={{ flex: 1, padding: '20px', height: '100vh', overflowY: 'auto', marginLeft: 'var(--sidebar-width, 220px)', transition: 'margin-left 0.3s ease' }}>
         <div className="tracker-inner">
-
           {/* Header */}
           <div className="tracker-header">
             {/* Replace editable/dynamic title with static, non-editable title */}
@@ -25,13 +24,22 @@ const Tracker: React.FC = () => {
               CTU MAIN ALUMNI TRACKER
             </h2>
             <div className="tracker-tabs">
-              <Link to="/tracker/questions" className={isActive('/tracker/questions') ? 'active' : ''}>
+              <Link
+                to="/tracker/questions"
+                className={isActive('/tracker/questions') ? 'active' : ''}
+              >
                 Questions
               </Link>
-              <Link to="/tracker/responses" className={isActive('/tracker/responses') ? 'active' : ''}>
+              <Link
+                to="/tracker/responses"
+                className={isActive('/tracker/responses') ? 'active' : ''}
+              >
                 Responses
               </Link>
-              <Link to="/tracker/settings" className={isActive('/tracker/settings') ? 'active' : ''}>
+              <Link
+                to="/tracker/settings"
+                className={isActive('/tracker/settings') ? 'active' : ''}
+              >
                 Settings
               </Link>
             </div>

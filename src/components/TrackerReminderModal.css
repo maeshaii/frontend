@@ -1,0 +1,269 @@
+.tracker-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(2px);
+}
+
+.tracker-modal-content {
+  background: #ffffff;
+  border-radius: 12px;
+  max-width: 480px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  animation: modalSlideIn 0.3s ease-out;
+  border: 1px solid #f1f5f9;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tracker-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 24px 16px 24px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.tracker-modal-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+  letter-spacing: -0.025em;
+}
+
+.tracker-modal-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #64748b;
+  padding: 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tracker-modal-close:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.tracker-modal-body {
+  padding: 32px 24px;
+  text-align: center;
+  background: #ffffff;
+}
+
+.tracker-modal-icon {
+  font-size: 2.5rem;
+  margin-bottom: 16px;
+  color: #3b82f6;
+  opacity: 0.9;
+}
+
+.tracker-modal-body h3 {
+  margin: 0 0 12px 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.4;
+}
+
+.tracker-modal-body p {
+  margin: 0 0 24px 0;
+  color: #64748b;
+  line-height: 1.6;
+  font-size: 0.95rem;
+  font-weight: 400;
+}
+
+.tracker-modal-benefits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.benefit-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.benefit-item:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.benefit-item:hover .benefit-icon {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.benefit-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+  color: #3b82f6;
+  opacity: 0.8;
+  transition: all 0.2s ease;
+}
+
+.benefit-item span:last-child {
+  color: #475569;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.benefit-item.special-incentive {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-color: #f59e0b;
+  border-width: 2px;
+}
+
+.benefit-item.special-incentive .benefit-icon {
+  color: #f59e0b;
+  font-size: 1.375rem;
+}
+
+.benefit-item.special-incentive span:last-child {
+  color: #92400e;
+  font-weight: 600;
+}
+
+.benefit-item.special-incentive:hover {
+  background: linear-gradient(135deg, #fde68a 0%, #fbbf24 100%);
+  border-color: #d97706;
+  transform: translateY(-1px);
+}
+
+.tracker-modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px 24px 24px;
+  background: #ffffff;
+  border-top: 1px solid #f1f5f9;
+}
+
+.tracker-modal-button {
+  flex: 1;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.tracker-modal-button.primary {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.tracker-modal-button.primary:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.tracker-modal-button.secondary {
+  background: #ffffff;
+  color: #64748b;
+  border-color: #d1d5db;
+}
+
+.tracker-modal-button.secondary:hover {
+  background: #f8fafc;
+  border-color: #9ca3af;
+  color: #475569;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 640px) {
+  .tracker-modal-content {
+    width: 95%;
+    margin: 20px;
+  }
+  
+  .tracker-modal-header {
+    padding: 20px 20px 12px 20px;
+  }
+  
+  .tracker-modal-header h2 {
+    font-size: 1.125rem;
+  }
+  
+  .tracker-modal-body {
+    padding: 24px 20px;
+  }
+  
+  .tracker-modal-icon {
+    font-size: 2rem;
+  }
+  
+  .tracker-modal-body h3 {
+    font-size: 1rem;
+  }
+  
+  .tracker-modal-body p {
+    font-size: 0.875rem;
+  }
+  
+  .tracker-modal-footer {
+    padding: 16px 20px 20px 20px;
+    flex-direction: column;
+  }
+  
+  .tracker-modal-button {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 0.875rem;
+  }
+  
+  .benefit-item {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  
+  .benefit-item span:last-child {
+    font-size: 0.8125rem;
+  }
+  
+  .benefit-icon {
+    font-size: 1.125rem;
+  }
+  
+  .benefit-item.special-incentive .benefit-icon {
+    font-size: 1.25rem;
+  }
+}

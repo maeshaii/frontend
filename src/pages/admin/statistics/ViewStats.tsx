@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
 import GenerateStatsModal from '../../../components/GenerateStatsModal';
 import { fetchAlumniStatistics } from '../../../services/api';
+import { FaChartBar, FaUpload, FaGraduationCap, FaUsers, FaCalendarAlt, FaFilter, FaCog, FaArrowLeft } from 'react-icons/fa';
 
-const App: React.FC = () => {
+const ViewStats: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation() as any;
   const [showModal, setShowModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [years, setYears] = useState<{ year: number; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [selectedBatchYear, setSelectedBatchYear] = useState('');
-  const [selectedCourse, setSelectedCourse] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     const loadStats = async () => {
@@ -29,328 +31,647 @@ const App: React.FC = () => {
     loadStats();
   }, []);
 
-  const handleGenerateClick = () => {
-    setShowModal(true);
-  };
+  // If navigated from Dashboard with a request to open the modal, honor it once.
+  useEffect(() => {
+    if (location?.state?.openGenerate) {
+      setShowModal(true);
+      // Clear the state so refreshing/back won't re-open unintentionally
+      try {
+        window.history.replaceState({}, document.title, '/ViewStats');
+      } catch {}
+    }
+  }, [location?.state]);
 
-  const handleCloseModal = () => {
-    setShowModal(false);
-  };
-
+  const handleGenerateClick = () => setShowModal(true);
+  const handleCloseModal = () => setShowModal(false);
   const handleGenerateStats = (statsData: any) => {
-    console.log('Generated statistics:', statsData);
+    // Only the modal should show the alert for single-type generation
     // You can add additional logic here to handle the generated statistics
     // For example, update the current view or navigate to a detailed statistics page
-    
-    // Show a success message or update the UI
-    alert(`Successfully generated ${statsData.type} statistics for ${statsData.total_alumni} alumni!`);
+    console.log('Generated statistics:', statsData);
   };
-
-  const handleCardClick = (year: number) => {
-    navigate(`/AlumniData/${year}`);
-  };
+  const handleCardClick = (year: number) => navigate(`/AlumniData/${year}`);
 
   const handleExport = async () => {
-    if (!selectedBatchYear) {
-      alert('Please select a batch year to export.');
-      return;
-    }
+    if (!selectedBatchYear) { alert('Please select a batch year to export.'); return; }
+    const token = localStorage.getItem('accessToken');
     try {
       const response = await fetch(`http://localhost:8000/api/export-alumni/?batch_year=${selectedBatchYear}`, {
         method: 'GET',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
-      if (!response.ok) {
-        alert('Failed to export data');
-        return;
-      }
+      if (!response.ok) { alert('Failed to export data'); return; }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `alumni_export_batch_${selectedBatchYear}.xlsx`;
       document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
+      a.click(); a.remove(); window.URL.revokeObjectURL(url);
       alert('Export successful!');
-    } catch (error) {
-      alert('Export failed!');
-    }
+    } catch { alert('Export failed!'); }
   };
 
   const handleExportedImport = async () => {
-    if (!importFile || !selectedBatchYear) {
-      alert('Please select a file and batch year to import.');
-      return;
-    }
+    if (!importFile) { alert('Please select a file to import.'); return; }
     const formData = new FormData();
     formData.append('file', importFile);
-    formData.append('batch_year', selectedBatchYear);
+    // Batch year optional: backend will read Year_Graduated/Batch Year per row; include only if selected
+    if (selectedBatchYear) formData.append('batch_year', selectedBatchYear);
+    const token = localStorage.getItem('accessToken');
     try {
-      const response = await fetch('http://localhost:8000/api/import-exported-alumni/', {
+      const response = await fetch('http://localhost:8000/api/import-alumni/', {
         method: 'POST',
         body: formData,
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
-      const result = await response.json();
-      if (result.success) {
-        let debugMsg = 'Import successful!';
-        if (result.debug && Array.isArray(result.debug)) {
-          debugMsg += '\n\n' + result.debug.join('\n');
-        }
-        alert(debugMsg);
+      const contentType = response.headers.get('content-type');
+      if (response.ok && contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'alumni_passwords.xlsx';
+        document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+        alert('Import successful! Passwords downloaded.');
         setImportFile(null);
       } else {
-        alert('Import failed: ' + result.message);
+        const result = await response.json();
+        alert(result.message || 'Import completed.');
       }
-    } catch (error) {
-      alert('Import failed!');
+    } catch { alert('Import failed!'); }
+  };
+
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
+      setImportFile(file);
+    } else {
+      alert('Please drop an Excel file (.xlsx or .xls).');
+    }
+  };
+
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleTemplateDownload = async () => {
+    try {
+      const resp = await fetch('http://localhost:8000/api/import-alumni/template/');
+      if (!resp.ok) throw new Error('Failed');
+      const blob = await resp.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'alumni_import_template.xlsx';
+      document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+    } catch {
+      alert('Template download is not configured on the server.');
     }
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh' }}>
+    <div style={{ display: 'flex', height: '100vh', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
       <Sidebar />
-
-      <div style={styles.container}>
-        <div style={styles.header}>
-          <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-            <button
-              onClick={() => navigate(-1)}
-              style={styles.backButton}
-            >
-              &lt; Back
-            </button>
-            <div style={styles.viewStatistics}>
-              <span role="img" aria-label="chart">📊</span> View Statistics
-            </div>
+      
+      <div className="admin-content-page" style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f8fafc', marginLeft: 'var(--sidebar-width, 220px)', transition: 'margin-left 0.3s ease' }}>
+        {/* Slim toolbar (no heavy header) */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '36px 48px 12px 48px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#0b2a55' }}>Alumni Users</div>
           </div>
-          <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-            <button style={styles.generateBtn} onClick={() => setShowExportModal(true)}>
-              Export Data
-            </button>
-            <button style={styles.generateBtn} onClick={handleGenerateClick}>
-              Generate Statistics
-            </button>
+          <div style={{ display: 'flex', gap: 12 }}>
+          <button style={styles.actionButton} onClick={() => setShowExportModal(true)}>
+            <FaUpload style={{ marginRight: '8px', color: 'white' }} />
+            Import/Export
+          </button>
+          <button style={styles.generateButton} onClick={handleGenerateClick}>
+            <FaCog style={{ marginRight: '8px', color: 'white' }} />
+            Generate Statistics
+          </button>
           </div>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '32px',
-            justifyContent: 'flex-start',
-            alignItems: 'flex-start',
-            width: '100%',
-            marginTop: 24,
-          }}
-        >
+        {/* Overview removed per request */}
+
+        {/* Alumni Cards Grid */}
+        <div style={styles.cardsContainer}>
+
           {loading ? (
-            <div>Loading...</div>
+            <div style={styles.loadingContainer}>
+              <div style={styles.spinner}></div>
+              <p style={styles.loadingText}>Loading alumni statistics...</p>
+            </div>
           ) : years.length === 0 ? (
-            <div>No alumni data found.</div>
-          ) : (
-            years.map((grad, index) => (
-              <div
-                key={grad.year}
-                onClick={() => handleCardClick(grad.year)}
-                style={{
-                  width: '220px',
-                  borderRadius: '20px',
-                  backgroundColor: 'white',
-                  overflow: 'hidden',
-                  boxShadow: '0 6px 18px rgba(0, 0, 0, 0.08)',
-                  transition: 'transform 0.2s ease',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <div style={{ height: '80px', backgroundColor: '#e3e9f7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, color: '#174f84' }}>
-                  <span role="img" aria-label="batch">🎓</span>
-                </div>
-                <div style={{ backgroundColor: '#174f84', color: 'white', padding: '15px' }}>
-                  <strong style={{ fontSize: '15px', display: 'block', marginBottom: '5px' }}>YEAR GRADUATED: {grad.year}</strong>
-                  <div style={{ fontSize: '13px' }}>Imported: {grad.count}</div>
-                </div>
+            <div style={styles.emptyState}>
+              <div style={styles.emptyIcon}>
+                <FaGraduationCap />
               </div>
-            ))
+              <h3 style={styles.emptyTitle}>No Alumni Data Found</h3>
+              <p style={styles.emptyText}>
+                No alumni data is available. Try importing data or generating statistics.
+              </p>
+            </div>
+          ) : (
+            <div style={styles.cardsGrid}>
+              {years.map((grad) => (
+                <div
+                  key={grad.year}
+                  onClick={() => handleCardClick(grad.year)}
+                  style={styles.yearCard}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-6px)';
+                    e.currentTarget.style.boxShadow = '0 18px 28px rgba(16, 24, 40, 0.16)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 8px 16px rgba(16, 24, 40, 0.10)';
+                  }}
+                >
+                  <div style={styles.cardHeader}>
+                    <div style={styles.cardIcon}>
+                      <FaGraduationCap />
+                    </div>
+                    <div style={styles.cardYear}>CLASS OF {grad.year}</div>
+                  </div>
+                  <div style={styles.cardContent}>
+                    <div style={styles.cardStats}>
+                      <div style={styles.statItem}>
+                        <FaUsers style={styles.statIcon} />
+                        <span style={styles.statNumber}>{grad.count}</span>
+                        <span style={styles.statLabel}>Alumni</span>
+                      </div>
+                    </div>
+                    <div style={styles.cardFooter}>
+                      <span style={styles.viewText}>Open details</span>
+                      <span style={{ marginLeft: 8, transition: 'transform .2s ease' }}>→</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
-        {showModal && (
-          <GenerateStatsModal 
-            onClose={handleCloseModal}
-            onGenerate={handleGenerateStats}
-          />
+        {/* Modals */}
+        {showModal && <GenerateStatsModal onClose={handleCloseModal} onGenerate={handleGenerateStats} />}
+
+        {showExportModal && (
+          <div style={styles.modalOverlay}>
+            <div style={{ ...styles.modalContent, maxWidth: 640, paddingBottom: 8 }}>
+              <div style={styles.modalHeader}>
+                <h2 style={styles.modalTitle}>Import Alumni Data</h2>
+                <button onClick={() => setShowExportModal(false)} style={styles.modalCloseButton}>×</button>
+              </div>
+
+              <div style={styles.modalBody}>
+                {/* Upload */}
+                <div
+                  style={{
+                    border: '2px dashed #d1d5db',
+                    borderRadius: 12,
+                    padding: 28,
+                    textAlign: 'center',
+                    background: isDragging ? '#f8fafc' : 'white',
+                    transition: 'background 0.15s ease',
+                    marginBottom: 16,
+                  }}
+                  onDrop={onDrop}
+                  onDragOver={onDragOver}
+                  onDragLeave={onDragLeave}
+                >
+                  <input
+                    id="alumni-import-file"
+                    type="file"
+                    accept=".xlsx,.xls"
+                    style={{ display: 'none' }}
+                    onChange={(e) => setImportFile(e.target.files ? e.target.files[0] : null)}
+                  />
+                  <label htmlFor="alumni-import-file" style={{ cursor: 'pointer', display: 'inline-block' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', marginBottom: 6 }}>
+                      {importFile ? importFile.name : 'Choose Excel File'}
+                    </div>
+                    <div style={{ color: '#6b7280' }}>Click to browse or drag and drop</div>
+                    <div style={{ color: '#9ca3af', marginTop: 6, fontSize: 13 }}>Supports .xlsx and .xls files</div>
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                  <button style={styles.importButton} onClick={handleExportedImport}>Import Alumni</button>
+                </div>
+
+                <div style={{ height: 1, background: '#e5e7eb', margin: '20px 0' }} />
+
+                {/* Export section */}
+                <div style={styles.modalSection}>
+                  <h3 style={styles.sectionTitle}>Export Alumni Data</h3>
+                  <p style={styles.sectionDescription}>Download alumni data for a specific batch year.</p>
+                  <div style={styles.inputGroup}>
+                    <label style={styles.inputLabel}>Select Batch Year</label>
+                    <select
+                      style={styles.selectInput}
+                      value={selectedBatchYear}
+                      onChange={(e) => setSelectedBatchYear(e.target.value)}
+                    >
+                      <option value="">Choose a graduation year...</option>
+                      {years.map((y) => (
+                        <option key={y.year} value={y.year}>Class of {y.year} ({y.count} alumni)</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button style={{ ...styles.importButton, background: '#e5e7eb', color: '#111827' }} onClick={() => setShowExportModal(false)}>Cancel</button>
+                    <button style={{ ...styles.importButton }} onClick={handleExport}>Export to Excel</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
-
-{showExportModal && (
-  <div style={{
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100vw',
-    height: '100vh',
-    background: 'rgba(0,0,0,0.4)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 9999,
-  }}>
-    <div style={{ background: '#b2e0e6', padding: '40px', borderRadius: '28px', minWidth: '340px', textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.10)' }}>
-      <h2 style={{ fontSize: '22px', fontWeight: 'bold', marginBottom: 24 }}>Export Alumni Data</h2>
-      <div style={{ marginBottom: 18, textAlign: 'left' }}>
-        <label style={{ fontWeight: 500 }}>Batch Graduated</label>
-        <select
-          style={{ width: '100%', padding: '12px', borderRadius: '20px', border: 'none', marginTop: 6, marginBottom: 12, background: 'white' }}
-          value={selectedBatchYear}
-          onChange={e => setSelectedBatchYear(e.target.value)}
-        >
-          <option value="">Select batch...</option>
-          {years.map(y => (
-            <option key={y.year} value={y.year}>{y.year}</option>
-          ))}
-        </select>
-        <label style={{ fontWeight: 500 }}>Upload Excel File</label>
-        <input
-          type="file"
-          accept=".xlsx,.xls"
-          style={{ width: '100%', padding: '12px', borderRadius: '20px', border: 'none', marginTop: 6, marginBottom: 12, background: 'white' }}
-          onChange={e => setImportFile(e.target.files ? e.target.files[0] : null)}
-        />
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 18 }}>
-        <button
-          style={{ background: '#f26c4f', color: 'white', border: 'none', borderRadius: '12px', padding: '10px 32px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}
-          onClick={handleExport}
-        >
-          Export
-        </button>
-        <button
-          style={{ background: '#4f46e5', color: 'white', border: 'none', borderRadius: '12px', padding: '10px 32px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}
-          onClick={handleExportedImport}
-        >
-          Import
-        </button>
-        <button style={{ background: 'white', color: '#222', border: '1px solid #888', borderRadius: '12px', padding: '10px 32px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={() => setShowExportModal(false)}>Cancel</button>
-      </div>
-    </div>
-  </div>
-)}
-
       </div>
     </div>
   );
 };
 
 const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    padding: '30px',
-    fontFamily: 'Arial, sans-serif',
-    flex: 1,
-    overflowY: 'auto'
-  },
-  header: {
+  // Deprecated header styles removed
+  headerActions: {
     display: 'flex',
-    justifyContent: 'space-between',
+    gap: '12px',
+    position: 'absolute',
+    right: '-32px',
+  },
+  actionButton: {
+    background: '#1C4E80',
+    border: '2px solid #1C4E80',
+    color: 'white',
+    padding: '14px 20px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    display: 'flex',
     alignItems: 'center',
-    marginBottom: '20px'
+    transition: 'all 0.2s ease',
   },
-  leftSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: '10px'
-  },
-  viewStatistics: {
-    fontSize: '20px',
-    fontWeight: 500,
-    fontFamily: 'Arial, sans-serif'
-  },
-  backButton: {
-    background: 'none',
-    border: 'none',
-    color: '#1D4E89',
-    fontSize: '20px',
-    cursor: 'pointer',
-    fontWeight: 'bold',
-    marginBottom: '20px',
-  },
-  generateBtn: {
-    backgroundColor: '#4f46e5',
+  generateButton: {
+    background: '#1C4E80',
+    border: '2px solid #1C4E80',
     color: 'white',
-    border: 'none',
-    padding: '10px 16px',
-    borderRadius: '20px',
+    padding: '14px 20px',
+    borderRadius: '8px',
     cursor: 'pointer',
-    fontWeight: 500
-  },
-  cards: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '20px',
-    width: '100%'
-  },
-  card: {
-    backgroundColor: '#17406a',
-    color: 'white',
-    borderRadius: '15px',
-    padding: '15px',
-    cursor: 'pointer',
-    transition: 'transform 0.2s',
+    fontWeight: '600',
     display: 'flex',
-    flexDirection: 'column',
-    width: '90%'
+    alignItems: 'center',
+    transition: 'all 0.2s ease',
   },
-  cardImage: {
-    backgroundColor: 'white',
-    height: '100px',
-    width: '100%',
-    borderRadius: '5px',
-    marginBottom: '1px'
-  },
-  cardText: {
-    textAlign: 'left',
-    width: '100%'
-  }
-};
 
-const modalStyles: { [key: string]: React.CSSProperties } = {
-  overlay: {
-    position: 'fixed',
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  // Stats overview
+  statsOverview: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+    gap: '24px',
+    padding: '32px',
+    backgroundColor: 'white',
+    margin: '0 32px',
+    borderRadius: '12px',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+  },
+  overviewCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    padding: '20px',
+    background: '#f8fafc',
+    borderRadius: '12px',
+    border: '1px solid #e5e7eb',
+  },
+  overviewIcon: {
+    fontSize: '32px',
+    color: '#6C63FF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1000
-  },
-  modal: {
-    backgroundColor: 'white',
-    padding: '30px',
+    width: '60px',
+    height: '60px',
+    background: '#f0f0ff',
     borderRadius: '12px',
-    width: '350px',
+  },
+  overviewContent: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
   },
-  dropdown: {
-    padding: '8px',
-    borderRadius: '8px',
-    border: '1px solid #ccc'
+  overviewNumber: {
+    fontSize: '28px',
+    fontWeight: '700',
+    color: '#1f2937',
+    lineHeight: 1,
   },
-  button: {
-    marginTop: '15px',
-    padding: '10px',
-    backgroundColor: '#4f46e5',
+  overviewLabel: {
+    fontSize: '14px',
+    color: '#6b7280',
+    marginTop: '4px',
+  },
+
+  // Cards container
+  cardsContainer: {
+    padding: '8px 32px 32px 32px',
+    display: 'flex',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  cardsHeader: {
+    textAlign: 'center',
+    marginBottom: '32px',
+  },
+  cardsTitle: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#1f2937',
+    margin: '0 0 8px 0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardsSubtitle: {
+    fontSize: '16px',
+    color: '#6b7280',
+    margin: '0',
+  },
+  cardsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+    gap: '20px',
+    maxWidth: '1200px',
+    margin: '0',
+  },
+
+  // Year card styles
+  yearCard: {
+    background: 'white',
+    borderRadius: '16px',
+    overflow: 'hidden',
+    boxShadow: '0 8px 16px rgba(16, 24, 40, 0.10)',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    border: '1px solid #e5e7eb',
+  },
+  cardHeader: {
+    background: 'linear-gradient(90deg, #1C4E80 0%, #275f9b 100%)',
     color: 'white',
-    border: 'none',
+    padding: '18px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+  },
+  cardIcon: {
+    fontSize: '24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '42px',
+    height: '42px',
+    background: 'rgba(255, 255, 255, 0.18)',
     borderRadius: '10px',
-    cursor: 'pointer'
-  }
+  },
+  cardYear: {
+    fontSize: '16px',
+    fontWeight: '600',
+  },
+  cardContent: {
+    padding: '16px',
+  },
+  cardStats: {
+    marginBottom: '8px',
+  },
+  statItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  statIcon: {
+    fontSize: '14px',
+    color: '#6b7280',
+  },
+  statNumber: {
+    fontSize: '16px',
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  statLabel: {
+    fontSize: '12px',
+    color: '#6b7280',
+  },
+  cardFooter: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    color: '#1c4e80',
+  },
+  viewText: {
+    fontSize: '12px',
+    color: '#1c4e80',
+    fontWeight: '700',
+  },
+
+  // Loading and empty states
+  loadingContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '80px 20px',
+  },
+  spinner: {
+    width: '40px',
+    height: '40px',
+    border: '4px solid #e5e7eb',
+    borderTop: '4px solid #6C63FF',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite',
+  },
+  loadingText: {
+    marginTop: '16px',
+    color: '#6b7280',
+    fontSize: '16px',
+  },
+  emptyState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '80px 20px',
+    minHeight: '50vh',
+    textAlign: 'center',
+    width: '100%',
+  },
+  emptyIcon: {
+    fontSize: '64px',
+    color: '#d1d5db',
+    marginBottom: '16px',
+  },
+  emptyTitle: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#374151',
+    margin: '0 0 8px 0',
+  },
+  emptyText: {
+    fontSize: '16px',
+    color: '#6b7280',
+    margin: 0,
+    maxWidth: '400px',
+  },
+
+  // Modal styles
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100vh',
+    background: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    padding: '20px',
+  },
+  modalContent: {
+    background: 'white',
+    borderRadius: '16px',
+    width: '100%',
+    maxWidth: '600px',
+    maxHeight: '90vh',
+    overflow: 'hidden',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+  },
+  modalHeader: {
+    padding: '24px',
+    borderBottom: '1px solid #e5e7eb',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalTitle: {
+    margin: 0,
+    fontSize: '20px',
+    fontWeight: '700',
+    color: '#1f2937',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  modalCloseButton: {
+    background: 'none',
+    border: 'none',
+    fontSize: '24px',
+    cursor: 'pointer',
+    color: '#6b7280',
+    width: '32px',
+    height: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '6px',
+    transition: 'all 0.2s ease',
+  },
+  modalBody: {
+    padding: '24px',
+    overflowY: 'auto',
+    maxHeight: 'calc(90vh - 100px)',
+  },
+  modalSection: {
+    marginBottom: '24px',
+  },
+  sectionTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#1f2937',
+    margin: '0 0 8px 0',
+  },
+  sectionDescription: {
+    fontSize: '14px',
+    color: '#6b7280',
+    margin: '0 0 16px 0',
+  },
+  inputGroup: {
+    marginBottom: '16px',
+  },
+  inputLabel: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: '6px',
+    display: 'block',
+  },
+  selectInput: {
+    width: '100%',
+    padding: '12px 16px',
+    border: '2px solid #e5e7eb',
+    borderRadius: '8px',
+    fontSize: '16px',
+    cursor: 'pointer',
+    outline: 'none',
+    transition: 'all 0.2s ease',
+  },
+  fileInput: {
+    width: '100%',
+    padding: '12px 16px',
+    border: '2px solid #e5e7eb',
+    borderRadius: '8px',
+    fontSize: '16px',
+    cursor: 'pointer',
+    outline: 'none',
+    transition: 'all 0.2s ease',
+  },
+  exportButton: {
+    background: '#1C4E80',
+    border: '2px solid #1C4E80',
+    color: 'white',
+    padding: '12px 20px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    transition: 'all 0.2s ease',
+  },
+  importButton: {
+    background: '#1C4E80',
+    border: '2px solid #1C4E80',
+    color: 'white',
+    padding: '12px 20px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    transition: 'all 0.2s ease',
+  },
+  modalDivider: {
+    height: '1px',
+    background: '#e5e7eb',
+    margin: '24px 0',
+  },
 };
 
-export default App;
+// Add CSS animation for spinner
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+document.head.appendChild(style);
+
+export default ViewStats;

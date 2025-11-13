@@ -85,9 +85,7 @@ export const User: React.FC<Props> = ({ users, type, onBack }) => {
         <label>Social Media</label>
         <input value={selectedUser?.socialMedia || 'N/A'} readOnly />
       </div>
-      <h2 style={{ fontSize: '20px', margin: '20px 0 10px' }}>
-        Employment Information
-      </h2>
+      <h2 style={{ fontSize: '20px', margin: '20px 0 10px' }}>Employment Information</h2>
       <div
         style={{
           display: 'grid',
@@ -123,7 +121,9 @@ export const User: React.FC<Props> = ({ users, type, onBack }) => {
   );
 
   return (
-    <div style={{ padding: '20px 40px', position: 'relative', zIndex: 9999, pointerEvents: 'auto' }}>
+    <div
+      style={{ padding: '20px 40px', position: 'relative', zIndex: 9999, pointerEvents: 'auto' }}
+    >
       {/* Top Bar */}
       <div
         style={{
@@ -197,7 +197,6 @@ export const User: React.FC<Props> = ({ users, type, onBack }) => {
       >
         <thead>
           <tr style={{ background: '#174f84', color: 'white' }}>
-            <th style={{ padding: '12px' }}>#</th>
             <th style={{ padding: '12px' }}>Name</th>
             <th style={{ padding: '12px' }}>ID Number</th>
             <th style={{ padding: '12px' }}>Course</th>
@@ -213,9 +212,6 @@ export const User: React.FC<Props> = ({ users, type, onBack }) => {
                 textAlign: 'center',
               }}
             >
-              <td style={{ padding: '10px' }}>
-                {String(index + 1).padStart(2, '0')}
-              </td>
               <td
                 style={{
                   cursor: 'pointer',
@@ -236,17 +232,19 @@ export const User: React.FC<Props> = ({ users, type, onBack }) => {
               <td
                 style={{
                   color:
-                    user.status === 'Employed'
-                      ? 'teal'
-                      : user.status === 'High Position'
-                      ? '#e6b800'
-                      : user.status === 'Absorb'
-                      ? '#0093D9'
-                      : 'orangered',
+                    user.status === 'Pending'
+                      ? '#EE82EE'
+                      : user.status === 'Employed'
+                        ? '#662d91'
+                        : user.status === 'Unemployed'
+                          ? '#800080'
+                          : user.status === 'Absorb'
+                            ? '#1d1160'
+                            : 'orangered',
                   textDecoration: 'underline',
                 }}
               >
-                {user.status}
+                {user.status === 'Pending' ? 'Untracked' : user.status}
               </td>
             </tr>
           ))}
@@ -284,7 +282,15 @@ export const User: React.FC<Props> = ({ users, type, onBack }) => {
         }}
         onClick={() => {
           console.log('DIV CLICKED');
-          setSelectedUser({ id: 888, name: 'Div User', idNumber: '8888888', course: 'DIV', batch: '9999', status: 'Employed', type: 'ALUMNI' });
+          setSelectedUser({
+            id: 888,
+            name: 'Div User',
+            idNumber: '8888888',
+            course: 'DIV',
+            batch: '9999',
+            status: 'Employed',
+            type: 'ALUMNI',
+          });
         }}
       >
         CLICK ME DIV

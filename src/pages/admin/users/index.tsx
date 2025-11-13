@@ -9,7 +9,7 @@ const UsersIndex: React.FC = () => {
   const [alumni, setAlumni] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCourse, setSelectedCourse] = useState('All');
+  const [selectedProgram, setSelectedProgram] = useState('All');
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
 
   useEffect(() => {
@@ -31,7 +31,7 @@ const UsersIndex: React.FC = () => {
     setLoading(true);
     setSelectedBatch(year);
     setSearchTerm('');
-    setSelectedCourse('All');
+    setSelectedProgram('All');
     try {
       const data = await fetchAlumniByYear(year.toString());
       setAlumni(data.alumni || []);
@@ -46,17 +46,17 @@ const UsersIndex: React.FC = () => {
     setSelectedBatch(null);
     setAlumni([]);
     setSearchTerm('');
-    setSelectedCourse('All');
+    setSelectedProgram('All');
   };
 
-  // Get unique courses for dropdown
-  const courseOptions = Array.from(new Set(alumni.map(a => a.course).filter(Boolean)));
+  // Get unique programs for dropdown
+  const programOptions = Array.from(new Set(alumni.map((a) => a.program).filter(Boolean)));
 
   // Filtered alumni
   const filteredAlumni = alumni.filter((user) => {
-    const matchCourse = selectedCourse === 'All' || user.course === selectedCourse;
+    const matchProgram = selectedProgram === 'All' || user.program === selectedProgram;
     const matchSearch = (user.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    return matchCourse && matchSearch;
+    return matchProgram && matchSearch;
   });
 
   const calculateAge = (birthDateStr?: string) => {
@@ -71,7 +71,7 @@ const UsersIndex: React.FC = () => {
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar />
-      <div style={{ flexGrow: 1, padding: '20px 40px 40px', backgroundColor: '#f5f7fa', overflowY: 'auto' }}>
+      <div className="admin-content-page" style={{ flexGrow: 1, padding: '20px 40px 40px', backgroundColor: '#f5f7fa', overflowY: 'auto', marginLeft: 'var(--sidebar-width, 220px)' }}>
         {/* Header: Only show in batch card view */}
         {!selectedBatch && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '25px' }}>
@@ -83,9 +83,7 @@ const UsersIndex: React.FC = () => {
         {/* Batch Cards View */}
         {!selectedBatch && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-            {batchList.length === 0 && !loading && (
-              <div>No alumni batches found.</div>
-            )}
+            {batchList.length === 0 && !loading && <div>No alumni batches found.</div>}
             {loading && <div>Loading...</div>}
             {batchList.map((batch) => (
               <div
@@ -104,12 +102,26 @@ const UsersIndex: React.FC = () => {
                   justifyContent: 'space-between',
                 }}
               >
-                <div style={{ height: '80px', backgroundColor: '#e3e9f7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, color: '#174f84' }}>
-                  <span role="img" aria-label="batch">🎓</span>
+                <div
+                  style={{
+                    height: '80px',
+                    backgroundColor: '#e3e9f7',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 32,
+                    color: '#174f84',
+                  }}
+                >
+                  <span role="img" aria-label="batch">
+                    🎓
+                  </span>
                 </div>
                 <div style={{ backgroundColor: '#174f84', color: 'white', padding: '15px' }}>
-                  <strong style={{ fontSize: '15px', display: 'block', marginBottom: '5px' }}>YEAR GRADUATED: {batch.year}</strong>
-                  <div style={{ fontSize: '13px' }}>Imported: {batch.count}</div>
+                  <strong style={{ fontSize: '15px', display: 'block', marginBottom: '5px' }}>
+                    CLASS OF {batch.year}
+                  </strong>
+                  <div style={{ fontSize: '13px' }}>Alumni: {batch.count}</div>
                 </div>
               </div>
             ))}
@@ -136,14 +148,21 @@ const UsersIndex: React.FC = () => {
               &lsaquo;
             </button>
             {/* Batch title and search/filter row in one flex container */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 18,
+              }}
+            >
               <h2 style={{ margin: 0 }}>BATCH {selectedBatch}</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
                 <input
                   type="text"
                   placeholder="🔍 Search...."
                   value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                   style={{
                     padding: '10px 24px',
                     borderRadius: '24px',
@@ -158,10 +177,12 @@ const UsersIndex: React.FC = () => {
                   }}
                 />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <label style={{ marginRight: 8, fontWeight: 500, color: '#222', fontSize: 15 }}>COURSE:</label>
+                  <label style={{ marginRight: 8, fontWeight: 500, color: '#222', fontSize: 15 }}>
+                    PROGRAM:
+                  </label>
                   <select
-                    value={selectedCourse}
-                    onChange={e => setSelectedCourse(e.target.value)}
+                    value={selectedProgram}
+                    onChange={(e) => setSelectedProgram(e.target.value)}
                     style={{
                       padding: '8px 28px 8px 18px',
                       borderRadius: '20px',
@@ -177,44 +198,80 @@ const UsersIndex: React.FC = () => {
                     }}
                   >
                     <option value="All">All</option>
-                    {courseOptions.map((course) => (
-                      <option key={course} value={course}>{course}</option>
+                    {programOptions.map((program) => (
+                      <option key={program} value={program}>
+                        {program}
+                      </option>
                     ))}
                   </select>
                 </div>
               </div>
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                backgroundColor: 'white',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+              }}
+            >
               <thead>
                 <tr style={{ background: '#174f84', color: 'white' }}>
-                  <th style={{ padding: '12px' }}>#</th>
                   <th style={{ padding: '12px' }}>Name</th>
                   <th style={{ padding: '12px' }}>ID Number</th>
-                  <th style={{ padding: '12px' }}>Course</th>
+                  <th style={{ padding: '12px' }}>Program</th>
                   <th style={{ padding: '12px' }}>Batch Graduated</th>
                   <th style={{ padding: '12px' }}>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', padding: '20px' }}>Loading...</td></tr>
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '20px' }}>
+                      Loading...
+                    </td>
+                  </tr>
                 ) : filteredAlumni.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', padding: '20px' }}>No alumni found for this batch.</td></tr>
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '20px' }}>
+                      No alumni found for this batch.
+                    </td>
+                  </tr>
                 ) : (
                   filteredAlumni.map((user, index) => (
                     <tr
                       key={user.id}
-                      style={{ textAlign: 'center', cursor: 'pointer', transition: 'background 0.2s' }}
+                      style={{
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s',
+                      }}
                       onClick={() => setSelectedUser(user)}
-                      onMouseOver={e => { (e.currentTarget as HTMLTableRowElement).style.background = '#f0f8ff'; }}
-                      onMouseOut={e => { (e.currentTarget as HTMLTableRowElement).style.background = ''; }}
+                      onMouseOver={(e) => {
+                        (e.currentTarget as HTMLTableRowElement).style.background = '#f0f8ff';
+                      }}
+                      onMouseOut={(e) => {
+                        (e.currentTarget as HTMLTableRowElement).style.background = '';
+                      }}
                     >
-                      <td style={{ padding: '10px' }}>{String(index + 1).padStart(2, '0')}</td>
                       <td>{user.name}</td>
                       <td>{user.ctu_id}</td>
-                      <td>{user.course}</td>
+                      <td>{user.program}</td>
                       <td>{user.batch}</td>
-                      <td style={{ color: user.status === 'Employed' ? 'teal' : user.status === 'High Position' ? '#e6b800' : user.status === 'Absorb' ? '#0093D9' : 'orangered' }}>{user.status}</td>
+                      <td
+                        style={{
+                          color:
+                            user.status === 'Employed'
+                              ? 'teal'
+                              : user.status === 'High Position'
+                                ? '#e6b800'
+                                : user.status === 'Absorb'
+                                  ? '#0093D9'
+                                  : 'orangered',
+                        }}
+                      >
+                        {user.status}
+                      </td>
                     </tr>
                   ))
                 )}
@@ -225,35 +282,85 @@ const UsersIndex: React.FC = () => {
 
         {/* Add modal after the table */}
         {selectedUser && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            background: 'rgba(0,0,0,0.7)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-          }}>
-            <div style={{ background: 'white', padding: '40px', borderRadius: '16px', minWidth: '340px', textAlign: 'center' }}>
-              <h2 style={{ fontSize: '22px', fontWeight: 'bold', marginBottom: 24 }}>User Profile</h2>
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              background: 'rgba(0,0,0,0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+            }}
+          >
+            <div
+              style={{
+                background: 'white',
+                padding: '40px',
+                borderRadius: '16px',
+                minWidth: '340px',
+                textAlign: 'center',
+              }}
+            >
+              <h2 style={{ fontSize: '22px', fontWeight: 'bold', marginBottom: 24 }}>
+                User Profile
+              </h2>
               <div style={{ textAlign: 'left', marginBottom: 18 }}>
-                <p><b>Name:</b> {selectedUser.name}</p>
-                <p><b>ID Number:</b> {selectedUser.ctu_id}</p>
-                <p><b>Course:</b> {selectedUser.course}</p>
-                <p><b>Batch:</b> {selectedUser.batch}</p>
-                <p><b>Status:</b> {selectedUser.status}</p>
-                <p><b>Gender:</b> {selectedUser.gender || 'N/A'}</p>
-                <p><b>Birthdate:</b> {selectedUser.birthdate || 'N/A'}</p>
-                <p><b>Age:</b> {selectedUser.birthdate ? calculateAge(selectedUser.birthdate) : 'N/A'}</p>
-                <p><b>Civil Status:</b> {selectedUser.civilStatus || 'N/A'}</p>
-                <p><b>Phone Number:</b> {selectedUser.phone || 'N/A'}</p>
-                <p><b>Address:</b> {selectedUser.address || 'N/A'}</p>
-                <p><b>Social Media:</b> {selectedUser.socialMedia || 'N/A'}</p>
+                <p>
+                  <b>Name:</b> {selectedUser.name}
+                </p>
+                <p>
+                  <b>ID Number:</b> {selectedUser.ctu_id}
+                </p>
+                <p>
+                  <b>Course:</b> {selectedUser.course}
+                </p>
+                <p>
+                  <b>Batch:</b> {selectedUser.batch}
+                </p>
+                <p>
+                  <b>Status:</b> {selectedUser.status}
+                </p>
+                <p>
+                  <b>Gender:</b> {selectedUser.gender || 'N/A'}
+                </p>
+                <p>
+                  <b>Birthdate:</b> {selectedUser.birthdate || 'N/A'}
+                </p>
+                <p>
+                  <b>Age:</b>{' '}
+                  {selectedUser.birthdate ? calculateAge(selectedUser.birthdate) : 'N/A'}
+                </p>
+                <p>
+                  <b>Civil Status:</b> {selectedUser.civilStatus || 'N/A'}
+                </p>
+                <p>
+                  <b>Phone Number:</b> {selectedUser.phone || 'N/A'}
+                </p>
+                <p>
+                  <b>Address:</b> {selectedUser.address || 'N/A'}
+                </p>
+                <p>
+                  <b>Social Media:</b> {selectedUser.socialMedia || 'N/A'}
+                </p>
               </div>
-              <button onClick={() => setSelectedUser(null)} style={{ marginTop: '20px', padding: '10px 20px', borderRadius: '8px', background: '#f26c4f', color: 'white', border: 'none', cursor: 'pointer' }}>Close</button>
+              <button
+                onClick={() => setSelectedUser(null)}
+                style={{
+                  marginTop: '20px',
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  background: '#f26c4f',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                Close
+              </button>
             </div>
           </div>
         )}
