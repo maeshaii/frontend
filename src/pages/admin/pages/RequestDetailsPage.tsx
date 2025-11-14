@@ -139,7 +139,6 @@ const RequestDetailsPage: React.FC = () => {
       minHeight: '100vh',
       width: '100%',
       boxSizing: 'border-box' as const,
-      marginLeft: 'var(--sidebar-width, 220px)',
     },
     header: {
       marginBottom: '28px',
