@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
-import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardRequests, approveRewardRequest, claimRewardRequest, getEngagementPointsSettings, updateEngagementPointsSettings, getRewardHistory, fetchTrackerResponses } from '../../../services/api';
-import { FaTimes } from 'react-icons/fa';
+import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardRequests, approveRewardRequest, claimRewardRequest, getRewardHistory, fetchTrackerResponses, getMilestoneTasksPoints, updateMilestoneTasksPoints, getEngagementPointsSettings, updateEngagementPointsSettings } from '../../../services/api';
+import { trackerApi } from '../../../services/trackerApi';
 import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineUser, HiOutlineTag } from 'react-icons/hi2';
 import { useRealTimeNotifications } from '../../../hooks/useRealTimeNotifications';
 
@@ -87,33 +87,24 @@ const RewardsPage: React.FC = () => {
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [instructions, setInstructions] = useState('');
   const [showPointsSettingsModal, setShowPointsSettingsModal] = useState(false);
-  const [pointsSettings, setPointsSettings] = useState({
-    enabled: true,
-    like: 1,
-    comment: 3,
-    share: 5,
-    reply: 2,
-    post: 0,
-    post_with_photo: 15,
-    tracker_form: 0,
-    // Rate limiting settings
-    rate_limiting_enabled: true,
-    daily_like_limit: 100,
-    daily_comment_limit: 50,
-    daily_share_limit: 20,
-    daily_reply_limit: 50,
-    daily_post_limit: 10,
-    daily_post_with_photo_limit: 10,
-    daily_tracker_form_limit: 1,
-    hourly_like_limit: 20,
-    hourly_comment_limit: 10,
-    hourly_share_limit: 5,
-    hourly_reply_limit: 10,
-    hourly_post_limit: 2,
-    hourly_post_with_photo_limit: 2,
-    hourly_tracker_form_limit: 1,
-  });
   const [pointsSettingsLoading, setPointsSettingsLoading] = useState(false);
+  const [milestoneTasksEnabled, setMilestoneTasksEnabled] = useState(true);
+  const [trackerFormEnabled, setTrackerFormEnabled] = useState(true);
+  const [trackerFormPoints, setTrackerFormPoints] = useState(10);
+  const [trackerFormAccepting, setTrackerFormAccepting] = useState(false);
+  const [milestoneTasks, setMilestoneTasks] = useState<Array<{
+    task_id: number;
+    task_type: string;
+    title: string;
+    description: string;
+    points: number;
+    max_points: number | null;
+    icon_name: string;
+    is_active: boolean;
+    order: number;
+    required_count?: number | null;
+  }>>([]);
+  const [milestoneTasksLoading, setMilestoneTasksLoading] = useState(false);
   const [voucherCode, setVoucherCode] = useState('');
   const [approving, setApproving] = useState(false);
   const [releasing, setReleasing] = useState(false);
@@ -152,7 +143,6 @@ const RewardsPage: React.FC = () => {
     fetchLeaderboardData();
     fetchRewardRequests();
     fetchRewardHistory();
-    fetchPointsSettings();
     fetchInventoryCount();
     fetchTrackerFormResponsesCount();
     
@@ -203,108 +193,128 @@ const RewardsPage: React.FC = () => {
     };
   }, [showStatusDropdown, showRewardTypeDropdown]);
 
-  const fetchPointsSettings = async () => {
+  const fetchMilestoneTasks = async () => {
+    setMilestoneTasksLoading(true);
     try {
-      const response = await getEngagementPointsSettings();
-      if (response.success && response.settings) {
-        setPointsSettings({
-          enabled: response.settings.enabled !== false,
-          like: response.settings.like_points || 0,
-          comment: response.settings.comment_points || 0,
-          share: response.settings.share_points || 0,
-          reply: response.settings.reply_points || 0,
-          post: response.settings.post_points || 0,
-          post_with_photo: response.settings.post_with_photo_points || 0,
-          tracker_form: response.settings.tracker_form_points || 0,
-          // Rate limiting settings
-          rate_limiting_enabled: response.settings.rate_limiting_enabled !== false,
-          daily_like_limit: response.settings.daily_like_limit || 100,
-          daily_comment_limit: response.settings.daily_comment_limit || 50,
-          daily_share_limit: response.settings.daily_share_limit || 20,
-          daily_reply_limit: response.settings.daily_reply_limit || 50,
-          daily_post_limit: response.settings.daily_post_limit || 10,
-          daily_post_with_photo_limit: response.settings.daily_post_with_photo_limit || 10,
-          daily_tracker_form_limit: response.settings.daily_tracker_form_limit || 1,
-          hourly_like_limit: response.settings.hourly_like_limit || 20,
-          hourly_comment_limit: response.settings.hourly_comment_limit || 10,
-          hourly_share_limit: response.settings.hourly_share_limit || 5,
-          hourly_reply_limit: response.settings.hourly_reply_limit || 10,
-          hourly_post_limit: response.settings.hourly_post_limit || 2,
-          hourly_post_with_photo_limit: response.settings.hourly_post_with_photo_limit || 2,
-          hourly_tracker_form_limit: response.settings.hourly_tracker_form_limit || 1,
-        });
-      } else {
-        // Use default values if API fails
-        setPointsSettings({
-          enabled: true,
-          like: 1,
-          comment: 3,
-          share: 5,
-          reply: 2,
-          post: 0,
-          post_with_photo: 15,
-          tracker_form: 0,
-          rate_limiting_enabled: true,
-          daily_like_limit: 100,
-          daily_comment_limit: 50,
-          daily_share_limit: 20,
-          daily_reply_limit: 50,
-          daily_post_limit: 10,
-          daily_post_with_photo_limit: 10,
-          daily_tracker_form_limit: 1,
-          hourly_like_limit: 20,
-          hourly_comment_limit: 10,
-          hourly_share_limit: 5,
-          hourly_reply_limit: 10,
-          hourly_post_limit: 2,
-          hourly_post_with_photo_limit: 2,
-          hourly_tracker_form_limit: 1,
-        });
+      const response = await getMilestoneTasksPoints();
+      if (response.success) {
+        if (response.tasks) {
+          setMilestoneTasks(response.tasks);
+        }
+        if (response.milestone_tasks_enabled !== undefined) {
+          setMilestoneTasksEnabled(response.milestone_tasks_enabled);
+        }
+      }
+      
+      // Also fetch tracker form settings
+      const pointsSettings = await getEngagementPointsSettings();
+      if (pointsSettings.success && pointsSettings.settings) {
+        if (pointsSettings.settings.tracker_form_enabled !== undefined) {
+          setTrackerFormEnabled(pointsSettings.settings.tracker_form_enabled);
+        }
+        if (pointsSettings.settings.tracker_form_points !== undefined) {
+          setTrackerFormPoints(pointsSettings.settings.tracker_form_points);
+        }
+      }
+      
+      // Fetch tracker form accepting status
+      try {
+        const activeForm = await trackerApi.getActiveForm();
+        if (activeForm && activeForm.tracker_form_id) {
+          const acceptingStatus = await trackerApi.getAcceptingStatus(activeForm.tracker_form_id);
+          setTrackerFormAccepting(acceptingStatus.accepting_responses || false);
+        }
+      } catch (error) {
+        console.error('Error fetching tracker form accepting status:', error);
+        setTrackerFormAccepting(false);
       }
     } catch (error) {
-      console.error('Error fetching points settings:', error);
-      // Use default values if API fails
-      setPointsSettings({
-        enabled: true,
-        like: 1,
-        comment: 3,
-        share: 5,
-        reply: 2,
-        post: 0,
-        post_with_photo: 15,
-        tracker_form: 0,
-        rate_limiting_enabled: true,
-        daily_like_limit: 100,
-        daily_comment_limit: 50,
-        daily_share_limit: 20,
-        daily_reply_limit: 50,
-        daily_post_limit: 10,
-        daily_post_with_photo_limit: 10,
-        daily_tracker_form_limit: 1,
-        hourly_like_limit: 20,
-        hourly_comment_limit: 10,
-        hourly_share_limit: 5,
-        hourly_reply_limit: 10,
-        hourly_post_limit: 2,
-        hourly_post_with_photo_limit: 2,
-        hourly_tracker_form_limit: 1,
-      });
+      console.error('Error fetching milestone tasks:', error);
+    } finally {
+      setMilestoneTasksLoading(false);
     }
+  };
+
+  const removeNumbersFromTitle = (title: string): string => {
+    // Remove numbers and extra spaces from title
+    // Examples: "Make 10 posts" -> "Make posts", "Comment on 5 posts" -> "Comment on posts"
+    return title.replace(/\d+/g, '').replace(/\s+/g, ' ').trim();
   };
 
   const handleSavePointsSettings = async () => {
     setPointsSettingsLoading(true);
     try {
-      const response = await updateEngagementPointsSettings(pointsSettings);
-      if (response.success) {
-        alert('✅ Points settings updated successfully!');
-        setShowPointsSettingsModal(false);
-      } else {
-        alert(`❌ Failed to update settings: ${response.message || 'Unknown error'}`);
+      // Prepare tasks array if there are any
+      const tasksToUpdate = milestoneTasks.length > 0 
+        ? milestoneTasks.map(task => ({
+            task_id: task.task_id,
+            points: task.points,
+            is_active: task.is_active,
+            required_count: typeof task.required_count === 'number' ? task.required_count : undefined,
+          }))
+        : [];
+      
+      const milestoneResponse = await updateMilestoneTasksPoints(tasksToUpdate, milestoneTasksEnabled);
+      if (!milestoneResponse.success) {
+        alert(`❌ Failed to update milestone tasks: ${milestoneResponse.message || 'Unknown error'}`);
+        return;
       }
+
+      // Update tracker form settings - fetch current settings first to preserve other values
+      const currentSettings = await getEngagementPointsSettings();
+      if (currentSettings.success && currentSettings.settings) {
+        const trackerFormResponse = await updateEngagementPointsSettings({
+          enabled: currentSettings.settings.enabled ?? true,
+          like: currentSettings.settings.like_points ?? 0,
+          comment: currentSettings.settings.comment_points ?? 0,
+          share: currentSettings.settings.share_points ?? 0,
+          reply: currentSettings.settings.reply_points ?? 0,
+          post: currentSettings.settings.post_points ?? 0,
+          post_with_photo: currentSettings.settings.post_with_photo_points ?? 0,
+          tracker_form: trackerFormPoints,
+          tracker_form_enabled: trackerFormEnabled,
+        });
+        
+        if (!trackerFormResponse.success) {
+          const errorMessage = trackerFormResponse.message || 'Unknown error';
+          alert(`❌ Failed to update tracker form settings: ${errorMessage}`);
+          // If the error is about accepting responses, refresh the accepting status
+          if (errorMessage.includes('accepting responses')) {
+            try {
+              const activeForm = await trackerApi.getActiveForm();
+              if (activeForm && activeForm.tracker_form_id) {
+                const acceptingStatus = await trackerApi.getAcceptingStatus(activeForm.tracker_form_id);
+                setTrackerFormAccepting(acceptingStatus.accepting_responses || false);
+              }
+            } catch (error) {
+              console.error('Error refreshing tracker form status:', error);
+            }
+          }
+          return;
+        }
+      } else {
+        alert(`❌ Failed to fetch current settings`);
+        return;
+      }
+
+      alert('✅ Settings updated successfully!');
+      setShowPointsSettingsModal(false);
     } catch (error: any) {
-      console.error('Error updating points settings:', error);
-      alert(`❌ Error: ${error.response?.data?.message || 'Failed to update settings'}`);
+      console.error('Error updating settings:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to update settings';
+      alert(`❌ Error: ${errorMessage}`);
+      // If the error is about accepting responses, refresh the accepting status
+      if (errorMessage.includes('accepting responses')) {
+        try {
+          const activeForm = await trackerApi.getActiveForm();
+          if (activeForm && activeForm.tracker_form_id) {
+            const acceptingStatus = await trackerApi.getAcceptingStatus(activeForm.tracker_form_id);
+            setTrackerFormAccepting(acceptingStatus.accepting_responses || false);
+          }
+        } catch (refreshError) {
+          console.error('Error refreshing tracker form status:', refreshError);
+        }
+      }
     } finally {
       setPointsSettingsLoading(false);
     }
@@ -862,7 +872,7 @@ const RewardsPage: React.FC = () => {
             <div 
               style={styles.inventoryCard}
               onClick={() => {
-                fetchPointsSettings();
+                fetchMilestoneTasks();
                 setShowPointsSettingsModal(true);
               }}
               onMouseEnter={(e) => {
@@ -876,12 +886,12 @@ const RewardsPage: React.FC = () => {
                 e.currentTarget.style.backgroundColor = '#1e3a5f';
               }}
             >
-              <div style={styles.inventoryTitle}>POINTS SETTINGS</div>
+              <div style={styles.inventoryTitle}>MILESTONE TASKS</div>
               <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'white' }}>
-                {pointsSettings.enabled ? '✓' : '✗'}
+                ⚙️
               </div>
               <div style={styles.inventorySubtitle}>
-                {pointsSettings.enabled ? 'Enabled' : 'Disabled'}
+                Configure Points
               </div>
             </div>
 
@@ -2846,6 +2856,16 @@ const RewardsPage: React.FC = () => {
 
         {/* Points Settings Modal */}
         {showPointsSettingsModal && (
+          <>
+          <style>{`
+            .points-settings-modal-scroll {
+               scrollbar-width: none;
+               -ms-overflow-style: none;
+             }
+            .points-settings-modal-scroll::-webkit-scrollbar {
+               display: none;
+             }
+          `}</style>
           <div style={{
             position: 'fixed',
             top: 0,
@@ -2868,377 +2888,296 @@ const RewardsPage: React.FC = () => {
               width: '900px',
               maxWidth: '95%',
               maxHeight: '75vh',
-              overflow: 'auto'
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
             }}
             onClick={(e) => e.stopPropagation()}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ marginBottom: '16px' }}>
                 <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#1e3a5f' }}>
                   Points Settings
                 </h2>
-                <button
-                  onClick={() => setShowPointsSettingsModal(false)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '8px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#6b7280',
-                    transition: 'all 0.2s',
-                    width: '32px',
-                    height: '32px'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = '#f3f4f6';
-                    e.currentTarget.style.color = '#1f2937';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.color = '#6b7280';
-                  }}
-                >
-                  <FaTimes size={18} />
-                </button>
               </div>
 
-              <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '16px' }}>
-                Configure points and rate limits to prevent spam.
-              </p>
-
-              {/* Enable/Disable Toggle */}
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between', 
-                padding: '10px 14px', 
-                background: pointsSettings.enabled ? '#f0fdf4' : '#fef2f2', 
-                borderRadius: '8px', 
-                marginBottom: '16px',
-                border: `2px solid ${pointsSettings.enabled ? '#10b981' : '#ef4444'}`
-              }}>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937', marginBottom: '2px' }}>
-                    Points System
+              {/* Milestone Tasks Enable/Disable Toggle */}
+              <div
+                className="points-settings-modal-scroll"
+                style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  paddingRight: '8px',
+                  marginRight: '-8px'
+                }}
+              >
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  padding: '10px 14px', 
+                  background: milestoneTasksEnabled ? '#f0fdf4' : '#fef2f2', 
+                  borderRadius: '8px', 
+                  marginTop: '16px',
+                  marginBottom: '16px',
+                  border: `2px solid ${milestoneTasksEnabled ? '#10b981' : '#ef4444'}`
+                }}>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937', marginBottom: '2px' }}>
+                      Milestone Tasks Feature
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                      {milestoneTasksEnabled ? 'Milestone tasks are currently enabled' : 'Milestone tasks are currently disabled'}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                    {pointsSettings.enabled ? 'Points are currently being awarded' : 'Points system is disabled'}
-                  </div>
-                </div>
-                <button
-                  onClick={() => setPointsSettings({ ...pointsSettings, enabled: !pointsSettings.enabled })}
-                  style={{
-                    width: '56px',
-                    height: '32px',
-                    borderRadius: '16px',
-                    border: 'none',
-                    background: pointsSettings.enabled ? '#10b981' : '#9ca3af',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    transition: 'all 0.3s',
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '4px',
-                    boxShadow: pointsSettings.enabled ? '0 2px 4px rgba(16, 185, 129, 0.3)' : '0 2px 4px rgba(0, 0, 0, 0.1)'
-                  }}
-                >
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: 'white',
-                    transition: 'transform 0.3s',
-                    transform: pointsSettings.enabled ? 'translateX(24px)' : 'translateX(0)',
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
-                  }} />
-                </button>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '16px', opacity: pointsSettings.enabled ? 1 : 0.5, pointerEvents: pointsSettings.enabled ? 'auto' : 'none' }}>
-                {/* Likes */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <HiOutlineHeart size={16} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Likes</span>
-                  </div>
-                  <input
-                    type="number"
-                    min="0"
-                    value={pointsSettings.like}
-                    onChange={(e) => setPointsSettings({ ...pointsSettings, like: parseInt(e.target.value) || 0 })}
+                  <button
+                    onClick={() => setMilestoneTasksEnabled(!milestoneTasksEnabled)}
                     style={{
-                      width: '60px',
-                      padding: '5px 8px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      textAlign: 'center'
+                      width: '56px',
+                      height: '32px',
+                      borderRadius: '16px',
+                      border: 'none',
+                      background: milestoneTasksEnabled ? '#10b981' : '#9ca3af',
+                      cursor: 'pointer',
+                      position: 'relative',
+                      transition: 'all 0.3s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '4px',
+                      boxShadow: milestoneTasksEnabled ? '0 2px 4px rgba(16, 185, 129, 0.3)' : '0 2px 4px rgba(0, 0, 0, 0.1)'
                     }}
-                  />
+                  >
+                    <div style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: 'white',
+                      transition: 'transform 0.3s',
+                      transform: milestoneTasksEnabled ? 'translateX(24px)' : 'translateX(0)',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                    }} />
+                  </button>
                 </div>
 
-                {/* Comments */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <HiOutlineChatBubbleLeft size={16} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Comments</span>
-                  </div>
-                  <input
-                    type="number"
-                    min="0"
-                    value={pointsSettings.comment}
-                    onChange={(e) => setPointsSettings({ ...pointsSettings, comment: parseInt(e.target.value) || 0 })}
-                    style={{
-                      width: '60px',
-                      padding: '5px 8px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      textAlign: 'center'
-                    }}
-                  />
+                {/* Milestone Tasks Section */}
+                <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '2px solid #e5e7eb', opacity: milestoneTasksEnabled ? 1 : 0.5, pointerEvents: milestoneTasksEnabled ? 'auto' : 'none' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#1e3a5f', marginBottom: '12px' }}>
+                    Milestone Tasks Points
+                  </h3>
+                  <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '16px' }}>
+                    Configure points awarded for completing milestone tasks. Points are only given when tasks are fully completed.
+                  </p>
+                  
+                  {milestoneTasksLoading ? (
+                    <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
+                      Loading milestone tasks...
+                    </div>
+                  ) : milestoneTasks.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
+                      No milestone tasks found.
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(1, 1fr)', 
+                      gap: '8px'
+                    }}>
+                      {milestoneTasks.map((task) => (
+                        <div 
+                          key={task.task_id}
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between', 
+                            padding: '10px 12px', 
+                            background: '#f9fafb', 
+                            borderRadius: '6px',
+                            border: task.is_active ? '1px solid #d1d5db' : '1px solid #fca5a5'
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: task.is_active ? '#1f2937' : '#9ca3af' }}>
+                                {removeNumbersFromTitle(task.title)}
+                              </span>
+                              {!task.is_active && (
+                                <span style={{ fontSize: '10px', color: '#ef4444', background: '#fee2e2', padding: '2px 6px', borderRadius: '4px' }}>
+                                  Inactive
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {task.description}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '12px' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              value={task.points}
+                              onChange={(e) => {
+                                const newTasks = milestoneTasks.map(t => 
+                                  t.task_id === task.task_id 
+                                    ? { ...t, points: parseInt(e.target.value) || 0 }
+                                    : t
+                                );
+                                setMilestoneTasks(newTasks);
+                              }}
+                              style={{
+                                width: '70px',
+                                padding: '6px 8px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                fontSize: '13px',
+                                textAlign: 'center',
+                                opacity: task.is_active ? 1 : 0.5,
+                                pointerEvents: task.is_active ? 'auto' : 'none'
+                              }}
+                            />
+                            <span style={{ fontSize: '12px', color: '#6b7280', minWidth: '40px' }}>points</span>
+                            {typeof task.required_count === 'number' && (
+                              <>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={task.required_count}
+                                  onChange={(e) => {
+                                    const value = parseInt(e.target.value);
+                                    const newTasks = milestoneTasks.map(t =>
+                                      t.task_id === task.task_id
+                                        ? { ...t, required_count: !isNaN(value) ? value : 0 }
+                                        : t
+                                    );
+                                    setMilestoneTasks(newTasks);
+                                  }}
+                                  style={{
+                                    width: '70px',
+                                    padding: '6px 8px',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '6px',
+                                    fontSize: '13px',
+                                    textAlign: 'center',
+                                    opacity: task.is_active ? 1 : 0.5,
+                                    pointerEvents: task.is_active ? 'auto' : 'none'
+                                  }}
+                                />
+                                <span style={{ fontSize: '12px', color: '#6b7280', minWidth: '60px' }}>target</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Repost */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <HiOutlineArrowPath size={16} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Repost</span>
+                {/* Tracker Form Rewards Section */}
+                <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '2px solid #e5e7eb' }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between', 
+                    padding: '10px 14px', 
+                    background: trackerFormEnabled ? '#f0fdf4' : '#fef2f2', 
+                    borderRadius: '8px', 
+                    marginBottom: '16px',
+                    border: `2px solid ${trackerFormEnabled ? '#10b981' : '#ef4444'}`
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937', marginBottom: '2px' }}>
+                        Tracker Form Rewards
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                        {trackerFormEnabled ? 'Tracker form rewards are currently enabled' : 'Tracker form rewards are currently disabled'}
+                        {!trackerFormEnabled && !trackerFormAccepting && (
+                          <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '4px', fontWeight: '500' }}>
+                            ⚠️ Tracker form must be accepting responses to enable rewards
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (!trackerFormEnabled && !trackerFormAccepting) {
+                          alert('⚠️ Cannot enable tracker form rewards. The tracker form must be accepting responses first. Please enable "Accepting Responses" in the Tracker Settings.');
+                          return;
+                        }
+                        setTrackerFormEnabled(!trackerFormEnabled);
+                      }}
+                      disabled={!trackerFormEnabled && !trackerFormAccepting}
+                      style={{
+                        width: '56px',
+                        height: '32px',
+                        borderRadius: '16px',
+                        border: 'none',
+                        background: trackerFormEnabled ? '#10b981' : '#9ca3af',
+                        cursor: (!trackerFormEnabled && !trackerFormAccepting) ? 'not-allowed' : 'pointer',
+                        position: 'relative',
+                        transition: 'all 0.3s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '4px',
+                        boxShadow: trackerFormEnabled ? '0 2px 4px rgba(16, 185, 129, 0.3)' : '0 2px 4px rgba(0, 0, 0, 0.1)',
+                        opacity: (!trackerFormEnabled && !trackerFormAccepting) ? 0.5 : 1
+                      }}
+                    >
+                      <div style={{
+                        width: '24px',
+                        height: '24px',
+                        borderRadius: '50%',
+                        background: 'white',
+                        transition: 'transform 0.3s',
+                        transform: trackerFormEnabled ? 'translateX(24px)' : 'translateX(0)',
+                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                      }} />
+                    </button>
                   </div>
-                  <input
-                    type="number"
-                    min="0"
-                    value={pointsSettings.share}
-                    onChange={(e) => setPointsSettings({ ...pointsSettings, share: parseInt(e.target.value) || 0 })}
-                    style={{
-                      width: '60px',
-                      padding: '5px 8px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      textAlign: 'center'
-                    }}
-                  />
-                </div>
 
-                {/* Replies */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <HiOutlineArrowUturnLeft size={16} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Replies</span>
-                  </div>
-                  <input
-                    type="number"
-                    min="0"
-                    value={pointsSettings.reply}
-                    onChange={(e) => setPointsSettings({ ...pointsSettings, reply: parseInt(e.target.value) || 0 })}
-                    style={{
-                      width: '60px',
-                      padding: '5px 8px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      textAlign: 'center'
-                    }}
-                  />
-                </div>
-
-                {/* Posts */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <HiOutlineDocumentText size={16} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Posts</span>
-                  </div>
-                  <input
-                    type="number"
-                    min="0"
-                    value={pointsSettings.post}
-                    onChange={(e) => setPointsSettings({ ...pointsSettings, post: parseInt(e.target.value) || 0 })}
-                    style={{
-                      width: '60px',
-                      padding: '5px 8px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      textAlign: 'center'
-                    }}
-                  />
-                </div>
-
-                {/* Posts with Photos */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <HiOutlineCamera size={16} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Posts with Photos</span>
-                  </div>
-                  <input
-                    type="number"
-                    min="0"
-                    value={pointsSettings.post_with_photo}
-                    onChange={(e) => setPointsSettings({ ...pointsSettings, post_with_photo: parseInt(e.target.value) || 0 })}
-                    style={{
-                      width: '60px',
-                      padding: '5px 8px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      textAlign: 'center'
-                    }}
-                  />
-                </div>
-
-                {/* Tracker Form */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <HiOutlineClipboardDocumentList size={16} color="#6b7280" strokeWidth={1.5} />
-                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#1f2937' }}>Tracker Form</span>
-                  </div>
-                  <input
-                    type="number"
-                    min="0"
-                    value={pointsSettings.tracker_form}
-                    onChange={(e) => setPointsSettings({ ...pointsSettings, tracker_form: parseInt(e.target.value) || 0 })}
-                    style={{
-                      width: '60px',
-                      padding: '5px 8px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      textAlign: 'center'
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Rate Limiting Section - Styled same as Points System */}
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between', 
-                padding: '10px 14px', 
-                background: pointsSettings.rate_limiting_enabled ? '#f0fdf4' : '#fef2f2', 
-                borderRadius: '8px', 
-                marginTop: '24px',
-                marginBottom: '20px',
-                border: `2px solid ${pointsSettings.rate_limiting_enabled ? '#10b981' : '#ef4444'}`
-              }}>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937', marginBottom: '2px' }}>
-                    Rate Limiting (Anti-Spam)
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                    {pointsSettings.rate_limiting_enabled ? 'Rate limiting is active' : 'Rate limiting is disabled'}
-                  </div>
-                </div>
-                <button
-                  onClick={() => setPointsSettings({ ...pointsSettings, rate_limiting_enabled: !pointsSettings.rate_limiting_enabled })}
-                  style={{
-                    width: '56px',
-                    height: '32px',
-                    borderRadius: '16px',
-                    border: 'none',
-                    background: pointsSettings.rate_limiting_enabled ? '#10b981' : '#9ca3af',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    transition: 'all 0.3s',
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '4px',
-                    boxShadow: pointsSettings.rate_limiting_enabled ? '0 2px 4px rgba(16, 185, 129, 0.3)' : '0 2px 4px rgba(0, 0, 0, 0.1)'
-                  }}
-                >
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: 'white',
-                    transition: 'transform 0.3s',
-                    transform: pointsSettings.rate_limiting_enabled ? 'translateX(24px)' : 'translateX(0)',
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
-                  }} />
-                </button>
-              </div>
-
-              {/* Daily Limits */}
-              <div style={{ marginBottom: '20px', opacity: pointsSettings.rate_limiting_enabled ? 1 : 0.5, pointerEvents: pointsSettings.rate_limiting_enabled ? 'auto' : 'none' }}>
-                <h4 style={{ fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>
-                  Daily Limits (per 24 hours)
-                </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-                  {[
-                    { key: 'daily_like_limit', label: 'Likes', icon: '❤️' },
-                    { key: 'daily_comment_limit', label: 'Comments', icon: '💬' },
-                    { key: 'daily_share_limit', label: 'Shares', icon: '🔄' },
-                    { key: 'daily_reply_limit', label: 'Replies', icon: '↩️' },
-                    { key: 'daily_post_limit', label: 'Posts', icon: '📝' },
-                    { key: 'daily_post_with_photo_limit', label: 'Posts w/ Photo', icon: '📷' },
-                    { key: 'daily_tracker_form_limit', label: 'Tracker Forms', icon: '📋' },
-                  ].map(({ key, label, icon }) => (
-                    <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#f9fafb', borderRadius: '6px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: '500', color: '#1f2937' }}>
-                        {icon} {label}
-                      </span>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between', 
+                    padding: '10px 12px', 
+                    background: '#f9fafb', 
+                    borderRadius: '6px',
+                    border: '1px solid #d1d5db',
+                    opacity: trackerFormEnabled ? 1 : 0.5,
+                    pointerEvents: trackerFormEnabled ? 'auto' : 'none'
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: trackerFormEnabled ? '#1f2937' : '#9ca3af', marginBottom: '4px' }}>
+                        Complete Tracker Form
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#6b7280' }}>
+                        Points awarded to alumni for completing the tracker form
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '12px' }}>
                       <input
                         type="number"
                         min="0"
-                        value={pointsSettings[key as keyof typeof pointsSettings] as number}
-                        onChange={(e) => setPointsSettings({ ...pointsSettings, [key]: parseInt(e.target.value) || 0 })}
+                        value={trackerFormPoints}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value);
+                          setTrackerFormPoints(!isNaN(value) && value >= 0 ? value : 0);
+                        }}
                         style={{
-                          width: '55px',
-                          padding: '4px 6px',
+                          width: '70px',
+                          padding: '6px 8px',
                           border: '1px solid #d1d5db',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          textAlign: 'center'
+                          borderRadius: '6px',
+                          fontSize: '13px',
+                          textAlign: 'center',
+                          opacity: trackerFormEnabled ? 1 : 0.5,
+                          pointerEvents: trackerFormEnabled ? 'auto' : 'none'
                         }}
                       />
+                      <span style={{ fontSize: '12px', color: '#6b7280', minWidth: '40px' }}>points</span>
                     </div>
-                  ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Hourly Limits */}
-              <div style={{ opacity: pointsSettings.rate_limiting_enabled ? 1 : 0.5, pointerEvents: pointsSettings.rate_limiting_enabled ? 'auto' : 'none' }}>
-                <h4 style={{ fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>
-                  Hourly Limits (per hour)
-                </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-                  {[
-                    { key: 'hourly_like_limit', label: 'Likes', icon: '❤️' },
-                    { key: 'hourly_comment_limit', label: 'Comments', icon: '💬' },
-                    { key: 'hourly_share_limit', label: 'Shares', icon: '🔄' },
-                    { key: 'hourly_reply_limit', label: 'Replies', icon: '↩️' },
-                    { key: 'hourly_post_limit', label: 'Posts', icon: '📝' },
-                    { key: 'hourly_post_with_photo_limit', label: 'Posts w/ Photo', icon: '📷' },
-                    { key: 'hourly_tracker_form_limit', label: 'Tracker Forms', icon: '📋' },
-                  ].map(({ key, label, icon }) => (
-                    <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#f9fafb', borderRadius: '6px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: '500', color: '#1f2937' }}>
-                        {icon} {label}
-                      </span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={pointsSettings[key as keyof typeof pointsSettings] as number}
-                        onChange={(e) => setPointsSettings({ ...pointsSettings, [key]: parseInt(e.target.value) || 0 })}
-                        style={{
-                          width: '55px',
-                          padding: '4px 6px',
-                          border: '1px solid #d1d5db',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          textAlign: 'center'
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
                 <button
                   onClick={() => setShowPointsSettingsModal(false)}
                   style={{
@@ -3276,6 +3215,7 @@ const RewardsPage: React.FC = () => {
               </div>
             </div>
           </div>
+          </>
         )}
 
         </div>

@@ -134,6 +134,7 @@ const RequestDetailsPage: React.FC = () => {
     pageContainer: {
       flex: 1,
       padding: '32px 40px',
+      marginLeft: 'var(--sidebar-width, 220px)',
       backgroundColor: '#f8f9fa',
       minHeight: '100vh',
       width: '100%',

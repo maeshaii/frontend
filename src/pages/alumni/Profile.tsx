@@ -9,6 +9,7 @@ import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
 import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye, HiOutlineXMark, HiOutlineInformationCircle, HiOutlineTicket } from 'react-icons/hi2';
+import EarnPointsModal from '../../components/EarnPointsModal';
 
 function getCurrentUserId(user: AlumniUser | null): number | null {
   if (!user) return null;
@@ -211,6 +212,7 @@ const AlumniProfile: React.FC = () => {
     post_with_photo: 15,
     tracker_form: 0
   });
+  const [trackerFormEnabled, setTrackerFormEnabled] = useState(false);
   const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
   const [showRewardsModal, setShowRewardsModal] = useState(false);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
@@ -227,6 +229,7 @@ const AlumniProfile: React.FC = () => {
   const [pendingRewardRequest, setPendingRewardRequest] = useState<{id: number; name: string; value: string; type?: string} | null>(null);
   const [employmentData, setEmploymentData] = useState<any>(null);
   const [employmentLoading, setEmploymentLoading] = useState(false);
+  const [showEarnPointsModal, setShowEarnPointsModal] = useState(false);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -335,6 +338,10 @@ const AlumniProfile: React.FC = () => {
                     post_with_photo: settingsResponse.settings.post_with_photo_points || 0,
                     tracker_form: settingsResponse.settings.tracker_form_points || 0
                   });
+                  // Set tracker form enabled state
+                  if (settingsResponse.settings.tracker_form_enabled !== undefined) {
+                    setTrackerFormEnabled(settingsResponse.settings.tracker_form_enabled);
+                  }
                 }
               } catch (settingsError) {
                 console.error('Error fetching points settings:', settingsError);
@@ -1973,199 +1980,68 @@ getPosts()
                     </div>
                   )}
 
-                  {/* Points Breakdown - Only show if userPoints exists */}
-                  {userPoints && (
-                    <div style={{ fontSize: '14px', color: '#333' }}>
-                      <div style={{ fontWeight: '600', marginBottom: '12px', color: '#174f84' }}>Points Breakdown</div>
-                      
-                      {/* Likes */}
-                      {(() => {
-                        const count = userPoints.points_breakdown?.likes?.count || 0;
-                        const pointsPerAction = pointsSettings.like;
-                        const calculatedPoints = count * pointsPerAction;
-                        return (
-                          <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: '10px 0',
-                            borderBottom: '1px solid #f0f0f0'
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <HiOutlineHeart size={16} color="#6b7280" strokeWidth={1.5} />
-                              <span>Likes</span>
-                              <span style={{ fontSize: '12px', color: '#999' }}>
-                                ({count})
-                              </span>
-                            </div>
-                            <div style={{ fontWeight: '600', color: '#667eea' }}>
-                              +{calculatedPoints}
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                    {/* Comments */}
-                    {(() => {
-                      const count = userPoints.points_breakdown?.comments?.count || 0;
-                      const pointsPerAction = pointsSettings.comment;
-                      const calculatedPoints = count * pointsPerAction;
-                      return (
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '10px 0',
-                          borderBottom: '1px solid #f0f0f0'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <HiOutlineChatBubbleLeft size={16} color="#6b7280" strokeWidth={1.5} />
-                            <span>Comments</span>
-                            <span style={{ fontSize: '12px', color: '#999' }}>
-                              ({count})
-                            </span>
-                          </div>
-                          <div style={{ fontWeight: '600', color: '#667eea' }}>
-                            +{calculatedPoints}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Repost */}
-                    {(() => {
-                      const count = userPoints.points_breakdown?.shares?.count || 0;
-                      const pointsPerAction = pointsSettings.share;
-                      const calculatedPoints = count * pointsPerAction;
-                      return (
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '10px 0',
-                          borderBottom: '1px solid #f0f0f0'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <HiOutlineArrowPath size={16} color="#6b7280" strokeWidth={1.5} />
-                            <span>Repost</span>
-                            <span style={{ fontSize: '12px', color: '#999' }}>
-                              ({count})
-                            </span>
-                          </div>
-                          <div style={{ fontWeight: '600', color: '#667eea' }}>
-                            +{calculatedPoints}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Replies */}
-                    {(() => {
-                      const count = userPoints.points_breakdown?.replies?.count || 0;
-                      const pointsPerAction = pointsSettings.reply;
-                      const calculatedPoints = count * pointsPerAction;
-                      return (
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '10px 0',
-                          borderBottom: '1px solid #f0f0f0'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <HiOutlineArrowUturnLeft size={16} color="#6b7280" strokeWidth={1.5} />
-                            <span>Replies</span>
-                            <span style={{ fontSize: '12px', color: '#999' }}>
-                              ({count})
-                            </span>
-                          </div>
-                          <div style={{ fontWeight: '600', color: '#667eea' }}>
-                            +{calculatedPoints}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Posts */}
-                    {(() => {
-                      const count = userPoints.points_breakdown?.posts?.count || 0;
-                      const pointsPerAction = pointsSettings.post;
-                      const calculatedPoints = count * pointsPerAction;
-                      return (
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '10px 0',
-                          borderBottom: '1px solid #f0f0f0'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <HiOutlineDocumentText size={16} color="#6b7280" strokeWidth={1.5} />
-                            <span>Posts</span>
-                            <span style={{ fontSize: '12px', color: '#999' }}>
-                              ({count})
-                            </span>
-                          </div>
-                          <div style={{ fontWeight: '600', color: '#667eea' }}>
-                            +{calculatedPoints}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Posts with Photos */}
-                    {(() => {
-                      const count = userPoints.points_breakdown?.posts_with_photos?.count || 0;
-                      const pointsPerAction = pointsSettings.post_with_photo;
-                      const calculatedPoints = count * pointsPerAction;
-                      return (
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '10px 0',
-                          borderBottom: '1px solid #f0f0f0'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <HiOutlineCamera size={16} color="#6b7280" strokeWidth={1.5} />
-                            <span>Posts w/ Photos</span>
-                            <span style={{ fontSize: '12px', color: '#999' }}>
-                              ({count})
-                            </span>
-                          </div>
-                          <div style={{ fontWeight: '600', color: '#667eea' }}>
-                            +{calculatedPoints}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Tracker Form - Only show for Alumni users, not OJT */}
-                    {user && user.account_type?.user && !user.account_type?.ojt && (() => {
-                      const count = userPoints.points_breakdown?.tracker_form?.count || 0;
-                      const pointsPerAction = pointsSettings.tracker_form;
-                      const calculatedPoints = count * pointsPerAction;
-                      return (
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '10px 0'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <HiOutlineClipboardDocumentList size={16} color="#6b7280" strokeWidth={1.5} />
-                            <span>Tracker Form</span>
-                            <span style={{ fontSize: '12px', color: '#999' }}>
-                              ({count})
-                            </span>
-                          </div>
-                          <div style={{ fontWeight: '600', color: '#667eea' }}>
-                            +{calculatedPoints}
-                          </div>
-                        </div>
-                      );
-                    })()}
+                  {/* Earn More Points Button - Replace Points Breakdown */}
+                  <div style={{ marginTop: '16px' }}>
+                    <button
+                      onClick={() => setShowEarnPointsModal(true)}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        backgroundColor: '#f97316',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#ea580c';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f97316';
+                      }}
+                      >
+                      <span>Complete tasks to earn points!</span>
+                    </button>
                   </div>
+
+                  {/* Tracker Form Button - Only visible if enabled and user is alumni */}
+                  {trackerFormEnabled && user?.account_type?.user && (
+                    <div style={{ marginTop: '12px' }}>
+                      <button
+                        onClick={() => navigate('/tracker')}
+                        style={{
+                          width: '100%',
+                          padding: '12px 16px',
+                          backgroundColor: '#1e3a5f',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#2d5a8f';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#1e3a5f';
+                        }}
+                      >
+                        <span>Complete Tracker Form to earn points!</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -5650,6 +5526,12 @@ getPosts()
           </div>
         </div>
       )}
+
+      {/* Earn More Points Modal */}
+      <EarnPointsModal
+        isOpen={showEarnPointsModal}
+        onClose={() => setShowEarnPointsModal(false)}
+      />
     </div>
   );
 };
