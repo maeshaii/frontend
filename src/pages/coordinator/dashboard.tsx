@@ -1135,71 +1135,103 @@ export default function Dashboard() {
                   const sectionMatch = selectedSectionFilter === 'ALL' || yearData.section === selectedSectionFilter;
                   return batchMatch && sectionMatch;
                 }).map((yearData) => {
-                  const classLabel = `CLASS OF ${yearData.year}`;
-                  const courseLabel = `Course : ${program}`;
                   const studentLabel = `${yearData.count} Student${yearData.count === 1 ? '' : 's'}`;
                   return (
                     <div
                       key={`${yearData.year}-${yearData.section || 'default'}`}
                       style={{
                         backgroundColor: 'white',
-                        borderRadius: '16px',
-                        padding: '20px',
-                        boxShadow: '0 6px 12px rgba(15, 23, 42, 0.08)',
-                        border: '1px solid #e2e8f0',
+                        borderRadius: '20px',
+                        padding: '24px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                        border: '1px solid rgba(226, 232, 240, 0.8)',
                         cursor: 'pointer',
-                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '12px'
+                        gap: '16px',
+                        position: 'relative',
+                        overflow: 'hidden'
                       }}
                       onClick={() => setSelectedCard({ year: yearData.year, section: yearData.section })}
                       onMouseEnter={(e) => {
                         const target = e.currentTarget as HTMLDivElement;
-                        target.style.transform = 'translateY(-3px)';
-                        target.style.boxShadow = '0 12px 24px rgba(15, 23, 42, 0.12)';
+                        target.style.transform = 'translateY(-6px) scale(1.02)';
+                        target.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
+                        target.style.borderColor = 'rgba(29, 78, 216, 0.3)';
                       }}
                       onMouseLeave={(e) => {
                         const target = e.currentTarget as HTMLDivElement;
-                        target.style.transform = 'translateY(0)';
-                        target.style.boxShadow = '0 6px 12px rgba(15, 23, 42, 0.08)';
+                        target.style.transform = 'translateY(0) scale(1)';
+                        target.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                        target.style.borderColor = 'rgba(226, 232, 240, 0.8)';
                       }}
                     >
                       <div style={{
-                        width: '48px',
-                        height: '48px',
-                        borderRadius: '16px',
-                        background: 'linear-gradient(145deg, #1C4E80, #225A96)',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#ffffff',
-                        fontSize: '22px'
+                        gap: '16px'
                       }}>
-                        <FaUsers />
-                      </div>
-                      <div>
-                        <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 700, color: '#1f2937' }}>
-                          {classLabel}
-                        </h3>
-                        <p style={{ margin: 0, fontSize: '14px', color: '#4b5563', fontWeight: 500 }}>
-                          {courseLabel}
-                        </p>
+                        <div style={{
+                          width: '56px',
+                          height: '56px',
+                          borderRadius: '18px',
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#ffffff',
+                          fontSize: '24px',
+                          boxShadow: '0 10px 15px -3px rgba(102, 126, 234, 0.3), 0 4px 6px -2px rgba(102, 126, 234, 0.2)',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          flexShrink: 0
+                        }}>
+                          <div style={{
+                            position: 'absolute',
+                            top: '-50%',
+                            right: '-50%',
+                            width: '100%',
+                            height: '100%',
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            borderRadius: '50%'
+                          }}></div>
+                          <FaUsers style={{ position: 'relative', zIndex: 1 }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <h3 style={{ 
+                            margin: 0, 
+                            fontSize: '20px', 
+                            fontWeight: 700, 
+                            color: '#1e293b',
+                            letterSpacing: '-0.02em',
+                            lineHeight: '1.3',
+                            fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                          }}>
+                            Section : {yearData.section || 'N/A'}
+                          </h3>
+                        </div>
                       </div>
                       <div style={{
                         marginTop: 'auto',
-                        backgroundColor: '#F1F5FB',
-                        border: '1px solid #BFDBFE',
-                        borderRadius: '10px',
-                        padding: '12px 16px',
+                        background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                        border: '1px solid rgba(59, 130, 246, 0.2)',
+                        borderRadius: '14px',
+                        padding: '14px 18px',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        color: '#1D4ED8',
-                        fontWeight: 600
+                        justifyContent: 'center',
+                        color: '#1e40af',
+                        fontWeight: 600,
+                        boxShadow: '0 1px 3px 0 rgba(59, 130, 246, 0.1)'
                       }}>
-                        <span style={{ fontSize: '14px' }}>Students</span>
-                        <span style={{ fontSize: '20px' }}>{studentLabel}</span>
+                        <span style={{ 
+                          fontSize: '18px', 
+                          fontWeight: 700,
+                          color: '#1e40af',
+                          letterSpacing: '-0.01em',
+                          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                        }}>{studentLabel}</span>
                       </div>
                     </div>
                   );
