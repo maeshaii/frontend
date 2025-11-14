@@ -14,7 +14,7 @@ const API_BASE = ensureApiSuffix(process.env.REACT_APP_API_URL);
 const api = axios.create({
   baseURL: API_BASE,
   withCredentials: false,
-  timeout: 10000, // 10 second timeout for login
+  timeout: 20000, // 20 second timeout for login (increased to handle slower responses)
 });
 
 // Public API instance for endpoints that don't require authentication
@@ -205,25 +205,53 @@ export const loginUser = async (acc_username: string, acc_password: string) => {
       statusText: error.response?.statusText,
       data: error.response?.data,
       message: error.message,
+      code: error.code,
       config: {
         url: error.config?.url,
         method: error.config?.method,
-        headers: error.config?.headers
+        headers: error.config?.headers,
+        baseURL: error.config?.baseURL
       }
     });
     
-    // Provide more specific error messages
-    if (error.response?.status === 400) {
-      return { success: false, message: 'Invalid credentials or request format' };
-    } else if (error.response?.status === 500) {
-      return { success: false, message: 'Server error - please try again later' };
-    } else if (error.code === 'ERR_NETWORK') {
-      return { success: false, message: 'Network error - check your connection' };
-    } else if (error.response?.status === 0) {
-      return { success: false, message: 'CORS error - backend may not be running' };
+    // Handle timeout errors specifically
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      return { 
+        success: false, 
+        message: 'Request timeout - the server is taking too long to respond. Please check if the backend server is running and try again.' 
+      };
     }
     
-    return { success: false, message: 'Login failed - please try again' };
+    // Handle network errors
+    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+      return { 
+        success: false, 
+        message: 'Network error - unable to connect to the server. Please check your connection and ensure the backend server is running.' 
+      };
+    }
+    
+    // Handle CORS errors
+    if (error.response?.status === 0 || (!error.response && error.request)) {
+      return { 
+        success: false, 
+        message: 'Connection error - unable to reach the server. Please verify the backend is running and accessible.' 
+      };
+    }
+    
+    // Provide more specific error messages for HTTP status codes
+    if (error.response?.status === 400) {
+      return { success: false, message: 'Invalid credentials or request format' };
+    } else if (error.response?.status === 401) {
+      return { success: false, message: 'Invalid username or password' };
+    } else if (error.response?.status === 500) {
+      return { success: false, message: 'Server error - please try again later' };
+    }
+    
+    // Default error message
+    return { 
+      success: false, 
+      message: error.response?.data?.message || error.message || 'Login failed - please try again' 
+    };
   }
 };
 
@@ -1136,7 +1164,8 @@ export const getUserPoints = async (userId: number) => {
       replies: { points: 0, count: 0 },
       posts: { points: 0, count: 0 },
       posts_with_photos: { points: 0, count: 0 },
-      tracker_form: { points: 0, count: 0 }
+      tracker_form: { points: 0, count: 0 },
+      milestones: { points: 0, count: 0 }
     }
   };
 };
@@ -1158,6 +1187,18 @@ export const getEngagementPointsSettings = async () => {
   return response.data;
 };
 
+// Get engagement milestone tasks for the current user
+export const getEngagementTasks = async () => {
+  const response = await api.get('engagement/tasks/');
+  return response.data;
+};
+
+// Get points tasks (Verify Email, Complete Preferences, etc.)
+export const getPointsTasks = async () => {
+  const response = await api.get('engagement/points-tasks/');
+  return response.data;
+};
+
 // Update engagement points settings
 export const updateEngagementPointsSettings = async (settings: {
   enabled: boolean;
@@ -1168,23 +1209,33 @@ export const updateEngagementPointsSettings = async (settings: {
   post: number;
   post_with_photo: number;
   tracker_form: number;
-  rate_limiting_enabled?: boolean;
-  daily_like_limit?: number;
-  daily_comment_limit?: number;
-  daily_share_limit?: number;
-  daily_reply_limit?: number;
-  daily_post_limit?: number;
-  daily_post_with_photo_limit?: number;
-  daily_tracker_form_limit?: number;
-  hourly_like_limit?: number;
-  hourly_comment_limit?: number;
-  hourly_share_limit?: number;
-  hourly_reply_limit?: number;
-  hourly_post_limit?: number;
-  hourly_post_with_photo_limit?: number;
-  hourly_tracker_form_limit?: number;
+  tracker_form_enabled?: boolean;
 }) => {
   const response = await api.post('engagement/points-settings/', settings);
+  return response.data;
+};
+
+// Get milestone tasks points (admin only)
+export const getMilestoneTasksPoints = async () => {
+  const response = await api.get('engagement/milestone-tasks-points/');
+  return response.data;
+};
+
+// Update milestone tasks points (admin only)
+export const updateMilestoneTasksPoints = async (tasks: Array<{
+  task_id: number;
+  points: number;
+  is_active?: boolean;
+  required_count?: number;
+}>, milestoneTasksEnabled?: boolean) => {
+  const payload: any = {};
+  if (tasks && tasks.length > 0) {
+    payload.tasks = tasks;
+  }
+  if (milestoneTasksEnabled !== undefined) {
+    payload.milestone_tasks_enabled = milestoneTasksEnabled;
+  }
+  const response = await api.post('engagement/milestone-tasks-points/', payload);
   return response.data;
 };
 

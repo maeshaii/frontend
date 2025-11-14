@@ -27,6 +27,8 @@ export default function Dashboard() {
   const [showDateModal, setShowDateModal] = useState(false);
   const [showNoStudentsModal, setShowNoStudentsModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
   const [exportSection, setExportSection] = useState<string>('ALL');
   const [sendDate, setSendDateState] = useState('');
   const [existingSendDates, setExistingSendDates] = useState<any[]>([]);
@@ -148,36 +150,32 @@ export default function Dashboard() {
         }
       }
       
-      // Show summary message
-      let summaryMessage = `✅ Import completed!\n\n`;
-      summaryMessage += `Files processed: ${selectedFiles.length}\n`;
-      if (totalCreated > 0) {
-        summaryMessage += `Total students created: ${totalCreated}\n`;
-      }
-      if (totalUpdated > 0) {
-        summaryMessage += `Total students updated: ${totalUpdated}\n`;
-      }
-      if (allSections.length > 0) {
-        summaryMessage += `Sections: ${allSections.join(', ')}\n`;
-      }
-      if (failedFiles.length > 0) {
-        summaryMessage += `\n⚠️ Failed files: ${failedFiles.join(', ')}`;
-      }
-      alert(summaryMessage);
+      // Set import result for modal
+      setImportResult({
+        filesProcessed: selectedFiles.length,
+        totalCreated,
+        totalUpdated,
+        sections: allSections,
+        failedFiles,
+        passwords: allPasswords,
+        batchYear
+      });
       
       // Download all passwords if any exist
       if (allPasswords.length > 0) {
         console.log('Downloading passwords for', allPasswords.length, 'students');
         downloadPasswords(allPasswords, batchYear);
-        alert(`📥 Password file has been downloaded with ${allPasswords.length} student passwords!`);
       } else {
         console.log('No passwords to download');
       }
       
-      // Close modal and refresh data
+      // Close import modal and refresh data
       setShowModal(false);
       setSelectedFiles([]);
       setSelectedYear(null);
+      
+      // Show import completion modal
+      setShowImportModal(true);
       
       // Refresh the OJT data to update cards
       await refreshOJTData();
@@ -2628,6 +2626,120 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Import Completion Modal */}
+      {showImportModal && importResult && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }} onClick={() => {
+          setShowImportModal(false);
+          setImportResult(null);
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '24px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            zIndex: 1001
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              marginBottom: '16px'
+            }}>
+              <span style={{ fontSize: '24px' }}>✅</span>
+              <h2 style={{
+                margin: 0,
+                fontSize: '18px',
+                fontWeight: '600',
+                color: '#1e293b'
+              }}>
+                Import completed!
+              </h2>
+            </div>
+
+            <div style={{
+              marginBottom: '20px',
+              fontSize: '14px',
+              color: '#475569',
+              lineHeight: '1.6'
+            }}>
+              <div style={{ marginBottom: '8px' }}>
+                <strong>Files processed:</strong> {importResult.filesProcessed}
+              </div>
+              {importResult.totalCreated > 0 && (
+                <div style={{ marginBottom: '8px' }}>
+                  <strong>Total students created:</strong> {importResult.totalCreated}
+                </div>
+              )}
+              {importResult.totalUpdated > 0 && (
+                <div style={{ marginBottom: '8px' }}>
+                  <strong>Total students updated:</strong> {importResult.totalUpdated}
+                </div>
+              )}
+              {importResult.sections && importResult.sections.length > 0 && (
+                <div style={{ marginBottom: '8px' }}>
+                  <strong>Sections:</strong> {importResult.sections.join(', ')}
+                </div>
+              )}
+              {importResult.failedFiles && importResult.failedFiles.length > 0 && (
+                <div style={{ marginBottom: '8px', color: '#dc2626' }}>
+                  <strong>⚠️ Failed files:</strong> {importResult.failedFiles.join(', ')}
+                </div>
+              )}
+              {importResult.passwords && importResult.passwords.length > 0 && (
+                <div style={{ marginBottom: '8px', color: '#059669' }}>
+                  <strong>📥 Password file downloaded:</strong> {importResult.passwords.length} student passwords
+                </div>
+              )}
+            </div>
+
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportResult(null);
+                }}
+                style={{
+                  padding: '8px 24px',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#2563eb';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#3b82f6';
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

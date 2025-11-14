@@ -1,0 +1,55 @@
+/* Custom scrollbar styling for EarnPointsModal */
+.earn-points-modal-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.earn-points-modal-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.earn-points-modal-content::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+
+.earn-points-modal-content::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Firefox scrollbar styling */
+.earn-points-modal-content {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f1f1f1;
+}
+
+/* Points badge styling - ensure white text */
+.earn-points-badge,
+.earn-points-badge *,
+.earn-points-badge span,
+.earn-points-badge span *,
+div.earn-points-badge,
+div.earn-points-badge *,
+div.earn-points-badge span,
+div.earn-points-badge span * {
+  color: white !important;
+  -webkit-text-fill-color: white !important;
+}
+
+/* Target all children and descendants */
+.earn-points-badge *::before,
+.earn-points-badge *::after,
+.earn-points-badge span::before,
+.earn-points-badge span::after {
+  color: white !important;
+  -webkit-text-fill-color: white !important;
+}
+
+/* Modal header text - ensure white */
+.earn-points-modal-header h2,
+.earn-points-modal-header h2 * {
+  color: white !important;
+  -webkit-text-fill-color: white !important;
+}
+
