@@ -494,8 +494,8 @@ const Sidebar = () => {
     { to: '/user-management', label: 'User Management' },
     { to: profileLink, label: 'Profile' },
     { to: '/tracker/questions', label: 'Tracker' },
-    { to: '/requests', label: 'Requests' },
-    { to: '/rewards', label: 'Rewards' },
+    { to: '/requests', label: 'Coordinator Requests' },
+    { to: '/rewards', label: 'Reward Requests' },
     { to: '/report-settings', label: 'Header/Footer Settings' },
   ];
 
