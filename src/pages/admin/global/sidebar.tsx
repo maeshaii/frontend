@@ -436,6 +436,12 @@ const Sidebar = () => {
       fontSize: 10,
       padding: '2px 6px',
       display: (isMobileSmall || isCollapsed) ? 'none' : 'inline-block',
+      zIndex: 1000,
+      fontWeight: 'bold' as const,
+      minWidth: '18px',
+      textAlign: 'center' as const,
+      lineHeight: '1.2',
+      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
     },
     requestsDot: {
       position: 'absolute' as const,
@@ -446,6 +452,8 @@ const Sidebar = () => {
       background: '#ef4444',
       borderRadius: '50%',
       display: (isMobileSmall || isCollapsed) ? 'inline-block' : 'none',
+      zIndex: 1000,
+      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
     },
   };
 
@@ -619,12 +627,14 @@ const Sidebar = () => {
                   {!isCollapsed && !isMobileSmall && (
                     <span style={styles.navItemText}>{link.label}</span>
                   )}
+                  {/* Show badge on Requests link whenever there are pending requests, regardless of current page */}
                   {isRequests && pendingRequests > 0 && (
                     <>
                       <span style={styles.requestsBadge}>{pendingRequests}</span>
                       <span style={styles.requestsDot} />
                     </>
                   )}
+                  {/* Show badge on Rewards link whenever there are pending reward requests, regardless of current page */}
                   {isRewards && pendingRewardRequests > 0 && (
                     <>
                       <span style={styles.requestsBadge}>{pendingRewardRequests}</span>
