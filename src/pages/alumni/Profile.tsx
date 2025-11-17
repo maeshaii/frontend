@@ -4487,7 +4487,7 @@ getPosts()
                         </h3>
                         <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                           <span>Type: {item.type}</span>
-                          <span>Cost: <strong style={{ color: '#1e3a5f', fontWeight: '700' }}>{item.value}</strong></span>
+                          <span>Points Cost: <strong style={{ color: '#1e3a5f', fontWeight: '700' }}>{item.value}</strong></span>
                           <span>Stock: {item.quantity} available</span>
                         </div>
                       </div>
@@ -4966,22 +4966,22 @@ getPosts()
                   return (
                 <>
                   {/* Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid #e5e7eb' }}>
                     <div>
-                      <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '600', color: '#1e3a5f', marginBottom: '4px' }}>
+                      <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: '#6b7280', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                         Reward Details
                       </h2>
-                      <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '600', color: '#174f84', lineHeight: '1.2' }}>
+                      <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#111827', lineHeight: '1.2' }}>
                         {req.reward_name}
                       </h3>
                     </div>
                     <button
                       onClick={() => setSelectedRewardDetail(null)}
                       style={{
-                        background: '#f5f7fa',
+                        background: 'transparent',
                         border: 'none',
                         cursor: 'pointer',
-                        color: '#666',
+                        color: '#6b7280',
                         padding: '8px',
                         display: 'flex',
                         alignItems: 'center',
@@ -4993,12 +4993,12 @@ getPosts()
                         flexShrink: 0
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#e0e0e0';
-                        e.currentTarget.style.color = '#333';
+                        e.currentTarget.style.background = '#f3f4f6';
+                        e.currentTarget.style.color = '#111827';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#f5f7fa';
-                        e.currentTarget.style.color = '#666';
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = '#6b7280';
                       }}
                     >
                       <HiOutlineXMark size={20} />
@@ -5008,60 +5008,54 @@ getPosts()
                   {/* Key Info Cards */}
                   <div style={{ 
                     display: 'grid', 
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
-                    gap: '12px',
-                    marginBottom: '20px'
+                    gridTemplateColumns: 'repeat(3, 1fr)', 
+                    gap: '16px',
+                    marginBottom: '24px'
                   }}>
                     <div style={{ 
-                      padding: '14px', 
-                      background: 'linear-gradient(135deg, #e8f0f8 0%, #d0e1f0 100%)',
-                      borderRadius: '10px',
-                      border: '1px solid #a8c5e0'
+                      padding: '16px', 
+                      background: '#f9fafb',
+                      borderRadius: '12px',
+                      border: '1px solid #e5e7eb'
                     }}>
-                      <div style={{ fontSize: '11px', color: '#666', fontWeight: '500', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '500', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                         Type
                       </div>
-                      <div style={{ fontSize: '14px', color: '#174f84', fontWeight: '600' }}>
+                      <div style={{ fontSize: '16px', color: '#111827', fontWeight: '600' }}>
                         {req.reward_type}
                       </div>
                     </div>
                     
                     <div style={{ 
-                      padding: '14px', 
-                      background: 'linear-gradient(135deg, #e0ecf5 0%, #c8ddeb 100%)',
-                      borderRadius: '10px',
-                      border: '1px solid #9bb8d6'
+                      padding: '16px', 
+                      background: '#f9fafb',
+                      borderRadius: '12px',
+                      border: '1px solid #e5e7eb'
                     }}>
-                      <div style={{ fontSize: '11px', color: '#666', fontWeight: '500', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Cost
+                      <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '500', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Points Cost
                       </div>
-                      <div style={{ fontSize: '14px', color: '#174f84', fontWeight: '600' }}>
+                      <div style={{ fontSize: '16px', color: '#111827', fontWeight: '600' }}>
                         {req.points_cost} pts
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#1e3a5f', marginTop: '2px' }}>
-                        ({req.reward_value})
                       </div>
                     </div>
                     
                     <div style={{ 
-                      padding: '14px', 
-                      background: isPending ? 'linear-gradient(135deg, #d8e6f2 0%, #c0d9ea 100%)' : 
-                                  isApproved ? 'linear-gradient(135deg, #c8ddeb 0%, #b0d0e2 100%)' : 
-                                  isClaimed ? 'linear-gradient(135deg, #e8f0f8 0%, #d0e1f0 100%)' : 
-                                  'linear-gradient(135deg, #e0ecf5 0%, #d0e1f0 100%)',
-                      borderRadius: '10px',
-                      border: `1px solid ${isPending ? '#8fb3d1' : isApproved ? '#7aa3c4' : isClaimed ? '#a8c5e0' : '#9bb8d6'}`
+                      padding: '16px', 
+                      background: '#f9fafb',
+                      borderRadius: '12px',
+                      border: '1px solid #e5e7eb'
                     }}>
-                      <div style={{ fontSize: '11px', color: '#666', fontWeight: '500', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '500', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                         Status
                       </div>
                       <div style={{ 
-                        fontSize: '14px', 
-                        color: isPending ? '#1e3a5f' : isApproved ? '#174f84' : isClaimed ? '#174f84' : '#666',
+                        fontSize: '16px', 
+                        color: isPending ? '#f59e0b' : isApproved ? '#991b1b' : isClaimed ? '#4338ca' : '#6b7280',
                         fontWeight: '600'
                       }}>
-                        {isPending ? 'Pending Approval' : 
-                         isApproved && !isClaimed ? 'Approved - Ready' :
+                        {isPending ? 'Pending' : 
+                         isApproved && !isClaimed ? 'Ready' :
                          isClaimed ? 'Claimed' : req.status}
                       </div>
                     </div>
@@ -5071,51 +5065,59 @@ getPosts()
                    {(req.requested_at || req.approved_at || (req.expires_at && !isClaimed)) && (
                     <div style={{ 
                       display: 'grid', 
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
-                      gap: '12px',
-                      marginBottom: '20px'
+                      gridTemplateColumns: 'repeat(3, 1fr)', 
+                      gap: '16px',
+                      marginBottom: '24px'
                     }}>
                       {req.requested_at && (
-                        <div style={{ padding: '12px', background: 'linear-gradient(135deg, #e8f0f8 0%, #d8e6f2 100%)', borderRadius: '8px', border: '1px solid #a8c5e0' }}>
-                          <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Requested</div>
-                          <div style={{ fontSize: '13px', color: '#174f84', fontWeight: '500' }}>
-                            {new Date(req.requested_at).toLocaleDateString('en-US', {
+                        <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+                          <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Requested</div>
+                          <div style={{ fontSize: '15px', color: '#111827', fontWeight: '600' }}>
+                            {new Date(req.requested_at).toLocaleString('en-US', {
                               month: 'short',
                               day: 'numeric',
-                              year: 'numeric'
+                              year: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit'
                             })}
                           </div>
                         </div>
                       )}
                       {req.approved_at && (
-                        <div style={{ padding: '12px', background: 'linear-gradient(135deg, #d0e1f0 0%, #c0d9ea 100%)', borderRadius: '8px', border: '1px solid #9bb8d6' }}>
-                          <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Approved</div>
-                          <div style={{ fontSize: '13px', color: '#174f84', fontWeight: '500' }}>
-                            {new Date(req.approved_at).toLocaleDateString('en-US', {
+                        <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+                          <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Approved</div>
+                          <div style={{ fontSize: '15px', color: '#111827', fontWeight: '600' }}>
+                            {new Date(req.approved_at).toLocaleString('en-US', {
                               month: 'short',
                               day: 'numeric',
-                              year: 'numeric'
+                              year: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit'
                             })}
                           </div>
                         </div>
                       )}
                       {req.expires_at && !isClaimed && (
-                        <div style={{ padding: '12px', background: 'linear-gradient(135deg, #e0ecf5 0%, #d0e1f0 100%)', borderRadius: '8px', border: '1px solid #a8c5e0' }}>
-                          <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Expires</div>
-                          <div style={{ fontSize: '13px', color: '#1e3a5f', fontWeight: '500' }}>
-                            {new Date(req.expires_at).toLocaleDateString('en-US', {
+                        <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+                          <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expires</div>
+                          <div style={{ fontSize: '15px', color: '#111827', fontWeight: '600', marginBottom: '8px' }}>
+                            {new Date(req.expires_at).toLocaleString('en-US', {
                               month: 'short',
                               day: 'numeric',
-                              year: 'numeric'
+                              year: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit'
                             })}
                           </div>
                           {isApproved && !isClaimed && (
                             <div style={{ 
-                              marginTop: '6px',
+                              marginTop: '8px',
+                              paddingTop: '8px',
+                              borderTop: '1px solid #e5e7eb',
                               fontSize: '11px',
                               color: '#b91c1c',
                               fontWeight: '500',
-                              lineHeight: 1.4
+                              lineHeight: 1.5
                             }}>
                               Failure to claim within 5 days of approval voids this request.
                             </div>
@@ -5130,21 +5132,21 @@ getPosts()
                         <div style={{ 
                           marginBottom: '20px',
                           padding: '16px', 
-                          background: 'linear-gradient(135deg, #e8f0f8 0%, #d0e1f0 100%)',
+                          background: '#eff6ff',
                           borderRadius: '12px',
-                          border: '1px solid #a8c5e0'
+                          border: '1px solid #bfdbfe'
                         }}>
                           <div style={{ 
                             display: 'flex',
                             alignItems: 'flex-start',
-                            gap: '10px'
+                            gap: '12px'
                           }}>
-                            <HiOutlineInformationCircle size={18} color="#174f84" style={{ marginTop: '2px', flexShrink: 0 }} />
+                            <HiOutlineInformationCircle size={20} color="#1e40af" style={{ marginTop: '2px', flexShrink: 0 }} />
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: '600', color: '#1e3a5f', fontSize: '13px', marginBottom: '8px' }}>
+                              <div style={{ fontWeight: '600', color: '#1e40af', fontSize: '14px', marginBottom: '8px' }}>
                                 Instructions
                               </div>
-                              <div style={{ lineHeight: '1.6', color: '#174f84', fontSize: '13px' }}>
+                              <div style={{ lineHeight: '1.6', color: '#1e3a8a', fontSize: '14px' }}>
                                 {req.notes}
                               </div>
                             </div>
@@ -5156,38 +5158,38 @@ getPosts()
                       {req.voucher_code && (req.status === 'claimed' || recentlyClaimed) && (
                         <div style={{ 
                           marginBottom: '20px',
-                          padding: '16px', 
-                          background: 'linear-gradient(135deg, #e0ecf5 0%, #c8ddeb 100%)',
+                          padding: '20px', 
+                          background: '#f0f9ff',
                           borderRadius: '12px',
-                          border: '1px solid #9bb8d6'
+                          border: '1px solid #bae6fd'
                         }}>
                           <div style={{ 
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '8px',
-                            marginBottom: '12px'
+                            gap: '10px',
+                            marginBottom: '16px'
                           }}>
-                            <HiOutlineTicket size={18} color="#174f84" />
-                            <span style={{ fontWeight: '600', color: '#1e3a5f', fontSize: '13px' }}>
+                            <HiOutlineTicket size={20} color="#0284c7" />
+                            <span style={{ fontWeight: '600', color: '#0c4a6e', fontSize: '14px' }}>
                               Voucher Code
                             </span>
                           </div>
                           <div style={{ 
-                            fontSize: '24px',
+                            fontSize: '28px',
                             fontWeight: '700',
-                            color: '#174f84',
+                            color: '#0284c7',
                             fontFamily: '"SF Mono", "Monaco", "Inconsolata", "Roboto Mono", monospace',
-                            letterSpacing: '2px',
-                            padding: '14px 16px',
+                            letterSpacing: '3px',
+                            padding: '20px',
                             background: 'white',
-                            borderRadius: '8px',
+                            borderRadius: '10px',
                             textAlign: 'center',
-                            border: '2px solid #174f84',
-                            boxShadow: '0 2px 4px rgba(23, 79, 132, 0.2)'
+                            border: '2px dashed #0284c7',
+                            marginBottom: '12px'
                           }}>
                             {req.voucher_code}
                           </div>
-                          <div style={{ fontSize: '11px', color: '#1e3a5f', textAlign: 'center', marginTop: '10px', fontWeight: '500' }}>
+                          <div style={{ fontSize: '12px', color: '#0c4a6e', textAlign: 'center', fontWeight: '500' }}>
                             Save this code for redemption
                           </div>
                         </div>
@@ -5196,18 +5198,17 @@ getPosts()
                         <div style={{ 
                           marginBottom: '20px',
                           padding: '16px', 
-                          background: 'linear-gradient(135deg, #e0ecf5 0%, #c8ddeb 100%)',
+                          background: '#f0f9ff',
                           borderRadius: '12px',
-                          border: '1px solid #9bb8d6',
+                          border: '1px solid #bae6fd',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '12px',
-                          color: '#174f84',
-                          fontSize: '13px',
-                          fontWeight: '500'
+                          gap: '12px'
                         }}>
-                          <HiOutlineTicket size={18} color="#174f84" />
-                          <span>Voucher code will be revealed once you claim this reward.</span>
+                          <HiOutlineTicket size={20} color="#0284c7" />
+                          <span style={{ color: '#0c4a6e', fontSize: '14px', fontWeight: '500' }}>
+                            Voucher code will be revealed once you claim this reward.
+                          </span>
                         </div>
                       )}
                       

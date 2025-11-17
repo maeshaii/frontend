@@ -5,6 +5,7 @@ import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardReque
 import { trackerApi } from '../../../services/trackerApi';
 import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineUser, HiOutlineTag } from 'react-icons/hi2';
 import { useRealTimeNotifications } from '../../../hooks/useRealTimeNotifications';
+import ctulogo from '../../../images/ctulogo.png';
 
 interface LeaderboardEntry {
   rank: number;
@@ -1511,6 +1512,7 @@ const RewardsPage: React.FC = () => {
                   
             {/* Unified Table Content */}
             <div style={{ 
+              minHeight: '200px',
               maxHeight: '600px', 
               overflowY: 'auto',
               transition: 'opacity 0.3s ease-in-out'
@@ -1557,7 +1559,12 @@ const RewardsPage: React.FC = () => {
                             textAlign: 'center', 
                             padding: '40px', 
                             color: '#6b7280',
-                            animation: 'fadeIn 0.3s ease-in-out'
+                            animation: 'fadeIn 0.3s ease-in-out',
+                            minHeight: '200px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'center',
+                            alignItems: 'center'
                           }}
                         >
                           <style>{`
@@ -1603,6 +1610,7 @@ const RewardsPage: React.FC = () => {
                           }
                         `}</style>
                         <div style={{
+                          minHeight: '200px',
                           maxHeight: '650px',
                           overflowY: 'auto',
                           overflowX: 'auto',
@@ -1695,33 +1703,28 @@ const RewardsPage: React.FC = () => {
                             >
                               <td style={{ padding: '12px 16px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  {req.profile_pic ? (
-                                    <img 
-                                      src={String(req.profile_pic).startsWith('http') ? req.profile_pic : `http://127.0.0.1:8000${req.profile_pic}`}
-                                      alt={req.user_name}
-                                      style={{
-                                        width: '32px',
-                                        height: '32px',
-                                        borderRadius: '50%',
-                                        objectFit: 'cover'
-                                      }}
-                                    />
-                                  ) : (
-                                    <div style={{
+                                  <img 
+                                    src={
+                                      req.profile_pic
+                                        ? (String(req.profile_pic).startsWith('http') 
+                                            ? req.profile_pic 
+                                            : `http://127.0.0.1:8000${req.profile_pic}`)
+                                        : ctulogo
+                                    }
+                                    alt={req.user_name}
+                                    style={{
                                       width: '32px',
                                       height: '32px',
                                       borderRadius: '50%',
-                                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      color: 'white',
-                                      fontSize: '14px',
-                                      fontWeight: 'bold'
-                                    }}>
-                                      {req.user_name.charAt(0)}
-                                    </div>
-                                  )}
+                                      objectFit: 'cover',
+                                      border: '1px solid #e5e7eb'
+                                    }}
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      target.onerror = null;
+                                      target.src = ctulogo;
+                                    }}
+                                  />
                                   <div>
                                     <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>
                                       {req.user_name}
@@ -1901,33 +1904,28 @@ const RewardsPage: React.FC = () => {
                           >
                             <td style={{ padding: '12px 16px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                {entry.profile_pic ? (
-                                  <img 
-                                    src={String(entry.profile_pic).startsWith('http') ? entry.profile_pic : `http://127.0.0.1:8000${entry.profile_pic}`}
-                                    alt={entry.user_name}
-                                    style={{
-                                      width: '32px',
-                                      height: '32px',
-                                      borderRadius: '50%',
-                                      objectFit: 'cover'
-                                    }}
-                                  />
-                                ) : (
-                                  <div style={{
+                                <img 
+                                  src={
+                                    entry.profile_pic
+                                      ? (String(entry.profile_pic).startsWith('http') 
+                                          ? entry.profile_pic 
+                                          : `http://127.0.0.1:8000${entry.profile_pic}`)
+                                      : ctulogo
+                                  }
+                                  alt={entry.user_name}
+                                  style={{
                                     width: '32px',
                                     height: '32px',
                                     borderRadius: '50%',
-                                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: 'white',
-                                    fontSize: '14px',
-                                    fontWeight: 'bold'
-                                  }}>
-                                    {entry.user_name.charAt(0)}
-                      </div>
-                                )}
+                                    objectFit: 'cover',
+                                    border: '1px solid #e5e7eb'
+                                  }}
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.onerror = null;
+                                    target.src = ctulogo;
+                                  }}
+                                />
                                 <div>
                                   <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>
                                     {entry.user_name}
@@ -2336,7 +2334,8 @@ const RewardsPage: React.FC = () => {
                         border: '1px solid #e5e7eb',
                         overflow: 'hidden',
                         transition: 'all 0.2s',
-                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
+                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                        minHeight: '200px'
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.12)';
@@ -2357,52 +2356,28 @@ const RewardsPage: React.FC = () => {
                           {/* User Profile */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                             <div style={{ position: 'relative' }}>
-                              {req.profile_pic ? (
-                                <img 
-                                  src={
-                                    String(req.profile_pic).startsWith('http') 
-                                      ? req.profile_pic 
-                                      : `http://127.0.0.1:8000${req.profile_pic}`
-                                  }
-                                  alt={req.user_name}
-                                  style={{
-                                    width: '56px',
-                                    height: '56px',
-                                    borderRadius: '50%',
-                                    objectFit: 'cover',
-                                    border: '3px solid #1e3a5f'
-                                  }}
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.onerror = null;
-                                    // Replace with fallback avatar
-                                    target.style.display = 'none';
-                                    const fallback = target.parentElement?.querySelector('.profile-pic-fallback') as HTMLElement;
-                                    if (fallback) fallback.style.display = 'flex';
-                                  }}
-                                />
-                              ) : null}
-                              <div 
-                                className="profile-pic-fallback"
+                              <img 
+                                src={
+                                  req.profile_pic
+                                    ? (String(req.profile_pic).startsWith('http') 
+                                        ? req.profile_pic 
+                                        : `http://127.0.0.1:8000${req.profile_pic}`)
+                                    : ctulogo
+                                }
+                                alt={req.user_name}
                                 style={{
                                   width: '56px',
                                   height: '56px',
                                   borderRadius: '50%',
-                                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                  display: req.profile_pic ? 'none' : 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontSize: '22px',
-                                  fontWeight: 'bold',
-                                  color: 'white',
-                                  border: '3px solid #1e3a5f',
-                                  position: 'absolute',
-                                  top: 0,
-                                  left: 0
+                                  objectFit: 'cover',
+                                  border: '3px solid #1e3a5f'
                                 }}
-                              >
-                                {req.user_name.charAt(0)}
-                              </div>
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.onerror = null;
+                                  target.src = ctulogo;
+                                }}
+                              />
                             </div>
                             <div>
                               <div style={{

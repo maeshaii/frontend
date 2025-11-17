@@ -57,7 +57,40 @@ export function useRealTimeNotifications(
   const popupNotificationIdsRef = useRef<Set<number>>(new Set());
   const autoMarkedNotificationIdsRef = useRef<Set<number>>(new Set());
 
-  const shouldShowAsPopup = useCallback((notification: NotificationUpdate) => {
+const isRewardNotification = (notification?: NotificationUpdate) => {
+  if (!notification) return false;
+  const type = (notification.type || '').toLowerCase();
+  const subject = (notification.subject || '').toLowerCase();
+  const content = (notification.content || '').toLowerCase();
+  return type.includes('reward') || subject.includes('reward') || content.includes('reward');
+};
+
+const extractRewardRequestId = (notification?: NotificationUpdate) => {
+  if (!notification) return null;
+  const contentMatch = notification.content?.match(/<!--REQUEST_ID:(\d+)-->/i);
+  if (contentMatch && contentMatch[1]) {
+    const parsed = Number(contentMatch[1]);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  const subjectMatch = notification.subject?.match(/REQUEST_ID:(\d+)/i);
+  if (subjectMatch && subjectMatch[1]) {
+    const parsed = Number(subjectMatch[1]);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
+};
+
+const deriveRewardStatusFromNotification = (notification?: NotificationUpdate) => {
+  if (!notification) return undefined;
+  const text = `${notification.subject || ''} ${notification.content || ''}`.toLowerCase();
+  if (text.includes('ready') && text.includes('pickup')) return 'ready_for_pickup';
+  if (text.includes('approved')) return 'approved';
+  if (text.includes('claimed') || text.includes('released')) return 'claimed';
+  if (text.includes('pending')) return 'pending';
+  return undefined;
+};
+
+const shouldShowAsPopup = useCallback((notification: NotificationUpdate) => {
     if (!isAdminUser) return false;
     if (!notification) return false;
     const type = (notification.type || '').toLowerCase();
@@ -227,6 +260,28 @@ export function useRealTimeNotifications(
         switch (event.type) {
           case 'notification_update': {
             const notification = event.notification;
+
+            if (isRewardNotification(notification)) {
+              const requestId = extractRewardRequestId(notification);
+              const derivedStatus = deriveRewardStatusFromNotification(notification);
+              try {
+                localStorage.setItem('latestRewardRequestUpdate', JSON.stringify({
+                  requestId,
+                  status: derivedStatus,
+                  timestamp: Date.now()
+                }));
+              } catch (error) {
+                console.warn('Failed writing reward request update to localStorage:', error);
+              }
+              window.dispatchEvent(new CustomEvent('rewardRequestUpdated', {
+                detail: {
+                  requestId,
+                  status: derivedStatus,
+                  source: 'realtime_notification',
+                  notification
+                }
+              }));
+            }
 
             if (shouldShowAsPopup(notification)) {
               const alreadyHandled = popupNotificationIdsRef.current.has(notification.id);
