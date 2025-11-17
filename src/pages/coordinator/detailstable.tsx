@@ -723,6 +723,10 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
                     <div style={styles.modalValue}>{selected.phone_number || (selected.ctu_id === '1334003' ? '9181234567' : selected.ctu_id === '1334004' ? '9181234567' : 'Not specified')}</div>
                   </div>
                   <div style={styles.modalField}>
+                    <div style={styles.modalLabel}>Email</div>
+                    <div style={styles.modalValue}>{selected.email || 'Not specified'}</div>
+                  </div>
+                  <div style={styles.modalField}>
                     <div style={styles.modalLabel}>Address</div>
                     <div style={styles.modalValue}>{selected.address || 'Not specified'}</div>
                   </div>

@@ -86,10 +86,15 @@ export default function Dashboard() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const filesArray = Array.from(e.target.files);
-      setSelectedFiles(filesArray);
-    } else {
-      setSelectedFiles([]);
+      const newFiles = Array.from(e.target.files);
+      // Append new files to existing files, avoiding duplicates
+      setSelectedFiles(prevFiles => {
+        const existingFileNames = new Set(prevFiles.map(f => f.name));
+        const uniqueNewFiles = newFiles.filter(f => !existingFileNames.has(f.name));
+        return [...prevFiles, ...uniqueNewFiles];
+      });
+      // Reset input value so same file can be selected again
+      e.target.value = '';
     }
   };
 
@@ -113,27 +118,33 @@ export default function Dashboard() {
       let allSections: string[] = [];
       let failedFiles: string[] = [];
       let batchYear: number | string | null = null;
+      let batchYears: Set<number | string> = new Set(); // Track all batch years from multiple files
+      let fileResults: Array<{fileName: string, batchYear: number | string | null, sections: string[], created: number, updated: number}> = [];
       
-      // Import each file sequentially
+      // Import each file sequentially - supports multiple files with different batch years/sections
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i];
         console.log(`Importing file ${i + 1}/${selectedFiles.length}: ${file.name}`);
         
         try {
           // Year is auto-detected: from existing users or from Excel "Batch_Year" column
+          // Each file can have its own batch year and sections
           const result = await importOJT(file, '', program, coordinatorUsername);
           console.log(`Import result for ${file.name}:`, result);
           
-      if (result.success) {
+          if (result.success) {
             totalCreated += result.created_count || 0;
             totalUpdated += result.updating_count || 0;
-            // Get batch year from result if available
-            if (result.batch_year && !batchYear) {
-              batchYear = result.batch_year;
+            
+            // Track batch year from this file
+            if (result.batch_year) {
+              batchYears.add(result.batch_year);
+              if (!batchYear) {
+                batchYear = result.batch_year; // Use first batch year for password filename
+              }
             }
-            if (result.passwords && Array.isArray(result.passwords)) {
-              allPasswords = [...allPasswords, ...result.passwords];
-            }
+            
+            // Track sections from this file
             if (result.sections && Array.isArray(result.sections)) {
               result.sections.forEach((section: string) => {
                 if (!allSections.includes(section)) {
@@ -141,16 +152,44 @@ export default function Dashboard() {
                 }
               });
             }
+            
+            // Collect passwords from this file
+            if (result.passwords && Array.isArray(result.passwords)) {
+              allPasswords = [...allPasswords, ...result.passwords];
+            }
+            
+            // Store file result for detailed reporting
+            fileResults.push({
+              fileName: file.name,
+              batchYear: result.batch_year || null,
+              sections: result.sections || [],
+              created: result.created_count || 0,
+              updated: result.updating_count || 0
+            });
           } else {
             failedFiles.push(file.name);
+            fileResults.push({
+              fileName: file.name,
+              batchYear: null,
+              sections: [],
+              created: 0,
+              updated: 0
+            });
           }
         } catch (error) {
           console.error(`Error importing ${file.name}:`, error);
           failedFiles.push(file.name);
+          fileResults.push({
+            fileName: file.name,
+            batchYear: null,
+            sections: [],
+            created: 0,
+            updated: 0
+          });
         }
       }
       
-      // Set import result for modal
+      // Set import result for modal - supports multiple batch years from different files
       setImportResult({
         filesProcessed: selectedFiles.length,
         totalCreated,
@@ -158,7 +197,9 @@ export default function Dashboard() {
         sections: allSections,
         failedFiles,
         passwords: allPasswords,
-        batchYear
+        batchYear: batchYear, // Primary batch year for password filename
+        batchYears: Array.from(batchYears), // All batch years from multiple files
+        fileResults: fileResults // Detailed results per file
       });
       
       // Download all passwords if any exist
@@ -1798,8 +1839,17 @@ export default function Dashboard() {
                 </div>
               )}
               
-              {/* Existing Schedule Warning - Only show unprocessed dates here */}
-              {existingSendDates.filter(sd => !sd.is_processed).length > 0 && !allDataSent && (
+              {/* Existing Schedule Warning - Only show unprocessed dates for selected batch */}
+              {(() => {
+                // Filter to show only schedules for the selected batch
+                const relevantSchedules = selectedBatchFilter === 'ALL'
+                  ? existingSendDates.filter(sd => !sd.is_processed)
+                  : existingSendDates.filter(sd => {
+                      const batchYear = parseInt(selectedBatchFilter);
+                      return sd.batch_year === batchYear && !sd.is_processed;
+                    });
+                return relevantSchedules.length > 0 && !allDataSent;
+              })() && (
                 <div style={{
                   backgroundColor: '#fef3c7',
                   border: '2px solid #fbbf24',
@@ -1953,14 +2003,23 @@ export default function Dashboard() {
                         Existing Scheduled Dates Found
                       </strong>
                       <div style={{ color: '#78350f', fontSize: '12px', lineHeight: '1.5' }}>
-                        {existingSendDates.filter(sd => !sd.is_processed).map((sd, idx) => (
-                          <div key={idx} style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span>• <strong>Batch {sd.batch_year}</strong>{sd.section && ` (Section ${sd.section})`}: {new Date(sd.send_date).toLocaleDateString()}</span>
-                            <span style={{ fontSize: '11px', marginLeft: 'auto', opacity: 0.8 }}>
-                              (Set on {new Date(sd.created_at).toLocaleDateString()})
-                            </span>
-                          </div>
-                        ))}
+                        {(() => {
+                          // Show only schedules for the selected batch
+                          const relevantSchedules = selectedBatchFilter === 'ALL'
+                            ? existingSendDates.filter(sd => !sd.is_processed)
+                            : existingSendDates.filter(sd => {
+                                const batchYear = parseInt(selectedBatchFilter);
+                                return sd.batch_year === batchYear && !sd.is_processed;
+                              });
+                          return relevantSchedules.map((sd, idx) => (
+                            <div key={idx} style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>• <strong>Batch {sd.batch_year}</strong>{sd.section && ` (Section ${sd.section})`}: {new Date(sd.send_date).toLocaleDateString()}</span>
+                              <span style={{ fontSize: '11px', marginLeft: 'auto', opacity: 0.8 }}>
+                                (Set on {new Date(sd.created_at).toLocaleDateString()})
+                              </span>
+                            </div>
+                          ));
+                        })()}
                       </div>
                       <div style={{ marginTop: '6px', fontSize: '11px', color: '#92400e', fontStyle: 'italic' }}>
                         Set a new date below to update the existing schedule
@@ -2140,11 +2199,38 @@ export default function Dashboard() {
                 Cancel
               </button>
               <button
-                  disabled={existingSendDates.length > 0 && !allDataSent}
+                  disabled={(() => {
+                    // Check if there's an existing unprocessed send date for the selected batch
+                    if (selectedBatchFilter === 'ALL') {
+                      // For "ALL", check if there are any unprocessed send dates
+                      return existingSendDates.filter(sd => !sd.is_processed).length > 0 && !allDataSent;
+                    } else {
+                      // For specific batch, check only that batch
+                      const batchYear = parseInt(selectedBatchFilter);
+                      const hasExistingForBatch = existingSendDates.some(
+                        sd => sd.batch_year === batchYear && !sd.is_processed
+                      );
+                      return hasExistingForBatch && !allDataSent;
+                    }
+                  })()}
                   onClick={async () => {
-                    // Prevent action if there's an existing schedule
-                    if (existingSendDates.length > 0 && !allDataSent) {
-                      alert('⚠️ Existing Schedule Found!\n\nPlease remove the existing scheduled date first by clicking the ✕ button above.');
+                    // Prevent action if there's an existing schedule for the selected batch
+                    const hasExistingSchedule = (() => {
+                      if (selectedBatchFilter === 'ALL') {
+                        return existingSendDates.filter(sd => !sd.is_processed).length > 0;
+                      } else {
+                        const batchYear = parseInt(selectedBatchFilter);
+                        return existingSendDates.some(
+                          sd => sd.batch_year === batchYear && !sd.is_processed
+                        );
+                      }
+                    })();
+                    
+                    if (hasExistingSchedule && !allDataSent) {
+                      const batchText = selectedBatchFilter === 'ALL' 
+                        ? 'one or more batches' 
+                        : `batch ${selectedBatchFilter}`;
+                      alert(`⚠️ Existing Schedule Found!\n\nYou already have a scheduled date for ${batchText}.\n\nPlease remove the existing scheduled date first by clicking the ✕ button above.`);
                       return;
                     }
                     
@@ -2264,39 +2350,106 @@ export default function Dashboard() {
                     padding: '10px 20px',
                   border: '2px solid #e5e7eb',
                     borderRadius: '24px',
-                    background: (allDataSent || (existingSendDates.length > 0 && !allDataSent)) 
-                      ? 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)' 
-                      : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                    background: (() => {
+                      if (allDataSent) return 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)';
+                      if (selectedBatchFilter === 'ALL') {
+                        return existingSendDates.filter(sd => !sd.is_processed).length > 0
+                          ? 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)'
+                          : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)';
+                      } else {
+                        const batchYear = parseInt(selectedBatchFilter);
+                        const hasExisting = existingSendDates.some(sd => sd.batch_year === batchYear && !sd.is_processed);
+                        return hasExisting
+                          ? 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)'
+                          : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)';
+                      }
+                    })(),
                   color: '#000000',
-                  cursor: (allDataSent || (existingSendDates.length > 0 && !allDataSent)) ? 'not-allowed' : 'pointer',
+                  cursor: (() => {
+                    if (allDataSent) return 'not-allowed';
+                    if (selectedBatchFilter === 'ALL') {
+                      return existingSendDates.filter(sd => !sd.is_processed).length > 0 ? 'not-allowed' : 'pointer';
+                    } else {
+                      const batchYear = parseInt(selectedBatchFilter);
+                      const hasExisting = existingSendDates.some(sd => sd.batch_year === batchYear && !sd.is_processed);
+                      return hasExisting ? 'not-allowed' : 'pointer';
+                    }
+                  })(),
                     fontWeight: '700',
                     fontSize: '13px',
                     transition: 'all 0.3s ease',
-                    boxShadow: (allDataSent || (existingSendDates.length > 0 && !allDataSent)) 
-                      ? '0 4px 8px rgba(148, 163, 184, 0.2)' 
-                      : '0 8px 16px rgba(59, 130, 246, 0.3)',
+                    boxShadow: (() => {
+                      if (allDataSent) return '0 4px 8px rgba(148, 163, 184, 0.2)';
+                      if (selectedBatchFilter === 'ALL') {
+                        return existingSendDates.filter(sd => !sd.is_processed).length > 0
+                          ? '0 4px 8px rgba(148, 163, 184, 0.2)'
+                          : '0 8px 16px rgba(59, 130, 246, 0.3)';
+                      } else {
+                        const batchYear = parseInt(selectedBatchFilter);
+                        const hasExisting = existingSendDates.some(sd => sd.batch_year === batchYear && !sd.is_processed);
+                        return hasExisting
+                          ? '0 4px 8px rgba(148, 163, 184, 0.2)'
+                          : '0 8px 16px rgba(59, 130, 246, 0.3)';
+                      }
+                    })(),
                     position: 'relative',
                     overflow: 'hidden',
-                    opacity: (allDataSent || (existingSendDates.length > 0 && !allDataSent)) ? 0.6 : 1
+                    opacity: (() => {
+                      if (allDataSent) return 0.6;
+                      if (selectedBatchFilter === 'ALL') {
+                        return existingSendDates.filter(sd => !sd.is_processed).length > 0 ? 0.6 : 1;
+                      } else {
+                        const batchYear = parseInt(selectedBatchFilter);
+                        const hasExisting = existingSendDates.some(sd => sd.batch_year === batchYear && !sd.is_processed);
+                        return hasExisting ? 0.6 : 1;
+                      }
+                    })()
                   }}
                   onMouseEnter={(e) => {
-                    if (!allDataSent && !(existingSendDates.length > 0)) {
+                    const isDisabled = (() => {
+                      if (allDataSent) return true;
+                      if (selectedBatchFilter === 'ALL') {
+                        return existingSendDates.filter(sd => !sd.is_processed).length > 0;
+                      } else {
+                        const batchYear = parseInt(selectedBatchFilter);
+                        return existingSendDates.some(sd => sd.batch_year === batchYear && !sd.is_processed);
+                      }
+                    })();
+                    if (!isDisabled) {
                       const target = e.currentTarget as HTMLButtonElement;
                       target.style.transform = 'translateY(-3px)';
                       target.style.boxShadow = '0 12px 24px rgba(59, 130, 246, 0.4)';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!allDataSent && !(existingSendDates.length > 0)) {
+                    const isDisabled = (() => {
+                      if (allDataSent) return true;
+                      if (selectedBatchFilter === 'ALL') {
+                        return existingSendDates.filter(sd => !sd.is_processed).length > 0;
+                      } else {
+                        const batchYear = parseInt(selectedBatchFilter);
+                        return existingSendDates.some(sd => sd.batch_year === batchYear && !sd.is_processed);
+                      }
+                    })();
+                    if (!isDisabled) {
                       const target = e.currentTarget as HTMLButtonElement;
                       target.style.transform = 'translateY(0)';
                       target.style.boxShadow = '0 8px 16px rgba(59, 130, 246, 0.3)';
                     }
                   }}
                 >
-                  {allDataSent ? 'All Data Already Sent' : 
-                   (existingSendDates.length > 0 && !allDataSent) ? 'Remove Existing Schedule First' : 
-                   'Schedule Processing'}
+                  {(() => {
+                    if (allDataSent) return 'All Data Already Sent';
+                    if (selectedBatchFilter === 'ALL') {
+                      return existingSendDates.filter(sd => !sd.is_processed).length > 0
+                        ? 'Remove Existing Schedule First'
+                        : 'Schedule Processing';
+                    } else {
+                      const batchYear = parseInt(selectedBatchFilter);
+                      const hasExisting = existingSendDates.some(sd => sd.batch_year === batchYear && !sd.is_processed);
+                      return hasExisting ? 'Remove Existing Schedule First' : 'Schedule Processing';
+                    }
+                  })()}
               </button>
               </div>
             </div>
@@ -2709,9 +2862,31 @@ export default function Dashboard() {
                   <strong>Total students updated:</strong> {importResult.totalUpdated}
                 </div>
               )}
+              {importResult.batchYears && importResult.batchYears.length > 1 && (
+                <div style={{ marginBottom: '8px', color: '#059669' }}>
+                  <strong>📅 Batch Years:</strong> {importResult.batchYears.join(', ')} (Multiple batches imported)
+                </div>
+              )}
+              {importResult.batchYear && (!importResult.batchYears || importResult.batchYears.length === 1) && (
+                <div style={{ marginBottom: '8px' }}>
+                  <strong>📅 Batch Year:</strong> {importResult.batchYear}
+                </div>
+              )}
               {importResult.sections && importResult.sections.length > 0 && (
                 <div style={{ marginBottom: '8px' }}>
                   <strong>Sections:</strong> {importResult.sections.join(', ')}
+                </div>
+              )}
+              {importResult.fileResults && importResult.fileResults.length > 1 && (
+                <div style={{ marginBottom: '12px', marginTop: '12px', padding: '12px', backgroundColor: '#f3f4f6', borderRadius: '6px' }}>
+                  <strong style={{ display: 'block', marginBottom: '8px' }}>📋 File-by-File Results:</strong>
+                  {importResult.fileResults.map((fileResult: any, idx: number) => (
+                    <div key={idx} style={{ marginBottom: '6px', fontSize: '14px', paddingLeft: '12px', borderLeft: '3px solid #3b82f6' }}>
+                      <strong>{fileResult.fileName}:</strong> {fileResult.created} created, {fileResult.updated} updated
+                      {fileResult.batchYear && <span> (Batch {fileResult.batchYear})</span>}
+                      {fileResult.sections && fileResult.sections.length > 0 && <span> - Sections: {fileResult.sections.join(', ')}</span>}
+                    </div>
+                  ))}
                 </div>
               )}
               {importResult.failedFiles && importResult.failedFiles.length > 0 && (
