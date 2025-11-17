@@ -2,7 +2,7 @@ import React, { useState, useEffect, ChangeEvent, useRef } from 'react';
 import './Tracker.css';
 import { trackerApi } from '../../../services/trackerApi';
 import ctulogo from '../../../images/ctulogo.png';
-import {  sendReminders, sendEmailReminders, fetchAlumniList } from '../../../services/api';
+import {  sendReminders, sendEmailReminders, sendSmsReminders, fetchAlumniList } from '../../../services/api';
 
 interface AlumniUser {
   id: number;
@@ -254,6 +254,78 @@ const Settings: React.FC = () => {
         errorMsg += 'Please try again.';
       }
       
+      alert(errorMsg);
+    }
+  };
+
+  const handleSendSms = async () => {
+    try {
+      const selectedAlumni = filteredNotResponded
+        .filter(user => selectedUserIds.includes(user.id));
+
+      if (selectedAlumni.length === 0) {
+        alert('No users selected.');
+        return;
+      }
+
+      const confirmed = window.confirm(
+        `Send SMS to ${selectedAlumni.length} selected user(s)?\n\n` +
+        `Note: Only users with verified or valid phone numbers will receive the message.`
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      const userIds = selectedAlumni.map(user => user.id);
+
+      const result = await sendSmsReminders(
+        userIds,
+        message,
+        window.location.origin
+      );
+
+      let resultMessage = '';
+
+      if (result.sent > 0) {
+        resultMessage += `✅ Successfully sent ${result.sent} SMS message(s)\n`;
+      }
+
+      if (result.no_phone > 0) {
+        resultMessage += `⚠️ ${result.no_phone} user(s) without valid phone numbers\n`;
+      }
+
+      if (result.failed > 0) {
+        resultMessage += `❌ ${result.failed} SMS message(s) failed to send\n`;
+      }
+
+      if (result.errors && result.errors.length > 0) {
+        resultMessage += `\nDetails:\n`;
+        result.errors.slice(0, 5).forEach((error: any) => {
+          resultMessage += `- ${error.user}: ${error.reason}\n`;
+        });
+        if (result.errors.length > 5) {
+          resultMessage += `... and ${result.errors.length - 5} more\n`;
+        }
+      }
+
+      if (!resultMessage) {
+        resultMessage = 'SMS sending completed.';
+      }
+
+      alert(resultMessage);
+    } catch (error: any) {
+      console.error('Error in handleSendSms:', error);
+      let errorMsg = 'An error occurred while sending SMS messages. ';
+
+      if (error.response?.data?.message) {
+        errorMsg += error.response.data.message;
+      } else if (error.message) {
+        errorMsg += error.message;
+      } else {
+        errorMsg += 'Please try again.';
+      }
+
       alert(errorMsg);
     }
   };
@@ -699,6 +771,18 @@ const Settings: React.FC = () => {
                   title="Send tracker form link via email to selected users"
                 >
                     📧 Send via Email
+                  </button>
+                <button
+                  className="border-button"
+                  onClick={handleSendSms}
+                  style={{
+                    background: '#0a9396',
+                    color: '#fff',
+                    fontWeight: '600'
+                  }}
+                  title="Send tracker form link via SMS to selected users"
+                >
+                    📱 Send via SMS
                   </button>
             </div>
             </div>
