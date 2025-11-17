@@ -446,6 +446,19 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     };
   }, []);
 
+  // Close tracker reminder modal when post/repost modals are open
+  useEffect(() => {
+    if (showPostModal || showRepostNotificationModal) {
+      // Suppress and close tracker reminder when post/repost modals are open
+      if (trackerReminderTimeoutRef.current) {
+        clearTimeout(trackerReminderTimeoutRef.current);
+        trackerReminderTimeoutRef.current = null;
+      }
+      setShowTrackerModal(false);
+      setTrackerReminderSuppressed(true);
+    }
+  }, [showPostModal, showRepostNotificationModal]);
+
   // Fetch admin and PESO user IDs dynamically
   const fetchAdminPesoUsers = async () => {
     try {
@@ -881,6 +894,13 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         replyId: pendingRepostReplyId || undefined
       });
       setShowRepostNotificationModal(true);
+      // Suppress tracker reminder when repost modal opens
+      if (trackerReminderTimeoutRef.current) {
+        clearTimeout(trackerReminderTimeoutRef.current);
+        trackerReminderTimeoutRef.current = null;
+      }
+      setShowTrackerModal(false);
+      setTrackerReminderSuppressed(true);
       console.log('Opening repost notification modal for repost:', pendingRepostId);
     }
 
@@ -962,6 +982,13 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   };
 
   const handleViewPost = async (postId: string) => {
+    // Suppress tracker reminder when post modal opens
+    if (trackerReminderTimeoutRef.current) {
+      clearTimeout(trackerReminderTimeoutRef.current);
+      trackerReminderTimeoutRef.current = null;
+    }
+    setShowTrackerModal(false);
+    setTrackerReminderSuppressed(true);
     console.log('🔍 OJT DEBUG: handleViewPost called with postId:', postId);
     console.log('🔍 OJT DEBUG: Current user:', user);
     console.log('🔍 OJT DEBUG: User ID:', user?.user_id || user?.id);

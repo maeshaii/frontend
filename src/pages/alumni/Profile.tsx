@@ -8,7 +8,7 @@ import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, de
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
-import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye, HiOutlineXMark, HiOutlineInformationCircle, HiOutlineTicket } from 'react-icons/hi2';
+import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye, HiOutlineXMark, HiOutlineInformationCircle, HiOutlineTicket, HiOutlineMagnifyingGlass } from 'react-icons/hi2';
 import EarnPointsModal from '../../components/EarnPointsModal';
 
 function getCurrentUserId(user: AlumniUser | null): number | null {
@@ -230,6 +230,8 @@ const AlumniProfile: React.FC = () => {
   const [employmentData, setEmploymentData] = useState<any>(null);
   const [employmentLoading, setEmploymentLoading] = useState(false);
   const [showEarnPointsModal, setShowEarnPointsModal] = useState(false);
+  const approvedRewardsScrollRef = React.useRef<HTMLDivElement | null>(null);
+  const rewardFilterRef = React.useRef<HTMLDivElement | null>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -2189,21 +2191,40 @@ getPosts()
         <div className="profile-center-content">
           {/* Orange Banner */}
           <div className="profile-orange-banner">
-            {isOwnProfile && (
-              <div className="profile-edit-profile-button" onClick={handleEditProfile}>
-                <span>Edit Profile</span>
-                <span>✏️</span>
-              </div>
-            )}
           </div>
           {/* Profile Info Section */}
           <div className="profile-info-section">
             <div className="profile-info-card">
-              <img 
-                src={user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo}
-                alt="Profile" 
-                className="profile-image"
-              />
+              <div className="profile-image-wrapper">
+                <img 
+                  src={user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo}
+                  alt="Profile" 
+                  className="profile-image"
+                />
+                {isOwnProfile && (
+                  <button
+                    className="profile-edit-pic-button"
+                    onClick={handleEditProfile}
+                    aria-label="Edit profile picture"
+                    title="Edit profile picture"
+                  >
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"></path>
+                      <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                  </button>
+                )}
+              </div>
               <div className="profile-name">{user?.name || 'no name detected'}</div>
               
               <div className="profile-other-actions-below-university">
@@ -2896,13 +2917,6 @@ getPosts()
               marginBottom: '20px',
               textAlign: 'center'
             }}>
-              <label style={{
-                display: 'block',
-                fontSize: '14px',
-                fontWeight: '500',
-                color: '#4a4a4a',
-                marginBottom: '12px'
-              }}>Profile Picture</label>
               
               <div style={{
                 display: 'flex',
@@ -4409,26 +4423,29 @@ getPosts()
                 <div style={{ fontSize: '16px', color: '#6b7280' }}>Loading rewards...</div>
               </div>
             ) : (() => {
-              // Filter to only show rewards user can afford
-              const affordableRewards = inventoryItems.filter((item) => {
-                const pointsMatch = item.value?.match(/(\d+)/);
-                const requiredPoints = pointsMatch ? parseInt(pointsMatch[1]) : 0;
-                const canAfford = (userPoints?.total_points || 0) >= requiredPoints;
-                // Also check if item has stock
-                return canAfford && item.quantity > 0;
-              });
-              
-              return affordableRewards.length === 0 ? (
+              // Show ALL rewards from DB (do not filter by affordability)
+              const rewards = Array.isArray(inventoryItems) ? inventoryItems : [];
+              return rewards.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px' }}>
                   <div style={{ fontSize: '24px', marginBottom: '8px' }}>📭</div>
-                  <div style={{ fontSize: '16px', color: '#6b7280', marginBottom: '8px' }}>No rewards available that you can afford at the moment</div>
+                  <div style={{ fontSize: '16px', color: '#6b7280', marginBottom: '8px' }}>No rewards available</div>
                   <div style={{ fontSize: '14px', color: '#9ca3af', marginTop: '8px' }}>
                     You currently have {userPoints?.total_points || 0} points
                   </div>
                 </div>
               ) : (
               <div style={{ display: 'grid', gap: '16px' }}>
-                {affordableRewards.map((item) => {
+                {rewards
+                  .map((item) => {
+                    const pointsMatch = item.value?.match(/(\d+)/);
+                    const requiredPoints = pointsMatch ? parseInt(pointsMatch[1]) : 0;
+                    const canAfford = (userPoints?.total_points || 0) >= requiredPoints;
+                    const requestable = canAfford && item.quantity > 0;
+                    return { item, requiredPoints, canAfford, requestable };
+                  })
+                  // Sort so requestable rewards come first; non-requestable go to the bottom
+                  .sort((a, b) => Number(b.requestable) - Number(a.requestable))
+                  .map(({ item, requiredPoints, canAfford }) => {
                   const isVoucher = item.type?.toLowerCase().includes('voucher') || 
                                     item.type?.toLowerCase().includes('gift card') ||
                                     item.type?.toLowerCase().includes('coupon');
@@ -4437,10 +4454,7 @@ getPosts()
                                        item.type?.toLowerCase().includes('product') ||
                                        item.type?.toLowerCase().includes('item');
                   
-                  // Extract points required
-                  const pointsMatch = item.value?.match(/(\d+)/);
-                  const requiredPoints = pointsMatch ? parseInt(pointsMatch[1]) : 0;
-                  const canAfford = (userPoints?.total_points || 0) >= requiredPoints;
+                  const pointsShort = Math.max(0, requiredPoints - (userPoints?.total_points || 0));
                   const isClaiming = claimingReward === item.id;
 
                   return (
@@ -4505,8 +4519,13 @@ getPosts()
                           }
                         }}
                       >
-                        {isClaiming ? 'Processing...' : canAfford && item.quantity > 0 ? 'Request to Claim Reward' : 
-                          item.quantity <= 0 ? 'Out of Stock' : 'Insufficient Points'}
+                        {isClaiming
+                          ? 'Processing...'
+                          : canAfford && item.quantity > 0
+                          ? 'Request to Claim Reward'
+                          : item.quantity <= 0
+                          ? 'Out of Stock'
+                          : `Need ${pointsShort} more point${pointsShort === 1 ? '' : 's'}`}
                       </button>
                       
                     </div>
@@ -4544,10 +4563,12 @@ getPosts()
               padding: '24px',
               maxWidth: '1000px',
               width: '100%',
+              minHeight: '40vh',
               maxHeight: '80vh',
               overflow: 'auto',
               boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
             }}
+            ref={approvedRewardsScrollRef}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -4593,7 +4614,7 @@ getPosts()
                   gap: '12px'
                 }}>
                   {/* Status Filter */}
-                  <div style={{ position: 'relative' }} data-reward-filter-dropdown>
+                  <div style={{ position: 'relative' }} data-reward-filter-dropdown ref={rewardFilterRef}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: '500' }}>Filter by status:</span>
                       <div style={{ position: 'relative' }}>
@@ -4605,7 +4626,14 @@ getPosts()
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            setShowRewardFilterDropdown(!showRewardFilterDropdown);
+                            const next = !showRewardFilterDropdown;
+                            setShowRewardFilterDropdown(next);
+                            if (next) {
+                              // Ensure the dropdown is visible by scrolling it into view
+                              setTimeout(() => {
+                                rewardFilterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              }, 0);
+                            }
                           }}
                           data-reward-filter-dropdown
                           style={{
@@ -4638,7 +4666,7 @@ getPosts()
                              rewardStatusFilter === 'pending' ? 'Pending' : 
                              rewardStatusFilter === 'approved' ? 'Ready' : 
                              rewardStatusFilter === 'claimed' ? 'Claimed' : 
-                             'Did Not Push Through'}
+                             'Failed'}
                           </span>
                           <span style={{ 
                             fontSize: '10px',
@@ -4698,7 +4726,7 @@ getPosts()
                               >
                                 {filter === 'all' ? 'All' : 
                                  filter === 'approved' ? 'Ready' : 
-                                 filter === 'did_not_push_through' ? 'Did Not Push Through' : 
+                                 filter === 'did_not_push_through' ? 'Failed' : 
                                  filter.charAt(0).toUpperCase() + filter.slice(1)}
                               </div>
                             ))}
@@ -4731,8 +4759,10 @@ getPosts()
                   if (filteredRewards.length === 0) {
                     return (
                       <div style={{ textAlign: 'center', padding: '40px' }}>
-                        <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔍</div>
-                        <div style={{ fontSize: '16px', color: '#666' }}>No rewards found for this filter</div>
+                        <div style={{ fontSize: '24px', marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
+                          <HiOutlineMagnifyingGlass size={28} color="#667085" />
+                        </div>
+                        <div style={{ fontSize: '16px', color: '#666' }}>No reward requests found for this filter</div>
                       </div>
                     );
                   }
@@ -4751,16 +4781,16 @@ getPosts()
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
-                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Reward</th>
-                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Type</th>
-                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Status</th>
-                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Cost</th>
-                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Requested</th>
-                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Approved</th>
+                            <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Reward</th>
+                            <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Type</th>
+                            <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Status</th>
+                            <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Cost</th>
+                            <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Requested</th>
+                            <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Approved</th>
                             {hasClaimableRewards && (
-                              <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Expires</th>
+                              <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Expires</th>
                             )}
-                            <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Action</th>
+                            <th style={{ padding: '8px', textAlign: 'center', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -4785,7 +4815,8 @@ getPosts()
                                   borderBottom: '1px solid #f1f5f9',
                                   cursor: 'pointer',
                                   transition: 'background-color 0.2s',
-                                  backgroundColor: didNotPushThrough ? '#fef2f2' : 'transparent'
+                                  backgroundColor: didNotPushThrough ? '#fef2f2' : 'transparent',
+                                  height: '36px'
                                 }}
                                 onMouseEnter={(e) => {
                                   e.currentTarget.style.backgroundColor = didNotPushThrough ? '#fee2e2' : '#f8fafc';
@@ -4794,13 +4825,13 @@ getPosts()
                                   e.currentTarget.style.backgroundColor = didNotPushThrough ? '#fef2f2' : 'transparent';
                                 }}
                               >
-                                <td style={{ padding: '12px', fontWeight: '600', color: '#1e293b', fontSize: '14px' }}>
+                                <td style={{ padding: '8px', fontWeight: '600', color: '#1e293b', fontSize: '14px' }}>
                                   {req.reward_name}
                                 </td>
-                                <td style={{ padding: '12px', color: '#64748b', fontSize: '13px' }}>
+                                <td style={{ padding: '8px', color: '#64748b', fontSize: '13px' }}>
                                   {req.reward_type}
                                 </td>
-                                <td style={{ padding: '12px' }}>
+                                <td style={{ padding: '8px' }}>
                                   <span style={{
                                     padding: '4px 8px',
                                     borderRadius: '4px',
@@ -4815,17 +4846,17 @@ getPosts()
                                      isClaimed ? 'Claimed' : req.status}
                                   </span>
                                 </td>
-                                <td style={{ padding: '12px', color: '#667eea', fontWeight: '600', fontSize: '13px' }}>
+                                <td style={{ padding: '8px', color: '#667eea', fontWeight: '600', fontSize: '13px' }}>
                                   {req.points_cost} pts
                                 </td>
-                                <td style={{ padding: '12px', color: '#64748b', fontSize: '13px' }}>
+                                <td style={{ padding: '8px', color: '#64748b', fontSize: '13px' }}>
                                   {req.requested_at ? new Date(req.requested_at).toLocaleDateString('en-US', {
                                     month: 'short',
                                     day: 'numeric',
                                     year: 'numeric'
                                   }) : '-'}
                                 </td>
-                                <td style={{ padding: '12px', color: '#64748b', fontSize: '13px' }}>
+                                <td style={{ padding: '8px', color: '#64748b', fontSize: '13px' }}>
                                   {req.approved_at ? new Date(req.approved_at).toLocaleDateString('en-US', {
                                     month: 'short',
                                     day: 'numeric',
@@ -4833,7 +4864,7 @@ getPosts()
                                   }) : '-'}
                                 </td>
                                 {hasClaimableRewards && (
-                                  <td style={{ padding: '12px', color: canClaim ? (hasExpired ? '#dc2626' : '#64748b') : '#64748b', fontSize: '13px', fontWeight: canClaim && hasExpired ? '600' : '400' }}>
+                                  <td style={{ padding: '8px', color: canClaim ? (hasExpired ? '#dc2626' : '#64748b') : '#64748b', fontSize: '13px', fontWeight: canClaim && hasExpired ? '600' : '400' }}>
                                     {canClaim && req.expires_at ? new Date(req.expires_at).toLocaleDateString('en-US', {
                                       month: 'short',
                                       day: 'numeric',
@@ -4841,7 +4872,7 @@ getPosts()
                                     }) : '-'}
                                   </td>
                                 )}
-                                <td style={{ padding: '12px', textAlign: 'center' }}>
+                                <td style={{ padding: '8px', textAlign: 'center' }}>
                                   <button
                                     onClick={() => setSelectedRewardDetail(req)}
                                     style={{

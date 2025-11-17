@@ -634,9 +634,19 @@ export const createPost = async (postData: {
   type?: string;
 }) => {
   console.log('Sending post creation request:', postData);
-  const response = await api.post('posts/', postData);
-  console.log('Post creation response:', response.data);
-  return response.data;
+  console.log('API base URL:', API_BASE);
+  console.log('Full URL will be:', `${API_BASE}posts/`);
+  try {
+    const response = await api.post('posts/', postData);
+    console.log('Post creation response:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('createPost error:', error);
+    console.error('Request URL:', error.config?.url);
+    console.error('Request base URL:', error.config?.baseURL);
+    console.error('Full request URL:', error.config?.baseURL + error.config?.url);
+    throw error;
+  }
 };
 
 export const likePost = async (postId: number) => {

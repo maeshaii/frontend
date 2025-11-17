@@ -277,16 +277,16 @@ const Settings: React.FC = () => {
           unemployment_reason: data.unemployment_reason || '',
           created_at: data.created_at || '',
           updated_at: data.updated_at || '',
-          // Part III fields - map from existing fields where applicable, with normalized values
-          employment_type: normalizedEmploymentType || data.employment_type || '',
-          current_employment_status: normalizedEmploymentStatus,
+          // Part III fields - prioritize tracker data fields from API response
+          employment_type: data.employment_type || normalizedEmploymentType || '',
+          current_employment_status: data.current_employment_status || normalizedEmploymentStatus || '',
           current_company_name: data.current_company_name || data.organization_name || '',
           current_position: data.current_position || data.position || '',
-          current_sector: normalizedSector,
-          current_scope: normalizedScope,
+          current_sector: data.current_sector || normalizedSector || '',
+          current_scope: data.current_scope || normalizedScope || '',
           employment_duration: data.employment_duration || data.employment_duration_current || '',
           salary_range: data.salary_range || data.salary_current || '',
-          received_awards: normalizedAwards,
+          received_awards: data.received_awards || normalizedAwards || '',
           awards_supporting_doc: data.awards_supporting_doc || data.supporting_document_awards_recognition || '',
           employment_supporting_doc: data.employment_supporting_doc || data.supporting_document_current || '',
           employment_sector: data.employment_sector || '',
@@ -312,31 +312,30 @@ const Settings: React.FC = () => {
           }
           console.log('OJT - hasEmploymentData:', hasEmploymentData);
         } else {
-          // For Alumni accounts: use has_tracker_data to check if they have tracker data
+          // For Alumni accounts: check if they have Part III tracker data
           const hasTrackerData = data.has_tracker_data || false;
-          const hasEmploymentData = data.organization_name && data.organization_name.trim() !== '';
-          const isUnemployedInDB = data.sector === 'Unemployed' || data.employment_status === 'Unemployed';
+          const hasPartIIIData = data.has_part_iii_data || false;
           
-          // For alumni: if they have tracker data, show pre-populated Part III
-          const hasJob = hasTrackerData && hasEmploymentData && !isUnemployedInDB;
-          setHasJobInDB(hasJob);
+          // For alumni: if they have Part III data, show it
+          setHasJobInDB(hasPartIIIData);
           
-          // If user has tracker data in DB, enable editing mode automatically
-          if (hasJob) {
+          // If user has Part III data in DB, enable viewing mode automatically
+          if (hasPartIIIData) {
             setIsEditingEmployment(true);
           }
           
           // Set pursueFurtherStudy based on existing data
           if (data.post_graduate_degree || data.q_post_graduate_degree) {
             setPursueFurtherStudy(true);
-          } else if (hasJob) {
+          } else if (hasPartIIIData) {
             setPursueFurtherStudy(false);
           }
           
           console.log('Alumni - hasTrackerData:', hasTrackerData);
-          console.log('Alumni - hasEmploymentData:', hasEmploymentData);
-          console.log('Alumni - isUnemployedInDB:', isUnemployedInDB);
-          console.log('Alumni - hasJobInDB:', hasJob);
+          console.log('Alumni - hasPartIIIData:', hasPartIIIData);
+          console.log('Alumni - hasJobInDB:', hasPartIIIData);
+          console.log('Alumni - Debug info:', data.debug || 'No debug info');
+          console.log('Alumni - Full employment data:', data);
         }
         
         console.log('Employment data loaded:', data);
@@ -1064,13 +1063,161 @@ const Settings: React.FC = () => {
                       </>
                     )}
 
-                    {/* Alumni Account: Use the flow with Part III/IV */}
-                    {accountType === 'alumni' && (
-                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#64748b' }}>
-                          Coming soon
-                        </Typography>
-                      </Box>
+                    {/* Alumni Account: Display Part III tracker data or prompt to answer tracker */}
+                    {accountType === 'alumni' && (hasJobInDB === true || hasJobInDB === false) && (
+                      <>
+                        {hasJobInDB ? (
+                          // Display Part III tracker data
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: '#174f84' }}>
+                              PART III - Employment Status
+                            </Typography>
+                            
+                            <TextField
+                              label="Employment Type"
+                              value={employmentData.employment_type || 'N/A'}
+                              variant="outlined"
+                              fullWidth
+                              disabled={true}
+                              sx={{ mb: 2 }}
+                            />
+                            
+                            <TextField
+                              label="Current Employment Status"
+                              value={employmentData.current_employment_status || 'N/A'}
+                              variant="outlined"
+                              fullWidth
+                              disabled={true}
+                              sx={{ mb: 2 }}
+                            />
+                            
+                            <TextField
+                              label="Company Name"
+                              value={employmentData.current_company_name || 'N/A'}
+                              variant="outlined"
+                              fullWidth
+                              disabled={true}
+                              sx={{ mb: 2 }}
+                            />
+                            
+                            <TextField
+                              label="Current Position"
+                              value={employmentData.current_position || 'N/A'}
+                              variant="outlined"
+                              fullWidth
+                              disabled={true}
+                              sx={{ mb: 2 }}
+                            />
+                            
+                            <TextField
+                              label="Sector"
+                              value={employmentData.current_sector || 'N/A'}
+                              variant="outlined"
+                              fullWidth
+                              disabled={true}
+                              sx={{ mb: 2 }}
+                            />
+                            
+                            <TextField
+                              label="Scope"
+                              value={employmentData.current_scope || 'N/A'}
+                              variant="outlined"
+                              fullWidth
+                              disabled={true}
+                              sx={{ mb: 2 }}
+                            />
+                            
+                            <TextField
+                              label="Employment Duration"
+                              value={employmentData.employment_duration || 'N/A'}
+                              variant="outlined"
+                              fullWidth
+                              disabled={true}
+                              sx={{ mb: 2 }}
+                            />
+                            
+                            <TextField
+                              label="Salary Range"
+                              value={employmentData.salary_range || 'N/A'}
+                              variant="outlined"
+                              fullWidth
+                              disabled={true}
+                              sx={{ mb: 2 }}
+                            />
+                            
+                            <TextField
+                              label="Received Awards"
+                              value={employmentData.received_awards || 'N/A'}
+                              variant="outlined"
+                              fullWidth
+                              disabled={true}
+                              sx={{ mb: 2 }}
+                            />
+                            
+                            {employmentData.awards_supporting_doc && (
+                              <Box sx={{ mb: 2 }}>
+                                <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                  Awards Supporting Document:
+                                </Typography>
+                                <a 
+                                  href={`http://127.0.0.1:8000${employmentData.awards_supporting_doc}`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  style={{ color: '#174f84', textDecoration: 'underline' }}
+                                >
+                                  View Document
+                                </a>
+                              </Box>
+                            )}
+                            
+                            {employmentData.employment_supporting_doc && (
+                              <Box sx={{ mb: 2 }}>
+                                <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                  Employment Supporting Document:
+                                </Typography>
+                                <a 
+                                  href={`http://127.0.0.1:8000${employmentData.employment_supporting_doc}`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  style={{ color: '#174f84', textDecoration: 'underline' }}
+                                >
+                                  View Document
+                                </a>
+                              </Box>
+                            )}
+                          </Box>
+                        ) : (
+                          // Prompt to answer tracker
+                          <Box sx={{ 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            py: 6,
+                            gap: 3
+                          }}>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#64748b', textAlign: 'center' }}>
+                              Please answer the tracker form to view your employment details
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#94a3b8', textAlign: 'center', maxWidth: 500 }}>
+                              Your employment details (Part III - Employment Status) will be displayed here once you complete the tracker form.
+                            </Typography>
+                            <Button
+                              variant="contained"
+                              onClick={() => navigate('/tracker')}
+                              sx={{
+                                backgroundColor: '#174f84',
+                                '&:hover': { backgroundColor: '#0d3a5f' },
+                                px: 4,
+                                py: 1.5,
+                                mt: 2
+                              }}
+                            >
+                              Go to Tracker Form
+                            </Button>
+                          </Box>
+                        )}
+                      </>
                     )}
 
                   </Box>

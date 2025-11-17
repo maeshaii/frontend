@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPost, createForumPost, createDonationRequest, getUserPoints } from '../../services/api';
 import ctulogo from '../../images/ctulogo.png';
 import './postcreate.css';
@@ -20,6 +20,42 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
   const [postImages, setPostImages] = useState<string[]>([]); // Multiple images
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  // Removed emoji picker state and logic
+  const [showEmojiPicker] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // no-op: emoji picker removed
+    };
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+
+
+  const insertAtCursor = (text: string) => {
+    const el = textareaRef.current;
+    if (!el) {
+      setPostContent(prev => prev + text);
+      return;
+    }
+    const start = el.selectionStart ?? postContent.length;
+    const end = el.selectionEnd ?? postContent.length;
+    const newValue = postContent.slice(0, start) + text + postContent.slice(end);
+    setPostContent(newValue);
+    // Restore cursor after React state update
+    requestAnimationFrame(() => {
+      el.focus();
+      const caret = start + text.length;
+      el.setSelectionRange(caret, caret);
+      // autoresize
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+    });
+  };
+
 
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,7 +188,24 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
       onPosted();
       onCancel?.();
     } catch (error: any) {
-      setError(error.message || 'Failed to create post');
+      console.error('Post creation error:', error);
+      console.error('Error response:', error.response);
+      console.error('Error config:', error.config);
+      
+      // Provide more specific error messages
+      if (error.response?.status === 404) {
+        setError(`Post endpoint not found. Please check if the server is running. (URL: ${error.config?.url || 'unknown'})`);
+      } else if (error.response?.status === 401) {
+        setError('Please log in again to create a post.');
+      } else if (error.response?.status === 400) {
+        setError(error.response?.data?.message || error.response?.data?.error || 'Invalid post data. Please check your input.');
+      } else if (error.response?.status >= 500) {
+        setError('Server error. Please try again later.');
+      } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+        setError('Network error. Please check your connection and try again.');
+      } else {
+        setError(error.response?.data?.message || error.message || 'Failed to create post');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -205,7 +258,7 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
           </div>
 
           <div className="post-create-content">
-            <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
               <textarea
                 placeholder="What's on your mind?"
                 value={postContent}
@@ -217,7 +270,10 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
                 }}
                 className="post-content-textarea"
                 required
+                ref={textareaRef}
               />
+
+
             </div>
 
 
@@ -289,7 +345,7 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
               </div>
             )}
 
-            <div className="post-actions">
+            <div className="post-actions" style={{ gap: 10 }}>
               <label className="upload-button">
                 <input
                   type="file"

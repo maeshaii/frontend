@@ -26,13 +26,9 @@ const TrackerReminderModal: React.FC<TrackerReminderModalProps> = ({ isOpen, onC
   return (
     <div className="tracker-modal-overlay">
       <div className="tracker-modal-content">
-        <div className="tracker-modal-header">
-          <h2>📋 Graduate Tracer Survey</h2>
-          <button className="tracker-modal-close" onClick={onClose}>
-            ×
-          </button>
-        </div>
-        
+        <button className="tracker-modal-close" onClick={onClose}>
+          ×
+        </button>
         <div className="tracker-modal-body">
           <div className="tracker-modal-icon">
             📋

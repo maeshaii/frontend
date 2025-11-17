@@ -128,7 +128,8 @@
   transition: all 0.2s ease;
   outline: none;
   overflow: hidden;
-  text-align: center;
+  text-align: justify;
+  text-justify: inter-word;
   resize: none;
 }
 

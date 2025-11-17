@@ -917,21 +917,26 @@ const NotificationPage: React.FC = () => {
       const isFollowNotification = notif.type.toLowerCase().includes('follow');
       if (isFollowNotification) {
         console.log('Follow notification detected - attempting to extract user ID');
-        // Extract user ID from notification content (format: "Name|user_id started following you")
-        const userIdMatch = notif.content.match(/\|(\d+)\s/);
-        if (userIdMatch) {
-          const userId = userIdMatch[1];
-          console.log('Found user ID in follow notification:', userId);
-          
-          // Redirect to the user's profile
-          const currentPath = window.location.pathname;
-          if (currentPath.startsWith('/peso')) {
-            window.location.href = `/peso/profile/${userId}`;
-          } else if (currentPath.startsWith('/ccict')) {
-            window.location.href = `/ccict/profile/${userId}`;
-          } else {
-            window.location.href = `/profile/${userId}`;
+        
+        // Try to extract user ID from ACTOR_ID comment (new format: "Name started following you<!--ACTOR_ID:user_id-->")
+        const actorIdMatch = notif.content.match(/<!--ACTOR_ID:(\d+)-->/);
+        let userId: string | null = null;
+        
+        if (actorIdMatch) {
+          userId = actorIdMatch[1];
+          console.log('Found user ID from ACTOR_ID in follow notification:', userId);
+        } else {
+          // Fallback: Extract user ID from old format (format: "Name|user_id started following you")
+          const userIdMatch = notif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
+          if (userIdMatch) {
+            userId = userIdMatch[2];
+            console.log('Found user ID from old format in follow notification:', userId);
           }
+        }
+        
+        if (userId) {
+          // Redirect to the user's profile
+          navigate(`/profile/${userId}`);
           return;
         } else {
           console.log('No user ID found in follow notification content');
@@ -1601,7 +1606,7 @@ const NotificationPage: React.FC = () => {
             </div>
           ) : (
             filteredNotifications.map((notif: any, index: number) => {
-              const isTrackerNotification = notif.type.toLowerCase().includes('tracker') || notif.content.includes('Tracker Form');
+              const isTrackerNotification = notif.type.toLowerCase().includes('tracker') || notif.type.toLowerCase() === 'ccict' || notif.content.includes('Tracker Form');
               const isRewardNotification = notif.type?.toLowerCase() === 'reward';
               const shouldShowCheckbox = selected.length > 0 || hoveredCheckboxId === notif.id;
               
@@ -1921,7 +1926,7 @@ const NotificationPage: React.FC = () => {
                               </span>
                             );
                           }
-                          return notif.content;
+                          return notif.content.replace(/<!--[^>]+-->/g, '');
                         })()
                       ) : (
                         <div 
@@ -1931,7 +1936,7 @@ const NotificationPage: React.FC = () => {
                             textOverflow: 'ellipsis'
                           }}
                           dangerouslySetInnerHTML={{ 
-                            __html: notif.content.replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ')
+                            __html: notif.content.replace(/<!--[^>]+-->/g, '').replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ')
                           }} 
                         />
                       )}
@@ -2034,7 +2039,7 @@ const NotificationPage: React.FC = () => {
                 flexShrink: 0
               }}>
                 {(() => {
-                  const isTrackerModal = (openNotif.type?.toLowerCase().includes('tracker') || openNotif.content?.includes('Tracker Form'));
+                  const isTrackerModal = (openNotif.type?.toLowerCase().includes('tracker') || openNotif.type?.toLowerCase() === 'ccict' || openNotif.content?.includes('Tracker Form'));
                   const isRewardModal = openNotif.type?.toLowerCase() === 'reward';
                   
                   // For tracker and reward notifications, use admin profile

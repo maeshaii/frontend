@@ -383,9 +383,8 @@ const PostCard: React.FC<PostCardProps> = ({
     
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
-    
-    // Enhanced regex to detect names (First Last format)
-    const nameRegex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
+    // Note: We intentionally do NOT auto-detect regular names anymore to avoid
+    // over-highlighting common words. Only URLs and @mentions are interactive.
     
     const parts = text.split(urlRegex);
     
@@ -448,42 +447,9 @@ const PostCard: React.FC<PostCardProps> = ({
             </button>
           );
         }
-        
-        const nameParts = mentionPart.split(nameRegex);
-        return nameParts.map((namePart, nameIndex) => {
-          const isNameSegment = nameIndex % 2 === 1;
-          if (isNameSegment) {
-            const displayName = namePart.trim();
-            if (!displayName) return null;
-            return (
-              <button
-                key={`${index}-${mentionIndex}-${nameIndex}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleUserSearch(displayName);
-                }}
-                style={{ 
-                  color: '#007bff', 
-                  fontWeight: '600',
-                  background: 'none',
-                  border: 'none',
-                  padding: '0',
-                  cursor: 'pointer',
-                  textDecoration: 'none'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.textDecoration = 'underline';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.textDecoration = 'none';
-                }}
-              >
-                {displayName}
-              </button>
-            );
-          }
-          return namePart;
-        });
+
+        // For non-mention text, return as-is (no name-based highlighting)
+        return mentionPart;
       });
       
       return processedMentionParts;

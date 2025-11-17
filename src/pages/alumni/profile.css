@@ -318,21 +318,8 @@ body::-webkit-scrollbar {
   margin-bottom: 60px;
 }
 
-/* Edit profile button */
-.profile-edit-profile-btn {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: white;
-  cursor: pointer;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 6px 12px;
-  border-radius: 6px;
-}
+/* Old banner button class retained (unused) */
+.profile-edit-profile-btn { display: none; }
 
 /* Profile info section */
 .profile-info-section {
@@ -340,6 +327,9 @@ body::-webkit-scrollbar {
   margin-top: -80px;
   margin-bottom: 24px;
 }
+
+/* Floating edit profile button replaced by camera overlay on avatar */
+.profile-edit-profile-fab { display: none; }
 
 /* Profile info card - special padding */
 .profile-info-card {
@@ -352,15 +342,46 @@ body::-webkit-scrollbar {
 }
 
 /* Profile image */
+.profile-image-wrapper {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 12px; /* move spacing from image to wrapper so overlay hugs edge */
+}
+
 .profile-image {
   width: 120px;
   height: 120px;
   border-radius: 50%;
   border: 5px solid white;
-  margin-bottom: 12px;
+  margin-bottom: 0; /* ensure overlay aligns to the actual circle edge */
   margin-top: -80px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   object-fit: cover;
+}
+
+/* Camera edit button overlay (like FB) */
+.profile-edit-pic-button {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  transform: translate(-25%, -25%); /* pull the button up/left to overlap inside the avatar */
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid #fff; /* white ring to match notif style */
+  background: #ffffff;   /* white background as requested */
+  color: #174f84;        /* modern camera icon color */
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+  z-index: 2;
+}
+
+.profile-edit-pic-button:hover {
+  background: #f3f4f6;
 }
 
 /* Profile name */
@@ -451,6 +472,8 @@ body::-webkit-scrollbar {
   color: #333;
   margin-bottom: 16px;
   line-height: 1.5;
+  text-align: justify;
+  text-justify: inter-word;
 }
 
 /* Post actions */

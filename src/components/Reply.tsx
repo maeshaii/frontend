@@ -167,9 +167,7 @@ const Reply: React.FC<ReplyProps> = ({
   const renderTextWithLinks = (text: string) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
-    
-    // Enhanced regex to detect names (First Last format)
-    const nameRegex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
+    // Do not auto-detect plain names to avoid over-highlighting
     
     const parts = text.split(urlRegex);
     
@@ -232,49 +230,9 @@ const Reply: React.FC<ReplyProps> = ({
             </button>
           );
         }
-        
-        const nameParts = mentionPart.split(nameRegex);
-        return nameParts.map((namePart, nameIndex) => {
-          const isNameSegment = nameIndex % 2 === 1;
-          if (isNameSegment) {
-            const displayName = namePart.trim();
-            if (!displayName) return null;
 
-            const replyAuthorName = `${reply.user.f_name} ${reply.user.m_name || ''} ${reply.user.l_name}`.trim();
-            const isReplyAuthor = displayName.toLowerCase() === replyAuthorName.toLowerCase();
-            
-            return (
-              <button
-                key={`${index}-${mentionIndex}-${nameIndex}`}
-                onClick={() => {
-                  if (isReplyAuthor) {
-                    window.location.href = getProfilePath(reply.user.user_id);
-                  } else {
-                    handleUserSearch(displayName);
-                  }
-                }}
-                style={{ 
-                  color: '#007bff', 
-                  fontWeight: '600',
-                  background: 'none',
-                  border: 'none',
-                  padding: '0',
-                  cursor: 'pointer',
-                  textDecoration: 'none'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.textDecoration = 'underline';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.textDecoration = 'none';
-                }}
-              >
-                {displayName}
-              </button>
-            );
-          }
-          return namePart;
-        });
+        // Non-mention text returned as-is (no name-based highlighting)
+        return mentionPart;
       });
       
       return processedMentionParts;
