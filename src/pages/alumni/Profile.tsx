@@ -1,13 +1,15 @@
-  import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import ctulogo from '../../images/ctulogo.png';
 import './profile.css';
 import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api, createConversation } from '../../services/api';
-import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment, getUserPoints } from '../../services/api';
+import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment, getUserPoints, getInventoryItems, requestReward, getRewardRequests, claimRewardRequest, getEngagementPointsSettings } from '../../services/api';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
+import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye, HiOutlineXMark, HiOutlineInformationCircle, HiOutlineTicket } from 'react-icons/hi2';
+import EarnPointsModal from '../../components/EarnPointsModal';
 
 function getCurrentUserId(user: AlumniUser | null): number | null {
   if (!user) return null;
@@ -200,7 +202,52 @@ const AlumniProfile: React.FC = () => {
   const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
   const [userPoints, setUserPoints] = useState<any>(null);
   const [pointsLoading, setPointsLoading] = useState(false);
+  const [pointsSettings, setPointsSettings] = useState({
+    enabled: true,
+    like: 1,
+    comment: 3,
+    share: 5,
+    reply: 2,
+    post: 0,
+    post_with_photo: 15,
+    tracker_form: 0
+  });
+  const [trackerFormEnabled, setTrackerFormEnabled] = useState(false);
   const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
+  const [showRewardsModal, setShowRewardsModal] = useState(false);
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [rewardsLoading, setRewardsLoading] = useState(false);
+  const [claimingReward, setClaimingReward] = useState<number | null>(null);
+  const [recentlyClaimedRewardIds, setRecentlyClaimedRewardIds] = useState<number[]>([]);
+  const [userRewardRequests, setUserRewardRequests] = useState<any[]>([]);
+  const [showApprovedRewardsModal, setShowApprovedRewardsModal] = useState(false);
+  const [selectedRewardDetail, setSelectedRewardDetail] = useState<any | null>(null);
+  const [rewardStatusFilter, setRewardStatusFilter] = useState<'all' | 'pending' | 'approved' | 'claimed' | 'did_not_push_through'>('all');
+  const [showRewardFilterDropdown, setShowRewardFilterDropdown] = useState(false);
+  const [showMonthlyLimitModal, setShowMonthlyLimitModal] = useState(false);
+  const [showConfirmRequestModal, setShowConfirmRequestModal] = useState(false);
+  const [pendingRewardRequest, setPendingRewardRequest] = useState<{id: number; name: string; value: string; type?: string} | null>(null);
+  const [employmentData, setEmploymentData] = useState<any>(null);
+  const [employmentLoading, setEmploymentLoading] = useState(false);
+  const [showEarnPointsModal, setShowEarnPointsModal] = useState(false);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showRewardFilterDropdown && !target.closest('[data-reward-filter-dropdown]')) {
+        setShowRewardFilterDropdown(false);
+      }
+    };
+
+    if (showRewardFilterDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showRewardFilterDropdown]);
 
   // Get current user ID
   const currentUserObj = JSON.parse(localStorage.getItem('user') || '{}');
@@ -267,19 +314,47 @@ const AlumniProfile: React.FC = () => {
           setUser(userData);
           setEditBio(profileData.profile_bio || '');
           
-          // Fetch engagement points (only for Alumni)
+          // Fetch engagement points (for Alumni and OJT users)
           const isAlumni = profileData.account_type?.user;
-          if (isAlumni && profileData.user_id) {
+          const isOJT = profileData.account_type?.ojt;
+          if ((isAlumni || isOJT) && profileData.user_id) {
             setPointsLoading(true);
             try {
               const points = await getUserPoints(profileData.user_id);
-              setUserPoints(points);
+              // If points is null or empty object, set to null
+              setUserPoints(points && (points.total_points !== undefined || points.points_breakdown) ? points : null);
+              
+              // Fetch points settings
+              try {
+                const settingsResponse = await getEngagementPointsSettings();
+                if (settingsResponse && settingsResponse.success && settingsResponse.settings) {
+                  setPointsSettings({
+                    enabled: settingsResponse.settings.enabled !== false,
+                    like: settingsResponse.settings.like_points || 0,
+                    comment: settingsResponse.settings.comment_points || 0,
+                    share: settingsResponse.settings.share_points || 0,
+                    reply: settingsResponse.settings.reply_points || 0,
+                    post: settingsResponse.settings.post_points || 0,
+                    post_with_photo: settingsResponse.settings.post_with_photo_points || 0,
+                    tracker_form: settingsResponse.settings.tracker_form_points || 0
+                  });
+                  // Set tracker form enabled state
+                  if (settingsResponse.settings.tracker_form_enabled !== undefined) {
+                    setTrackerFormEnabled(settingsResponse.settings.tracker_form_enabled);
+                  }
+                }
+              } catch (settingsError) {
+                console.error('Error fetching points settings:', settingsError);
+              }
             } catch (error) {
               console.error('Error fetching points:', error);
               setUserPoints(null);
             } finally {
               setPointsLoading(false);
             }
+          } else {
+            // If not Alumni or OJT, ensure userPoints is null
+            setUserPoints(null);
           }
           
           // Update localStorage only if viewing own profile
@@ -288,6 +363,29 @@ const AlumniProfile: React.FC = () => {
           }
           
           const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+          
+          // Fetch employment data
+          if (numericUserId !== undefined && numericUserId !== null && !isNaN(Number(numericUserId))) {
+            setEmploymentLoading(true);
+            try {
+              const token = localStorage.getItem('accessToken');
+              const employmentRes = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${numericUserId}/`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+              });
+              if (employmentRes.ok) {
+                const employmentData = await employmentRes.json();
+                setEmploymentData(employmentData);
+              } else {
+                setEmploymentData(null);
+              }
+            } catch (error) {
+              console.error('Error fetching employment data:', error);
+              setEmploymentData(null);
+            } finally {
+              setEmploymentLoading(false);
+            }
+          }
+          
           if (numericUserId !== undefined && numericUserId !== null && !isNaN(Number(numericUserId))) {
             // Followers list
             fetchFollowers(Number(numericUserId))
@@ -689,6 +787,427 @@ getPosts()
     }
   };
 
+
+  const fetchInventoryItems = async () => {
+    try {
+      setRewardsLoading(true);
+      const response = await getInventoryItems();
+      if (response.success) {
+        setInventoryItems(response.items || []);
+      } else {
+        alert(response.message || 'Failed to load rewards');
+      }
+    } catch (error: any) {
+      console.error('Error fetching inventory:', error);
+      alert(error.response?.data?.message || 'Failed to load rewards');
+    } finally {
+      setRewardsLoading(false);
+    }
+  };
+
+  const handleRequestReward = async (rewardId: number) => {
+    if (claimingReward !== null) return;
+    
+    const reward = inventoryItems.find(item => item.id === rewardId);
+    if (!reward) return;
+
+    const pointsMatch = reward.value?.match(/(\d+)/);
+    const requiredPoints = pointsMatch ? parseInt(pointsMatch[1]) : 0;
+    const canAfford = (userPoints?.total_points || 0) >= requiredPoints;
+
+    if (!canAfford) {
+      alert(`Insufficient points. You need ${requiredPoints} points but only have ${userPoints?.total_points || 0}.`);
+      return;
+    }
+
+    if (reward.quantity <= 0) {
+      alert('This reward is out of stock.');
+      return;
+    }
+
+    // Check if user has already requested a reward this month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthlyRequests = userRewardRequests.filter((req: any) => {
+      const requestedDate = new Date(req.requested_at);
+      return requestedDate >= startOfMonth;
+    });
+
+    if (monthlyRequests.length >= 1) {
+      setShowMonthlyLimitModal(true);
+      return;
+    }
+
+    // Show confirmation modal instead of browser confirm
+    setPendingRewardRequest({
+      id: rewardId,
+      name: reward.name,
+      value: reward.value,
+      type: reward.type
+    });
+    setShowConfirmRequestModal(true);
+  };
+
+  const confirmRequestReward = async () => {
+    if (!pendingRewardRequest) return;
+    
+    const rewardId = pendingRewardRequest.id;
+    setShowConfirmRequestModal(false);
+    
+    try {
+      setClaimingReward(rewardId);
+      const response = await requestReward(rewardId);
+      
+      if (response.success) {
+        // Refresh requests
+        await fetchUserRewardRequests();
+        
+        // Refresh inventory
+        await fetchInventoryItems();
+        
+        // Close modal
+        setPendingRewardRequest(null);
+      } else {
+        alert(response.message || 'Failed to request reward');
+      }
+    } catch (error: any) {
+      console.error('Error requesting reward:', error);
+      alert(error.response?.data?.message || 'Failed to request reward');
+    } finally {
+      setClaimingReward(null);
+    }
+  };
+
+  const fetchUserRewardRequests = useCallback(async () => {
+    try {
+      const response = await getRewardRequests();
+      if (response.success) {
+        const requests = response.requests || [];
+        setUserRewardRequests((prev) => {
+          const prevMap = new Map(prev.map((req: any) => [req.request_id, req]));
+          return requests.map((req: any) => {
+            const wasRecentlyClaimed = recentlyClaimedRewardIds.includes(req.request_id);
+            if (wasRecentlyClaimed) {
+              const previous = prevMap.get(req.request_id);
+              return {
+                ...req,
+                status: 'claimed',
+                claimed_at: req.claimed_at || previous?.claimed_at || new Date().toISOString()
+              };
+            }
+            const previous = prevMap.get(req.request_id);
+            if (previous && previous.status === 'claimed' && req.status !== 'claimed') {
+              return { ...req, status: 'claimed', claimed_at: previous.claimed_at };
+            }
+            return req;
+          });
+        });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error fetching reward requests:', error);
+      return false;
+    }
+  }, [recentlyClaimedRewardIds]);
+
+  // Check for openRewardRequests flag from notification - check when component mounts and when user loads
+  useEffect(() => {
+    const checkAndOpenRewardRequests = () => {
+      const openRewardRequests = localStorage.getItem('openRewardRequests');
+      if (openRewardRequests === 'true' && user && user.user_id) {
+        localStorage.removeItem('openRewardRequests');
+        console.log('Opening reward requests modal from notification');
+        // Fetch reward requests first, then open modal
+        fetchUserRewardRequests().then(() => {
+          // Use setTimeout to ensure state updates are processed
+          setTimeout(() => {
+            setShowApprovedRewardsModal(true);
+          }, 200);
+        }).catch(() => {
+          // Even if fetch fails, try to open modal
+          setTimeout(() => {
+            setShowApprovedRewardsModal(true);
+          }, 200);
+        });
+      }
+    };
+    
+    // Check immediately and also when user loads
+    checkAndOpenRewardRequests();
+  }, [user, fetchUserRewardRequests]);
+
+  // Check for openRewardDetail flag from notification - opens specific reward detail modal
+  useEffect(() => {
+    const checkAndOpenRewardDetail = async () => {
+      const openRewardDetailId = localStorage.getItem('openRewardDetail');
+      if (openRewardDetailId && user && user.user_id) {
+        localStorage.removeItem('openRewardDetail');
+        console.log('Opening reward detail modal from notification for request ID:', openRewardDetailId);
+        try {
+          // Fetch reward requests directly to get fresh data
+          const response = await getRewardRequests();
+          if (response.success && response.requests) {
+            // Find the specific reward request by ID
+            const rewardDetail = response.requests.find(
+              (req: any) => req.request_id === Number(openRewardDetailId)
+            );
+            if (rewardDetail) {
+              // Update state and open detail modal
+              setUserRewardRequests(response.requests);
+              setTimeout(() => {
+                setSelectedRewardDetail(rewardDetail);
+              }, 200);
+            } else {
+              // If not found, update state and fallback to opening the list modal
+              console.log('Reward detail not found, opening list modal instead');
+              setUserRewardRequests(response.requests);
+              setTimeout(() => {
+                setShowApprovedRewardsModal(true);
+              }, 200);
+            }
+          } else {
+            // If fetch failed, try to open list modal
+            setTimeout(() => {
+              setShowApprovedRewardsModal(true);
+            }, 200);
+          }
+        } catch (error) {
+          console.error('Error fetching reward detail:', error);
+          // On error, try to open list modal
+          setTimeout(() => {
+            setShowApprovedRewardsModal(true);
+          }, 200);
+        }
+      }
+    };
+    
+    // Check immediately and also when user loads
+    checkAndOpenRewardDetail();
+  }, [user]);
+
+  // Auto-refresh reward requests while modal or detail view is open
+  useEffect(() => {
+    if (!showApprovedRewardsModal && !selectedRewardDetail) {
+      return;
+    }
+
+    fetchUserRewardRequests();
+
+    const intervalId = window.setInterval(() => {
+      fetchUserRewardRequests();
+    }, 5000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [showApprovedRewardsModal, selectedRewardDetail?.request_id, fetchUserRewardRequests]);
+
+  // Listen for reward request updates from other tabs/admin actions
+  useEffect(() => {
+    const handleStorageUpdate = (event: StorageEvent) => {
+      if (event.key === 'latestRewardRequestUpdate' && event.newValue) {
+        fetchUserRewardRequests();
+      }
+    };
+
+    const handleCustomUpdate = (event: Event) => {
+      if ((event as CustomEvent).detail) {
+        fetchUserRewardRequests();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageUpdate);
+    window.addEventListener('rewardRequestUpdated', handleCustomUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageUpdate);
+      window.removeEventListener('rewardRequestUpdated', handleCustomUpdate as EventListener);
+    };
+  }, [fetchUserRewardRequests]);
+
+  // Listen for points updates from other components (like PostCard, PostCreate)
+  useEffect(() => {
+    const handlePointsUpdate = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { userId, points } = customEvent.detail;
+      // Only update if viewing own profile and the userId matches
+      if (isOwnProfile && currentId && Number(userId) === Number(currentId)) {
+        console.log('Points updated, refreshing display:', points);
+        setUserPoints(points);
+      }
+    };
+
+    window.addEventListener('pointsUpdated', handlePointsUpdate);
+    return () => {
+      window.removeEventListener('pointsUpdated', handlePointsUpdate);
+    };
+  }, [isOwnProfile, currentId]);
+
+  // Listen for WebSocket points updates for cross-platform real-time updates
+  useEffect(() => {
+    if (!isOwnProfile || !currentId) return;
+
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+
+    const wsBase = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const wsHost = window.location.host.replace(':3000', ':8000'); // Adjust port if needed
+    const wsUrl = `${wsBase}${wsHost}/ws/notifications/?token=${encodeURIComponent(token)}`;
+
+    let ws: WebSocket | null = null;
+
+    try {
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log('WebSocket connected for points updates');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'points_update' && data.points) {
+            const pointsData = data.points;
+            // Only update if it's for the current user
+            if (Number(pointsData.user_id) === Number(currentId)) {
+              console.log('Points updated via WebSocket:', pointsData);
+              setUserPoints(pointsData);
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket disconnected for points updates');
+        // Optionally reconnect after a delay
+        setTimeout(() => {
+          if (isOwnProfile && currentId) {
+            // This will trigger the effect again
+          }
+        }, 5000);
+      };
+    } catch (error) {
+      console.error('Error setting up WebSocket:', error);
+    }
+
+    return () => {
+      if (ws) {
+        ws.close();
+      }
+    };
+  }, [isOwnProfile, currentId]);
+
+  const handleClaimApprovedReward = async (requestId: number) => {
+    if (claimingReward !== null) return;
+
+    const request = userRewardRequests.find(req => req.request_id === requestId);
+    if (!request) return;
+
+    const confirm = window.confirm(`Claim "${request.reward_name}"?\n\nPoints will be deducted: ${request.points_cost}`);
+    if (!confirm) return;
+
+    try {
+      setClaimingReward(requestId);
+      const response = await claimRewardRequest(requestId);
+      
+      if (response.success) {
+        alert(response.message || 'Reward claimed successfully!');
+        setRecentlyClaimedRewardIds((prev) => prev.includes(requestId) ? prev : [...prev, requestId]);
+
+        const updatedRequestData = response.request || response.reward_request || null;
+        setUserRewardRequests((prev) =>
+          prev.map((req) => {
+            if (req.request_id !== requestId) return req;
+            const merged = {
+              ...req,
+              ...updatedRequestData,
+              status: updatedRequestData?.status || 'claimed',
+              claimed_at: updatedRequestData?.claimed_at || new Date().toISOString()
+            };
+            return merged;
+          })
+        );
+        setSelectedRewardDetail((prev: any | null) => {
+          if (!prev || prev.request_id !== requestId) return prev;
+          const merged = {
+            ...prev,
+            ...updatedRequestData,
+            status: updatedRequestData?.status || 'claimed',
+            claimed_at: updatedRequestData?.claimed_at || new Date().toISOString()
+          };
+          return merged;
+        });
+        
+        // Refresh points
+        if (currentId) {
+          try {
+            const pointsData = await getUserPoints(Number(currentId));
+            setUserPoints(pointsData);
+          } catch (err) {
+            console.error('Error refreshing points:', err);
+          }
+        }
+        
+        // Refresh requests
+        await fetchUserRewardRequests();
+        
+        // Refresh inventory
+        await fetchInventoryItems();
+      } else {
+        alert(response.message || 'Failed to claim reward');
+      }
+    } catch (error: any) {
+      console.error('Error claiming reward:', error);
+      alert(error.response?.data?.message || 'Failed to claim reward');
+    } finally {
+      setClaimingReward(null);
+    }
+  };
+
+  useEffect(() => {
+    setRecentlyClaimedRewardIds((prev) => {
+      if (!prev.length) return prev;
+      const filtered = prev.filter((id) => {
+        const req = userRewardRequests.find((request) => request.request_id === id);
+        return req && req.status !== 'claimed';
+      });
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [userRewardRequests]);
+
+  useEffect(() => {
+    if (!selectedRewardDetail) return;
+    const updated = userRewardRequests.find((request) => request.request_id === selectedRewardDetail.request_id);
+    if (!updated) return;
+    const recentlyClaimed = recentlyClaimedRewardIds.includes(updated.request_id);
+    setSelectedRewardDetail((prev: any | null) => {
+      if (!prev || prev.request_id !== updated.request_id) return prev;
+      const mergedStatus = recentlyClaimed ? 'claimed' : updated.status;
+      const mergedClaimedAt = updated.claimed_at || prev.claimed_at || (recentlyClaimed ? new Date().toISOString() : undefined);
+      const needsUpdate =
+        prev.status !== mergedStatus ||
+        prev.claimed_at !== mergedClaimedAt ||
+        prev.voucher_code !== updated.voucher_code ||
+        prev.notes !== updated.notes ||
+        prev.instructions !== updated.instructions;
+
+      if (!needsUpdate) return prev;
+
+      return {
+        ...prev,
+        ...updated,
+        status: mergedStatus,
+        claimed_at: mergedClaimedAt
+      };
+    });
+  }, [userRewardRequests, recentlyClaimedRewardIds, selectedRewardDetail?.request_id]);
 
   const handleEditProfile = () => {
     // Set the current user's profile picture as the initial edit value
@@ -1181,10 +1700,17 @@ getPosts()
                   ) : null}
                 </div>
               ) : isOwnProfile ? (
-                <button className="profile-add-bio-btn" onClick={() => setBioModalOpen(true)}>
-                  Add Bio
-                </button>
-              ) : null}
+                <div className="profile-bio-text">
+                  <span>Tell everyone a little about yourself by adding a bio.</span>
+                  <button className="profile-add-bio-btn" onClick={() => setBioModalOpen(true)}>
+                    Add Bio
+                  </button>
+                </div>
+              ) : (
+                <div className="profile-bio-text">
+                  <span>This user has not added a bio yet.</span>
+                </div>
+              )}
             </div>
 
             {/* Social Media and Email for Alumni/OJT accounts */}
@@ -1271,8 +1797,21 @@ getPosts()
             )}
           </div>
 
-          {/* Engagement Points - Only for Alumni viewing their own profile */}
-          {user && user.account_type?.user && isOwnProfile && (
+          {/* Engagement Points - For Alumni and OJT users viewing their own profile */}
+          {(() => {
+            const hasRewardsAccess = user && (user.account_type?.user || user.account_type?.ojt) && isOwnProfile;
+            if (process.env.NODE_ENV === 'development') {
+              console.log('Rewards Card Debug:', {
+                user: !!user,
+                account_type: user?.account_type,
+                isAlumni: user?.account_type?.user,
+                isOJT: user?.account_type?.ojt,
+                isOwnProfile,
+                hasRewardsAccess
+              });
+            }
+            return hasRewardsAccess;
+          })() && (
             <div style={{ marginTop: '16px' }}>
               <div className="profile-intro-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>🏆</span>
@@ -1283,186 +1822,234 @@ getPosts()
                 <div style={{ padding: '20px', textAlign: 'center' }}>
                   <div style={{ fontSize: '14px', color: '#666' }}>Loading points...</div>
                 </div>
-              ) : userPoints ? (
-                <div>
-                  {/* Total Points */}
-                  <div style={{
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    color: 'white',
-                    marginBottom: '16px',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>Total Points</div>
-                    <div style={{ fontSize: '36px', fontWeight: 'bold' }}>{userPoints.total_points || 0}</div>
-                  </div>
-
-                  {/* Points Breakdown */}
-                  <div style={{ fontSize: '14px', color: '#333' }}>
-                    <div style={{ fontWeight: '600', marginBottom: '12px', color: '#174f84' }}>Points Breakdown</div>
-                    
-                    {/* Likes */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>👍</span>
-                        <span>Likes</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.likes?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.likes?.points || 0}
-                      </div>
-                    </div>
-
-                    {/* Comments */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>💬</span>
-                        <span>Comments</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.comments?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.comments?.points || 0}
-                      </div>
-                    </div>
-
-                    {/* Shares */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>🔄</span>
-                        <span>Shares</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.shares?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.shares?.points || 0}
-                      </div>
-                    </div>
-
-                    {/* Replies */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>↩️</span>
-                        <span>Replies</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.replies?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.replies?.points || 0}
-                      </div>
-                    </div>
-
-                    {/* Posts */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>📝</span>
-                        <span>Posts</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.posts?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.posts?.points || 0}
-                      </div>
-                    </div>
-
-                    {/* Posts with Photos */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>📸</span>
-                        <span>Posts w/ Photos</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.posts_with_photos?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.posts_with_photos?.points || 0}
-                      </div>
-                    </div>
-
-                    {/* Tracker Form */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>📝</span>
-                        <span>Tracker Form</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>
-                          ({userPoints.points_breakdown?.tracker_form?.count || 0})
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: '600', color: '#667eea' }}>
-                        +{userPoints.points_breakdown?.tracker_form?.points || 0}
-                      </div>
-                    </div>
-                  </div>
-                </div>
               ) : (
-                <div style={{
-                  padding: '20px',
-                  textAlign: 'center',
-                  background: '#f5f7fa',
-                  borderRadius: '8px'
-                }}>
-                  <div style={{ fontSize: '24px', marginBottom: '8px' }}>🎮</div>
-                  <div style={{ fontSize: '14px', color: '#666' }}>
-                    Start engaging to earn points!
+                <div>
+                  {/* Total Points - Show even if userPoints is null/undefined */}
+                  {userPoints && (
+                    <div style={{
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      borderRadius: '12px',
+                      padding: '20px',
+                      color: 'white',
+                      marginBottom: '16px',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>Total Points</div>
+                      <div style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '8px' }}>{userPoints.total_points || 0}</div>
+                      {userPoints.rank && (
+                        <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '12px' }}>Rank #{userPoints.rank}</div>
+                      )}
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => {
+                            setShowRewardsModal(true);
+                            fetchInventoryItems();
+                            fetchUserRewardRequests();
+                          }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            color: 'white',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <HiOutlineGift size={16} strokeWidth={1.5} />
+                            <span>View Rewards</span>
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowApprovedRewardsModal(true);
+                            fetchUserRewardRequests();
+                          }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            color: 'white',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <HiOutlineCheckCircle size={16} strokeWidth={1.5} />
+                            <span>My Requests</span>
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Reward Card - Always show for OJT and Alumni users, even without points */}
+                  {!userPoints && (
+                    <div style={{
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      borderRadius: '12px',
+                      padding: '20px',
+                      color: 'white',
+                      marginBottom: '16px',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>Total Points</div>
+                      <div style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '8px' }}>0</div>
+                      {userPoints?.rank ? (
+                        <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '12px' }}>Rank #{userPoints.rank}</div>
+                      ) : (
+                        <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '12px' }}>Rank -</div>
+                      )}
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => {
+                            setShowRewardsModal(true);
+                            fetchInventoryItems();
+                            fetchUserRewardRequests();
+                          }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            color: 'white',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <HiOutlineGift size={16} strokeWidth={1.5} />
+                            <span>View Rewards</span>
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowApprovedRewardsModal(true);
+                            fetchUserRewardRequests();
+                          }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            color: 'white',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <HiOutlineCheckCircle size={16} strokeWidth={1.5} />
+                            <span>My Requests</span>
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Earn More Points Button - Replace Points Breakdown */}
+                  <div style={{ marginTop: '16px' }}>
+                    <button
+                      onClick={() => setShowEarnPointsModal(true)}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        backgroundColor: '#f97316',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#ea580c';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f97316';
+                      }}
+                      >
+                      <span>Complete tasks to earn points!</span>
+                    </button>
                   </div>
-                  <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
-                    Like, comment, share, and post to level up
-                  </div>
+
+                  {/* Tracker Form Button - Only visible if enabled and user is alumni */}
+                  {trackerFormEnabled && user?.account_type?.user && (
+                    <div style={{ marginTop: '12px' }}>
+                      <button
+                        onClick={() => navigate('/tracker')}
+                        style={{
+                          width: '100%',
+                          padding: '12px 16px',
+                          backgroundColor: '#1e3a5f',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#2d5a8f';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#1e3a5f';
+                        }}
+                      >
+                        <span>Complete Tracker Form to earn points!</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
 
           {/* Followers - Hide for admin and PESO accounts */}
-          {!user?.account_type?.peso && (!user?.account_type?.admin || isOwnProfile) && (!user?.account_type?.ccict || isOwnProfile) && (
+          {!user?.account_type?.peso && !user?.account_type?.admin && (!user?.account_type?.ccict || isOwnProfile) && (
           <div style={{ marginBottom: '24px' }}>
             <div className="profile-followers-header">
               <div className="profile-followers-title">Followers ({followers.length})</div>
@@ -1529,7 +2116,9 @@ getPosts()
           )}
 
           {/* Following - Hide for admin and PESO accounts */}
-          {!user?.account_type?.peso && (!user?.account_type?.admin || isOwnProfile) && (!user?.account_type?.ccict || isOwnProfile) && (
+          {(!user?.account_type?.peso || !isOwnProfile) &&
+           (!user?.account_type?.admin || !isOwnProfile) &&
+           (!user?.account_type?.ccict || isOwnProfile) && (
           <div style={{ marginBottom: '24px' }}>
             <div className="profile-followers-header">
               <div className="profile-followers-title">Following ({following.length})</div>
@@ -3759,6 +4348,1190 @@ getPosts()
           </div>
         </div>
       )}
+
+      {/* Rewards Modal */}
+      {showRewardsModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}
+          onClick={() => setShowRewardsModal(false)}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '24px',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid #e5e7eb' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#1e3a5f', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <HiOutlineGift size={24} color="#1e3a5f" strokeWidth={1.5} />
+                <span>Available Rewards</span>
+              </h2>
+              <button
+                onClick={() => setShowRewardsModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#6b7280',
+                  padding: '4px 8px',
+                  lineHeight: '1',
+                  transition: 'color 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.color = '#1f2937'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
+              >
+                ×
+              </button>
+            </div>
+
+            {rewardsLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}>
+                <div style={{ fontSize: '16px', color: '#6b7280' }}>Loading rewards...</div>
+              </div>
+            ) : (() => {
+              // Filter to only show rewards user can afford
+              const affordableRewards = inventoryItems.filter((item) => {
+                const pointsMatch = item.value?.match(/(\d+)/);
+                const requiredPoints = pointsMatch ? parseInt(pointsMatch[1]) : 0;
+                const canAfford = (userPoints?.total_points || 0) >= requiredPoints;
+                // Also check if item has stock
+                return canAfford && item.quantity > 0;
+              });
+              
+              return affordableRewards.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}>
+                  <div style={{ fontSize: '24px', marginBottom: '8px' }}>📭</div>
+                  <div style={{ fontSize: '16px', color: '#6b7280', marginBottom: '8px' }}>No rewards available that you can afford at the moment</div>
+                  <div style={{ fontSize: '14px', color: '#9ca3af', marginTop: '8px' }}>
+                    You currently have {userPoints?.total_points || 0} points
+                  </div>
+                </div>
+              ) : (
+              <div style={{ display: 'grid', gap: '16px' }}>
+                {affordableRewards.map((item) => {
+                  const isVoucher = item.type?.toLowerCase().includes('voucher') || 
+                                    item.type?.toLowerCase().includes('gift card') ||
+                                    item.type?.toLowerCase().includes('coupon');
+                  const isMerchandise = item.type?.toLowerCase().includes('merchandise') || 
+                                       item.type?.toLowerCase().includes('merch') ||
+                                       item.type?.toLowerCase().includes('product') ||
+                                       item.type?.toLowerCase().includes('item');
+                  
+                  // Extract points required
+                  const pointsMatch = item.value?.match(/(\d+)/);
+                  const requiredPoints = pointsMatch ? parseInt(pointsMatch[1]) : 0;
+                  const canAfford = (userPoints?.total_points || 0) >= requiredPoints;
+                  const isClaiming = claimingReward === item.id;
+
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        padding: '12px 16px',
+                        background: 'white',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '16px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.08)';
+                        e.currentTarget.style.borderColor = '#cbd5e1';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
+                        e.currentTarget.style.borderColor = '#e5e7eb';
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#1f2937', marginBottom: '4px' }}>
+                          {item.name}
+                        </h3>
+                        <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                          <span>Type: {item.type}</span>
+                          <span>Cost: <strong style={{ color: '#1e3a5f', fontWeight: '700' }}>{item.value}</strong></span>
+                          <span>Stock: {item.quantity} available</span>
+                        </div>
+                      </div>
+                      
+                      <button
+                        onClick={() => handleRequestReward(item.id)}
+                        disabled={!canAfford || item.quantity <= 0 || isClaiming}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: canAfford && item.quantity > 0 ? '#1e3a5f' : '#e5e7eb',
+                          color: canAfford && item.quantity > 0 ? 'white' : '#9ca3af',
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          cursor: canAfford && item.quantity > 0 ? 'pointer' : 'not-allowed',
+                          transition: 'all 0.2s',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => {
+                          if (canAfford && item.quantity > 0) {
+                            e.currentTarget.style.backgroundColor = '#153e75';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (canAfford && item.quantity > 0) {
+                            e.currentTarget.style.backgroundColor = '#1e3a5f';
+                          }
+                        }}
+                      >
+                        {isClaiming ? 'Processing...' : canAfford && item.quantity > 0 ? 'Request to Claim Reward' : 
+                          item.quantity <= 0 ? 'Out of Stock' : 'Insufficient Points'}
+                      </button>
+                      
+                    </div>
+                  );
+                })}
+              </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Approved Rewards Modal - Shows user's reward requests */}
+      {showApprovedRewardsModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}
+          onClick={() => setShowApprovedRewardsModal(false)}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '24px',
+              maxWidth: '1000px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#174f84', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <HiOutlineCheckCircle size={24} color="#174f84" strokeWidth={1.5} />
+                <span>My Reward Requests</span>
+                <span style={{ fontSize: '14px', fontWeight: '500', color: '#64748b', marginLeft: '8px' }}>
+                  ({userRewardRequests.length})
+                </span>
+              </h2>
+              <button
+                onClick={() => {
+                  setShowApprovedRewardsModal(false);
+                  setSelectedRewardDetail(null);
+                  setRewardStatusFilter('all');
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#666'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {userRewardRequests.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}>
+                <div style={{ fontSize: '24px', marginBottom: '8px' }}>📭</div>
+                <div style={{ fontSize: '16px', color: '#666' }}>No reward requests yet</div>
+              </div>
+            ) : (
+              <>
+                {/* Filters and View Toggle */}
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  marginBottom: '16px',
+                  flexWrap: 'wrap',
+                  gap: '12px'
+                }}>
+                  {/* Status Filter */}
+                  <div style={{ position: 'relative' }} data-reward-filter-dropdown>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: '500' }}>Filter by status:</span>
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          type="button"
+                          role="button"
+                          aria-expanded={showRewardFilterDropdown}
+                          aria-haspopup="true"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowRewardFilterDropdown(!showRewardFilterDropdown);
+                          }}
+                          data-reward-filter-dropdown
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: '8px',
+                            border: '1px solid #e5e7eb',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            backgroundColor: 'white',
+                            color: '#1e3a5f',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            minWidth: '180px',
+                            justifyContent: 'space-between',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = '#cbd5e1';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!showRewardFilterDropdown) {
+                              e.currentTarget.style.borderColor = '#e5e7eb';
+                            }
+                          }}
+                        >
+                          <span>
+                            {rewardStatusFilter === 'all' ? 'All' : 
+                             rewardStatusFilter === 'pending' ? 'Pending' : 
+                             rewardStatusFilter === 'approved' ? 'Ready' : 
+                             rewardStatusFilter === 'claimed' ? 'Claimed' : 
+                             'Did Not Push Through'}
+                          </span>
+                          <span style={{ 
+                            fontSize: '10px',
+                            transform: showRewardFilterDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                            transition: 'transform 0.2s'
+                          }}>▼</span>
+                        </button>
+                        {showRewardFilterDropdown && (
+                          <div 
+                            data-reward-filter-dropdown
+                            style={{
+                              position: 'absolute',
+                              top: '100%',
+                              left: 0,
+                              backgroundColor: 'white',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                              border: '1px solid #e5e7eb',
+                              zIndex: 100,
+                              marginTop: '4px',
+                              overflow: 'hidden',
+                              minWidth: '180px'
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                          >
+                            {(['all', 'pending', 'approved', 'claimed', 'did_not_push_through'] as const).map((filter) => (
+                              <div
+                                key={filter}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setRewardStatusFilter(filter);
+                                  setShowRewardFilterDropdown(false);
+                                }}
+                                style={{
+                                  padding: '10px 16px',
+                                  cursor: 'pointer',
+                                  backgroundColor: rewardStatusFilter === filter ? '#f3f4f6' : 'white',
+                                  color: rewardStatusFilter === filter ? '#1e3a5f' : '#374151',
+                                  fontSize: '13px',
+                                  fontWeight: rewardStatusFilter === filter ? '600' : '400',
+                                  transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (rewardStatusFilter !== filter) {
+                                    e.currentTarget.style.backgroundColor = '#f9fafb';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (rewardStatusFilter !== filter) {
+                                    e.currentTarget.style.backgroundColor = 'white';
+                                  }
+                                }}
+                              >
+                                {filter === 'all' ? 'All' : 
+                                 filter === 'approved' ? 'Ready' : 
+                                 filter === 'did_not_push_through' ? 'Did Not Push Through' : 
+                                 filter.charAt(0).toUpperCase() + filter.slice(1)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Filtered Rewards */}
+                {(() => {
+                  const filteredRewards = userRewardRequests.filter((req: any) => {
+                    const recentlyClaimed = recentlyClaimedRewardIds.includes(req.request_id);
+                    if (rewardStatusFilter === 'all') return true;
+                    if (rewardStatusFilter === 'pending') return req.status === 'pending' && !recentlyClaimed;
+                    if (rewardStatusFilter === 'approved') return (req.status === 'approved' || req.status === 'ready_for_pickup') && !recentlyClaimed;
+                    if (rewardStatusFilter === 'claimed') return req.status === 'claimed' || recentlyClaimed;
+                    if (rewardStatusFilter === 'did_not_push_through') {
+                      // Reward that was approved but expired before being claimed
+                      const isApproved = req.status === 'approved' || req.status === 'ready_for_pickup';
+                      const isNotClaimed = req.status !== 'claimed' && !recentlyClaimed;
+                      const hasExpired = req.expires_at && new Date(req.expires_at) < new Date();
+                      return isApproved && isNotClaimed && hasExpired;
+                    }
+                    return true;
+                  });
+
+                  if (filteredRewards.length === 0) {
+                    return (
+                      <div style={{ textAlign: 'center', padding: '40px' }}>
+                        <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔍</div>
+                        <div style={{ fontSize: '16px', color: '#666' }}>No rewards found for this filter</div>
+                      </div>
+                    );
+                  }
+
+                  // Check if any reward can be claimed (to show Expires column)
+                  const hasClaimableRewards = filteredRewards.some((req: any) => {
+                    const recentlyClaimed = recentlyClaimedRewardIds.includes(req.request_id);
+                    const isApproved = (req.status === 'approved' || req.status === 'ready_for_pickup') && !recentlyClaimed;
+                    const isClaimed = req.status === 'claimed' || recentlyClaimed;
+                    return isApproved && !isClaimed;
+                  });
+
+                  // Table View
+                  return (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Reward</th>
+                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Type</th>
+                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Status</th>
+                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Cost</th>
+                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Requested</th>
+                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Approved</th>
+                            {hasClaimableRewards && (
+                              <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Expires</th>
+                            )}
+                            <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredRewards.map((req: any) => {
+                  const recentlyClaimed = recentlyClaimedRewardIds.includes(req.request_id);
+                  const isApproved = (req.status === 'approved' || req.status === 'ready_for_pickup') && !recentlyClaimed;
+                  const isClaimed = req.status === 'claimed' || recentlyClaimed;
+                  const isPending = req.status === 'pending' && !recentlyClaimed;
+                            const hasExpired = req.expires_at && new Date(req.expires_at) < new Date();
+                            const didNotPushThrough = isApproved && !isClaimed && hasExpired;
+                            const isMerchandise = req.reward_type?.toLowerCase().includes('merchandise') || 
+                                                 req.reward_type?.toLowerCase().includes('merch') ||
+                                                 req.reward_type?.toLowerCase().includes('product') ||
+                                                 req.reward_type?.toLowerCase().includes('item');
+                            // Only vouchers can be claimed by user, merchandise must be released by admin
+                            const canClaim = isApproved && !isClaimed && !isMerchandise;
+
+                  return (
+                              <tr 
+                      key={req.request_id}
+                      style={{
+                                  borderBottom: '1px solid #f1f5f9',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.2s',
+                                  backgroundColor: didNotPushThrough ? '#fef2f2' : 'transparent'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = didNotPushThrough ? '#fee2e2' : '#f8fafc';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = didNotPushThrough ? '#fef2f2' : 'transparent';
+                                }}
+                              >
+                                <td style={{ padding: '12px', fontWeight: '600', color: '#1e293b', fontSize: '14px' }}>
+                                  {req.reward_name}
+                                </td>
+                                <td style={{ padding: '12px', color: '#64748b', fontSize: '13px' }}>
+                                  {req.reward_type}
+                                </td>
+                                <td style={{ padding: '12px' }}>
+                                  <span style={{
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    fontWeight: '600',
+                                    background: didNotPushThrough ? '#fee2e2' : isPending ? '#fef9c3' : isApproved ? '#fee2e2' : isClaimed ? '#dbeafe' : '#f3f4f6',
+                                    color: didNotPushThrough ? '#991b1b' : isPending ? '#a16207' : isApproved ? '#991b1b' : isClaimed ? '#1e40af' : '#374151'
+                                  }}>
+                                    {didNotPushThrough ? 'Expired' :
+                                     isPending ? 'Pending' : 
+                                     isApproved && !isClaimed ? 'Ready' :
+                                     isClaimed ? 'Claimed' : req.status}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px', color: '#667eea', fontWeight: '600', fontSize: '13px' }}>
+                                  {req.points_cost} pts
+                                </td>
+                                <td style={{ padding: '12px', color: '#64748b', fontSize: '13px' }}>
+                                  {req.requested_at ? new Date(req.requested_at).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  }) : '-'}
+                                </td>
+                                <td style={{ padding: '12px', color: '#64748b', fontSize: '13px' }}>
+                                  {req.approved_at ? new Date(req.approved_at).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  }) : '-'}
+                                </td>
+                                {hasClaimableRewards && (
+                                  <td style={{ padding: '12px', color: canClaim ? (hasExpired ? '#dc2626' : '#64748b') : '#64748b', fontSize: '13px', fontWeight: canClaim && hasExpired ? '600' : '400' }}>
+                                    {canClaim && req.expires_at ? new Date(req.expires_at).toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric'
+                                    }) : '-'}
+                                  </td>
+                                )}
+                                <td style={{ padding: '12px', textAlign: 'center' }}>
+                                  <button
+                                    onClick={() => setSelectedRewardDetail(req)}
+                                    style={{
+                                      padding: '6px 12px',
+                                      borderRadius: '6px',
+                                      border: '1px solid #667eea',
+                                      background: 'white',
+                                      color: '#667eea',
+                                      fontSize: '12px',
+                                      fontWeight: '600',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      transition: 'all 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = '#667eea';
+                                      e.currentTarget.style.color = 'white';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = 'white';
+                                      e.currentTarget.style.color = '#667eea';
+                                    }}
+                                  >
+                                    <HiOutlineEye size={14} />
+                                    View
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Reward Detail Modal */}
+      {selectedRewardDetail && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1001,
+            padding: '20px'
+          }}
+          onClick={() => setSelectedRewardDetail(null)}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '20px',
+              padding: '24px',
+              maxWidth: '520px',
+              width: '100%',
+              maxHeight: '85vh',
+              overflow: 'auto',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Render the same detailed card view for selectedRewardDetail */}
+            {(() => {
+              const req = selectedRewardDetail;
+              const recentlyClaimed = recentlyClaimedRewardIds.includes(req.request_id);
+              const isApproved = (req.status === 'approved' || req.status === 'ready_for_pickup') && !recentlyClaimed;
+              const isClaimed = req.status === 'claimed' || recentlyClaimed;
+              const isPending = req.status === 'pending' && !recentlyClaimed;
+              const isMerchandise = req.reward_type?.toLowerCase().includes('merchandise') || 
+                                   req.reward_type?.toLowerCase().includes('merch') ||
+                                   req.reward_type?.toLowerCase().includes('product') ||
+                                   req.reward_type?.toLowerCase().includes('item');
+              // Only vouchers can be claimed by user, merchandise must be released by admin
+              const canClaim = isApproved && !isClaimed && !isMerchandise;
+              const isClaiming = claimingReward === req.request_id;
+
+                  return (
+                <>
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '600', color: '#1e3a5f', marginBottom: '4px' }}>
+                        Reward Details
+                      </h2>
+                      <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '600', color: '#174f84', lineHeight: '1.2' }}>
+                        {req.reward_name}
+                      </h3>
+                    </div>
+                    <button
+                      onClick={() => setSelectedRewardDetail(null)}
+                      style={{
+                        background: '#f5f7fa',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#666',
+                        padding: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '8px',
+                        transition: 'all 0.2s',
+                        width: '36px',
+                        height: '36px',
+                        flexShrink: 0
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#e0e0e0';
+                        e.currentTarget.style.color = '#333';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#f5f7fa';
+                        e.currentTarget.style.color = '#666';
+                      }}
+                    >
+                      <HiOutlineXMark size={20} />
+                    </button>
+                  </div>
+
+                  {/* Key Info Cards */}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
+                    gap: '12px',
+                    marginBottom: '20px'
+                  }}>
+                    <div style={{ 
+                      padding: '14px', 
+                      background: 'linear-gradient(135deg, #e8f0f8 0%, #d0e1f0 100%)',
+                      borderRadius: '10px',
+                      border: '1px solid #a8c5e0'
+                    }}>
+                      <div style={{ fontSize: '11px', color: '#666', fontWeight: '500', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Type
+                      </div>
+                      <div style={{ fontSize: '14px', color: '#174f84', fontWeight: '600' }}>
+                        {req.reward_type}
+                      </div>
+                    </div>
+                    
+                    <div style={{ 
+                      padding: '14px', 
+                      background: 'linear-gradient(135deg, #e0ecf5 0%, #c8ddeb 100%)',
+                      borderRadius: '10px',
+                      border: '1px solid #9bb8d6'
+                    }}>
+                      <div style={{ fontSize: '11px', color: '#666', fontWeight: '500', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Cost
+                      </div>
+                      <div style={{ fontSize: '14px', color: '#174f84', fontWeight: '600' }}>
+                        {req.points_cost} pts
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#1e3a5f', marginTop: '2px' }}>
+                        ({req.reward_value})
+                      </div>
+                    </div>
+                    
+                    <div style={{ 
+                      padding: '14px', 
+                      background: isPending ? 'linear-gradient(135deg, #d8e6f2 0%, #c0d9ea 100%)' : 
+                                  isApproved ? 'linear-gradient(135deg, #c8ddeb 0%, #b0d0e2 100%)' : 
+                                  isClaimed ? 'linear-gradient(135deg, #e8f0f8 0%, #d0e1f0 100%)' : 
+                                  'linear-gradient(135deg, #e0ecf5 0%, #d0e1f0 100%)',
+                      borderRadius: '10px',
+                      border: `1px solid ${isPending ? '#8fb3d1' : isApproved ? '#7aa3c4' : isClaimed ? '#a8c5e0' : '#9bb8d6'}`
+                    }}>
+                      <div style={{ fontSize: '11px', color: '#666', fontWeight: '500', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Status
+                      </div>
+                      <div style={{ 
+                        fontSize: '14px', 
+                        color: isPending ? '#1e3a5f' : isApproved ? '#174f84' : isClaimed ? '#174f84' : '#666',
+                        fontWeight: '600'
+                      }}>
+                        {isPending ? 'Pending Approval' : 
+                         isApproved && !isClaimed ? 'Approved - Ready' :
+                         isClaimed ? 'Claimed' : req.status}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dates */}
+                   {(req.requested_at || req.approved_at || (req.expires_at && !isClaimed)) && (
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
+                      gap: '12px',
+                      marginBottom: '20px'
+                    }}>
+                      {req.requested_at && (
+                        <div style={{ padding: '12px', background: 'linear-gradient(135deg, #e8f0f8 0%, #d8e6f2 100%)', borderRadius: '8px', border: '1px solid #a8c5e0' }}>
+                          <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Requested</div>
+                          <div style={{ fontSize: '13px', color: '#174f84', fontWeight: '500' }}>
+                            {new Date(req.requested_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {req.approved_at && (
+                        <div style={{ padding: '12px', background: 'linear-gradient(135deg, #d0e1f0 0%, #c0d9ea 100%)', borderRadius: '8px', border: '1px solid #9bb8d6' }}>
+                          <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Approved</div>
+                          <div style={{ fontSize: '13px', color: '#174f84', fontWeight: '500' }}>
+                            {new Date(req.approved_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {req.expires_at && !isClaimed && (
+                        <div style={{ padding: '12px', background: 'linear-gradient(135deg, #e0ecf5 0%, #d0e1f0 100%)', borderRadius: '8px', border: '1px solid #a8c5e0' }}>
+                          <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Expires</div>
+                          <div style={{ fontSize: '13px', color: '#1e3a5f', fontWeight: '500' }}>
+                            {new Date(req.expires_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </div>
+                          {isApproved && !isClaimed && (
+                            <div style={{ 
+                              marginTop: '6px',
+                              fontSize: '11px',
+                              color: '#b91c1c',
+                              fontWeight: '500',
+                              lineHeight: 1.4
+                            }}>
+                              Failure to claim within 5 days of approval voids this request.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                      {/* Instructions Section */}
+                      {req.notes && (
+                        <div style={{ 
+                          marginBottom: '20px',
+                          padding: '16px', 
+                          background: 'linear-gradient(135deg, #e8f0f8 0%, #d0e1f0 100%)',
+                          borderRadius: '12px',
+                          border: '1px solid #a8c5e0'
+                        }}>
+                          <div style={{ 
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '10px'
+                          }}>
+                            <HiOutlineInformationCircle size={18} color="#174f84" style={{ marginTop: '2px', flexShrink: 0 }} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: '600', color: '#1e3a5f', fontSize: '13px', marginBottom: '8px' }}>
+                                Instructions
+                              </div>
+                              <div style={{ lineHeight: '1.6', color: '#174f84', fontSize: '13px' }}>
+                                {req.notes}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Voucher Code Section */}
+                      {req.voucher_code && (req.status === 'claimed' || recentlyClaimed) && (
+                        <div style={{ 
+                          marginBottom: '20px',
+                          padding: '16px', 
+                          background: 'linear-gradient(135deg, #e0ecf5 0%, #c8ddeb 100%)',
+                          borderRadius: '12px',
+                          border: '1px solid #9bb8d6'
+                        }}>
+                          <div style={{ 
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            marginBottom: '12px'
+                          }}>
+                            <HiOutlineTicket size={18} color="#174f84" />
+                            <span style={{ fontWeight: '600', color: '#1e3a5f', fontSize: '13px' }}>
+                              Voucher Code
+                            </span>
+                          </div>
+                          <div style={{ 
+                            fontSize: '24px',
+                            fontWeight: '700',
+                            color: '#174f84',
+                            fontFamily: '"SF Mono", "Monaco", "Inconsolata", "Roboto Mono", monospace',
+                            letterSpacing: '2px',
+                            padding: '14px 16px',
+                            background: 'white',
+                            borderRadius: '8px',
+                            textAlign: 'center',
+                            border: '2px solid #174f84',
+                            boxShadow: '0 2px 4px rgba(23, 79, 132, 0.2)'
+                          }}>
+                            {req.voucher_code}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#1e3a5f', textAlign: 'center', marginTop: '10px', fontWeight: '500' }}>
+                            Save this code for redemption
+                          </div>
+                        </div>
+                      )}
+                      {req.voucher_code && req.status !== 'claimed' && !recentlyClaimed && (
+                        <div style={{ 
+                          marginBottom: '20px',
+                          padding: '16px', 
+                          background: 'linear-gradient(135deg, #e0ecf5 0%, #c8ddeb 100%)',
+                          borderRadius: '12px',
+                          border: '1px solid #9bb8d6',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          color: '#174f84',
+                          fontSize: '13px',
+                          fontWeight: '500'
+                        }}>
+                          <HiOutlineTicket size={18} color="#174f84" />
+                          <span>Voucher code will be revealed once you claim this reward.</span>
+                        </div>
+                      )}
+                      
+                      {canClaim && (
+                        <button
+                          onClick={() => handleClaimApprovedReward(req.request_id)}
+                          disabled={isClaiming}
+                          style={{
+                            width: '100%',
+                            padding: '14px 20px',
+                            borderRadius: '10px',
+                            border: 'none',
+                            background: 'linear-gradient(135deg, #174f84 0%, #1e3a5f 100%)',
+                            color: 'white',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: isClaiming ? 'not-allowed' : 'pointer',
+                            opacity: isClaiming ? 0.6 : 1,
+                            transition: 'all 0.2s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            boxShadow: '0 4px 6px rgba(23, 79, 132, 0.3)'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isClaiming) {
+                              e.currentTarget.style.background = 'linear-gradient(135deg, #1e3a5f 0%, #15304a 100%)';
+                              e.currentTarget.style.transform = 'translateY(-1px)';
+                              e.currentTarget.style.boxShadow = '0 6px 12px rgba(23, 79, 132, 0.4)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isClaiming) {
+                              e.currentTarget.style.background = 'linear-gradient(135deg, #174f84 0%, #1e3a5f 100%)';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                              e.currentTarget.style.boxShadow = '0 4px 6px rgba(23, 79, 132, 0.3)';
+                            }
+                          }}
+                        >
+                          {isClaiming ? (
+                            'Claiming...'
+                          ) : (
+                            <>
+                              <HiOutlineGift size={16} />
+                              <span>Claim Reward</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                </>
+                  );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Monthly Limit Modal */}
+      {showMonthlyLimitModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1001,
+            padding: '20px'
+          }}
+          onClick={() => setShowMonthlyLimitModal(false)}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '32px',
+              maxWidth: '500px',
+              width: '100%',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+              textAlign: 'center'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '24px', marginBottom: '16px' }}>⚠️</div>
+            <h2 style={{ 
+              margin: '0 0 16px 0', 
+              fontSize: '20px', 
+              fontWeight: '600', 
+              color: '#1e3a5f' 
+            }}>
+              Monthly Limit Reached
+            </h2>
+            <p style={{ 
+              margin: '0 0 24px 0', 
+              fontSize: '15px', 
+              color: '#6b7280',
+              lineHeight: '1.6'
+            }}>
+              You can only request 1 reward per month. Please wait until next month to request another reward.
+            </p>
+            <button
+              onClick={() => setShowMonthlyLimitModal(false)}
+              style={{
+                padding: '12px 32px',
+                background: '#1e3a5f',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '15px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                width: '100%',
+                maxWidth: '200px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#2d5a8f';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#1e3a5f';
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Request Reward Modal */}
+      {showConfirmRequestModal && pendingRewardRequest && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1001,
+            padding: '20px'
+          }}
+          onClick={() => {
+            setShowConfirmRequestModal(false);
+            setPendingRewardRequest(null);
+          }}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '32px',
+              maxWidth: '500px',
+              width: '100%',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              marginBottom: '24px',
+              paddingBottom: '20px',
+              borderBottom: '1px solid #e5e7eb'
+            }}>
+              <h2 style={{ 
+                margin: 0,
+                fontSize: '20px', 
+                fontWeight: '700', 
+                color: '#1e3a5f',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <HiOutlineGift size={24} color="#1e3a5f" strokeWidth={1.5} />
+                <span>Request Reward</span>
+              </h2>
+              <button
+                onClick={() => {
+                  setShowConfirmRequestModal(false);
+                  setPendingRewardRequest(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#6b7280',
+                  padding: '4px 8px',
+                  lineHeight: '1',
+                  transition: 'color 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.color = '#1f2937'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Content */}
+            <div>
+              {(() => {
+                // Extract points from value (e.g., "1 pt" or "10 pts" -> "1" or "10")
+                const pointsMatch = pendingRewardRequest.value?.match(/(\d+)/);
+                const pointsValue = pointsMatch ? parseInt(pointsMatch[1]) : 0;
+                const pointsText = pointsValue === 1 ? 'point' : 'points';
+                
+                return (
+                  <p style={{ 
+                    margin: '0 0 20px 0', 
+                    fontSize: '16px', 
+                    color: '#374151',
+                    lineHeight: '1.6'
+                  }}>
+                    You are about to redeem <strong style={{ color: '#1e3a5f', fontWeight: '600' }}>{pendingRewardRequest.name}</strong> as your reward for accumulating <strong style={{ color: '#1e3a5f', fontWeight: '600' }}>{pointsValue} {pointsText}</strong>.
+                  </p>
+                );
+              })()}
+              
+              {/* CTU Claim Notice - Only show for merchandise */}
+              {pendingRewardRequest.type && 
+               pendingRewardRequest.type.toLowerCase().includes('merchandise') && (
+                <div style={{
+                  background: '#fef3c7',
+                  border: '1px solid #fcd34d',
+                  borderRadius: '8px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px'
+                }}>
+                  <div style={{
+                    fontSize: '18px',
+                    flexShrink: 0,
+                    marginTop: '2px'
+                  }}>
+                    ⚠️
+                  </div>
+                  <p style={{
+                    margin: 0,
+                    fontSize: '14px',
+                    color: '#92400e',
+                    lineHeight: '1.6'
+                  }}>
+                    Please take note that this needs to be claimed in the CTU.
+                  </p>
+                </div>
+              )}
+
+              <div style={{
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '8px',
+                padding: '12px 16px',
+                marginBottom: '24px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '10px'
+              }}>
+                <div style={{
+                  fontSize: '16px',
+                  flexShrink: 0,
+                  marginTop: '2px',
+                  color: '#1e40af'
+                }}>
+                  ℹ️
+                </div>
+                <p style={{
+                  margin: 0,
+                  fontSize: '13px',
+                  color: '#1e40af',
+                  lineHeight: '1.5'
+                }}>
+                  Note: You can only redeem 1 reward per month.
+                </p>
+              </div>
+
+              <div style={{ 
+                display: 'flex', 
+                gap: '12px', 
+                justifyContent: 'flex-end',
+                marginTop: '24px'
+              }}>
+                <button
+                  onClick={() => {
+                    setShowConfirmRequestModal(false);
+                    setPendingRewardRequest(null);
+                  }}
+                  style={{
+                    padding: '12px 24px',
+                    background: '#f3f4f6',
+                    color: '#374151',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#e5e7eb';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmRequestReward}
+                  disabled={claimingReward !== null}
+                  style={{
+                    padding: '12px 24px',
+                    background: claimingReward !== null ? '#9ca3af' : '#1e3a5f',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: claimingReward !== null ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (claimingReward === null) {
+                      e.currentTarget.style.backgroundColor = '#2d5a8f';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (claimingReward === null) {
+                      e.currentTarget.style.backgroundColor = '#1e3a5f';
+                    }
+                  }}
+                >
+                  {claimingReward !== null ? 'Processing...' : 'Confirm Request'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Earn More Points Modal */}
+      <EarnPointsModal
+        isOpen={showEarnPointsModal}
+        onClose={() => setShowEarnPointsModal(false)}
+      />
     </div>
   );
 };

@@ -1,11 +1,29 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { likeRepost, unlikeRepost, commentOnRepost, getRepostLikes, editRepostComment, deleteRepostComment, editRepost, deleteRepost, editPost, deletePost, getCommentReplies } from '../services/api';
+import ReactDOM from 'react-dom';
+import {
+  likeRepost,
+  unlikeRepost,
+  commentOnRepost,
+  getRepostLikes,
+  editRepostComment,
+  deleteRepostComment,
+  editRepost,
+  deleteRepost,
+  editPost,
+  deletePost,
+  getCommentReplies,
+  deleteDonationRequest,
+  deleteForumPost,
+  updateDonationRequest,
+  editForumPost,
+} from '../services/api';
 import { getProfilePicUrl, handleProfilePicError, getImageUrl } from '../utils/profilePicUtils';
 import RepostButton from './RepostButton';
 import ReplyInput from './ReplyInput';
 import Reply from './Reply';
 import PostStatsRow from './PostStatsRow';
 import ctulogo from '../images/ctulogo.png';
+import './postFooterActions.css';
 
 // Minimal, reusable types for the repost card
 interface UserLite {
@@ -66,6 +84,10 @@ interface RepostCardProps {
   setEditRepostContent?: (fn: (prev: { [key: string | number]: string }) => { [key: string | number]: string }) => void;
   onViewOriginalPost?: (original: PostItemLite) => void;
   currentUserAvatar?: string;
+  autoOpenComments?: boolean;
+  highlightCommentId?: string;
+  highlightReplyId?: string;
+  highlightDurationMs?: number;
 }
 
 // Photo gallery helpers - same as PostCard
@@ -124,7 +146,11 @@ const RepostCard: React.FC<RepostCardProps> = ({
   editRepostContent = {},
   setEditRepostContent,
   onViewOriginalPost,
-  currentUserAvatar
+  currentUserAvatar,
+  autoOpenComments = false,
+  highlightCommentId,
+  highlightReplyId,
+  highlightDurationMs
 }) => {
   // Render name: {f_name} {m_name} {l_name} if m_name exists, else {f_name} {l_name}
   const renderName = (obj: { f_name: string; m_name?: string; l_name: string }) =>
@@ -169,14 +195,22 @@ const RepostCard: React.FC<RepostCardProps> = ({
   
   // State to control whether comments section is visible (hidden by default)
   const [showCommentsSection, setShowCommentsSection] = useState<boolean>(false);
-  
-  const optionsMenuRef = useRef<HTMLDivElement>(null);
-  const commentOptionsRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
-
-  // Check if current user owns this repost
+ 
+   const optionsMenuRef = useRef<HTMLDivElement>(null);
+   const commentOptionsRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+   const commentRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+   const replyRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+   const requestedReplyLoadsRef = useRef<Set<number>>(new Set());
+   const processedCommentHighlightRef = useRef<string | null>(null);
+   const processedReplyHighlightRef = useRef<string | null>(null);
+   const highlightTimerRef = useRef<number | null>(null);
+   const [activeCommentHighlight, setActiveCommentHighlight] = useState<number | null>(null);
+   const [activeReplyHighlight, setActiveReplyHighlight] = useState<number | null>(null);
+   const highlightColor = '#fff2e6';
+   const highlightDuration = highlightDurationMs ?? 3000;
+ 
   const isOwn = repost.user.user_id === currentUserId;
 
-  // Get current user info from localStorage for optimistic updates
   const getCurrentUserInfo = () => {
     try {
       const userStr = localStorage.getItem('user');
@@ -201,16 +235,14 @@ const RepostCard: React.FC<RepostCardProps> = ({
       console.warn('Cannot like: No current user');
       return;
     }
-    
-    // Get current user info for optimistic update
+
     const currentUserInfo = getCurrentUserInfo();
     if (!currentUserInfo) {
       console.warn('Cannot like: No current user info found');
       return;
     }
-    
+
     try {
-      // Optimistic update with current user's info (not repost owner's info)
       setLiked(true);
       setLikesCount(c => c + 1);
       setFetchedLikes(prev => [...prev, {
@@ -223,11 +255,10 @@ const RepostCard: React.FC<RepostCardProps> = ({
           profile_pic: currentUserInfo.profile_pic
         }
       }]);
-      
+
       await likeRepost(repost.repost_id);
     } catch (e) {
       console.error('Error liking repost:', e);
-      // Rollback
       setLiked(false);
       setLikesCount(c => Math.max(0, c - 1));
       setFetchedLikes(prev => prev.filter(like => {
@@ -243,23 +274,20 @@ const RepostCard: React.FC<RepostCardProps> = ({
       console.warn('Cannot unlike: No current user');
       return;
     }
-    
-    // Get current user info for optimistic update rollback
+
     const currentUserInfo = getCurrentUserInfo();
-    
+
     try {
-      // Optimistic update
       setLiked(false);
       setLikesCount(c => Math.max(0, c - 1));
       setFetchedLikes(prev => prev.filter(like => {
         const likeUser = like.user || like;
         return likeUser.user_id !== currentUserId;
       }));
-      
+
       await unlikeRepost(repost.repost_id);
     } catch (e) {
       console.error('Error unliking repost:', e);
-      // Rollback with current user's info (not repost owner's info)
       setLiked(true);
       setLikesCount(c => c + 1);
       if (currentUserInfo) {
@@ -285,14 +313,12 @@ const RepostCard: React.FC<RepostCardProps> = ({
       alert('Please log in to comment');
       return;
     }
-    
+
     try {
       await commentOnRepost(repost.repost_id, commentValue.trim());
       setCommentValue('');
       setShowCommentInput(false);
-      // Automatically show comments section when a comment is added
       setShowCommentsSection(true);
-      // Reload comments
       await loadComments();
       onRefresh?.();
     } catch (e) {
@@ -300,6 +326,60 @@ const RepostCard: React.FC<RepostCardProps> = ({
       alert('Failed to submit comment. Please try again.');
     }
   };
+
+  const scrollIntoViewSmooth = useCallback((element: HTMLElement | null) => {
+    if (!element) return;
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
+
+  const startHighlightTimer = useCallback(() => {
+    if (highlightTimerRef.current) {
+      window.clearTimeout(highlightTimerRef.current);
+    }
+    highlightTimerRef.current = window.setTimeout(() => {
+      setActiveCommentHighlight(null);
+      setActiveReplyHighlight(null);
+    }, highlightDuration);
+  }, [highlightDuration]);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) {
+        window.clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (autoOpenComments && comments.length > 0) {
+      setShowCommentsSection(true);
+    }
+  }, [autoOpenComments, comments]);
+
+  useEffect(() => {
+    processedCommentHighlightRef.current = null;
+  }, [highlightCommentId]);
+
+  useEffect(() => {
+    if (!highlightCommentId) return;
+    if (processedCommentHighlightRef.current === highlightCommentId) return;
+
+    const commentIdNum = Number(highlightCommentId);
+    if (Number.isNaN(commentIdNum)) return;
+    if (comments.length === 0) return;
+
+    const commentExists = comments.some(comment => Number(comment.comment_id) === commentIdNum);
+    if (!commentExists) return;
+
+    processedCommentHighlightRef.current = highlightCommentId;
+    setShowCommentsSection(true);
+    setShowAllComments(true);
+    setActiveCommentHighlight(commentIdNum);
+    startHighlightTimer();
+    requestAnimationFrame(() => {
+      scrollIntoViewSmooth(commentRefs.current[commentIdNum]);
+    });
+  }, [highlightCommentId, comments, startHighlightTimer, scrollIntoViewSmooth]);
 
   const loadComments = async () => {
     // Repost comments are included in the repost data itself
@@ -365,6 +445,40 @@ const RepostCard: React.FC<RepostCardProps> = ({
       setCommentReplies(prev => ({ ...prev, [commentId]: [] }));
     }
   }, []);
+
+  useEffect(() => {
+    if (!highlightReplyId) return;
+    if (processedReplyHighlightRef.current === highlightReplyId) return;
+
+    const replyIdNum = Number(highlightReplyId);
+    if (Number.isNaN(replyIdNum)) return;
+    if (comments.length === 0) return;
+
+    const entry = Object.entries(commentReplies).find(([, replies]) =>
+      replies?.some(reply => Number(reply.reply_id) === replyIdNum)
+    );
+
+    if (entry) {
+      processedReplyHighlightRef.current = highlightReplyId;
+      const commentIdNum = Number(entry[0]);
+      setShowCommentsSection(true);
+      setShowAllComments(true);
+      setShowReplies(prev => ({ ...prev, [commentIdNum]: true }));
+      setActiveCommentHighlight(commentIdNum);
+      setActiveReplyHighlight(replyIdNum);
+      startHighlightTimer();
+      requestAnimationFrame(() => {
+        scrollIntoViewSmooth(replyRefs.current[replyIdNum] || commentRefs.current[commentIdNum]);
+      });
+    } else {
+      comments.forEach(comment => {
+        if (!commentReplies[comment.comment_id] && !requestedReplyLoadsRef.current.has(comment.comment_id)) {
+          requestedReplyLoadsRef.current.add(comment.comment_id);
+          loadReplies(comment.comment_id);
+        }
+      });
+    }
+  }, [highlightReplyId, comments, commentReplies, loadReplies, scrollIntoViewSmooth, startHighlightTimer]);
 
   // Auto-load replies for comments that have replies_count > 0
   useEffect(() => {
@@ -474,13 +588,25 @@ const RepostCard: React.FC<RepostCardProps> = ({
       alert('You can only edit your own posts');
       return;
     }
-    setLocalEditOriginalContent(original.post_content || '');
+
+    const donationId =
+      original.donation_id ??
+      (original as any)?.donation_id ??
+      (original as any)?.donation?.donation_id ??
+      null;
+    const contextType: RepostContext = context || (donationId ? 'donation' : 'post');
+    const originalContent =
+      (contextType === 'donation'
+        ? (original.post_content ?? (original as any)?.description)
+        : original.post_content) || '';
+
+    setLocalEditOriginalContent(originalContent);
     setLocalEditingOriginal(true);
     setLocalShowOriginalOptions(false);
     
     // Also update props if provided
     if (setEditRepostContent && setEditingRepost) {
-      setEditRepostContent(prev => ({ ...prev, [`original_${original.post_id}`]: original.post_content || '' }));
+      setEditRepostContent(prev => ({ ...prev, [`original_${original.post_id}`]: originalContent }));
       setEditingRepost(prev => ({ ...prev, [`original_${original.post_id}`]: true }));
       setShowOptions?.(prev => ({ ...prev, [`original_${original.post_id}`]: false }));
     }
@@ -491,19 +617,61 @@ const RepostCard: React.FC<RepostCardProps> = ({
       alert('You can only delete your own posts');
       return;
     }
-    
-    if (window.confirm('Are you sure you want to delete this original post?')) {
-      try {
-        await deletePost(original.post_id!);
-        onRefresh?.();
-        alert('Original post deleted successfully');
-      } catch (error) {
-        console.error('Error deleting original post:', error);
-        alert('Failed to delete original post');
+
+    const donationId =
+      original.donation_id ??
+      (original as any)?.donation_id ??
+      (original as any)?.donation?.donation_id ??
+      null;
+    const postId =
+      original.post_id ??
+      (original as any)?.post_id ??
+      (original as any)?.id ??
+      null;
+    const contextType: RepostContext = context || (donationId ? 'donation' : 'post');
+
+    const confirmMessage =
+      contextType === 'donation'
+        ? 'Are you sure you want to delete this donation request?'
+        : 'Are you sure you want to delete this original post?';
+
+    try {
+      if (!window.confirm(confirmMessage)) {
+        return;
       }
+
+      if (contextType === 'donation') {
+        const targetDonationId = donationId ?? postId;
+        if (!targetDonationId) {
+          alert('Missing donation identifier. Please refresh and try again.');
+          return;
+        }
+        await deleteDonationRequest(targetDonationId);
+        alert('Donation request deleted successfully');
+      } else if (contextType === 'forum') {
+        if (!postId) {
+          alert('Missing forum post identifier. Please refresh and try again.');
+          return;
+        }
+        await deleteForumPost(postId);
+        alert('Forum post deleted successfully');
+      } else {
+        if (!postId) {
+          alert('Missing post identifier. Please refresh and try again.');
+          return;
+        }
+        await deletePost(postId);
+        alert('Original post deleted successfully');
+      }
+
+      onRefresh?.();
+    } catch (error) {
+      console.error('Error deleting original post:', error);
+      alert('Failed to delete original content');
+    } finally {
+      setLocalShowOriginalOptions(false);
+      setShowOptions?.(prev => ({ ...prev, [`original_${original.post_id}`]: false }));
     }
-    setLocalShowOriginalOptions(false);
-    setShowOptions?.(prev => ({ ...prev, [`original_${original.post_id}`]: false }));
   };
 
   const handleSaveEditOriginalPost = async () => {
@@ -514,8 +682,40 @@ const RepostCard: React.FC<RepostCardProps> = ({
       return;
     }
 
+    const donationId =
+      original.donation_id ??
+      (original as any)?.donation_id ??
+      (original as any)?.donation?.donation_id ??
+      null;
+    const postId =
+      original.post_id ??
+      (original as any)?.post_id ??
+      (original as any)?.id ??
+      null;
+    const contextType: RepostContext = context || (donationId ? 'donation' : 'post');
+
     try {
-      await editPost(original.post_id!, { post_content: newContent.trim() });
+      if (contextType === 'donation') {
+        const targetDonationId = donationId ?? postId;
+        if (!targetDonationId) {
+          alert('Missing donation identifier. Please refresh and try again.');
+          return;
+        }
+        await updateDonationRequest(targetDonationId, { description: newContent.trim() });
+      } else if (contextType === 'forum') {
+        if (!postId) {
+          alert('Missing forum post identifier. Please refresh and try again.');
+          return;
+        }
+        await editForumPost(postId, { content: newContent.trim() });
+      } else {
+        if (!postId) {
+          alert('Missing post identifier. Please refresh and try again.');
+          return;
+        }
+        await editPost(postId, { post_content: newContent.trim() });
+      }
+
       setLocalEditingOriginal(false);
       setLocalEditOriginalContent('');
       
@@ -668,7 +868,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
               </div>
               {context === 'donation' && (
                 <span style={{
-                  background: 'linear-gradient(135deg, #174f84 0%, #2d5aa0 100%)',
+                  backgroundColor: '#059669',
                   color: '#ffffff',
                   fontSize: '10px',
                   fontWeight: '600',
@@ -678,7 +878,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                   letterSpacing: '0.5px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                 }}>
-                  💝 Donation
+                  Donation
                 </span>
               )}
             </div>
@@ -835,7 +1035,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (!original) return;
+            if (!original || localEditingOriginal) return;
             // If onViewOriginalPost is provided, use it to open modal (same as donation)
             if (onViewOriginalPost) {
               onViewOriginalPost(original);
@@ -844,18 +1044,30 @@ const RepostCard: React.FC<RepostCardProps> = ({
               goToOriginal();
             }
           }}
-          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onMouseDown={(e) => {
+            if (localEditingOriginal) {
+              e.stopPropagation();
+              return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           style={{
             border: '1px solid #e9ecef',
             borderRadius: 12,
             overflow: 'hidden',
             backgroundColor: '#f8f9fa',
-            cursor: original.post_id ? 'pointer' : 'default',
+            cursor: !localEditingOriginal && original.post_id ? 'pointer' : 'default',
             transition: 'all 0.15s ease',
             marginBottom: 12
           }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 10px rgba(0,0,0,0.06)')}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLDivElement).style.boxShadow = 'none')}
+          onMouseEnter={(e) => {
+            if (localEditingOriginal) return;
+            (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 10px rgba(0,0,0,0.06)';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
+          }}
         >
           <div style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -870,7 +1082,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                   <div style={{ fontWeight: 'bold', fontSize: 13, color: '#333' }}>{originalPosterName || 'Original Post'}</div>
                   {original.donation_id && (
                     <span style={{
-                      background: 'linear-gradient(135deg, #174f84 0%, #2d5aa0 100%)',
+                      backgroundColor: '#059669',
                       color: '#ffffff',
                       fontSize: '10px',
                       fontWeight: '600',
@@ -880,7 +1092,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                       letterSpacing: '0.5px',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                     }}>
-                      💝 Donation
+                      Donation
                     </span>
                   )}
                 </div>
@@ -1053,25 +1265,27 @@ const RepostCard: React.FC<RepostCardProps> = ({
               return (
                 <div style={{ marginTop: 8 }}>
                   {originalImages.length === 1 ? (
-                    // Single image
-                    <img
-                      src={getImageUrl(originalImages[0])}
-                      alt="original post"
-                      style={{ 
-                        cursor: 'pointer',
-                        width: 'auto',
-                        height: 'auto',
-                        maxWidth: '100%',
-                        maxHeight: '40vh',
-                        borderRadius: '8px',
-                        objectFit: 'contain'
-                      }}
+                    // Single image - centered
+                    <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                      <img
+                        src={getImageUrl(originalImages[0])}
+                        alt="original post"
+                        style={{ 
+                          cursor: 'pointer',
+                          width: 'auto',
+                          height: 'auto',
+                          maxWidth: '100%',
+                          maxHeight: '40vh',
+                          borderRadius: '8px',
+                          objectFit: 'contain'
+                        }}
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         target.style.display = 'none';
                         console.error('Failed to load original post image:', originalImages[0]);
                       }}
                     />
+                    </div>
                   ) : (
                     // Multiple images grid for original post - Facebook style (smaller)
                     <div style={{
@@ -1182,44 +1396,24 @@ const RepostCard: React.FC<RepostCardProps> = ({
       />
 
       {/* Actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-around', borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+      <div className="post-footer-actions">
           <button
             onClick={() => liked ? handleUnlike() : handleLike()}
-            className="post-action-item"
-            style={{ 
-              color: liked ? '#1e3a8a' : '#555', 
-              background: 'transparent', 
-              border: 'none', 
-              cursor: 'pointer', 
-              padding: '8px', 
-              fontSize: 12, 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 6,
-              fontWeight: liked ? 'bold' : 'normal',
-              transition: 'color 0.3s ease, font-weight 0.3s ease'
-            }}
+            type="button"
+            className={`post-footer-action${liked ? ' active' : ''}`}
+            aria-pressed={!!liked}
           >
-            <span style={{ fontSize: 18 }}>👍</span>
-            <span>Like</span>
+            <span className="post-footer-icon">👍</span>
+            <span className="post-footer-label">Like</span>
           </button>
           <button
             onClick={() => setShowCommentInput(v => !v)}
-            className="post-action-item"
-            style={{ 
-              color: '#555', 
-              background: 'transparent', 
-              border: 'none', 
-              cursor: 'pointer', 
-              padding: '8px', 
-              fontSize: 12, 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 6 
-            }}
+            type="button"
+            className={`post-footer-action${showCommentInput ? ' active' : ''}`}
+            aria-expanded={!!showCommentInput}
           >
-            <span style={{ fontSize: 18 }}>💬</span>
-            Comment
+            <span className="post-footer-icon">💬</span>
+            <span className="post-footer-label">Comment</span>
           </button>
           <RepostButton
             originalPost={{
@@ -1245,8 +1439,6 @@ const RepostCard: React.FC<RepostCardProps> = ({
             formatTime={formatTime}
             isForum={context === 'forum'}
             isDonation={context === 'donation'}
-            style={{ color: '#555', padding: '8px', fontSize: 12 }}
-            className="post-action-item"
           />
       </div>
 
@@ -1308,328 +1500,354 @@ const RepostCard: React.FC<RepostCardProps> = ({
       {((comments && comments.length > 0) || (repost.comments_count && repost.comments_count > 0)) && showCommentsSection ? (
           <div className="comments-section" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #eee' }}>
             {comments && comments.length > 0 ? (
-              (showAllComments ? comments : comments.slice(0, 5)).map((comment) => (
-              <div key={comment.comment_id} className="comment-item" style={{ 
-                display: 'flex', 
-                gap: '8px', 
-                marginBottom: '6px', 
-                marginLeft: '12px',
-                marginRight: '12px'
-              }}>
-                <img
-                  src={getProfilePicUrl(comment.user.profile_pic)}
-                  alt="Profile"
-                  className="comment-profile-image"
-                  style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }}
-                  onError={handleProfilePicError}
-                  onClick={() => {
-                    const profilePath = window.location.pathname.startsWith('/peso') 
-                      ? `/peso/profile/${comment.user.user_id}` 
-                      : window.location.pathname.startsWith('/ccict')
-                      ? `/ccict/profile/${comment.user.user_id}`
-                      : `/profile/${comment.user.user_id}`;
-                    window.location.href = profilePath;
-                  }}
-                />
-                <div style={{ flex: 1 }}>
-                  {/* Comment bubble container */}
-                  <div style={{
-                    backgroundColor: '#f0f2f5',
-                    borderRadius: '18px',
-                    padding: '6px 10px',
-                    display: 'inline-block',
-                    maxWidth: '100%',
-                    position: 'relative'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                      <button
-                        onClick={() => window.location.href = getProfilePath(comment.user.user_id)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: '0',
-                          cursor: 'pointer',
-                          fontWeight: '600',
-                          fontSize: '13px',
-                          color: '#050505',
-                          textDecoration: 'none'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.textDecoration = 'underline';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.textDecoration = 'none';
-                        }}
-                      >
-                        {`${comment.user.f_name} ${comment.user.m_name || ''} ${comment.user.l_name}`.trim()}
-                      </button>
-                    {((Number(currentUserId) === Number(comment.user.user_id)) || isOwn) && !editingComment[comment.comment_id] && (
-                      <div style={{ position: 'relative' }} ref={(el) => { commentOptionsRefs.current[comment.comment_id] = el; }}>
-                        <button
-                          onClick={() => setShowCommentOptions(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            color: '#65676b',
-                            padding: '0 4px'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.color = '#050505';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.color = '#65676b';
-                          }}
-                        >
-                          ⋯
-                        </button>
-                        {showCommentOptions[comment.comment_id] && (
-                          <div
+              (showAllComments ? comments : comments.slice(0, 5)).map((comment) => {
+                const isCommentHighlighted = activeCommentHighlight === comment.comment_id;
+                return (
+                  <div
+                    key={comment.comment_id}
+                    className="comment-item"
+                    ref={(el) => {
+                      if (el) {
+                        commentRefs.current[comment.comment_id] = el;
+                      } else {
+                        delete commentRefs.current[comment.comment_id];
+                      }
+                    }}
+                    style={{ 
+                      display: 'flex', 
+                      gap: '8px', 
+                      marginBottom: '6px', 
+                      marginLeft: '12px',
+                      marginRight: '12px',
+                      scrollMarginTop: '96px'
+                    }}
+                  >
+                    <img
+                      src={getProfilePicUrl(comment.user.profile_pic)}
+                      alt="Profile"
+                      className="comment-profile-image"
+                      style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }}
+                      onError={handleProfilePicError}
+                      onClick={() => {
+                        const profilePath = window.location.pathname.startsWith('/peso') 
+                          ? `/peso/profile/${comment.user.user_id}` 
+                          : window.location.pathname.startsWith('/ccict')
+                          ? `/ccict/profile/${comment.user.user_id}`
+                          : `/profile/${comment.user.user_id}`;
+                        window.location.href = profilePath;
+                      }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      {/* Comment bubble container */}
+                      <div style={{
+                        backgroundColor: isCommentHighlighted ? highlightColor : '#f0f2f5',
+                        boxShadow: isCommentHighlighted ? '0 0 0 2px rgba(255,137,33,0.25)' : 'none',
+                        transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
+                        borderRadius: '18px',
+                        padding: '6px 10px',
+                        display: 'inline-block',
+                        maxWidth: '100%',
+                        position: 'relative'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                          <button
+                            onClick={() => window.location.href = getProfilePath(comment.user.user_id)}
                             style={{
-                              position: 'absolute',
-                              right: 0,
-                              top: '100%',
-                              marginTop: '4px',
-                              background: '#fff',
-                              border: '1px solid #e4e6eb',
-                              borderRadius: '8px',
-                              boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
-                              zIndex: 1000,
-                              minWidth: '120px',
-                              overflow: 'hidden'
+                              background: 'none',
+                              border: 'none',
+                              padding: '0',
+                              cursor: 'pointer',
+                              fontWeight: '600',
+                              fontSize: '13px',
+                              color: '#050505',
+                              textDecoration: 'none'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.textDecoration = 'underline';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.textDecoration = 'none';
                             }}
                           >
-                            {(String(currentUserId) === String(comment.user.user_id)) && (
-                              <button
-                                onClick={() => handleEditComment(comment.comment_id)}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  background: 'none',
-                                  border: 'none',
-                                  textAlign: 'left',
-                                  cursor: 'pointer',
-                                  fontSize: '13px',
-                                  color: '#050505',
-                                  fontWeight: '400'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = '#f2f3f5';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = 'transparent';
-                                }}
-                              >
-                                Edit
-                              </button>
-                            )}
+                            {`${comment.user.f_name} ${comment.user.m_name || ''} ${comment.user.l_name}`.trim()}
+                          </button>
+                        {((Number(currentUserId) === Number(comment.user.user_id)) || isOwn) && !editingComment[comment.comment_id] && (
+                          <div style={{ position: 'relative' }} ref={(el) => { commentOptionsRefs.current[comment.comment_id] = el; }}>
                             <button
-                              onClick={() => handleDeleteComment(comment.comment_id)}
+                              onClick={() => setShowCommentOptions(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
                               style={{
-                                width: '100%',
-                                padding: '8px 12px',
                                 background: 'none',
                                 border: 'none',
-                                textAlign: 'left',
                                 cursor: 'pointer',
-                                fontSize: '13px',
-                                color: '#050505',
-                                fontWeight: '400'
+                                fontSize: '14px',
+                                color: '#65676b',
+                                padding: '0 4px'
                               }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = '#f2f3f5';
+                                e.currentTarget.style.color = '#050505';
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = 'transparent';
+                                e.currentTarget.style.color = '#65676b';
                               }}
                             >
-                              Delete
+                              ⋯
+                            </button>
+                            {showCommentOptions[comment.comment_id] && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  right: 0,
+                                  top: '100%',
+                                  marginTop: '4px',
+                                  background: '#fff',
+                                  border: '1px solid #e4e6eb',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+                                  zIndex: 1000,
+                                  minWidth: '120px',
+                                  overflow: 'hidden'
+                                }}
+                              >
+                                {(String(currentUserId) === String(comment.user.user_id)) && (
+                                  <button
+                                    onClick={() => handleEditComment(comment.comment_id)}
+                                    style={{
+                                      width: '100%',
+                                      padding: '8px 12px',
+                                      background: 'none',
+                                      border: 'none',
+                                      textAlign: 'left',
+                                      cursor: 'pointer',
+                                      fontSize: '13px',
+                                      color: '#050505',
+                                      fontWeight: '400'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.backgroundColor = '#f2f3f5';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.backgroundColor = 'transparent';
+                                    }}
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteComment(comment.comment_id)}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    background: 'none',
+                                    border: 'none',
+                                    textAlign: 'left',
+                                    cursor: 'pointer',
+                                    fontSize: '13px',
+                                    color: '#050505',
+                                    fontWeight: '400'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#f2f3f5';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = 'transparent';
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        </div>
+                        
+                        {/* Comment Content */}
+                        {editingComment[comment.comment_id] ? (
+                          <textarea
+                            value={editCommentContent[comment.comment_id] || ''}
+                            onChange={(e) => setEditCommentContent(prev => ({ ...prev, [comment.comment_id]: e.target.value }))}
+                            style={{
+                              width: '100%',
+                              minHeight: '50px',
+                              padding: '8px 12px',
+                              border: '1px solid #ccd0d5',
+                              borderRadius: '18px',
+                              fontSize: '13px',
+                              resize: 'vertical',
+                              backgroundColor: '#ffffff',
+                              fontFamily: 'inherit'
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSaveEditComment(comment.comment_id);
+                              } else if (e.key === 'Escape') {
+                                handleCancelEditComment(comment.comment_id);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div style={{ fontSize: '13px', color: '#050505', lineHeight: '1.38', wordBreak: 'break-word' }}>
+                            {renderTextWithLinks(comment.comment_content)}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Actions below bubble */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '1px', marginLeft: '10px' }}>
+                        <span style={{ fontSize: '12px', color: '#65676b', fontWeight: '400' }}>
+                          {formatTime(comment.date_created)}
+                        </span>
+                        
+                        {!editingComment[comment.comment_id] && (
+                          <button
+                            onClick={() => {
+                              setShowReplyInput(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }));
+                              if (!showReplyInput[comment.comment_id]) {
+                                loadReplies(comment.comment_id);
+                              }
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#65676b',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              padding: '0',
+                              fontWeight: '600'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.textDecoration = 'underline';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.textDecoration = 'none';
+                            }}
+                          >
+                            Reply
+                          </button>
+                        )}
+                        
+                        {editingComment[comment.comment_id] && (
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            <button
+                              onClick={() => handleSaveEditComment(comment.comment_id)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#0866ff',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                padding: '0',
+                                fontWeight: '600'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.textDecoration = 'underline';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.textDecoration = 'none';
+                              }}
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => handleCancelEditComment(comment.comment_id)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#65676b',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                padding: '0',
+                                fontWeight: '600'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.textDecoration = 'underline';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.textDecoration = 'none';
+                              }}
+                            >
+                              Cancel
                             </button>
                           </div>
                         )}
                       </div>
-                    )}
-                    </div>
-                    
-                    {/* Comment Content */}
-                    {editingComment[comment.comment_id] ? (
-                      <textarea
-                        value={editCommentContent[comment.comment_id] || ''}
-                        onChange={(e) => setEditCommentContent(prev => ({ ...prev, [comment.comment_id]: e.target.value }))}
-                        style={{
-                          width: '100%',
-                          minHeight: '50px',
-                          padding: '8px 12px',
-                          border: '1px solid #ccd0d5',
-                          borderRadius: '18px',
-                          fontSize: '13px',
-                          resize: 'vertical',
-                          backgroundColor: '#ffffff',
-                          fontFamily: 'inherit'
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSaveEditComment(comment.comment_id);
-                          } else if (e.key === 'Escape') {
-                            handleCancelEditComment(comment.comment_id);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <div style={{ fontSize: '13px', color: '#050505', lineHeight: '1.38', wordBreak: 'break-word' }}>
-                        {renderTextWithLinks(comment.comment_content)}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Actions below bubble */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '1px', marginLeft: '10px' }}>
-                    <span style={{ fontSize: '12px', color: '#65676b', fontWeight: '400' }}>
-                      {formatTime(comment.date_created)}
-                    </span>
-                    
-                    {!editingComment[comment.comment_id] && (
-                      <button
-                        onClick={() => {
-                          setShowReplyInput(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }));
-                          if (!showReplyInput[comment.comment_id]) {
-                            loadReplies(comment.comment_id);
-                          }
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#65676b',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          padding: '0',
-                          fontWeight: '600'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.textDecoration = 'underline';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.textDecoration = 'none';
-                        }}
-                      >
-                        Reply
-                      </button>
-                    )}
-                    
-                    {editingComment[comment.comment_id] && (
-                      <div style={{ display: 'flex', gap: '12px' }}>
-                        <button
-                          onClick={() => handleSaveEditComment(comment.comment_id)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#0866ff',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            padding: '0',
-                            fontWeight: '600'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.textDecoration = 'underline';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.textDecoration = 'none';
-                          }}
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={() => handleCancelEditComment(comment.comment_id)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#65676b',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            padding: '0',
-                            fontWeight: '600'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.textDecoration = 'underline';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.textDecoration = 'none';
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Reply Input */}
-                  {showReplyInput[comment.comment_id] && (
-                    <ReplyInput
-                      commentId={comment.comment_id}
-                      currentUserId={currentUserId || undefined}
-                      displayName={reposterName}
-                      displayAvatar={reposterAvatar}
-                      onReplyAdded={() => handleReplyAdded(comment.comment_id)}
-                      commentAuthor={{
-                        user_id: comment.user.user_id,
-                        f_name: comment.user.f_name || '',
-                        m_name: comment.user.m_name || '',
-                        l_name: comment.user.l_name || '',
-                        name: `${comment.user.f_name || ''} ${comment.user.m_name || ''} ${comment.user.l_name || ''}`.trim()
-                      }}
-                    />
-                  )}
-                  
-                  {/* Replies */}
-                  {commentReplies[comment.comment_id] && commentReplies[comment.comment_id].length > 0 && (
-                    <div style={{ marginTop: '4px' }}>
-                      {/* Show all replies if less than 3, otherwise show first 3 with toggle */}
-                      {commentReplies[comment.comment_id].slice(0, 
-                        commentReplies[comment.comment_id].length < 3 ? 
-                          commentReplies[comment.comment_id].length : 
-                          (showReplies[comment.comment_id] ? commentReplies[comment.comment_id].length : 3)
-                      ).map((reply) => (
-                        <Reply
-                          key={reply.reply_id}
-                          reply={reply}
+                      
+                      {/* Reply Input */}
+                      {showReplyInput[comment.comment_id] && (
+                        <ReplyInput
                           commentId={comment.comment_id}
                           currentUserId={currentUserId || undefined}
-                          formatTime={formatTime}
-                          onReplyUpdate={() => loadReplies(comment.comment_id)}
                           displayName={reposterName}
                           displayAvatar={reposterAvatar}
-                        />
-                      ))}
-                      
-                      {/* Show more/less replies button */}
-                      {commentReplies[comment.comment_id].length > 3 && (
-                        <button
-                          onClick={() => setShowReplies(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#007bff',
-                            cursor: 'pointer',
-                            fontSize: '11px',
-                            padding: '2px 0',
-                            marginTop: '2px',
-                            marginLeft: '42px'
+                          onReplyAdded={() => handleReplyAdded(comment.comment_id)}
+                          commentAuthor={{
+                            user_id: comment.user.user_id,
+                            f_name: comment.user.f_name || '',
+                            m_name: comment.user.m_name || '',
+                            l_name: comment.user.l_name || '',
+                            name: `${comment.user.f_name || ''} ${comment.user.m_name || ''} ${comment.user.l_name || ''}`.trim()
                           }}
-                        >
-                          {showReplies[comment.comment_id] 
-                            ? 'Hide replies' 
-                            : `View ${commentReplies[comment.comment_id].length - 3} more ${commentReplies[comment.comment_id].length - 3 === 1 ? 'reply' : 'replies'}`
-                          }
-                        </button>
+                        />
                       )}
+                      
+                      {/* Replies */}
+                      {commentReplies[comment.comment_id] && commentReplies[comment.comment_id].length > 0 && (
+                        <div style={{ marginTop: '4px' }}>
+                          {/* Show all replies if less than 3, otherwise show first 3 with toggle */}
+                          {commentReplies[comment.comment_id].slice(0, 
+                            commentReplies[comment.comment_id].length < 3 ? 
+                              commentReplies[comment.comment_id].length : 
+                              (showReplies[comment.comment_id] ? commentReplies[comment.comment_id].length : 3)
+                          ).map((reply) => (
+                            <Reply
+                              key={reply.reply_id}
+                              reply={reply}
+                              commentId={comment.comment_id}
+                              currentUserId={currentUserId || undefined}
+                              formatTime={formatTime}
+                              onReplyUpdate={() => loadReplies(comment.comment_id)}
+                              displayName={reposterName}
+                              displayAvatar={reposterAvatar}
+                              registerHighlightRef={(replyId, element) => {
+                                if (element) {
+                                  replyRefs.current[replyId] = element;
+                                } else {
+                                  delete replyRefs.current[replyId];
+                                }
+                              }}
+                              isHighlighted={activeReplyHighlight === reply.reply_id}
+                              highlightColor={highlightColor}
+                            />
+                          ))}
+                          
+                          {/* Show more/less replies button */}
+                          {commentReplies[comment.comment_id].length > 3 && (
+                            <button
+                              onClick={() => setShowReplies(prev => ({ ...prev, [comment.comment_id]: !prev[comment.comment_id] }))}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#007bff',
+                                cursor: 'pointer',
+                                fontSize: '11px',
+                                padding: '2px 0',
+                                marginTop: '2px',
+                                marginLeft: '42px'
+                              }}
+                            >
+                              {showReplies[comment.comment_id] 
+                                ? 'Hide replies' 
+                                : `View ${commentReplies[comment.comment_id].length - 3} more ${commentReplies[comment.comment_id].length - 3 === 1 ? 'reply' : 'replies'}`
+                              }
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      
                     </div>
-                  )}
-                  
-                </div>
-              </div>
-              ))
+                  </div>
+                );
+              })
             ) : (
               <div style={{ padding: '12px 16px', textAlign: 'center', color: '#666', fontSize: '14px' }}>
                 {repost.comments_count} comment{repost.comments_count === 1 ? '' : 's'} - Click to refresh
@@ -1672,30 +1890,171 @@ const RepostCard: React.FC<RepostCardProps> = ({
         ) : null}
 
       {/* Likes modal */}
-      {showLikesModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setShowLikesModal(false)}>
-          <div style={{ background: '#fff', borderRadius: 12, width: '90%', maxWidth: 400, padding: 20, position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowLikesModal(false)} style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.05)', border: 'none', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer' }}>×</button>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: 16, fontWeight: 700, color: '#1e4c7a', textAlign: 'center' }}>👍 People who liked this</h3>
-            {likesLoading ? (
-              <div style={{ textAlign: 'center', padding: 20, color: '#6c757d' }}>Loading likes...</div>
-            ) : fetchedLikes.length ? (
-              fetchedLikes.map((like: any, i: number) => {
-                const u = like.user || like;
-                const name = `${u.f_name || ''} ${u.m_name || ''} ${u.l_name || ''}`.trim() || 'Unknown User';
-                const pic = getProfilePicUrl(u.profile_pic);
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '10px 6px', borderBottom: i < fetchedLikes.length - 1 ? '1px solid #eee' : 'none' }}>
-                    <img src={pic} alt={name} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', marginRight: 12 }} onError={handleProfilePicError} />
-                    <div style={{ fontWeight: 600, fontSize: 15, color: '#333' }}>{name}</div>
-                  </div>
-                );
-              })
-            ) : (
-              <div style={{ textAlign: 'center', padding: 20, color: '#6c757d' }}>No likes yet</div>
-            )}
+      {showLikesModal && ReactDOM.createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            animation: 'fadeIn 0.2s ease-out',
+            margin: 0,
+            padding: 0,
+            overflow: 'auto'
+          }}
+          onClick={() => setShowLikesModal(false)}
+        >
+          <div
+            style={{
+              background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+              borderRadius: 14,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.15), 0 8px 16px rgba(0,0,0,0.1)',
+              maxWidth: 400,
+              width: '90%',
+              padding: 20,
+              position: 'relative',
+              border: '1px solid rgba(255,255,255,0.2)',
+              animation: 'slideUp 0.3s ease-out',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowLikesModal(false)}
+              style={{
+                position: 'absolute',
+                top: 12,
+                right: 12,
+                background: 'rgba(0,0,0,0.05)',
+                border: 'none',
+                borderRadius: '50%',
+                width: 28,
+                height: 28,
+                fontSize: 14,
+                cursor: 'pointer',
+                color: '#666',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.1)';
+                e.currentTarget.style.color = '#333';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.05)';
+                e.currentTarget.style.color = '#666';
+              }}
+            >
+              ×
+            </button>
+
+            <h2 style={{
+              margin: '0 0 16px 0',
+              fontSize: 18,
+              fontWeight: '700',
+              color: '#1e4c7a',
+              textAlign: 'center',
+              borderBottom: '1px solid #e0e0e0',
+              paddingBottom: 10,
+            }}>
+              👍 People who liked this
+            </h2>
+
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              {likesLoading ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '20px',
+                  color: '#6c757d',
+                  fontSize: '14px',
+                }}>
+                  Loading likes...
+                </div>
+              ) : fetchedLikes && fetchedLikes.length > 0 ? (
+                fetchedLikes.map((like: any, index: number) => {
+                  const likeUser = like.user || like;
+                  const userName = `${likeUser.f_name || ''} ${likeUser.m_name || ''} ${likeUser.l_name || ''}`.trim();
+                  const userProfilePic = getProfilePicUrl(likeUser.profile_pic);
+
+                  return (
+                    <div
+                      key={index}
+                      onClick={() => {
+                        if (likeUser.user_id) {
+                          const currentPath = window.location.pathname;
+                          if (currentPath.startsWith('/peso')) {
+                            window.location.href = `/peso/profile/${likeUser.user_id}`;
+                          } else if (currentPath.startsWith('/ccict')) {
+                            window.location.href = `/ccict/profile/${likeUser.user_id}`;
+                          } else {
+                            window.location.href = `/profile/${likeUser.user_id}`;
+                          }
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '12px',
+                        borderBottom: index < (fetchedLikes?.length || 0) - 1 ? '1px solid #f0f0f0' : 'none',
+                        cursor: 'pointer',
+                        borderRadius: '8px',
+                        transition: 'background-color 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f8f9fa';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <img
+                        src={userProfilePic}
+                        alt="Profile"
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          marginRight: 12,
+                          border: '2px solid #e5e7eb',
+                        }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = ctulogo;
+                        }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: '600', fontSize: 15, color: '#333' }}>
+                          {userName || 'Unknown User'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '20px',
+                  color: '#6c757d',
+                  fontSize: '14px',
+                }}>
+                  No likes yet
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

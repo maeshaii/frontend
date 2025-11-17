@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate, Link, useParams } from 'react-router-dom';
 import AlumniTopBar from '../alumni/AlumniTopBar';
 import PostCreate from '../alumni/PostCreate';
@@ -13,6 +13,7 @@ import { trackerApi } from '../../services/trackerApi';
 import RepostNotificationModal from '../../components/RepostNotificationModal';
 import RepostModal from '../../components/RepostModal';
 import { getProfilePicUrl } from '../../utils/profilePicUtils';
+import { HiOutlineUsers, HiOutlineHeart } from 'react-icons/hi2';
 
 interface UnifiedDashboardProps {
   userType: 'alumni' | 'peso' | 'admin' | 'ojt';
@@ -247,16 +248,29 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
   const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
   const [showTrackerModal, setShowTrackerModal] = useState(false);
+  const [trackerReminderSuppressed, setTrackerReminderSuppressed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('suppressTrackerModal') === 'true';
+    } catch (_) {
+      return false;
+    }
+  });
   const [showRepostModal, setShowRepostModal] = useState(false);
   const [repostModalData, setRepostModalData] = useState<{repostId: string, reposterName?: string} | null>(null);
   const [showRepostNotificationModal, setShowRepostNotificationModal] = useState(false);
-  const [repostNotificationModalData, setRepostNotificationModalData] = useState<{repostId: string; reposterName?: string; commentId?: string} | null>(null);
+  const [repostNotificationModalData, setRepostNotificationModalData] = useState<{repostId: string; reposterName?: string; commentId?: string; replyId?: string} | null>(null);
   const [showPhotoGalleryModal, setShowPhotoGalleryModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [startY, setStartY] = useState(0);
   const isRefreshingRef = React.useRef(false);
+  const trackerReminderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trackerReminderSuppressedRef = useRef(trackerReminderSuppressed);
+
+  useEffect(() => {
+    trackerReminderSuppressedRef.current = trackerReminderSuppressed;
+  }, [trackerReminderSuppressed]);
   const navigate = useNavigate();
 
   // Determine user type from localStorage instead of props
@@ -322,15 +336,35 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     // Check tracker status for alumni users
     const currentUserId = userObj.user_id || userObj.id;
     if (currentUserId && (userObj.account_type?.user || userObj.account_type?.alumni)) {
-      // Only show tracker modal for alumni users
       trackerApi.checkSubmissionStatus(String(currentUserId))
         .then((response) => {
           console.log('🔍 Tracker status:', response);
           if (!response.has_submitted) {
-            // Show modal after a short delay to let the dashboard load
-            setTimeout(() => {
-              setShowTrackerModal(true);
-            }, 2000);
+            const shouldSuppressTrackerModal =
+              trackerReminderSuppressedRef.current ||
+              (() => {
+                try {
+                  return localStorage.getItem('suppressTrackerModal') === 'true';
+                } catch (_) {
+                  return false;
+                }
+              })();
+
+            if (!shouldSuppressTrackerModal) {
+              if (trackerReminderTimeoutRef.current) {
+                clearTimeout(trackerReminderTimeoutRef.current);
+              }
+              trackerReminderTimeoutRef.current = setTimeout(() => {
+                setTrackerReminderSuppressed(false);
+                setShowTrackerModal(true);
+                try {
+                  localStorage.removeItem('suppressTrackerModal');
+                } catch (_) {}
+                trackerReminderTimeoutRef.current = null;
+              }, 2000);
+            } else {
+              setTrackerReminderSuppressed(true);
+            }
           }
         })
         .catch((error) => {
@@ -380,6 +414,37 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         .catch((error) => console.error('Error fetching users:', error));
     });
   }, [navigate]);
+
+  useEffect(() => {
+    const handleSuppressTrackerModal = (_event?: Event) => {
+      if (trackerReminderTimeoutRef.current) {
+        clearTimeout(trackerReminderTimeoutRef.current);
+        trackerReminderTimeoutRef.current = null;
+      }
+      setTrackerReminderSuppressed(true);
+      setShowTrackerModal(false);
+      try {
+        localStorage.removeItem('suppressTrackerModal');
+      } catch (_) {}
+    };
+
+    window.addEventListener('suppressTrackerModal', handleSuppressTrackerModal as EventListener);
+    if (localStorage.getItem('suppressTrackerModal') === 'true') {
+      handleSuppressTrackerModal();
+    }
+
+    return () => {
+      window.removeEventListener('suppressTrackerModal', handleSuppressTrackerModal as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (trackerReminderTimeoutRef.current) {
+        clearTimeout(trackerReminderTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Fetch admin and PESO user IDs dynamically
   const fetchAdminPesoUsers = async () => {
@@ -798,6 +863,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     // PRIORITIZE REPOSTS FIRST
     const pendingRepostId = localStorage.getItem('pendingRepostView');
     const pendingRepostCommentId = localStorage.getItem('pendingRepostCommentId');
+    const pendingRepostReplyId = localStorage.getItem('pendingRepostReplyId');
     if (pendingRepostId) {
       console.log('Found pending repost view:', pendingRepostId);
       localStorage.removeItem('pendingRepostView');
@@ -805,8 +871,15 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         console.log('Found pending repost comment view:', pendingRepostCommentId);
         localStorage.removeItem('pendingRepostCommentId');
       }
-      // Set the modal data with repostId (which will be used to fetch the repost data)
-      setRepostNotificationModalData({ repostId: pendingRepostId, commentId: pendingRepostCommentId || undefined });
+      if (pendingRepostReplyId) {
+        console.log('Found pending repost reply view:', pendingRepostReplyId);
+        localStorage.removeItem('pendingRepostReplyId');
+      }
+      setRepostNotificationModalData({
+        repostId: pendingRepostId,
+        commentId: pendingRepostCommentId || undefined,
+        replyId: pendingRepostReplyId || undefined
+      });
       setShowRepostNotificationModal(true);
       console.log('Opening repost notification modal for repost:', pendingRepostId);
     }
@@ -1295,9 +1368,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                       src={adminUserData?.profile_pic ? (String(adminUserData.profile_pic).startsWith('http') ? adminUserData.profile_pic : `http://127.0.0.1:8000${adminUserData.profile_pic}`) : ctulogo} 
                       alt="Admin Profile" 
                       className="quick-link-icon"
-                      style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                      style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover' }}
                     />
-                    <div className="quick-link-text">CCICT</div>
+                    <div className="quick-link-text">{adminUserData?.name || 'CCICT'}</div>
                   </div>
                 </div>
                 <div 
@@ -1321,9 +1394,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                       src={pesoUserData?.profile_pic ? (String(pesoUserData.profile_pic).startsWith('http') ? pesoUserData.profile_pic : `http://127.0.0.1:8000${pesoUserData.profile_pic}`) : ctulogo} 
                       alt="PESO Profile" 
                       className="quick-link-icon"
-                      style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                      style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover' }}
                     />
-                    <div className="quick-link-text">PESO</div>
+                    <div className="quick-link-text">{pesoUserData?.name || 'PESO'}</div>
                   </div>
                 </div>
               </div>
@@ -1338,7 +1411,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 >
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
-                    <div className="quick-link-icon forum-icon">C</div>
+                    <div className="quick-link-icon" style={{ fontSize: '28px', color: '#333', background: 'transparent' }}>
+                      <HiOutlineUsers />
+                    </div>
                     <div className="quick-link-text">FORUM</div>
                   </div>
                 </div>
@@ -1353,7 +1428,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 >
                   <div className="quick-link-orange-header"></div>
                   <div className="quick-link-content">
-                    <div className="quick-link-icon peso-icon">✱</div>
+                    <div className="quick-link-icon" style={{ fontSize: '28px', color: '#333', background: 'transparent' }}>
+                      <HiOutlineHeart />
+                    </div>
                     <div className="quick-link-text">DONATION</div>
                   </div>
                 </div>
@@ -2660,6 +2737,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         repostId={repostNotificationModalData?.repostId || ''}
         reposterName={repostNotificationModalData?.reposterName}
         commentId={repostNotificationModalData?.commentId}
+        replyId={repostNotificationModalData?.replyId}
       />
     </div>
   );

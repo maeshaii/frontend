@@ -5,8 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getNotificationWebSocket, disconnectNotificationWebSocket, NotificationWsEvent, NotificationUpdate } from '../services/notificationWebSocket';
-import { fetchNotifications, fetchNotificationCount } from '../services/api';
-import { getUserInfo } from '../services/api';
+import { fetchNotifications, markNotificationAsRead, getUserInfo } from '../services/api';
 
 interface UseRealTimeNotificationsOptions {
   enablePolling?: boolean;
@@ -40,10 +39,57 @@ export function useRealTimeNotifications(
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAdminUser] = useState<boolean>(() => {
+    const user = getUserInfo();
+    const accountType = user?.account_type || {};
+    return Boolean(
+      accountType?.admin ||
+      accountType?.peso ||
+      accountType?.staff ||
+      accountType?.coordinator ||
+      accountType?.super_admin
+    );
+  });
 
   const wsRef = useRef<any>(null);
   const pollingIntervalRef = useRef<number | null>(null);
   const isInitializedRef = useRef(false);
+  const popupNotificationIdsRef = useRef<Set<number>>(new Set());
+  const autoMarkedNotificationIdsRef = useRef<Set<number>>(new Set());
+
+  const shouldShowAsPopup = useCallback((notification: NotificationUpdate) => {
+    if (!isAdminUser) return false;
+    if (!notification) return false;
+    const type = (notification.type || '').toLowerCase();
+    const subject = (notification.subject || '').toLowerCase();
+    const content = (notification.content || '').toLowerCase();
+
+    if (type.includes('tracker') || subject.includes('tracker') || content.includes('tracker')) {
+      return true;
+    }
+
+    if (type.includes('reward') || subject.includes('reward') || content.includes('reward')) {
+      return true;
+    }
+
+    return false;
+  }, [isAdminUser]);
+
+  const dispatchPopupNotification = useCallback((notification: NotificationUpdate) => {
+    window.dispatchEvent(new CustomEvent('popupNotification', { detail: { notification } }));
+  }, []);
+
+  const markHiddenNotificationAsRead = useCallback((notification: NotificationUpdate) => {
+    if (!isAdminUser) return;
+    if (!notification || notification.is_read) return;
+    if (autoMarkedNotificationIdsRef.current.has(notification.id)) return;
+
+    autoMarkedNotificationIdsRef.current.add(notification.id);
+    markNotificationAsRead(notification.id).catch((err) => {
+      console.error('Error auto-marking hidden notification as read:', err);
+      autoMarkedNotificationIdsRef.current.delete(notification.id);
+    });
+  }, [isAdminUser]);
 
   // Get current user info
   const getCurrentUserId = useCallback(() => {
@@ -61,15 +107,24 @@ export function useRealTimeNotifications(
       setError(null);
       
       const data = await fetchNotifications(userId);
-      if (data?.success && data.notifications) {
-        setNotifications(data.notifications);
-        
-        // Update count based on unread notifications
-        const unreadCount = data.notifications.filter((n: any) => !n.is_read).length;
+      if (data?.success && Array.isArray(data.notifications)) {
+        const rawNotifications = data.notifications as NotificationUpdate[];
+        const filteredNotifications = rawNotifications.filter((notification) => {
+          if (shouldShowAsPopup(notification)) {
+            popupNotificationIdsRef.current.add(notification.id);
+            markHiddenNotificationAsRead(notification);
+            return false;
+          }
+          return true;
+        });
+
+        setNotifications(filteredNotifications);
+
+        const unreadCount = filteredNotifications.filter((n) => !n.is_read).length;
         setNotificationCount(unreadCount);
-        console.log('📊 Fetched notifications, unread count:', unreadCount);
+        console.log('📊 Fetched notifications (filtered), unread count:', unreadCount);
       } else {
-        setNotifications(data || []);
+        setNotifications([]);
         setNotificationCount(0);
       }
     } catch (err) {
@@ -78,22 +133,12 @@ export function useRealTimeNotifications(
     } finally {
       setIsLoading(false);
     }
-  }, [getCurrentUserId]);
+  }, [getCurrentUserId, markHiddenNotificationAsRead, shouldShowAsPopup]);
 
   // Fetch notification count from API
   const fetchCountData = useCallback(async () => {
-    const userId = getCurrentUserId();
-    if (!userId) return;
-
-    try {
-      const data = await fetchNotificationCount(userId);
-      if (data?.success && typeof data.count === 'number') {
-        setNotificationCount(data.count);
-      }
-    } catch (err) {
-      console.error('Error fetching notification count:', err);
-    }
-  }, [getCurrentUserId]);
+    await fetchNotificationsData();
+  }, [fetchNotificationsData]);
 
   // Mark notification as read
   const markAsRead = useCallback(async (notificationId: number) => {
@@ -180,41 +225,57 @@ export function useRealTimeNotifications(
       ws.onEvent((event: NotificationWsEvent) => {
         console.log('useRealTimeNotifications received event:', event);
         switch (event.type) {
-          case 'notification_update':
+          case 'notification_update': {
+            const notification = event.notification;
+
+            if (shouldShowAsPopup(notification)) {
+              const alreadyHandled = popupNotificationIdsRef.current.has(notification.id);
+              popupNotificationIdsRef.current.add(notification.id);
+
+              if (!alreadyHandled) {
+                dispatchPopupNotification(notification);
+              }
+
+              markHiddenNotificationAsRead(notification);
+
+              setNotifications(prev => {
+                const currentNotifications = Array.isArray(prev) ? prev : [];
+                const filtered = currentNotifications.filter(n => n.id !== notification.id);
+                const unreadCount = filtered.filter(n => !n.is_read).length;
+                setNotificationCount(unreadCount);
+                return filtered;
+              });
+              break;
+            }
+
             setNotifications(prev => {
               const currentNotifications = Array.isArray(prev) ? prev : [];
-              // Add new notification or update existing one
-              const existingIndex = currentNotifications.findIndex(n => n.id === event.notification.id);
+              const existingIndex = currentNotifications.findIndex(n => n.id === notification.id);
+              let updated: NotificationUpdate[];
               if (existingIndex >= 0) {
-                const updated = [...currentNotifications];
-                updated[existingIndex] = event.notification;
-                return updated;
+                updated = [...currentNotifications];
+                updated[existingIndex] = notification;
               } else {
-                // Add new notification at the beginning
-                return [event.notification, ...currentNotifications];
+                updated = [notification, ...currentNotifications];
               }
+              const unreadCount = updated.filter(n => !n.is_read).length;
+              setNotificationCount(unreadCount);
+              return updated;
             });
-            
-            // Update count based on notification read status
-            if (!event.notification.is_read) {
-              // New unread notification - increment count
-              setNotificationCount(prev => {
-                const newCount = prev + 1;
-                console.log('📊 New unread notification, updated count:', newCount);
-                return newCount;
-              });
-            } else {
-              // Notification marked as read - decrement count
-              setNotificationCount(prev => {
-                const newCount = Math.max(0, prev - 1);
-                console.log('📊 Notification marked as read, updated count:', newCount);
-                return newCount;
-              });
-            }
             break;
+          }
 
           case 'notification_count_update':
-            setNotificationCount(event.count);
+            void fetchNotificationsData();
+            break;
+
+          case 'recent_search_update':
+            window.dispatchEvent(new CustomEvent('recentSearchUpdate', {
+              detail: {
+                recent_searches: event.recent_searches ?? [],
+                recent: event.recent ?? []
+              }
+            }));
             break;
 
           case 'connection_established':
@@ -263,11 +324,17 @@ export function useRealTimeNotifications(
 
     // Setup new interval
     pollingIntervalRef.current = window.setInterval(async () => {
-      // Always poll to ensure badge stays updated even if WebSocket misses events
-      await Promise.all([fetchNotificationsData(), fetchCountData()]);
+      await fetchNotificationsData();
     }, pollingInterval);
 
-  }, [enablePolling, pollingInterval, fetchNotificationsData, fetchCountData]);
+  }, [enablePolling, pollingInterval, fetchNotificationsData]);
+
+  // Refresh when tab becomes visible
+  const handleVisibilityChange = useCallback(() => {
+    if (document.visibilityState === 'visible') {
+      fetchNotificationsData();
+    }
+  }, [fetchNotificationsData]);
 
   // Initialize
   useEffect(() => {
@@ -277,8 +344,8 @@ export function useRealTimeNotifications(
     const initialize = async () => {
       console.log('🚀 Initializing real-time notifications...');
       
-      // Initial data fetch
-      await Promise.all([fetchNotificationsData(), fetchCountData()]);
+      // Initial data fetch (also updates count)
+      await fetchNotificationsData();
 
       // Setup WebSocket if auto-connect is enabled
       if (autoConnect) {
@@ -304,14 +371,7 @@ export function useRealTimeNotifications(
       }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [autoConnect, setupWebSocket, setupPolling, fetchNotificationsData, fetchCountData]);
-
-  // Refresh when tab becomes visible
-  const handleVisibilityChange = useCallback(() => {
-    if (document.visibilityState === 'visible') {
-      Promise.all([fetchNotificationsData(), fetchCountData()]);
-    }
-  }, [fetchNotificationsData, fetchCountData]);
+  }, [autoConnect, setupWebSocket, setupPolling, fetchNotificationsData, handleVisibilityChange]);
 
   useEffect(() => {
     document.addEventListener('visibilitychange', handleVisibilityChange);

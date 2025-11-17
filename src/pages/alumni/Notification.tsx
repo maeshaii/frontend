@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchNotifications, deleteNotifications, markNotificationAsRead, api, getPostFromComment } from '../../services/api';
+import { fetchNotifications, deleteNotifications, markNotificationAsRead, api, getPostFromComment, getAdminPesoUsers } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import { getProfilePicUrl } from '../../utils/profilePicUtils';
@@ -46,6 +46,7 @@ const NotificationPage: React.FC = () => {
   });
 
   const [selected, setSelected] = useState<number[]>([]);
+  const [hoveredCheckboxId, setHoveredCheckboxId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [showProfile, setShowProfile] = useState(false);
   const [openNotif, setOpenNotif] = useState<any | null>(null);
@@ -63,7 +64,37 @@ const NotificationPage: React.FC = () => {
   const [loadingProfilePics, setLoadingProfilePics] = useState<Set<string>>(new Set());
   const [lastApiCall, setLastApiCall] = useState<number>(0);
   const loadedProfilePics = React.useRef<Set<string>>(new Set());
+  const [adminUserIds, setAdminUserIds] = useState<number[]>([]);
+  const [adminProfilePic, setAdminProfilePic] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const storeRepostHighlightIds = (commentId?: string | null, replyId?: string | null) => {
+    if (commentId) {
+      localStorage.setItem('pendingRepostCommentId', commentId);
+    } else {
+      localStorage.removeItem('pendingRepostCommentId');
+    }
+
+    if (replyId) {
+      localStorage.setItem('pendingRepostReplyId', replyId);
+    } else {
+      localStorage.removeItem('pendingRepostReplyId');
+    }
+  };
+
+  const suppressTrackerReminderForRedirect = () => {
+    try {
+      localStorage.setItem('suppressTrackerModal', 'true');
+    } catch (_) {
+      // ignore storage write issues (private mode, etc.)
+    }
+
+    try {
+      window.dispatchEvent(new Event('suppressTrackerModal'));
+    } catch (_) {
+      // event dispatch failure should not break notification flow
+    }
+  };
 
   // Debug profile picture updates
   React.useEffect(() => {
@@ -73,6 +104,14 @@ const NotificationPage: React.FC = () => {
       localStorage.setItem('notifUserProfilePics', JSON.stringify(userProfilePics));
     } catch (_) {}
   }, [userProfilePics]);
+
+  React.useEffect(() => {
+    if (selected.length === 0) {
+      setHoveredCheckboxId(null);
+    }
+  }, [selected.length]);
+
+  const deleteDisabled = selected.length === 0;
 
   // Load profile pictures for notifications
   React.useEffect(() => {
@@ -172,6 +211,32 @@ const NotificationPage: React.FC = () => {
       loadProfilePics();
     }
   }, [realTimeNotifications]);
+
+  // Fetch admin user IDs and profile for tracker notifications
+  React.useEffect(() => {
+    const fetchAdminProfile = async () => {
+      try {
+        const response = await getAdminPesoUsers();
+        if (response.success && response.admin_user_ids && response.admin_user_ids.length > 0) {
+          setAdminUserIds(response.admin_user_ids);
+          // Fetch admin profile picture
+          const adminUserId = response.admin_user_ids[0];
+          try {
+            const adminResponse = await api.get(`alumni/profile/${adminUserId}/`);
+            if (adminResponse.data && adminResponse.data.profile_pic) {
+              const profilePicUrl = getProfilePicUrl(adminResponse.data.profile_pic);
+              setAdminProfilePic(profilePicUrl);
+            }
+          } catch (error) {
+            console.error('Error fetching admin profile:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching admin/PESO users:', error);
+      }
+    };
+    fetchAdminProfile();
+  }, []);
 
   // Cleanup old cache entries on component mount
   React.useEffect(() => {
@@ -465,13 +530,45 @@ const NotificationPage: React.FC = () => {
               console.log('Forum repost notification - redirecting to forum page with repost_id:', repostId);
               localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Store forum_id for reference
               localStorage.setItem('pendingRepostId', repostId); // Store repost_id to display
+              storeRepostHighlightIds(commentId, replyId);
+              suppressTrackerReminderForRedirect();
               navigate('/forum');
               return;
             } else if (donationIdMatch) {
               console.log('Donation repost notification - redirecting to donation page with repost_id:', repostId);
               localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Store donation_id for reference
               localStorage.setItem('pendingRepostId', repostId); // Store repost_id to display
+              storeRepostHighlightIds(commentId, replyId);
+              suppressTrackerReminderForRedirect();
               navigate('/donation');
+              return;
+            } else {
+              // Default repost handling: open repost modal on dashboard
+              localStorage.removeItem('pendingPostView');
+              localStorage.setItem('pendingRepostView', repostId);
+              storeRepostHighlightIds(commentId, replyId);
+              suppressTrackerReminderForRedirect();
+              const userStr = localStorage.getItem('user');
+              const userData = userStr ? JSON.parse(userStr) : null;
+              const currentUserId = userData?.user_id || userData?.id || '';
+              console.log('Redirecting to dashboard for repost modal. userId:', currentUserId);
+              
+              if (currentUserId) {
+                const isPeso = !!(userData?.account_type?.peso);
+                const isAdmin = !!(userData?.account_type?.admin);
+                if (isPeso) {
+                  suppressTrackerReminderForRedirect();
+                  navigate(`/peso/dashboard/${currentUserId}`);
+                } else if (isAdmin) {
+                  suppressTrackerReminderForRedirect();
+                  navigate(`/ccict/dashboard/${currentUserId}`);
+                } else {
+                  suppressTrackerReminderForRedirect();
+                  navigate(`/dashboard/${currentUserId}`);
+                }
+              } else {
+                navigate('/dashboard');
+              }
               return;
             }
           }
@@ -481,11 +578,13 @@ const NotificationPage: React.FC = () => {
           if (forumIdMatch) {
             console.log('Forum notification detected - redirecting to forum page with forum_id:', forumIdMatch[1]);
             localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
+            suppressTrackerReminderForRedirect();
             navigate('/forum');
             return;
           } else if (donationIdMatch) {
             console.log('Donation notification detected - redirecting to donation page with donation_id:', donationIdMatch[1]);
             localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
+            suppressTrackerReminderForRedirect();
             navigate('/donation');
             return;
           }
@@ -499,24 +598,30 @@ const NotificationPage: React.FC = () => {
               if (forumIdMatch) {
                 console.log('Forum mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
                 localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
+                suppressTrackerReminderForRedirect();
                 navigate('/forum');
                 return;
               } else if (donationIdMatch) {
                 console.log('Donation mention - redirecting to donation page with donation_id:', donationIdMatch[1]);
                 localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
+                suppressTrackerReminderForRedirect();
                 navigate('/donation');
                 return;
               } else {
                 // Regular post mention
                 localStorage.setItem('pendingPostView', originalPostId);
+                storeRepostHighlightIds(null, null);
               
                 // Redirect to dashboard
                 const currentPath = window.location.pathname;
                 if (currentPath.startsWith('/peso')) {
+                  suppressTrackerReminderForRedirect();
                   window.location.href = `/peso/dashboard/${originalPostId}`;
                 } else if (currentPath.startsWith('/ccict')) {
+                  suppressTrackerReminderForRedirect();
                   window.location.href = `/ccict/dashboard/${originalPostId}`;
                 } else {
+                  suppressTrackerReminderForRedirect();
                   window.location.href = `/dashboard/${originalPostId}`;
                 }
                 return;
@@ -535,25 +640,33 @@ const NotificationPage: React.FC = () => {
                   if (resolvedPostType === 'repost') {
                     console.log('Repost comment mention - redirecting to repost modal');
                     localStorage.setItem('pendingRepostView', resolvedPostId);
+                    storeRepostHighlightIds(commentId, replyId);
+                    suppressTrackerReminderForRedirect();
                     
                     // Redirect to dashboard
                     const currentPath = window.location.pathname;
                     if (currentPath.startsWith('/peso')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/peso/dashboard/${resolvedPostId}`;
                     } else if (currentPath.startsWith('/ccict')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/ccict/dashboard/${resolvedPostId}`;
                     } else {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/dashboard/${resolvedPostId}`;
                     }
+                    return;
                   }
                   // Check if this is a forum or donation post
                   else if (forumIdMatch) {
                     console.log('Forum comment mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
                     localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
+                    suppressTrackerReminderForRedirect();
                     navigate('/forum');
                   } else if (donationIdMatch) {
                     console.log('Donation comment mention - redirecting to donation page with donation_id:', donationIdMatch[1]);
                     localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
+                    suppressTrackerReminderForRedirect();
                     navigate('/donation');
                   } else {
                     // Regular post
@@ -562,10 +675,13 @@ const NotificationPage: React.FC = () => {
                     // Redirect to dashboard with resolved post ID
                     const currentPath = window.location.pathname;
                     if (currentPath.startsWith('/peso')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/peso/dashboard/${resolvedPostId}`;
                     } else if (currentPath.startsWith('/ccict')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/ccict/dashboard/${resolvedPostId}`;
                     } else {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/dashboard/${resolvedPostId}`;
                     }
                   }
@@ -591,25 +707,33 @@ const NotificationPage: React.FC = () => {
                   if (resolvedPostType === 'repost') {
                     console.log('Repost reply mention - redirecting to repost modal');
                     localStorage.setItem('pendingRepostView', resolvedPostId);
+                    storeRepostHighlightIds(commentId, replyId);
+                    suppressTrackerReminderForRedirect();
                     
                     // Redirect to dashboard
                     const currentPath = window.location.pathname;
                     if (currentPath.startsWith('/peso')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/peso/dashboard/${resolvedPostId}`;
                     } else if (currentPath.startsWith('/ccict')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/ccict/dashboard/${resolvedPostId}`;
                     } else {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/dashboard/${resolvedPostId}`;
                     }
+                    return;
                   }
                   // Check if this is a forum or donation post
                   else if (forumIdMatch) {
                     console.log('Forum reply mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
                     localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
+                    suppressTrackerReminderForRedirect();
                     navigate('/forum');
                   } else if (donationIdMatch) {
                     console.log('Donation reply mention - redirecting to donation page with donation_id:', donationIdMatch[1]);
                     localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
+                    suppressTrackerReminderForRedirect();
                     navigate('/donation');
                   } else {
                     // Regular post
@@ -618,10 +742,13 @@ const NotificationPage: React.FC = () => {
                     // Redirect to dashboard with resolved post ID
                     const currentPath = window.location.pathname;
                     if (currentPath.startsWith('/peso')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/peso/dashboard/${resolvedPostId}`;
                     } else if (currentPath.startsWith('/ccict')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/ccict/dashboard/${resolvedPostId}`;
                     } else {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/dashboard/${resolvedPostId}`;
                     }
                   }
@@ -650,6 +777,7 @@ const NotificationPage: React.FC = () => {
               if (repostId) {
                 localStorage.setItem('pendingRepostId', repostId);
               }
+              suppressTrackerReminderForRedirect();
               navigate('/forum');
               return;
             } 
@@ -660,6 +788,7 @@ const NotificationPage: React.FC = () => {
               if (repostId) {
                 localStorage.setItem('pendingRepostId', repostId);
               }
+              suppressTrackerReminderForRedirect();
               navigate('/donation');
               return;
             }
@@ -685,14 +814,19 @@ const NotificationPage: React.FC = () => {
                   if (resolvedPostType === 'repost') {
                     console.log('Comment is on a repost - redirecting to repost modal');
                     localStorage.setItem('pendingRepostView', resolvedPostId);
+                    storeRepostHighlightIds(commentId, replyId);
+                    suppressTrackerReminderForRedirect();
                     
                     // Redirect to dashboard
                     const currentPath = window.location.pathname;
                     if (currentPath.startsWith('/peso')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/peso/dashboard/${resolvedPostId}`;
                     } else if (currentPath.startsWith('/ccict')) {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/ccict/dashboard/${resolvedPostId}`;
                     } else {
+                      suppressTrackerReminderForRedirect();
                       window.location.href = `/dashboard/${resolvedPostId}`;
                     }
                     return;
@@ -721,9 +855,12 @@ const NotificationPage: React.FC = () => {
             if (repostId) {
               // Open the repost modal directly when we have a valid repost ID
               localStorage.setItem('pendingRepostView', repostId);
+              storeRepostHighlightIds(commentId, replyId);
+              suppressTrackerReminderForRedirect();
             } else {
               // Otherwise open the original post modal
               localStorage.setItem('pendingPostView', postId);
+              storeRepostHighlightIds(null, null);
             }
             
             // Store profile picture information from notification for peso posts
@@ -761,11 +898,11 @@ const NotificationPage: React.FC = () => {
             if (userId) {
               const currentPath = window.location.pathname;
               if (currentPath.startsWith('/peso')) {
-                window.location.href = `/peso/dashboard/${userId}`;
+                navigate(`/peso/dashboard/${userId}`);
               } else if (currentPath.startsWith('/ccict')) {
-                window.location.href = `/ccict/dashboard/${userId}`;
+                navigate(`/ccict/dashboard/${userId}`);
               } else {
-                window.location.href = `/dashboard/${userId}`;
+                navigate(`/dashboard/${userId}`);
               }
               return;
             }
@@ -809,13 +946,18 @@ const NotificationPage: React.FC = () => {
         
         // Store and redirect
         localStorage.setItem('pendingPostView', postId);
+        storeRepostHighlightIds(null, null);
+        suppressTrackerReminderForRedirect();
         
         const currentPath = window.location.pathname;
         if (currentPath.startsWith('/peso')) {
+          suppressTrackerReminderForRedirect();
           window.location.href = `/peso/dashboard/${postId}`;
         } else if (currentPath.startsWith('/ccict')) {
+          suppressTrackerReminderForRedirect();
           window.location.href = `/ccict/dashboard/${postId}`;
         } else {
+          suppressTrackerReminderForRedirect();
           window.location.href = `/dashboard/${postId}`;
         }
         return;
@@ -1252,7 +1394,7 @@ const NotificationPage: React.FC = () => {
 
   return (
     <div style={{ 
-      background: 'white', 
+      background: '#f0f4f8', 
       minHeight: '100vh', 
       fontFamily: 'Arial, sans-serif'
     }}>
@@ -1272,7 +1414,15 @@ const NotificationPage: React.FC = () => {
         );
       })()}
       
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '30px 50px' }}>
+      <div
+        style={{
+          width: '80%',
+          maxWidth: '1800px',
+          margin: '0 auto',
+          padding: '24px 16px',
+          boxSizing: 'border-box'
+        }}
+      >
         {/* Header */}
         <div style={{ 
           background: 'white', 
@@ -1389,21 +1539,25 @@ const NotificationPage: React.FC = () => {
                       handleDelete(false);
                     }
                   }}
+                  disabled={deleteDisabled}
                   style={{
-                    background: '#dc3545',
-                    color: 'white',
+                    background: deleteDisabled ? '#adb5bd' : '#dc3545',
+                    color: deleteDisabled ? '#f8f9fa' : 'white',
                     border: 'none',
-                    cursor: 'pointer',
+                    cursor: deleteDisabled ? 'not-allowed' : 'pointer',
                     padding: '8px 12px',
                     borderRadius: '8px',
                     fontSize: '14px',
                     fontWeight: '500',
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s ease',
+                    opacity: deleteDisabled ? 0.7 : 1
                   }}
                   onMouseEnter={(e) => {
+                    if (deleteDisabled) return;
                     e.currentTarget.style.background = '#c82333';
                   }}
                   onMouseLeave={(e) => {
+                    if (deleteDisabled) return;
                     e.currentTarget.style.background = '#dc3545';
                   }}
                   title={selected.length > 1 ? "Delete All" : "Delete"}
@@ -1448,6 +1602,8 @@ const NotificationPage: React.FC = () => {
           ) : (
             filteredNotifications.map((notif: any, index: number) => {
               const isTrackerNotification = notif.type.toLowerCase().includes('tracker') || notif.content.includes('Tracker Form');
+              const isRewardNotification = notif.type?.toLowerCase() === 'reward';
+              const shouldShowCheckbox = selected.length > 0 || hoveredCheckboxId === notif.id;
               
               return (
                 <div
@@ -1473,9 +1629,21 @@ const NotificationPage: React.FC = () => {
                     alignItems: 'flex-start',
                     gap: '12px'
                     }}
+                    onMouseMove={(e) => {
+                      const bounds = e.currentTarget.getBoundingClientRect();
+                      const relativeX = e.clientX - bounds.left;
+                      if (relativeX <= 60) {
+                        if (hoveredCheckboxId !== notif.id) {
+                          setHoveredCheckboxId(notif.id);
+                        }
+                      } else if (hoveredCheckboxId === notif.id && selected.length === 0) {
+                        setHoveredCheckboxId(null);
+                      }
+                    }}
                     onClick={async () => {
-                    if (isTrackerNotification) {
-                      // Show modal for tracker notifications
+                    const isRewardNotification = notif.type?.toLowerCase() === 'reward';
+                    if (isTrackerNotification || isRewardNotification) {
+                      // Show modal for tracker and reward notifications
                       setOpenNotif(notif);
                     } else {
                       // Direct redirect for post-related notifications
@@ -1503,6 +1671,9 @@ const NotificationPage: React.FC = () => {
                     e.currentTarget.style.boxShadow = !notif.is_read 
                       ? '0 2px 8px rgba(0, 102, 204, 0.2)' 
                       : '0 1px 3px rgba(0, 0, 0, 0.1)';
+                    if (selected.length === 0) {
+                      setHoveredCheckboxId(null);
+                    }
                   }}
                 >
                   {/* Checkbox */}
@@ -1510,7 +1681,10 @@ const NotificationPage: React.FC = () => {
                     position: 'absolute', 
                     top: '12px', 
                     left: '12px',
-                    zIndex: 2
+                    zIndex: 2,
+                    opacity: shouldShowCheckbox ? 1 : 0,
+                    pointerEvents: shouldShowCheckbox ? 'auto' : 'none',
+                    transition: 'opacity 0.2s ease'
                   }}>
                       <input
                         type="checkbox"
@@ -1579,6 +1753,49 @@ const NotificationPage: React.FC = () => {
                       // Check for AUTHOR_PIC marker (most efficient for peso notifications)
                       const authorPicMatch = notif.content.match(/<!--AUTHOR_PIC:([^>]+)-->/);
                       const directPicUrl = authorPicMatch ? authorPicMatch[1] : undefined;
+
+                      // For tracker and reward notifications, use admin profile
+                      if ((isTrackerNotification || isRewardNotification) && adminProfilePic) {
+                        return (
+                          <img
+                            src={adminProfilePic}
+                            alt="Admin"
+                            style={{
+                              width: '48px',
+                              height: '48px',
+                              borderRadius: '50%',
+                              objectFit: 'cover',
+                              border: '2px solid #e9ecef'
+                            }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = ctulogo;
+                            }}
+                          />
+                        );
+                      }
+                      
+                      // For reward notifications, use admin profile from notification content
+                      if (isRewardNotification && directPicUrl) {
+                        const profilePicUrl = directPicUrl.startsWith('http') 
+                          ? directPicUrl 
+                          : `http://127.0.0.1:8000${directPicUrl}`;
+                        return (
+                          <img
+                            src={profilePicUrl}
+                            alt="Admin"
+                            style={{
+                              width: '48px',
+                              height: '48px',
+                              borderRadius: '50%',
+                              objectFit: 'cover',
+                              border: '2px solid #e9ecef'
+                            }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = ctulogo;
+                            }}
+                          />
+                        );
+                      }
 
                       return (
                         <ProfilePicComponent
@@ -1665,13 +1882,16 @@ const NotificationPage: React.FC = () => {
                   {/* Notification Icon Overlay removed */}
                   
                   
-                  <div style={{ flex: 1, marginRight: '20px' }}>
+                  <div style={{ flex: 1, marginRight: '20px', minWidth: 0 }}>
                     <div style={{ 
                       color: '#333', 
                       fontSize: '14px',
                       lineHeight: '1.4',
                       marginBottom: '4px',
-                      fontWeight: !notif.is_read ? '500' : '400'
+                      fontWeight: !notif.is_read ? '500' : '400',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
                     }}>
                       {notif.type.toLowerCase() === 'follow' ? (
                         (() => {
@@ -1705,11 +1925,13 @@ const NotificationPage: React.FC = () => {
                         })()
                       ) : (
                         <div 
-                          style={{ display: 'inline' }}
+                          style={{
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
                           dangerouslySetInnerHTML={{ 
-                            __html: notif.content.length > 80 ? 
-                              notif.content.slice(0, 80).replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ') + '...' : 
-                              notif.content.replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ')
+                            __html: notif.content.replace(/\n/g, ' ').replace(/<br\s*\/?>/gi, ' ')
                           }} 
                         />
                       )}
@@ -1751,7 +1973,7 @@ const NotificationPage: React.FC = () => {
           <div
             style={{
               background: 'white',
-              width: '400px',
+              width: '600px',
               maxWidth: '90vw',
               borderRadius: '12px',
               overflow: 'hidden',
@@ -1761,20 +1983,19 @@ const NotificationPage: React.FC = () => {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close Button */}
             <button
               onClick={() => setOpenNotif(null)}
               style={{
                 position: 'absolute',
-                top: '12px',
-                right: '12px',
-                background: 'rgba(0,0,0,0.1)',
+                top: '16px',
+                right: '16px',
+                background: 'none',
                 border: 'none',
-                fontSize: 16,
+                fontSize: '24px',
                 cursor: 'pointer',
-                color: '#666',
-                width: '28px',
-                height: '28px',
+                color: '#6b7280',
+                width: '32px',
+                height: '32px',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -1783,12 +2004,12 @@ const NotificationPage: React.FC = () => {
                 zIndex: 10
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(0,0,0,0.2)';
-                e.currentTarget.style.color = '#333';
+                e.currentTarget.style.backgroundColor = '#f3f4f6';
+                e.currentTarget.style.color = '#1f2937';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(0,0,0,0.1)';
-                e.currentTarget.style.color = '#666';
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#6b7280';
               }}
               title="Close"
             >
@@ -1797,12 +2018,12 @@ const NotificationPage: React.FC = () => {
             
             {/* Header with avatar */}
             <div style={{
-              background: '#f8f9fa',
-              padding: '20px',
-              borderBottom: '1px solid #e9ecef',
+              background: '#ffffff',
+              padding: '20px 24px',
+              borderBottom: '1px solid #e5e7eb',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px'
+              gap: '16px'
             }}>
               {/* User Profile Picture */}
               <div style={{
@@ -1812,52 +2033,105 @@ const NotificationPage: React.FC = () => {
                 overflow: 'hidden',
                 flexShrink: 0
               }}>
-                <ProfilePicComponent 
-                  userId={(() => {
-                    if (openNotif.type && openNotif.type.toLowerCase() === 'follow') {
-                      const match = openNotif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
-                      return match ? match[2] : undefined;
-                    }
-                    const actorIdMatch = openNotif.content?.match(/<!--ACTOR_ID:(\d+)-->/);
-                    const authorIdMatch = openNotif.content?.match(/<!--AUTHOR_ID:(\d+)-->/);
-                    return actorIdMatch?.[1] || authorIdMatch?.[1] || undefined;
-                  })()}
-                  userName={(() => {
-                    if (openNotif.type && openNotif.type.toLowerCase() === 'follow') {
-                      const match = openNotif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
-                      return match ? match[1] : '';
-                    }
-                    // Check for AUTHOR_NAME marker (for PESO/Admin posts)
-                    const authorNameMatch = openNotif.content.match(/<!--AUTHOR_NAME:([^>]+)-->/);
-                    if (authorNameMatch) {
-                      return authorNameMatch[1];
-                    }
-                    // Fallback to pattern matching
-                    const nameMatch = openNotif.content.match(/^([^<]+?)\s+(commented|mentioned|liked|reposted|shared|posted|created)/i);
-                    return nameMatch ? nameMatch[1].trim() : '';
-                  })()}
-                  size="40px"
-                  directPicUrl={(() => {
-                    // Extract AUTHOR_PIC marker for PESO/Admin posts
+                {(() => {
+                  const isTrackerModal = (openNotif.type?.toLowerCase().includes('tracker') || openNotif.content?.includes('Tracker Form'));
+                  const isRewardModal = openNotif.type?.toLowerCase() === 'reward';
+                  
+                  // For tracker and reward notifications, use admin profile
+                  if ((isTrackerModal || isRewardModal) && adminProfilePic) {
+                    return (
+                      <img
+                        src={adminProfilePic}
+                        alt="Admin"
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          border: '2px solid #e9ecef'
+                        }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = ctulogo;
+                        }}
+                      />
+                    );
+                  }
+                  
+                  // For reward notifications, use admin profile from notification content
+                  if (isRewardModal) {
                     const authorPicMatch = openNotif.content?.match(/<!--AUTHOR_PIC:([^>]+)-->/);
-                    return authorPicMatch ? authorPicMatch[1] : undefined;
-                  })()}
-                />
+                    if (authorPicMatch) {
+                      const profilePicUrl = authorPicMatch[1].startsWith('http') 
+                        ? authorPicMatch[1] 
+                        : `http://127.0.0.1:8000${authorPicMatch[1]}`;
+                      return (
+                        <img
+                          src={profilePicUrl}
+                          alt="Admin"
+                          style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            border: '2px solid #e9ecef'
+                          }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = ctulogo;
+                          }}
+                        />
+                      );
+                    }
+                  }
+                  
+                  return (
+                    <ProfilePicComponent 
+                      userId={(() => {
+                        if (openNotif.type && openNotif.type.toLowerCase() === 'follow') {
+                          const match = openNotif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
+                          return match ? match[2] : undefined;
+                        }
+                        const actorIdMatch = openNotif.content?.match(/<!--ACTOR_ID:(\d+)-->/);
+                        const authorIdMatch = openNotif.content?.match(/<!--AUTHOR_ID:(\d+)-->/);
+                        return actorIdMatch?.[1] || authorIdMatch?.[1] || undefined;
+                      })()}
+                      userName={(() => {
+                        if (openNotif.type && openNotif.type.toLowerCase() === 'follow') {
+                          const match = openNotif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
+                          return match ? match[1] : '';
+                        }
+                        // Check for AUTHOR_NAME marker (for PESO/Admin posts and reward notifications)
+                        const authorNameMatch = openNotif.content.match(/<!--AUTHOR_NAME:([^>]+)-->/);
+                        if (authorNameMatch) {
+                          return authorNameMatch[1];
+                        }
+                        // Fallback to pattern matching
+                        const nameMatch = openNotif.content.match(/^([^<]+?)\s+(commented|mentioned|liked|reposted|shared|posted|created)/i);
+                        return nameMatch ? nameMatch[1].trim() : '';
+                      })()}
+                      size="40px"
+                      directPicUrl={(() => {
+                        // Extract AUTHOR_PIC marker for PESO/Admin posts and reward notifications
+                        const authorPicMatch = openNotif.content?.match(/<!--AUTHOR_PIC:([^>]+)-->/);
+                        return authorPicMatch ? authorPicMatch[1] : undefined;
+                      })()}
+                    />
+                  );
+                })()}
               </div>
 
               {/* Notification Info */}
               <div style={{ flex: 1 }}>
                 <div style={{ 
-                  fontSize: '16px', 
-                  fontWeight: '600',
-                  color: '#333',
-                  marginBottom: '4px'
+                  fontSize: '18px', 
+                  fontWeight: '700',
+                  color: '#1e3a5f',
+                  marginBottom: '6px'
                 }}>
                   {openNotif.subject || 'Notification'}
                 </div>
                 <div style={{ 
-                  fontSize: '12px',
-                  color: '#666'
+                  fontSize: '13px',
+                  color: '#6b7280'
                 }}>
                   {formatHybrid(openNotif.date)}
                 </div>
@@ -1865,11 +2139,11 @@ const NotificationPage: React.FC = () => {
             </div>
             
             
-            <div style={{ padding: '20px' }}>
+            <div style={{ padding: '24px' }}>
               <div style={{ 
                 fontSize: 14, 
-                lineHeight: '1.5', 
-                color: '#555',
+                lineHeight: '1.6', 
+                color: '#374151',
                 marginBottom: '20px'
               }}>
               {openNotif.type && openNotif.type.toLowerCase() === 'follow' ? (
@@ -2154,20 +2428,25 @@ const NotificationPage: React.FC = () => {
                       // Extract repost ID and/or original post ID
                       const repostIdMatch = openNotif.content.match(/<!--REPOST_ID:(\d+)-->/);
                       const postIdMatch = openNotif.content.match(/<!--POST_ID:(\d+)-->/);
+                      const commentIdMatch = openNotif.content.match(/<!--COMMENT_ID:(\d+)-->/);
+                      const replyIdMatch = openNotif.content.match(/<!--REPLY_ID:(\d+)-->/);
+                      const commentId = commentIdMatch?.[1] || null;
+                      const replyId = replyIdMatch?.[1] || null;
                       
                       if (repostIdMatch || postIdMatch) {
                         const repostId = repostIdMatch?.[1] || null;
                         const postId = postIdMatch?.[1] || null;
-                        // Detect repost context even if REPOST_ID isn't embedded
-                        const typeStr = (openNotif.type || '').toLowerCase();
-                        const contentStr = (openNotif.content || '').toLowerCase();
-                        const isRepostContext = !!repostId || typeStr.includes('repost') || contentStr.includes('your repost') || contentStr.includes('reposted');
                         setPostLoading(true);
                         
                         try {
-                          // If we have a repost ID, prioritize showing the repost UI
-                          const response = await api.get(`posts/${(postId || repostId)}/detail/`);
-                          if (response.data) {
+                          let response;
+                          if (repostId) {
+                            response = await api.get(`reposts/${repostId}/detail/`);
+                          } else if (postId) {
+                            response = await api.get(`posts/${postId}/detail/`);
+                          }
+
+                          if (response?.data) {
                             setOpenNotif(null);
                             const userStr = localStorage.getItem('user');
                             const user = userStr ? JSON.parse(userStr) : null;
@@ -2194,8 +2473,10 @@ const NotificationPage: React.FC = () => {
                               localStorage.removeItem('pendingRepostView');
                               if (repostId) {
                                 localStorage.setItem('pendingRepostView', repostId);
+                                storeRepostHighlightIds(commentId, replyId);
                               } else if (postId) {
                                 localStorage.setItem('pendingPostView', postId);
+                                storeRepostHighlightIds(null, null);
                               }
                               navigate(dashboardPath);
                             }
@@ -2215,6 +2496,69 @@ const NotificationPage: React.FC = () => {
                     disabled={postLoading}
                   >
                     {postLoading ? 'Loading...' : 'View Post'}
+                  </button>
+                </div>
+              ) : (openNotif.type && openNotif.type.toLowerCase() === 'reward') ? (
+                <div>
+                  <div style={{ 
+                    whiteSpace: 'pre-wrap',
+                    fontSize: '14px',
+                    lineHeight: '1.7',
+                    color: '#374151',
+                    marginBottom: '24px',
+                    padding: '16px',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '8px',
+                    border: '1px solid #e5e7eb'
+                  }}>
+                    {openNotif.content.replace(/<!--[^>]+-->/g, '')}
+                  </div>
+                  <button
+                    style={{
+                      background: '#1e3a5f',
+                      color: '#fff',
+                      padding: '12px 24px',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                      width: '100%',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#153e75';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#1e3a5f';
+                    }}
+                    onClick={() => {
+                      setOpenNotif(null);
+                      // Extract reward request ID from notification content
+                      const requestIdMatch = openNotif.content.match(/<!--REQUEST_ID:(\d+)-->/);
+                      const requestId = requestIdMatch ? requestIdMatch[1] : null;
+                      
+                      const userStr = localStorage.getItem('user');
+                      const user = userStr ? JSON.parse(userStr) : null;
+                      const userId = user?.user_id || user?.id;
+                      if (userId) {
+                        if (requestId) {
+                          // Set flag to open specific reward detail modal
+                          localStorage.setItem('openRewardDetail', requestId);
+                        } else {
+                          // Fallback: open reward requests list modal if no request ID found
+                          localStorage.setItem('openRewardRequests', 'true');
+                        }
+                        navigate(`/profile/${userId}`);
+                      }
+                    }}
+                  >
+                    <span>🎁</span>
+                    <span>View My Reward Requests</span>
                   </button>
                 </div>
               ) : (openNotif.type && (openNotif.type.toLowerCase() === 'like' || openNotif.type.toLowerCase() === 'comment' || openNotif.type.toLowerCase() === 'admin_peso_post' || openNotif.type.toLowerCase() === 'reply' || openNotif.type.toLowerCase() === 'mention')) ? (
@@ -2294,10 +2638,15 @@ const NotificationPage: React.FC = () => {
                           
                           // If this is a comment ID, we need to get the post from the comment
                           const commentIdMatch = openNotif.content.match(/<!--COMMENT_ID:(\d+)-->/);
+                          const replyIdMatch = openNotif.content.match(/<!--REPLY_ID:(\d+)-->/);
+                          const commentId = commentIdMatch?.[1] || null;
+                          const replyId = replyIdMatch?.[1] || null;
+                          
+                          // If this is a comment ID, we need to get the post from the comment
                           if (commentIdMatch && !postIdMatch && !forumIdMatch && !donationIdMatch) {
                             console.log('Comment-only notification - resolving to post');
-                            const commentId = parseInt(commentIdMatch[1]);
-                            const commentResponse = await getPostFromComment(commentId);
+                            const commentIdNum = parseInt(commentIdMatch[1]);
+                            const commentResponse = await getPostFromComment(commentIdNum);
                             if (commentResponse.success && commentResponse.post_id) {
                               actualPostId = commentResponse.post_id.toString();
                             } else {
@@ -2334,8 +2683,10 @@ const NotificationPage: React.FC = () => {
                               // Store repost or post ID for dashboard to open
                               if (repostId) {
                                 localStorage.setItem('pendingRepostView', repostId);
+                                storeRepostHighlightIds(commentId, replyId);
                               } else if (postId) {
                                 localStorage.setItem('pendingPostView', postId);
+                                storeRepostHighlightIds(null, null);
                               }
                               navigate(dashboardPath);
                             }

@@ -1,0 +1,66 @@
+/* Layout wrapper */
+.tracker-page {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.tracker-form {
+  flex: 1;
+  min-width: 0;
+}
+
+.tracker-sidebar {
+  width: 320px;
+}
+
+@media (max-width: 1024px) {
+  .tracker-page {
+    gap: 16px;
+  }
+
+  .tracker-sidebar {
+    width: 280px;
+  }
+}
+
+@media (max-width: 900px) {
+  .tracker-page {
+    flex-direction: column;
+  }
+
+  .tracker-sidebar {
+    width: 100%;
+    order: -1;
+  }
+}
+
+@media (max-width: 600px) {
+  .tracker-page {
+    gap: 12px;
+  }
+
+  .tracker-form-card,
+  .tracker-section-card,
+  .tracker-sidebar-card {
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .tracker-header {
+    font-size: 22px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tracker-page {
+    padding: 0 12px;
+  }
+
+  .tracker-form input,
+  .tracker-form select,
+  .tracker-form textarea {
+    font-size: 14px;
+  }
+}
+

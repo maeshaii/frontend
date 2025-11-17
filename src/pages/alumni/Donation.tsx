@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Card, Typography, Avatar, TextField } from '@mui/material';
 import AlumniTopBar from './AlumniTopBar';
@@ -96,6 +96,9 @@ const DonationPage: React.FC = () => {
   const [showOriginalDonationModal, setShowOriginalDonationModal] = useState(false);
   const [originalDonationModalData, setOriginalDonationModalData] = useState<any | null>(null);
   const [donationLoading, setDonationLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const isRefreshingRef = useRef(false);
 
   // Get current user info
   const userObj = JSON.parse(localStorage.getItem('user') || '{}');
@@ -263,6 +266,39 @@ const DonationPage: React.FC = () => {
       if (showLoading) setLoading(false);
     }
   };
+
+  const handlePullToRefresh = async () => {
+    if (isRefreshingRef.current || isRefreshing) return;
+
+    isRefreshingRef.current = true;
+    setIsRefreshing(true);
+    try {
+      await fetchDonationPosts(false);
+      console.log('✅ Donations refreshed via pull-to-refresh');
+    } catch (error) {
+      console.error('❌ Error refreshing donations:', error);
+    } finally {
+      isRefreshingRef.current = false;
+      setIsRefreshing(false);
+      setPullDistance(0);
+    }
+  };
+
+  useEffect(() => {
+    if (!isRefreshing && pullDistance > 0) {
+      const interval = setInterval(() => {
+        setPullDistance(prev => {
+          if (prev <= 0) {
+            clearInterval(interval);
+            return 0;
+          }
+          return Math.max(prev - 3, 0);
+        });
+      }, 16);
+
+      return () => clearInterval(interval);
+    }
+  }, [isRefreshing, pullDistance]);
 
   // Handle view original donation
   const handleViewOriginalDonation = async (originalPost: any) => {
@@ -464,7 +500,38 @@ const DonationPage: React.FC = () => {
   }
 
   return (
-    <Box sx={{ bgcolor: '#f0f4f8', minHeight: '100vh' }}>
+    <Box sx={{ 
+      bgcolor: '#f0f4f8', 
+      minHeight: '100vh',
+      overflowX: 'hidden',
+      '&::-webkit-scrollbar': {
+        display: 'none'
+      },
+      scrollbarWidth: 'none',
+      msOverflowStyle: 'none'
+    }}>
+      <style>
+        {`
+          body {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+          }
+          body::-webkit-scrollbar {
+            display: none;
+          }
+          * {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+          }
+          *::-webkit-scrollbar {
+            display: none;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
       <AlumniTopBar 
         showProfile={showProfile}
         setShowProfile={setShowProfile}
@@ -472,9 +539,16 @@ const DonationPage: React.FC = () => {
       />
 
       {/* Main Content */}
-      <Box sx={{ maxWidth: '1400px', mx: 'auto', px: 2, py: 3 }}>
+      <Box
+        sx={{
+          maxWidth: { xs: '100%', lg: '1600px', xl: '1800px' },
+          mx: 'auto',
+          px: { xs: 2, md: 3 },
+          py: 3
+        }}
+      >
         {/* Header Section */}
-        <Box sx={{ mb: 4 }}>
+        <Box sx={{ mb: 4, px: { xs: 0, md: 3 } }}>
           <Card
             sx={{
               display: 'flex',
@@ -482,7 +556,7 @@ const DonationPage: React.FC = () => {
               p: 3,
               borderRadius: 3,
               boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-              background: 'linear-gradient(135deg, #d32f2f 0%, #f06292 100%)',
+              background: '#c62828',
               color: 'white'
             }}
           >
@@ -508,83 +582,106 @@ const DonationPage: React.FC = () => {
         </Box>  
 
         {/* Three Column Layout */}
-      <Box sx={{ display: 'flex', gap: 3, px: 3, pb: 3 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          gap: { xs: 2, md: 3.5 },
+          px: { xs: 0, md: 3 },
+          pb: 3,
+          alignItems: { xs: 'stretch', md: 'flex-start' }
+        }}
+      >
         {/* Left Sidebar - About */}
-          <Box sx={{ flex: '0 0 300px' }}>
+          <Box
+            sx={{
+              flex: { xs: '1 1 100%', md: '0 0 260px' },
+              width: '100%',
+              maxWidth: { xs: '100%', md: 260 },
+              order: { xs: 2, md: 1 }
+            }}
+          >
           <Card sx={{ 
             borderRadius: 3, 
             boxShadow: '0 4px 16px rgba(0,0,0,0.06)', 
             p: 3, 
             bgcolor: 'white',
-            border: '1px solid rgba(0,0,0,0.05)',
-            background: 'linear-gradient(135deg, #ffffff 0%, #fff5f7 100%)'
+            border: '1px solid rgba(0,0,0,0.05)'
           }}>
             <Typography variant="h6" component="div" fontWeight="bold" sx={{ 
               mb: 2,
-              color: '#d32f2f',
+              color: '#c62828',
               display: 'flex',
               alignItems: 'center',
               gap: 1,
               fontSize: '20px'
             }}>
-              <span style={{ fontSize: '24px' }}>💝</span>
+              <span style={{ fontSize: '24px' }}>❤️</span>
               About Donations
             </Typography>
             <Typography variant="body2" sx={{ color: '#5a6c7d', mb: 2, lineHeight: 1.8, fontSize: '14px' }}>
-              Help fellow alumni by supporting their donation requests. Share your needs and connect with your batchmates for mutual support.
+              A dedicated space for CTU alumni to connect and support each other through donations. Whether you need assistance or want to help fellow alumni, this platform brings our community together for mutual aid and solidarity.
             </Typography>
-            <Box sx={{ mt: 2, pt: 2, borderTop: '2px solid rgba(211, 47, 47, 0.1)' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid rgba(198, 40, 40, 0.1)' }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
                   width: 8, 
                   height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#d32f2f', 
-                  mr: 1.5 
+                  bgcolor: '#c62828',
+                  mr: 1.5,
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
-                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
-                  Create donation requests for items you need
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Connect with alumni from your batch and beyond
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
                   width: 8, 
                   height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#d32f2f', 
-                  mr: 1.5 
+                  bgcolor: '#c62828',
+                  mr: 1.5,
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
-                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
-                  Browse requests from your batchmates
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Support causes that matter to our community
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
                   width: 8, 
                   height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#d32f2f', 
-                  mr: 1.5 
+                  bgcolor: '#c62828',
+                  mr: 1.5,
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
-                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
-                  Like and comment to show support
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Build stronger alumni relationships
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
                 <Box sx={{ 
                   width: 8, 
                   height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#d32f2f', 
-                  mr: 1.5 
+                  bgcolor: '#c62828',
+                  mr: 1.5,
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
-                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px' }}>
-                  Repost to help spread the word
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Share resources and opportunities
                 </Typography>
               </Box>
             </Box>
-            <Box sx={{ mt: 3, p: 2.5, bgcolor: 'rgba(211, 47, 47, 0.05)', borderRadius: 2, border: '1px solid rgba(211, 47, 47, 0.1)' }}>
-              <Typography variant="body2" sx={{ color: '#d32f2f', fontStyle: 'italic', fontSize: '13px', lineHeight: 1.6 }}>
+            <Box sx={{ mt: 3, p: 2.5, bgcolor: '#f9fafb', borderRadius: 2, border: '1px solid rgba(0,0,0,0.08)' }}>
+              <Typography variant="body2" sx={{ color: '#6b7280', fontStyle: 'italic', fontSize: '13px', lineHeight: 1.6 }}>
                 "Together we can make a difference in each other's lives."
               </Typography>
             </Box>
@@ -592,7 +689,16 @@ const DonationPage: React.FC = () => {
         </Box>
 
           {/* Center Content */}
-          <Box sx={{ flex: '1 1 600px' }}>
+          <Box
+            sx={{
+              flex: { xs: '1 1 auto', md: '1 1 720px' },
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              width: '100%',
+              order: { xs: 1, md: 2 }
+            }}
+          >
             {/* Start a post */}
             <Card sx={{ 
               mb: 3, 
@@ -601,6 +707,7 @@ const DonationPage: React.FC = () => {
               p: 3,
               border: '1px solid rgba(0,0,0,0.05)',
               transition: 'all 0.3s ease',
+              flexShrink: 0,
               '&:hover': {
                 boxShadow: '0 6px 20px rgba(0,0,0,0.1)',
                 transform: 'translateY(-2px)'
@@ -651,7 +758,7 @@ const DonationPage: React.FC = () => {
                       },
                       '&.Mui-focused': {
                         bgcolor: '#fff',
-                        boxShadow: '0 0 0 3px rgba(211, 47, 47, 0.1)'
+                        boxShadow: '0 0 0 3px rgba(198, 40, 40, 0.1)'
                       },
                     }
                   }}
@@ -659,16 +766,87 @@ const DonationPage: React.FC = () => {
               </Box>
             </Card>
 
+          {/* Pull-to-Refresh Indicator */}
+            {pullDistance > 0 && (
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  px: 1,
+                  py: `${Math.min(pullDistance * 0.15, 15)}px`,
+                  background: 'linear-gradient(180deg, #e3f2fd 0%, #f8f9fa 100%)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)',
+                  opacity: Math.min(pullDistance / 40, 1),
+                  borderBottom: pullDistance >= 50 ? '2px solid #1e3a8a' : '2px solid #e0e0e0',
+                  boxShadow: pullDistance >= 50 ? '0 2px 8px rgba(30, 58, 138, 0.15)' : 'none',
+                  borderRadius: 2,
+                  mb: 1
+                }}
+              >
+                {isRefreshing ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: '16px',
+                        height: '16px',
+                        border: '2px solid #e0e0e0',
+                        borderTopColor: '#1e3a8a',
+                        borderRadius: '50%',
+                        animation: 'spin 0.6s linear infinite'
+                      }}
+                    />
+                    <Typography sx={{ color: '#1e3a8a', fontSize: '14px', fontWeight: 500 }}>
+                      Refreshing...
+                    </Typography>
+                  </Box>
+                ) : pullDistance >= 50 ? (
+                  <Typography sx={{ color: '#1e3a8a', fontSize: '14px', fontWeight: 500 }}>
+                    ↓ Release to refresh
+                  </Typography>
+                ) : (
+                  <Typography sx={{ color: '#666', fontSize: '14px' }}>
+                    ↓ Pull down to refresh
+                  </Typography>
+                )}
+              </Box>
+            )}
+
           {/* Donations Feed */}
             <Box sx={{ 
-              maxHeight: 'calc(100vh - 300px)', 
+              maxHeight: 'calc(100vh - 250px)',
               overflowY: 'auto',
               scrollbarWidth: 'none', /* Firefox */
               msOverflowStyle: 'none', /* IE and Edge */
               '&::-webkit-scrollbar': {
                 display: 'none', /* Chrome, Safari and Opera */
               },
-            }}>
+              transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.4, 70)}px)` : 'translateY(0)',
+              transition: isRefreshing 
+                ? 'transform 0.4s cubic-bezier(0.4, 0.0, 0.2, 1)' 
+                : 'transform 0.15s cubic-bezier(0.4, 0.0, 0.2, 1)',
+              willChange: 'transform'
+            }}
+              onWheel={(e) => {
+                if (isRefreshingRef.current || isRefreshing) return;
+                const container = e.currentTarget;
+                if (container.scrollTop === 0 && e.deltaY < 0) {
+                  setPullDistance(prev => {
+                    const newDistance = Math.min(prev + Math.abs(e.deltaY) * 0.8, 100);
+                    if (newDistance >= 50 && prev < 50 && !isRefreshingRef.current) {
+                      setTimeout(() => handlePullToRefresh(), 50);
+                    }
+                    return newDistance;
+                  });
+                } else if (container.scrollTop > 0 && pullDistance > 0) {
+                  setPullDistance(0);
+                }
+              }}
+              onScroll={(e) => {
+                const container = e.currentTarget;
+                if (container.scrollTop > 0) {
+                  setPullDistance(0);
+                }
+              }}
+            >
               {loading ? (
                 <Box sx={{ textAlign: 'center', py: 4 }}>
                   <Typography>Loading donation requests...</Typography>
@@ -771,57 +949,28 @@ const DonationPage: React.FC = () => {
           </Box>
 
         {/* Right Sidebar - Stats */}
-          <Box sx={{ flex: '0 0 300px' }}>
-          <Card sx={{ 
-            p: 3, 
-            borderRadius: 3, 
-            boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
-            border: '1px solid rgba(0,0,0,0.05)',
-            background: 'linear-gradient(135deg, #ffffff 0%, #fff5f7 100%)'
-          }}>
-            <Typography variant="h6" fontWeight="bold" sx={{ 
-              color: '#d32f2f',
-              mb: 3,
-              fontSize: '18px'
-            }}>
-              📊 Quick Stats
-            </Typography>
-            <Box sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '14px' }}>
-                  Total Requests
-                </Typography>
-                <Typography variant="h6" fontWeight="bold" sx={{ color: '#d32f2f' }}>
-                  {donations.length}
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '14px' }}>
-                  Your Requests
-                </Typography>
-                <Typography variant="h6" fontWeight="bold" sx={{ color: '#d32f2f' }}>
-                  {donations.filter((d: any) => Number(d.user?.user_id) === Number(currentUserId)).length}
-                </Typography>
-              </Box>
-            </Box>
-            <Box sx={{ pt: 2, borderTop: '2px solid rgba(211, 47, 47, 0.1)' }}>
-              <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                Help make a positive impact by supporting your batchmates' donation requests.
-              </Typography>
-            </Box>
-          </Card>
-
+          <Box
+            sx={{
+              flex: { xs: '1 1 100%', md: '0 0 260px' },
+              maxWidth: { xs: '100%', md: 260 },
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: { xs: 2, md: 3 },
+              mt: { xs: 3, md: 0 },
+              order: { xs: 3, md: 3 }
+            }}
+          >
           {/* Tips Card */}
           <Card sx={{ 
-            mt: 3,
             p: 3, 
             borderRadius: 3, 
             boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
             border: '1px solid rgba(0,0,0,0.05)',
-            background: 'linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)'
+            bgcolor: 'white'
           }}>
             <Typography variant="h6" fontWeight="bold" sx={{ 
-              color: '#1976d2',
+              color: '#059669',
               mb: 2.5,
               fontSize: '18px'
             }}>
@@ -830,54 +979,58 @@ const DonationPage: React.FC = () => {
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#1976d2', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Be specific about what you need
+                  Provide clear details about your situation
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#1976d2', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Include images when possible
+                  Include relevant photos or documents
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#1976d2', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Respond promptly to offers
+                  Set realistic timelines if applicable
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#1976d2', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Express gratitude for donations
+                  Update your request as circumstances change
                 </Typography>
               </Box>
             </Box>
@@ -885,15 +1038,14 @@ const DonationPage: React.FC = () => {
 
           {/* Support Card */}
           <Card sx={{ 
-            mt: 3,
             p: 3, 
             borderRadius: 3, 
             boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
             border: '1px solid rgba(0,0,0,0.05)',
-            background: 'linear-gradient(135deg, #fff9e6 0%, #fffce8 100%)'
+            bgcolor: 'white'
           }}>
             <Typography variant="h6" fontWeight="bold" sx={{ 
-              color: '#f57c00',
+              color: '#059669',
               mb: 2,
               fontSize: '18px'
             }}>
@@ -902,41 +1054,58 @@ const DonationPage: React.FC = () => {
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#f57c00', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Like to show your support
+                  Share requests to increase visibility
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#f57c00', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Comment to offer help
+                  Reach out privately to offer assistance
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                <Box sx={{ 
+                  width: 8, 
+                  height: 8, 
+                  borderRadius: '50%', 
+                  bgcolor: '#059669',
+                  mr: 1.5,
+                  mt: 0.75,
+                  flexShrink: 0
+                }} />
+                <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
+                  Connect requesters with relevant resources
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
                 <Box sx={{ 
-                  minWidth: 6, 
-                  height: 6, 
+                  width: 8, 
+                  height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#f57c00', 
+                  bgcolor: '#059669',
                   mr: 1.5,
-                  mt: 0.5
+                  mt: 0.75,
+                  flexShrink: 0
                 }} />
                 <Typography variant="body2" sx={{ color: '#5a6c7d', fontSize: '13px', lineHeight: 1.6 }}>
-                  Repost to spread the word
+                  Follow up to see how you can continue helping
                 </Typography>
               </Box>
             </Box>

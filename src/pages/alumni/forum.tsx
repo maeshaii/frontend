@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Card, Typography, Avatar, TextField } from '@mui/material';
 import AlumniTopBar from './AlumniTopBar';
@@ -97,6 +97,9 @@ const ForumPage: React.FC = () => {
   const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
   const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
   const [postLoading, setPostLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const isRefreshingRef = useRef(false);
 
   // Get current user info
   const userObj = JSON.parse(localStorage.getItem('user') || '{}');
@@ -156,12 +159,20 @@ const ForumPage: React.FC = () => {
       const response = await api.get('alumni/all/');
       
       if (response.data.success && response.data.alumni) {
+        const allAlumni = response.data.alumni ?? [];
+        
         // Filter to only show users from the same batch
         const currentUserBatch = userObj.year_graduated || userObj.batch;
-        const batchMembers = response.data.alumni.filter((member: any) => {
+        let batchMembers = allAlumni.filter((member: any) => {
           const memberBatch = member.batch;
-          return memberBatch === currentUserBatch;
+          return memberBatch && currentUserBatch && memberBatch === currentUserBatch;
         });
+
+        // Fallback: if no batch match, show the first few alumni instead of an empty list
+        if (batchMembers.length === 0) {
+          batchMembers = allAlumni.filter((member: any) => Number(member.id) !== Number(currentUserId));
+        }
+
         setAllMembers(batchMembers);
         
         // Check follow status for each member
@@ -412,9 +423,11 @@ const ForumPage: React.FC = () => {
     }
   }, []); // Run only once on mount
 
-  const fetchForumPosts = async () => {
+  const fetchForumPosts = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       const forumsData = await getForums();
       
       // Transform forum data to match PostItem interface
@@ -542,13 +555,81 @@ const ForumPage: React.FC = () => {
     } catch (error: any) {
       console.error('Error fetching forum posts:', error);
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 
+  const handlePullToRefresh = async () => {
+    if (isRefreshingRef.current || isRefreshing) return;
+
+    isRefreshingRef.current = true;
+    setIsRefreshing(true);
+    try {
+      await fetchForumPosts(false);
+      console.log('✅ Forum refreshed via pull-to-refresh');
+    } catch (error) {
+      console.error('❌ Error refreshing forum posts:', error);
+    } finally {
+      isRefreshingRef.current = false;
+      setIsRefreshing(false);
+      setPullDistance(0);
+    }
+  };
+
+  useEffect(() => {
+    if (!isRefreshing && pullDistance > 0) {
+      const interval = setInterval(() => {
+        setPullDistance(prev => {
+          if (prev <= 0) {
+            clearInterval(interval);
+            return 0;
+          }
+          return Math.max(prev - 3, 0);
+        });
+      }, 16);
+
+      return () => clearInterval(interval);
+    }
+  }, [isRefreshing, pullDistance]);
+
 
   return (
-    <Box sx={{ bgcolor: '#f0f4f8', minHeight: '100vh' }}>
+    <Box sx={{ 
+      bgcolor: '#f0f4f8', 
+      height: '100vh',
+      overflowX: 'hidden',
+      overflowY: 'hidden',
+      '&::-webkit-scrollbar': {
+        display: 'none'
+      },
+      scrollbarWidth: 'none',
+      msOverflowStyle: 'none'
+    }}>
+      <style>
+        {`
+          body {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            overflow: hidden;
+          }
+          body::-webkit-scrollbar {
+            display: none;
+          }
+          * {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+          }
+          *::-webkit-scrollbar {
+            display: none;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
       {/* Alumni TopBar */}
       <AlumniTopBar 
         showProfile={showProfile}
@@ -558,9 +639,16 @@ const ForumPage: React.FC = () => {
 
 
       {/* Main Content */}
-      <Box sx={{ maxWidth: '1400px', mx: 'auto', px: 2, py: 3 }}>
+      <Box
+        sx={{
+          maxWidth: { xs: '100%', lg: '1600px', xl: '1800px' },
+          mx: 'auto',
+          px: { xs: 2, md: 3 },
+          py: 3
+        }}
+      >
         {/* Header Section */}
-        <Box sx={{ mb: 4 }}>
+        <Box sx={{ mb: 4, px: { xs: 0, md: 3 } }}>
           <Card
             sx={{
               display: 'flex',
@@ -594,12 +682,37 @@ const ForumPage: React.FC = () => {
         </Box>
 
         {/* Three Column Layout */}
-        <Box sx={{ display: 'flex', gap: 3 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
+            gap: { xs: 2, md: 3.5 },
+            px: { xs: 0, md: 3 },
+          }}
+        >
           {/* Left Sidebar - Members */}
-          <Box sx={{ flex: '0 0 300px' }}>
-            <div className="profile-followers-card">
+          <Box
+            sx={{
+              flex: { xs: '1 1 100%', md: '0 0 260px' },
+              width: '100%',
+              maxWidth: { xs: '100%', md: 260 },
+              order: { xs: 2, md: 1 }
+            }}
+          >
+            <Card sx={{ 
+              p: 3, 
+              borderRadius: 3, 
+              boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+              border: '1px solid rgba(0,0,0,0.05)',
+              background: 'linear-gradient(135deg, #ffffff 0%, #f8faff 100%)'
+            }}>
               <div className="profile-followers-header">
-                <div className="profile-followers-title">Members ({allMembers.length})</div>
+                <Typography variant="h6" fontWeight="bold" sx={{ 
+                  color: '#174f84',
+                  fontSize: '20px'
+                }}>
+                  Members ({allMembers.length})
+                </Typography>
                 <div
                   className="profile-followers-seeall"
                   onClick={() => {
@@ -686,11 +799,22 @@ const ForumPage: React.FC = () => {
                   </>
                 )}
               </div>
-            </div>
+            </Card>
           </Box>
 
           {/* Center Content */}
-          <Box sx={{ flex: '1 1 600px' }}>
+          <Box
+            sx={{ 
+              flex: { xs: '1 1 auto', md: '1 1 720px' },
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            maxHeight: { xs: 'none', md: 'calc(100vh - 260px)' },
+              overflow: { xs: 'visible', md: 'hidden' },
+              order: { xs: 1, md: 2 },
+              width: '100%'
+            }}
+          >
               {/* Start a post */}
             <Card sx={{ 
               mb: 3, 
@@ -699,6 +823,7 @@ const ForumPage: React.FC = () => {
               p: 3,
               border: '1px solid rgba(0,0,0,0.05)',
               transition: 'all 0.3s ease',
+              flexShrink: 0,
               '&:hover': {
                 boxShadow: '0 6px 20px rgba(0,0,0,0.1)',
                 transform: 'translateY(-2px)'
@@ -757,16 +882,88 @@ const ForumPage: React.FC = () => {
               </Box>
               </Card>
 
+            {/* Pull-to-Refresh Indicator */}
+            {pullDistance > 0 && (
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  px: 1,
+                  py: `${Math.min(pullDistance * 0.15, 15)}px`,
+                  background: 'linear-gradient(180deg, #e3f2fd 0%, #f8f9fa 100%)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)',
+                  opacity: Math.min(pullDistance / 40, 1),
+                  borderBottom: pullDistance >= 50 ? '2px solid #1e3a8a' : '2px solid #e0e0e0',
+                  boxShadow: pullDistance >= 50 ? '0 2px 8px rgba(30, 58, 138, 0.15)' : 'none',
+                  borderRadius: 2,
+                  mb: 1
+                }}
+              >
+                {isRefreshing ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: '16px',
+                        height: '16px',
+                        border: '2px solid #e0e0e0',
+                        borderTopColor: '#1e3a8a',
+                        borderRadius: '50%',
+                        animation: 'spin 0.6s linear infinite'
+                      }}
+                    />
+                    <Typography sx={{ color: '#1e3a8a', fontSize: '14px', fontWeight: 500 }}>
+                      Refreshing...
+                    </Typography>
+                  </Box>
+                ) : pullDistance >= 50 ? (
+                  <Typography sx={{ color: '#1e3a8a', fontSize: '14px', fontWeight: 500 }}>
+                    ↓ Release to refresh
+                  </Typography>
+                ) : (
+                  <Typography sx={{ color: '#666', fontSize: '14px' }}>
+                    ↓ Pull down to refresh
+                  </Typography>
+                )}
+              </Box>
+            )}
+
             {/* Posts Feed */}
             <Box sx={{ 
-              maxHeight: 'calc(100vh - 300px)', 
-              overflowY: 'auto',
+              flex: 1,
+              minHeight: 0,
+              overflowY: { xs: 'visible', md: 'auto' },
               scrollbarWidth: 'none', /* Firefox */
               msOverflowStyle: 'none', /* IE and Edge */
               '&::-webkit-scrollbar': {
                 display: 'none', /* Chrome, Safari and Opera */
               },
-            }}>
+              transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.4, 70)}px)` : 'translateY(0)',
+              transition: isRefreshing 
+                ? 'transform 0.4s cubic-bezier(0.4, 0.0, 0.2, 1)' 
+                : 'transform 0.15s cubic-bezier(0.4, 0.0, 0.2, 1)',
+              willChange: 'transform'
+            }}
+              onWheel={(e) => {
+                if (isRefreshingRef.current || isRefreshing) return;
+                const container = e.currentTarget;
+                if ((container.scrollTop ?? 0) === 0 && e.deltaY < 0) {
+                  setPullDistance(prev => {
+                    const newDistance = Math.min(prev + Math.abs(e.deltaY) * 0.8, 100);
+                    if (newDistance >= 50 && prev < 50 && !isRefreshingRef.current) {
+                      setTimeout(() => handlePullToRefresh(), 50);
+                    }
+                    return newDistance;
+                  });
+                } else if ((container.scrollTop ?? 0) > 0 && pullDistance > 0) {
+                  setPullDistance(0);
+                }
+              }}
+              onScroll={(e) => {
+                const container = e.currentTarget;
+                if ((container.scrollTop ?? 0) > 0) {
+                  setPullDistance(0);
+                }
+              }}
+            >
               {loading ? (
                 <Box sx={{ textAlign: 'center', py: 4 }}>
                   <Typography>Loading forum posts...</Typography>
@@ -1080,7 +1277,15 @@ const ForumPage: React.FC = () => {
           </Box>
 
           {/* Right Sidebar - About */}
-          <Box sx={{ flex: '0 0 300px' }}>
+          <Box
+            sx={{
+              flex: { xs: '1 1 100%', md: '0 0 260px' },
+              width: '100%',
+              maxWidth: { xs: '100%', md: 260 },
+              order: { xs: 3, md: 3 },
+              mt: { xs: 3, md: 0 }
+            }}
+          >
               <Card sx={{ 
                 p: 3, 
                 borderRadius: 3, 
@@ -1095,7 +1300,7 @@ const ForumPage: React.FC = () => {
                   gap: 1,
                   fontSize: '20px'
                 }}>
-                  <span style={{ fontSize: '24px' }}>💬</span>
+                  <span style={{ fontSize: '24px' }}>📢</span>
                   About Forum
                 </Typography>
               <Typography variant="body2" sx={{ 

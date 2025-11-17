@@ -953,7 +953,29 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         const fileMessage =
           data.files_uploaded > 0 ? ` and ${data.files_uploaded} file(s) uploaded` : '';
         alert(`Form submitted successfully!${fileMessage}`);
+        
+        // Refresh points after tracker form submission (for Alumni users only - OJT can't submit tracker)
         const userStr = localStorage.getItem('user');
+        if (userStr) {
+          try {
+            const userObj = JSON.parse(userStr);
+            if (userObj.account_type && userObj.account_type.user) {
+              const userId = userObj.user_id || userObj.id;
+              if (userId) {
+                // Import getUserPoints dynamically to avoid circular dependencies
+                const { getUserPoints } = await import('../../../services/api');
+                const points = await getUserPoints(userId);
+                // Dispatch event to notify Profile component
+                window.dispatchEvent(new CustomEvent('pointsUpdated', { 
+                  detail: { userId, points } 
+                }));
+              }
+            }
+          } catch (error) {
+            console.error('Error refreshing points after tracker submission:', error);
+          }
+        }
+        
         if (userStr) {
           const userObj = JSON.parse(userStr);
           const userId = userObj.user_id || userObj.id;

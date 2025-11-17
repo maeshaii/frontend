@@ -60,15 +60,10 @@ const Login = () => {
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      if (error.code === 'ECONNABORTED') {
-        setError('Login timeout - server is taking too long to respond. Please try again.');
-      } else if (error.response?.status === 500) {
-        setError('Server error - please try again in a moment.');
-      } else if (error.code === 'ERR_NETWORK') {
-        setError('Network error - please check your connection.');
-      } else {
-        setError('An unexpected error occurred. Please try again.');
-      }
+      // loginUser returns { success: false, message: '...' } for errors, so this catch
+      // should only trigger for unexpected errors. The error message from loginUser
+      // will be displayed via data.message in the else block above.
+      setError(error.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setIsLoading(false);
     }

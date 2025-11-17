@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost, getPostLikes, getRepostLikes } from '../services/api';
+import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost, getPostLikes, getRepostLikes, getDonationLikes, getForumLikes, getUserPoints } from '../services/api';
 import { 
   commentOnForumPost, 
   deleteForumComment, 
@@ -23,6 +23,7 @@ import Reply from './Reply';
 import ReplyInput from './ReplyInput';
 import RepostButton from './RepostButton';
 import PostStatsRow from './PostStatsRow';
+import './postFooterActions.css';
 
 interface RepostItem {
   repost_id: number;
@@ -381,7 +382,7 @@ const PostCard: React.FC<PostCardProps> = ({
     if (!text) return null;
     
     const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const mentionRegex = /@(\w+)/g;
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
     
     // Enhanced regex to detect names (First Last format)
     const nameRegex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
@@ -414,17 +415,18 @@ const PostCard: React.FC<PostCardProps> = ({
       // Handle mentions (@username)
       const mentionParts = part.split(mentionRegex);
       const processedMentionParts = mentionParts.map((mentionPart, mentionIndex) => {
-        if (mentionRegex.test(mentionPart)) {
-          // Extract username from @username
-          const username = mentionPart.substring(1); // Remove @
+        const isMentionSegment = mentionIndex % 2 === 1;
+        if (isMentionSegment) {
+          const mentionText = mentionPart.trim();
+          if (!mentionText) return null;
+          const display = `@${mentionText}`;
           
           return (
             <button
               key={`${index}-${mentionIndex}`}
               onClick={(e) => {
                 e.stopPropagation();
-                // Search for the user and redirect to their profile
-                handleUserSearch(username);
+                handleUserSearch(mentionText);
               }}
               style={{ 
                 color: '#007bff', 
@@ -442,22 +444,23 @@ const PostCard: React.FC<PostCardProps> = ({
                 e.currentTarget.style.textDecoration = 'none';
               }}
             >
-              {mentionPart}
+              {display}
             </button>
           );
         }
         
-        // Handle names (First Last format)
         const nameParts = mentionPart.split(nameRegex);
         return nameParts.map((namePart, nameIndex) => {
-          if (nameRegex.test(namePart)) {
+          const isNameSegment = nameIndex % 2 === 1;
+          if (isNameSegment) {
+            const displayName = namePart.trim();
+            if (!displayName) return null;
             return (
               <button
                 key={`${index}-${mentionIndex}-${nameIndex}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  // Search for the user and redirect to their profile
-                  handleUserSearch(namePart);
+                  handleUserSearch(displayName);
                 }}
                 style={{ 
                   color: '#007bff', 
@@ -475,7 +478,7 @@ const PostCard: React.FC<PostCardProps> = ({
                   e.currentTarget.style.textDecoration = 'none';
                 }}
               >
-                {namePart}
+                {displayName}
               </button>
             );
           }
@@ -523,6 +526,27 @@ const PostCard: React.FC<PostCardProps> = ({
     };
   }, [showOptions, post.post_id, post.comments, setShowOptions, showCommentOptions]);
 
+  // Helper function to refresh and dispatch points update
+  const refreshPointsAndDispatch = useCallback(async () => {
+    if (!currentUserId) return;
+    try {
+      // Add a small delay to ensure backend has processed points update
+      setTimeout(async () => {
+        try {
+          const points = await getUserPoints(currentUserId);
+          // Dispatch event to notify Profile component
+          window.dispatchEvent(new CustomEvent('pointsUpdated', { 
+            detail: { userId: currentUserId, points } 
+          }));
+        } catch (error) {
+          console.error('Error refreshing points after action:', error);
+        }
+      }, 500); // 500ms delay to ensure backend has processed
+    } catch (error) {
+      console.error('Error in refreshPointsAndDispatch:', error);
+    }
+  }, [currentUserId]);
+
   const handleLike = async () => {
     if (!setLikedPosts) return;
     console.log('handleLike called for post:', post.post_id, 'isForum:', isForum, 'isDonation:', isDonation, 'isRepostPost:', isRepostPost);
@@ -569,6 +593,10 @@ const PostCard: React.FC<PostCardProps> = ({
         await likePost(post.post_id);
         setLikedPosts(prev => ({ ...prev, [post.post_id]: true }));
       }
+      
+      // Refresh points after successful like
+      refreshPointsAndDispatch();
+      
       onPostUpdate?.();
     } catch (error) {
       console.error('Error liking post:', error);
@@ -768,6 +796,10 @@ const PostCard: React.FC<PostCardProps> = ({
         setShowCommentInput?.(prev => ({ ...prev, [itemId]: false }));
         // Automatically show comments section when a comment is added
         setShowCommentsSection(prev => ({ ...prev, [itemId]: true }));
+        
+        // Refresh points after successful comment
+        refreshPointsAndDispatch();
+        
         onPostUpdate?.();
       }
     } catch (error) {
@@ -1076,6 +1108,13 @@ const PostCard: React.FC<PostCardProps> = ({
       if (isRepostPost && repostData?.repost_id) {
         // Fetch likes for repost
         likesData = await getRepostLikes(repostData.repost_id);
+      } else if (isDonation) {
+        // Fetch likes for donation post
+        const donationId = (post as any).donation_id || post.post_id;
+        likesData = await getDonationLikes(donationId);
+      } else if (isForum) {
+        // Fetch likes for forum post
+        likesData = await getForumLikes(post.post_id);
       } else {
         // Fetch likes for regular post
         likesData = await getPostLikes(post.post_id);
@@ -1192,7 +1231,7 @@ const PostCard: React.FC<PostCardProps> = ({
                     </div>
                     {isDonation && (
                       <span style={{
-                        background: 'linear-gradient(135deg, #174f84 0%, #2d5aa0 100%)',
+                        backgroundColor: '#059669',
                         color: '#ffffff',
                         fontSize: '10px',
                         fontWeight: '600',
@@ -1202,7 +1241,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         letterSpacing: '0.5px',
                         boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                       }}>
-                        💝 Donation
+                        Donation
                       </span>
                     )}
                   </div>
@@ -1727,58 +1766,27 @@ const PostCard: React.FC<PostCardProps> = ({
             )}
 
             {/* Repost Actions - Same as regular post actions */}
-            <div className="post-actions" style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              borderTop: '1px solid #e9ecef'
-            }}>
+            <div className="post-footer-actions">
               <button
                 onClick={() => {
                   console.log('Like button clicked for repost:', repostData?.repost_id, 'likedPosts:', likedPosts[repostData?.repost_id]);
                   likedPosts[repostData?.repost_id] ? handleUnlike() : handleLike();
                 }}
-                className="post-action-item"
-                style={{ 
-                  color: likedPosts[repostData?.repost_id] ? '#1e3a8a' : '#555', 
-                  background: 'transparent', 
-                  border: 'none', 
-                  cursor: 'pointer', 
-                  padding: '8px', 
-                  fontSize: 12, 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 6,
-                  fontWeight: likedPosts[repostData?.repost_id] ? 'bold' : 'normal'
-                }}
+                type="button"
+                className={`post-footer-action${likedPosts[repostData?.repost_id] ? ' active' : ''}`}
+                aria-pressed={!!likedPosts[repostData?.repost_id]}
               >
-                <span style={{ fontSize: 18 }}>👍</span>
-                <span>Like</span>
+                <span className="post-footer-icon">👍</span>
+                <span className="post-footer-label">Like</span>
               </button>
               <button
                 onClick={() => setShowCommentInput?.(prev => ({ ...prev, [repostData?.repost_id || post.post_id]: !prev[repostData?.repost_id || post.post_id] }))}
-                className="post-action-item"
-                style={{
-                  color: '#6c757d',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '8px 16px',
-                  borderRadius: 6,
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f8f9fa';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
+                type="button"
+                className={`post-footer-action${showCommentInput?.[repostData?.repost_id || post.post_id] ? ' active' : ''}`}
+                aria-expanded={!!showCommentInput?.[repostData?.repost_id || post.post_id]}
               >
-                <span style={{ fontSize: '14px' }}>💬</span>
-                Comment
+                <span className="post-footer-icon">💬</span>
+                <span className="post-footer-label">Comment</span>
               </button>
               <RepostButton
                 originalPost={{
@@ -1803,14 +1811,6 @@ const PostCard: React.FC<PostCardProps> = ({
                 formatTime={formatTime}
                 isForum={isForum}
                 isDonation={isDonation}
-                style={{
-                  color: repostedPosts[post.post_id] ? '#007bff' : '#6c757d',
-                  fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
-                  padding: '8px 16px',
-                  borderRadius: 6,
-                  transition: 'background-color 0.2s'
-                }}
-                className="post-action-item"
               />
             </div>
 
@@ -2085,7 +2085,7 @@ const PostCard: React.FC<PostCardProps> = ({
               </div>
               {isDonation && (
                 <span style={{
-                  background: 'linear-gradient(135deg, #174f84 0%, #2d5aa0 100%)',
+                  backgroundColor: '#059669',
                   color: '#ffffff',
                   fontSize: '10px',
                   fontWeight: '600',
@@ -2095,7 +2095,7 @@ const PostCard: React.FC<PostCardProps> = ({
                   letterSpacing: '0.5px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                 }}>
-                  💝 Donation
+                  Donation
                 </span>
               )}
             </div>
@@ -2571,60 +2571,28 @@ const PostCard: React.FC<PostCardProps> = ({
         animate={true}
       />
 
-      <div className="post-actions" style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        borderTop: '1px solid #e9ecef'
-      }}>
+      <div className="post-footer-actions">
         <button
           onClick={() => {
             console.log('Like button clicked for post:', post.post_id, 'likedPosts:', likedPosts[post.post_id]);
             console.log('Calling like/unlike handler');
             likedPosts[post.post_id] ? handleUnlike() : handleLike();
           }}
-          className="post-action-item"
-          style={{ 
-            color: likedPosts[post.post_id] ? '#1e3a8a' : '#555', 
-            background: 'transparent', 
-            border: 'none', 
-            cursor: 'pointer', 
-            padding: '8px', 
-            fontSize: 12, 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 6,
-            fontWeight: likedPosts[post.post_id] ? 'bold' : 'normal',
-            transition: 'color 0.3s ease, font-weight 0.3s ease'
-          }}
+          type="button"
+          className={`post-footer-action${likedPosts[post.post_id] ? ' active' : ''}`}
+          aria-pressed={!!likedPosts[post.post_id]}
         >
-          <span style={{ fontSize: 18 }}>👍</span>
-          <span>Like</span>
+          <span className="post-footer-icon">👍</span>
+          <span className="post-footer-label">Like</span>
         </button>
         <button
           onClick={() => setShowCommentInput?.(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }))}
-          className="post-action-item"
-          style={{
-            color: '#6c757d',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '8px 16px',
-            borderRadius: 6,
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            transition: 'background-color 0.2s'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#f8f9fa';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }}
+          type="button"
+          className={`post-footer-action${showCommentInput?.[post.post_id] ? ' active' : ''}`}
+          aria-expanded={!!showCommentInput?.[post.post_id]}
         >
-          <span style={{ fontSize: '14px' }}>💬</span>
-          Comment
+          <span className="post-footer-icon">💬</span>
+          <span className="post-footer-label">Comment</span>
         </button>
         <RepostButton
           originalPost={{
@@ -2649,14 +2617,6 @@ const PostCard: React.FC<PostCardProps> = ({
           formatTime={formatTime}
           isForum={isForum}
           isDonation={isDonation}
-          style={{
-            color: repostedPosts[post.post_id] ? '#007bff' : '#6c757d',
-            fontWeight: repostedPosts[post.post_id] ? 'bold' : 'normal',
-            padding: '8px 16px',
-            borderRadius: 6,
-            transition: 'background-color 0.2s'
-          }}
-          className="post-action-item"
         />
       </div>
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createPost, createForumPost, createDonationRequest } from '../../services/api';
+import { createPost, createForumPost, createDonationRequest, getUserPoints } from '../../services/api';
 import ctulogo from '../../images/ctulogo.png';
 import './postcreate.css';
 
@@ -25,9 +25,9 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const maxImages = 15;
+      const maxImages = 30;
       
-      // Limit to 15 images
+      // Limit to 30 images
       const filesToProcess = Array.from(files).slice(0, maxImages - postImages.length);
       
       // Process all files and collect promises
@@ -127,6 +127,26 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
         const result = await createPost(postData);
         
         console.log('Post creation result:', result);
+        
+        // Refresh points after posting (for Alumni and OJT users)
+        // Add a small delay to ensure backend has processed points update
+        if (storedUser && storedUser.account_type && (storedUser.account_type.user || storedUser.account_type.ojt)) {
+          const userId = storedUser.user_id || storedUser.id;
+          if (userId) {
+            // Wait a bit for backend to process points
+            setTimeout(async () => {
+              try {
+                const points = await getUserPoints(userId);
+                // Dispatch event to notify Profile component
+                window.dispatchEvent(new CustomEvent('pointsUpdated', { 
+                  detail: { userId, points } 
+                }));
+              } catch (error) {
+                console.error('Error refreshing points after post:', error);
+              }
+            }, 500); // 500ms delay to ensure backend has processed
+          }
+        }
       }
 
       onPosted();
@@ -250,7 +270,7 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
                   ))}
                 </div>
                 <div style={{ fontSize: 12, color: '#666' }}>
-                  {postImages.length} of 15 images selected
+                  {postImages.length} of 30 images selected
                 </div>
               </div>
             )}
@@ -277,13 +297,13 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
                   multiple
                   onChange={handleImageUpload}
                   style={{ display: 'none' }}
-                  disabled={postImages.length >= 15}
+                  disabled={postImages.length >= 30}
                 />
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M23 19C23 19.5304 22.7893 20.0391 22.4142 20.4142C22.0391 20.7893 21.5304 21 21 21H3C2.46957 21 1.96086 20.7893 1.58579 20.4142C1.21071 20.0391 1 19.5304 1 19V8C1 7.46957 1.21071 6.96086 1.58579 6.58579C1.96086 6.21071 2.46957 6 3 6H7L9 4H15L17 6H21C21.5304 6 22.0391 6.21071 22.4142 6.58579C22.7893 6.96086 23 7.46957 23 8V19Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="2"/>
                 </svg>
-                {postImages.length >= 15 ? 'Max Photos (15)' : 'Add Photos'}
+                {postImages.length >= 30 ? 'Max Photos (30)' : 'Add Photos'}
               </label>
             </div>
 

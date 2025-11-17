@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { api } from '../services/api';
 import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
@@ -13,9 +13,10 @@ interface RepostNotificationModalProps {
   repostId: string;
   reposterName?: string;
   commentId?: string;
+  replyId?: string;
 }
 
-const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpen, onClose, repostId, reposterName, commentId }) => {
+const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpen, onClose, repostId, reposterName, commentId, replyId }) => {
   const [repost, setRepost] = useState<any>(null);
   const [originalPost, setOriginalPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -27,27 +28,12 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
   const [mainCommentValue, setMainCommentValue] = useState('');
   const [commentReplies, setCommentReplies] = useState<{ [key: number]: any[] }>({});
   const [showReplies, setShowReplies] = useState<{ [key: number]: boolean }>({});
-  const commentRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
     if (isOpen && repostId) {
       fetchRepostData();
     }
   }, [isOpen, repostId]);
-
-  useEffect(() => {
-    if (commentId && repost && repost.comments && commentRefs.current[commentId]) {
-      const commentElement = commentRefs.current[commentId];
-      if (commentElement) {
-        commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // Optional: Add a temporary highlight
-        commentElement.style.backgroundColor = '#fff2e6'; // Light orange background
-        setTimeout(() => {
-          commentElement.style.backgroundColor = ''; // Remove highlight
-        }, 3000); // Highlight for 3 seconds
-      }
-    }
-  }, [commentId, repost]);
 
   // Initialize liked/reposted states when repost data is loaded
   useEffect(() => {
@@ -504,6 +490,9 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
                 currentUserId={(JSON.parse(localStorage.getItem('user') || '{}').id) || (JSON.parse(localStorage.getItem('user') || '{}').user_id) || null}
                 formatTime={formatTime}
                 onRefresh={fetchRepostData}
+                autoOpenComments={!!(commentId || replyId)}
+                highlightCommentId={commentId}
+                highlightReplyId={replyId}
               />
             </div>
           ) : (

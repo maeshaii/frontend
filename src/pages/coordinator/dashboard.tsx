@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
 import { fetchOJTStatistics, importOJT, setSendDate, getSendDates, checkAllSentStatus, deleteSendDate } from '../../services/api';
-import logoLogin from '../../images/logo_login.png';
+import logoLogin from '../../images/logo.png';
 import { FaUpload, FaChartBar, FaSignOutAlt, FaDownload, FaCalendarAlt, FaUsers } from 'react-icons/fa';
 
 export default function Dashboard() {
@@ -21,12 +21,14 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [importLoading, setImportLoading] = useState(false);
   const [coordinatorUsername, setCoordinatorUsername] = useState('');
-  const [activePage, setActivePage] = useState('dashboard'); // 'dashboard' or 'imports'
+  const [activePage, setActivePage] = useState('imports'); // 'imports' or 'statistics'
   const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('ALL');
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
   const [showDateModal, setShowDateModal] = useState(false);
   const [showNoStudentsModal, setShowNoStudentsModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
   const [exportSection, setExportSection] = useState<string>('ALL');
   const [sendDate, setSendDateState] = useState('');
   const [existingSendDates, setExistingSendDates] = useState<any[]>([]);
@@ -39,7 +41,20 @@ export default function Dashboard() {
     if (user) {
       const userData = JSON.parse(user);
       // Use username instead of full name for coordinator
-      setCoordinatorUsername(userData.username || userData.name || '');
+      const username = userData.username || userData.name || '';
+      setCoordinatorUsername(username);
+      
+      // Set program based on coordinator username
+      if (username === 'ITCOORDINATOR') {
+        setProgram('BSIT');
+      } else if (username === 'CTCOORDINATOR') {
+        setProgram('BIT-CT');
+      } else if (username === 'ISCOORDINATOR') {
+        setProgram('BSIS');
+      } else {
+        // Default fallback
+        setProgram('BSIT');
+      }
     }
   }, []);
 
@@ -135,36 +150,32 @@ export default function Dashboard() {
         }
       }
       
-      // Show summary message
-      let summaryMessage = `✅ Import completed!\n\n`;
-      summaryMessage += `Files processed: ${selectedFiles.length}\n`;
-      if (totalCreated > 0) {
-        summaryMessage += `Total students created: ${totalCreated}\n`;
-      }
-      if (totalUpdated > 0) {
-        summaryMessage += `Total students updated: ${totalUpdated}\n`;
-      }
-      if (allSections.length > 0) {
-        summaryMessage += `Sections: ${allSections.join(', ')}\n`;
-      }
-      if (failedFiles.length > 0) {
-        summaryMessage += `\n⚠️ Failed files: ${failedFiles.join(', ')}`;
-      }
-      alert(summaryMessage);
+      // Set import result for modal
+      setImportResult({
+        filesProcessed: selectedFiles.length,
+        totalCreated,
+        totalUpdated,
+        sections: allSections,
+        failedFiles,
+        passwords: allPasswords,
+        batchYear
+      });
       
       // Download all passwords if any exist
       if (allPasswords.length > 0) {
         console.log('Downloading passwords for', allPasswords.length, 'students');
         downloadPasswords(allPasswords, batchYear);
-        alert(`📥 Password file has been downloaded with ${allPasswords.length} student passwords!`);
       } else {
         console.log('No passwords to download');
       }
       
-      // Close modal and refresh data
+      // Close import modal and refresh data
       setShowModal(false);
       setSelectedFiles([]);
       setSelectedYear(null);
+      
+      // Show import completion modal
+      setShowImportModal(true);
       
       // Refresh the OJT data to update cards
       await refreshOJTData();
@@ -405,40 +416,65 @@ export default function Dashboard() {
       display: 'flex',
       height: '100vh',
       fontFamily: 'Arial, sans-serif',
+      overflow: 'hidden',
     },
     sidebar: {
-      width: '220px',
+      width: '240px',
       height: '100vh',
-      backgroundColor: '#1e4c7a',
+      background: 'linear-gradient(180deg, #1C4E80 0%, #1b3f6b 100%)',
       display: 'flex',
       flexDirection: 'column' as const,
       justifyContent: 'space-between',
-      color: 'white',
-      padding: '20px 10px',
+      color: '#ffffff',
+      padding: '24px 18px',
+      overflow: 'hidden' as const,
+      position: 'relative' as const,
+      boxShadow: '2px 0 10px rgba(15, 35, 60, 0.35)',
+      borderRight: '1px solid rgba(255, 255, 255, 0.08)',
     },
     topSection: {
       display: 'flex',
       flexDirection: 'column' as const,
+      flex: '0 1 auto',
+      minHeight: 0,
+      overflow: 'hidden' as const,
+      gap: '28px',
+    },
+    bottomSection: {
+      marginTop: 'auto',
+      paddingTop: '12px',
     },
     logo: {
       display: 'flex',
       flexDirection: 'column' as const,
       alignItems: 'center',
-      marginBottom: '20px',
+      marginBottom: '12px',
+      flexShrink: 0,
+      gap: '16px',
+    },
+    logoContainer: {
+      width: '100%',
+      maxWidth: '180px',
+      height: '64px',
+      background: '#ffffff',
+      borderRadius: '12px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      boxShadow: '0 6px 18px rgba(12, 32, 55, 0.18)',
+      padding: '6px 12px',
     },
     logoImage: {
-      width: '80px',
-      height: '80px',
-      borderRadius: '8px',
-      background: 'white',
-      padding: '8px',
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+      height: '100%',
+      width: 'auto',
+      objectFit: 'contain' as const,
     },
     logoText: {
-      fontSize: '14px',
-      marginTop: '8px',
+      fontSize: '16px',
       textAlign: 'center' as const,
-      fontWeight: 'bold' as const,
+      fontWeight: '700' as const,
+      letterSpacing: '0.4px',
+      color: '#ffffff',
     },
     navList: {
       listStyleType: 'none' as const,
@@ -448,20 +484,31 @@ export default function Dashboard() {
     navItem: {
       display: 'flex',
       alignItems: 'center',
-      padding: '12px 16px',
-      margin: '8px 0',
+      padding: '12px 18px',
+      margin: '6px 0',
       cursor: 'pointer',
-      borderRadius: '8px',
-      transition: 'background 0.3s',
+      borderRadius: '10px',
+      transition: 'all 0.25s ease',
       textDecoration: 'none',
-      color: 'white',
+      color: '#f8fbff',
+      fontSize: '14px',
+      fontWeight: 600,
+      backgroundColor: 'transparent',
     },
     activeNavItem: {
-      backgroundColor: '#406b94',
+      backgroundColor: 'rgba(248, 251, 255, 0.18)',
+      color: '#ffffff',
+      boxShadow: '0 6px 14px rgba(13, 42, 72, 0.3)',
     },
     icon: {
       marginRight: '12px',
       fontSize: '18px',
+      display: 'flex',
+      alignItems: 'center',
+    },
+    navItemText: {
+      letterSpacing: '0.2px',
+      whiteSpace: 'nowrap' as const,
     },
     logout: {
       display: 'flex',
@@ -469,12 +516,27 @@ export default function Dashboard() {
       padding: '12px 16px',
       cursor: 'pointer',
       textDecoration: 'none',
-      color: 'white',
+      color: '#f8fbff',
+      width: '100%',
+      borderRadius: '8px',
+      fontSize: '14px',
+      fontWeight: 600,
+      transition: 'all 0.25s ease',
+      background: 'transparent',
+      border: 'none',
+      outline: 'none',
+      justifyContent: 'flex-start',
+      marginBottom: '24px',
     },
     main: {
       flex: 1,
-      padding: '30px 50px',
-      background: 'white',
+      padding: '20px',
+      background: '#f3f4f6',
+      height: '100%',
+      boxSizing: 'border-box' as const,
+      overflow: 'hidden' as const,
+      display: 'flex',
+      flexDirection: 'column' as const,
     },
     header: {
       display: 'flex',
@@ -636,70 +698,84 @@ export default function Dashboard() {
       <div style={styles.sidebar}>
         <div style={styles.topSection}>
           <div style={styles.logo}>
-            <img src={logoLogin} alt="Logo" style={styles.logoImage} />
-            <h1 style={styles.logoText}>WhereNa You</h1>
+            <div style={styles.logoContainer}>
+              <img src={logoLogin} alt="WhereNa You logo" style={styles.logoImage} />
+            </div>
           </div>
 
           <ul style={styles.navList}>
-            {links.map((link) => (
-              <li key={link.to}>
-                <div
-                  style={{
-                    ...styles.navItem,
-                    ...(link.label === 'Imports' && activePage === 'imports'
-                      ? styles.activeNavItem
-                      : {}),
-                    ...(link.label === 'Dashboard' && activePage === 'dashboard'
-                      ? styles.activeNavItem
-                      : {}),
-                    ...(link.label === 'Statistics' && activePage === 'statistics'
-                      ? styles.activeNavItem
-                      : {}),
-                  }}
-                  onClick={() => {
-                    if (link.label === 'Dashboard') {
-                      setActivePage('dashboard');
-                      setSelectedCard(null);
-                      setShowStats(false);
-                    } else if (link.label === 'Imports') {
-                      setActivePage('imports');
-                      setShowStats(false);
-                      refreshOJTData();
-                    } else if (link.label === 'Statistics') {
-                      setActivePage('statistics');
-                      setShowStats(true);
-                    }
-                  }}
-                >
-                  <span style={{ marginRight: '10px', fontSize: '18px' }}>{link.icon}</span>
-                  {link.label}
-                </div>
-              </li>
-            ))}
+            {links.map((link) => {
+              const isActive = (link.label === 'Imports' && activePage === 'imports') ||
+                              (link.label === 'Statistics' && activePage === 'statistics');
+              return (
+                <li key={link.to}>
+                  <div
+                    style={{
+                      ...styles.navItem,
+                      ...(isActive ? styles.activeNavItem : {}),
+                    }}
+                    onClick={() => {
+                      if (link.label === 'Imports') {
+                        setActivePage('imports');
+                        setSelectedCard(null);
+                        setShowStats(false);
+                        refreshOJTData();
+                      } else if (link.label === 'Statistics') {
+                        setActivePage('statistics');
+                        setShowStats(true);
+                      }
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.backgroundColor = 'rgba(248, 251, 255, 0.12)';
+                        e.currentTarget.style.color = 'white';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.color = '#f8fbff';
+                      }
+                    }}
+                  >
+                    <span style={styles.icon}>{link.icon}</span>
+                    <span style={styles.navItemText}>{link.label}</span>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
 
-        <div style={styles.logout} onClick={handleLogout}>
-          <span style={{ marginRight: '10px', fontSize: '18px' }}><FaSignOutAlt /></span> Logout
+        <div style={styles.bottomSection}>
+          <button
+            type="button"
+            style={styles.logout}
+            onClick={handleLogout}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.10)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            <span style={styles.icon}><FaSignOutAlt /></span>
+            <span style={styles.navItemText}>Logout</span>
+          </button>
         </div>
       </div>
 
       {/* ===================== Modern Main Content ===================== */}
-      <main style={{
-        flex: 1,
-        padding: '32px',
-        backgroundColor: '#f3f4f6',
-        minHeight: '100vh',
-        overflowY: 'auto' as const
-      }}>
+      <main style={styles.main}>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
 
         {/* Modern Filters & Actions */}
         {!showStats && !selectedCard && (
           <div style={{
             backgroundColor: 'white',
             borderRadius: '16px',
-            padding: '28px',
-            marginBottom: '32px',
+            padding: '20px',
+            marginBottom: '20px',
             boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
             border: '1px solid #e5e7eb'
           }}>
@@ -760,7 +836,7 @@ export default function Dashboard() {
                   letterSpacing: '0.5px',
                   border: 'none'
                 }}>
-                  BSIT
+                  {program}
                 </div>
               </div>
             
@@ -851,7 +927,7 @@ export default function Dashboard() {
                 <button
                   style={{
                     padding: '11px 20px',
-                    backgroundColor: '#8b5cf6',
+                    backgroundColor: '#3b82f6',
                     color: 'white',
                     border: 'none',
                     borderRadius: '10px',
@@ -859,7 +935,7 @@ export default function Dashboard() {
                     fontWeight: '600',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    boxShadow: '0 2px 4px rgba(139, 92, 246, 0.3)',
+                    boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px'
@@ -867,15 +943,15 @@ export default function Dashboard() {
                   onClick={downloadOJTTemplate}
                   onMouseEnter={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
-                    target.style.backgroundColor = '#7c3aed';
+                    target.style.backgroundColor = '#2563eb';
                     target.style.transform = 'translateY(-2px)';
-                    target.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.4)';
+                    target.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
                   }}
                   onMouseLeave={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
-                    target.style.backgroundColor = '#8b5cf6';
+                    target.style.backgroundColor = '#3b82f6';
                     target.style.transform = 'translateY(0)';
-                    target.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.3)';
+                    target.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
                   }}
                 >
                   Download Template
@@ -883,7 +959,7 @@ export default function Dashboard() {
                 <button
                   style={{
                     padding: '11px 20px',
-                    backgroundColor: '#f59e0b',
+                    backgroundColor: '#3b82f6',
                     color: 'white',
                     border: 'none',
                     borderRadius: '10px',
@@ -891,7 +967,7 @@ export default function Dashboard() {
                     fontWeight: '600',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
+                    boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px'
@@ -899,15 +975,15 @@ export default function Dashboard() {
                   onClick={() => setShowExportModal(true)}
                   onMouseEnter={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
-                    target.style.backgroundColor = '#d97706';
+                    target.style.backgroundColor = '#2563eb';
                     target.style.transform = 'translateY(-2px)';
-                    target.style.boxShadow = '0 4px 8px rgba(245, 158, 11, 0.4)';
+                    target.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
                   }}
                   onMouseLeave={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
-                    target.style.backgroundColor = '#f59e0b';
+                    target.style.backgroundColor = '#3b82f6';
                     target.style.transform = 'translateY(0)';
-                    target.style.boxShadow = '0 2px 4px rgba(245, 158, 11, 0.3)';
+                    target.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
                   }}
                 >
                   Export Students
@@ -915,7 +991,7 @@ export default function Dashboard() {
                 <button
                   style={{ 
                     padding: '11px 20px',
-                    backgroundColor: '#10b981',
+                    backgroundColor: '#3b82f6',
                     color: 'white',
                     border: 'none',
                     borderRadius: '10px',
@@ -923,7 +999,7 @@ export default function Dashboard() {
                     fontWeight: '600',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)',
+                    boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px'
@@ -967,15 +1043,15 @@ export default function Dashboard() {
                   }}
                   onMouseEnter={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
-                    target.style.backgroundColor = '#059669';
+                    target.style.backgroundColor = '#2563eb';
                     target.style.transform = 'translateY(-2px)';
-                    target.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.4)';
+                    target.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
                   }}
                   onMouseLeave={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
-                    target.style.backgroundColor = '#10b981';
+                    target.style.backgroundColor = '#3b82f6';
                     target.style.transform = 'translateY(0)';
-                    target.style.boxShadow = '0 2px 4px rgba(16, 185, 129, 0.3)';
+                    target.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
                   }}
                 >
                   Set Send Date
@@ -1004,7 +1080,7 @@ export default function Dashboard() {
                 <div style={{
                   gridColumn: '1 / -1',
                   textAlign: 'center',
-                  padding: '60px 20px',
+                  padding: '20px',
                   backgroundColor: 'white',
                   borderRadius: '16px',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
@@ -1037,7 +1113,7 @@ export default function Dashboard() {
                 <div style={{
                   gridColumn: '1 / -1',
                   textAlign: 'center',
-                  padding: '60px 20px',
+                  padding: '20px',
                   backgroundColor: 'white',
                   borderRadius: '16px',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
@@ -1056,114 +1132,115 @@ export default function Dashboard() {
                   const batchMatch = selectedBatchFilter === 'ALL' || yearData.year.toString() === selectedBatchFilter;
                   const sectionMatch = selectedSectionFilter === 'ALL' || yearData.section === selectedSectionFilter;
                   return batchMatch && sectionMatch;
-                }).map((yearData) => (
-                  <div
-                    key={`${yearData.year}-${yearData.section || 'default'}`}
-                    style={{
-                      backgroundColor: 'white',
-                      borderRadius: '20px',
-                      padding: '24px',
-                      boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.1)',
-                      border: '1px solid #e2e8f0',
-                      cursor: 'pointer',
-                      transition: 'all 0.3s ease',
-                      position: 'relative',
-                      overflow: 'hidden'
-                    }}
-                    onClick={() => setSelectedCard({ year: yearData.year, section: yearData.section })}
-                    onMouseEnter={(e) => {
-                      const target = e.currentTarget as HTMLDivElement;
-                      target.style.transform = 'translateY(-4px)';
-                      target.style.boxShadow = '0 16px 32px -8px rgba(0, 0, 0, 0.15)';
-                    }}
-                    onMouseLeave={(e) => {
-                      const target = e.currentTarget as HTMLDivElement;
-                      target.style.transform = 'translateY(0)';
-                      target.style.boxShadow = '0 8px 16px -4px rgba(0, 0, 0, 0.1)';
-                    }}
-                  >
-                    {/* Decorative gradient */}
-                    <div style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: '4px',
-                      background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
-                      borderRadius: '20px 20px 0 0'
-                    }}></div>
-                    
-                    {/* Card content */}
-                    <div style={{ position: 'relative', zIndex: 1 }}>
-                      <div style={{
+                }).map((yearData) => {
+                  const studentLabel = `${yearData.count} Student${yearData.count === 1 ? '' : 's'}`;
+                  return (
+                    <div
+                      key={`${yearData.year}-${yearData.section || 'default'}`}
+                      style={{
+                        backgroundColor: 'white',
+                        borderRadius: '20px',
+                        padding: '24px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                        border: '1px solid rgba(226, 232, 240, 0.8)',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                         display: 'flex',
-                        alignItems: 'flex-start',
-                        justifyContent: 'space-between',
-                        marginBottom: '20px'
-                      }}>
-                        <div style={{ flex: 1 }}>
-                          {yearData.section && (
-                            <div style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '4px 12px',
-                              backgroundColor: '#dbeafe',
-                              borderRadius: '6px',
-                              fontSize: '13px',
-                              color: '#1e40af',
-                              fontWeight: '600'
-                            }}>
-                              Section: {yearData.section}
-                            </div>
-                          )}
-                        </div>
-                        <div style={{
-                          width: '48px',
-                          height: '48px',
-                          backgroundColor: '#eff6ff',
-                          borderRadius: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#3b82f6',
-                          fontSize: '20px'
-                        }}>
-                          <FaUsers />
-                        </div>
-                      </div>
-                      
+                        flexDirection: 'column',
+                        gap: '16px',
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}
+                      onClick={() => setSelectedCard({ year: yearData.year, section: yearData.section })}
+                      onMouseEnter={(e) => {
+                        const target = e.currentTarget as HTMLDivElement;
+                        target.style.transform = 'translateY(-6px) scale(1.02)';
+                        target.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
+                        target.style.borderColor = 'rgba(29, 78, 216, 0.3)';
+                      }}
+                      onMouseLeave={(e) => {
+                        const target = e.currentTarget as HTMLDivElement;
+                        target.style.transform = 'translateY(0) scale(1)';
+                        target.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                        target.style.borderColor = 'rgba(226, 232, 240, 0.8)';
+                      }}
+                    >
                       <div style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px',
-                        marginTop: '20px'
+                        gap: '16px'
                       }}>
-                        <span style={{
-                          fontSize: '14px',
-                          color: '#64748b',
-                          fontWeight: '500'
+                        <div style={{
+                          width: '56px',
+                          height: '56px',
+                          borderRadius: '18px',
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#ffffff',
+                          fontSize: '24px',
+                          boxShadow: '0 10px 15px -3px rgba(102, 126, 234, 0.3), 0 4px 6px -2px rgba(102, 126, 234, 0.2)',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          flexShrink: 0
                         }}>
-                          OJT Students:
-                        </span>
-                        <span style={{
-                          fontSize: '28px',
-                          fontWeight: '800',
-                          color: '#3b82f6',
-                          lineHeight: '1'
-                        }}>
-                          {yearData.count}
-                        </span>
+                          <div style={{
+                            position: 'absolute',
+                            top: '-50%',
+                            right: '-50%',
+                            width: '100%',
+                            height: '100%',
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            borderRadius: '50%'
+                          }}></div>
+                          <FaUsers style={{ position: 'relative', zIndex: 1 }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <h3 style={{ 
+                            margin: 0, 
+                            fontSize: '20px', 
+                            fontWeight: 700, 
+                            color: '#1e293b',
+                            letterSpacing: '-0.02em',
+                            lineHeight: '1.3',
+                            fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                          }}>
+                            Section : {yearData.section || 'N/A'}
+                          </h3>
+                        </div>
+                      </div>
+                      <div style={{
+                        marginTop: 'auto',
+                        background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                        border: '1px solid rgba(59, 130, 246, 0.2)',
+                        borderRadius: '14px',
+                        padding: '14px 18px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#1e40af',
+                        fontWeight: 600,
+                        boxShadow: '0 1px 3px 0 rgba(59, 130, 246, 0.1)'
+                      }}>
+                        <span style={{ 
+                          fontSize: '18px', 
+                          fontWeight: 700,
+                          color: '#1e40af',
+                          letterSpacing: '-0.01em',
+                          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                        }}>{studentLabel}</span>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           )
         ) : (
           <Statistics />
         )}
+        </div>
       </main>
 
       {/* ===================== Logout Confirm Modal ===================== */}
@@ -1287,27 +1364,6 @@ export default function Dashboard() {
             <div style={{ padding: '32px 40px 32px 28px' }}>
               {/* Form Fields */}
               <div style={{ marginBottom: '32px' }}>
-                {/* Info Message - Year Auto-Detection */}
-                <div style={{ 
-                  marginBottom: '24px',
-                  padding: '16px',
-                  backgroundColor: '#eff6ff',
-                  borderLeft: '4px solid #3b82f6',
-                  borderRadius: '8px'
-                }}>
-                  <p style={{ 
-                    margin: '0', 
-                    fontSize: '13px', 
-                    color: '#1e40af',
-                    lineHeight: '1.6'
-                  }}>
-                    💡 <strong>Smart Year Detection:</strong><br/>
-                    • <strong>New students:</strong> Auto-calculated as next year (e.g., import in 2025 = batch 2026)<br/>
-                    • <strong>Existing students:</strong> Year auto-detected from CTU_ID<br/>
-                    • <strong>Optional:</strong> Add "Batch_Year" column to Excel to override
-                  </p>
-                </div>
-
                 {/* File Upload Field */}
                 <div style={{ marginBottom: '24px' }}>
                   <label style={{ 
@@ -1573,40 +1629,43 @@ export default function Dashboard() {
         }}>
           <div style={{
             backgroundColor: 'white',
-            borderRadius: '24px',
+            borderRadius: '36px',
             padding: '0',
             boxShadow: '0 32px 64px -12px rgba(0, 0, 0, 0.35)',
-            width: '520px',
-            maxWidth: '85vw',
+            width: '420px',
+            maxWidth: '90vw',
             border: '1px solid rgba(226, 232, 240, 0.8)',
             position: 'relative',
-            animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+            animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+            overflow: 'hidden'
           }}>
             {/* Gradient Header */}
             <div style={{
               background: 'white',
-              padding: '24px 36px 18px 36px',
+              padding: '16px 24px 12px 24px',
               color: '#1f2937',
               position: 'relative',
-              borderBottom: '2px solid #e5e7eb'
+              borderBottom: '2px solid #e5e7eb',
+              borderTopLeftRadius: '36px',
+              borderTopRightRadius: '36px'
             }}>
               {/* Header Content */}
               <div style={{ 
-                marginBottom: '16px'
+                marginBottom: '12px'
               }}>
                 <h3 style={{ 
-                  margin: '0 0 8px 0', 
-                  fontSize: '24px',
+                  margin: '0 0 6px 0', 
+                  fontSize: '20px',
                   fontWeight: '800',
                   lineHeight: '1.2',
                   letterSpacing: '-0.025em',
-                  color: 'white'
+                  color: '#1e293b'
                 }}>
                   Auto-Process Batch
             </h3>
                 <p style={{ 
                   margin: '0', 
-                  fontSize: '16px',
+                  fontSize: '14px',
                   fontWeight: '500',
                   opacity: '0.9'
                 }}>
@@ -1616,25 +1675,24 @@ export default function Dashboard() {
             </div>
 
             {/* Content Area */}
-            <div style={{ padding: '20px 36px 32px 36px' }}>
+            <div style={{ padding: '16px 24px 20px 24px' }}>
               {/* No Data Warning - for testing */}
               {ojtYears.length === 0 && (
                 <div style={{
                   backgroundColor: '#e0f2fe',
                   border: '2px solid #0ea5e9',
-                  borderRadius: '12px',
+                  borderRadius: '24px',
                   padding: '16px 20px',
                   marginBottom: '24px',
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: '12px'
                 }}>
-                  <span style={{ fontSize: '24px', flexShrink: 0 }}>ℹ️</span>
                   <div style={{ flex: 1 }}>
-                    <strong style={{ color: '#075985', fontSize: '15px', display: 'block', marginBottom: '8px' }}>
+                    <strong style={{ color: '#075985', fontSize: '13px', display: 'block', marginBottom: '6px' }}>
                       No OJT Data Available
                     </strong>
-                    <div style={{ color: '#0c4a6e', fontSize: '14px', lineHeight: '1.6' }}>
+                    <div style={{ color: '#0c4a6e', fontSize: '12px', lineHeight: '1.5' }}>
                       Please import OJT students first before scheduling automatic processing.
                     </div>
                   </div>
@@ -1652,24 +1710,23 @@ export default function Dashboard() {
                     <div style={{
                       backgroundColor: '#fef2f2',
                       border: '2px solid #ef4444',
-                      borderRadius: '12px',
+                      borderRadius: '24px',
                       padding: '14px 18px',
                       marginBottom: '20px',
                       display: 'flex',
                       alignItems: 'flex-start',
                       gap: '12px'
                     }}>
-                      <span style={{ fontSize: '22px', flexShrink: 0 }}>🔒</span>
                       <div style={{ flex: 1 }}>
-                        <strong style={{ color: '#991b1b', fontSize: '14px', display: 'block', marginBottom: '6px' }}>
+                        <strong style={{ color: '#991b1b', fontSize: '13px', display: 'block', marginBottom: '5px' }}>
                           Batch {selectedBatchFilter} Already Processed
                         </strong>
-                        <div style={{ color: '#b91c1c', fontSize: '13px', lineHeight: '1.5' }}>
+                        <div style={{ color: '#b91c1c', fontSize: '12px', lineHeight: '1.4' }}>
                           This batch was processed on {new Date(processedBatch.processed_at || processedBatch.send_date).toLocaleDateString()}.
                           The send date cannot be modified for completed batches.
                         </div>
-                        <div style={{ marginTop: '6px', fontSize: '12px', color: '#991b1b', fontStyle: 'italic' }}>
-                          ⚠️ All completed students have been sent to admin and ongoing students marked as incomplete.
+                        <div style={{ marginTop: '5px', fontSize: '11px', color: '#991b1b', fontStyle: 'italic' }}>
+                          All completed students have been sent to admin and ongoing students marked as incomplete.
                         </div>
                       </div>
                     </div>
@@ -1683,30 +1740,29 @@ export default function Dashboard() {
                     <div style={{
                       backgroundColor: '#fef3c7',
                       border: '2px solid #f59e0b',
-                      borderRadius: '12px',
-                      padding: '14px 18px',
-                      marginBottom: '20px',
+                      borderRadius: '24px',
+                      padding: '12px 16px',
+                      marginBottom: '16px',
                       display: 'flex',
                       alignItems: 'flex-start',
                       gap: '12px'
                     }}>
-                      <span style={{ fontSize: '22px', flexShrink: 0 }}>⚠️</span>
                       <div style={{ flex: 1 }}>
-                        <strong style={{ color: '#92400e', fontSize: '14px', display: 'block', marginBottom: '6px' }}>
+                        <strong style={{ color: '#92400e', fontSize: '13px', display: 'block', marginBottom: '5px' }}>
                           Some Batches Already Processed
                         </strong>
-                        <div style={{ color: '#78350f', fontSize: '13px', lineHeight: '1.5', marginBottom: '8px' }}>
+                        <div style={{ color: '#78350f', fontSize: '12px', lineHeight: '1.4', marginBottom: '6px' }}>
                           The following batches have already been processed and will be skipped:
                         </div>
-                        <div style={{ color: '#78350f', fontSize: '13px', lineHeight: '1.6' }}>
+                        <div style={{ color: '#78350f', fontSize: '12px', lineHeight: '1.5' }}>
                           {processedBatches.map((batch, idx) => (
                             <div key={idx} style={{ marginBottom: '2px' }}>
                               • <strong>Batch {batch.batch_year}</strong> (processed on {new Date(batch.processed_at || batch.send_date).toLocaleDateString()})
                             </div>
                           ))}
                         </div>
-                        <div style={{ marginTop: '8px', fontSize: '12px', color: '#92400e', fontStyle: 'italic' }}>
-                          💡 Only unprocessed batches will be scheduled.
+                        <div style={{ marginTop: '6px', fontSize: '11px', color: '#92400e', fontStyle: 'italic' }}>
+                          Only unprocessed batches will be scheduled.
                         </div>
                       </div>
                     </div>
@@ -1721,23 +1777,22 @@ export default function Dashboard() {
                 <div style={{
                   backgroundColor: '#dcfce7',
                   border: '2px solid #22c55e',
-                  borderRadius: '12px',
-                  padding: '14px 18px',
-                  marginBottom: '20px',
+                  borderRadius: '24px',
+                  padding: '12px 16px',
+                  marginBottom: '16px',
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: '12px'
                 }}>
-                  <span style={{ fontSize: '22px', flexShrink: 0 }}>✅</span>
                   <div style={{ flex: 1 }}>
-                    <strong style={{ color: '#166534', fontSize: '14px', display: 'block', marginBottom: '6px' }}>
+                    <strong style={{ color: '#166534', fontSize: '13px', display: 'block', marginBottom: '5px' }}>
                       All Completed OJT Data Already Sent to Admin
                     </strong>
-                    <div style={{ color: '#15803d', fontSize: '13px', lineHeight: '1.5' }}>
+                    <div style={{ color: '#15803d', fontSize: '12px', lineHeight: '1.4' }}>
                       All {completedCount} completed OJT students have been successfully sent to admin for approval.
                     </div>
-                    <div style={{ marginTop: '6px', fontSize: '12px', color: '#166534', fontStyle: 'italic' }}>
-                      ℹ️ Note: Scheduling is not needed as all data has already been processed.
+                    <div style={{ marginTop: '5px', fontSize: '11px', color: '#166534', fontStyle: 'italic' }}>
+                      Note: Scheduling is not needed as all data has already been processed.
                     </div>
                   </div>
                 </div>
@@ -1748,9 +1803,9 @@ export default function Dashboard() {
                 <div style={{
                   backgroundColor: '#fef3c7',
                   border: '2px solid #fbbf24',
-                  borderRadius: '12px',
-                  padding: '16px 20px',
-                  marginBottom: '24px',
+                  borderRadius: '24px',
+                  padding: '12px 16px',
+                  marginBottom: '16px',
                   position: 'relative'
                 }}>
                   {/* X Button to Remove Schedule */}
@@ -1893,23 +1948,22 @@ export default function Dashboard() {
                   </button>
 
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                    <span style={{ fontSize: '24px', flexShrink: 0 }}>⚠️</span>
                     <div style={{ flex: 1 }}>
-                      <strong style={{ color: '#92400e', fontSize: '15px', display: 'block', marginBottom: '8px' }}>
+                      <strong style={{ color: '#92400e', fontSize: '13px', display: 'block', marginBottom: '6px' }}>
                         Existing Scheduled Dates Found
                       </strong>
-                      <div style={{ color: '#78350f', fontSize: '14px', lineHeight: '1.6' }}>
+                      <div style={{ color: '#78350f', fontSize: '12px', lineHeight: '1.5' }}>
                         {existingSendDates.filter(sd => !sd.is_processed).map((sd, idx) => (
-                          <div key={idx} style={{ marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div key={idx} style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span>• <strong>Batch {sd.batch_year}</strong>{sd.section && ` (Section ${sd.section})`}: {new Date(sd.send_date).toLocaleDateString()}</span>
-                            <span style={{ fontSize: '12px', marginLeft: 'auto', opacity: 0.8 }}>
+                            <span style={{ fontSize: '11px', marginLeft: 'auto', opacity: 0.8 }}>
                               (Set on {new Date(sd.created_at).toLocaleDateString()})
                             </span>
                           </div>
                         ))}
                       </div>
-                      <div style={{ marginTop: '8px', fontSize: '13px', color: '#92400e', fontStyle: 'italic' }}>
-                        💡 Set a new date below to update the existing schedule
+                      <div style={{ marginTop: '6px', fontSize: '11px', color: '#92400e', fontStyle: 'italic' }}>
+                        Set a new date below to update the existing schedule
                       </div>
                     </div>
                   </div>
@@ -1920,9 +1974,9 @@ export default function Dashboard() {
               <div style={{
                 backgroundColor: '#f8fafc',
                 border: '1px solid #e2e8f0',
-                borderRadius: '14px',
-                padding: '20px 28px',
-                marginBottom: '20px',
+                borderRadius: '24px',
+                padding: '14px 18px',
+                marginBottom: '16px',
                 position: 'relative',
                 overflow: 'hidden'
               }}>
@@ -1933,66 +1987,66 @@ export default function Dashboard() {
                   <span style={{ 
                     fontWeight: '700', 
                     color: '#1e293b',
-                    fontSize: '15px'
+                    fontSize: '13px'
                   }}>
                     Processing Actions
                   </span>
                 </div>
                 
-                <div style={{ paddingLeft: '8px' }}>
+                <div style={{ paddingLeft: '6px' }}>
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
-                    marginBottom: '10px',
-                    fontSize: '14px',
+                    marginBottom: '8px',
+                    fontSize: '12px',
                     color: '#475569'
                   }}>
                     <div style={{
-                      width: '8px',
-                      height: '8px',
+                      width: '6px',
+                      height: '6px',
                       backgroundColor: '#10b981',
                       borderRadius: '50%',
-                      marginRight: '16px',
-                      marginLeft: '4px',
+                      marginRight: '12px',
+                      marginLeft: '3px',
                       flexShrink: 0,
-                      boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)'
+                      boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.2)'
                     }}></div>
                     <span><strong style={{ color: '#059669' }}>Completed</strong> students → Sent to admin</span>
                   </div>
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
-                    marginBottom: '10px',
-                    fontSize: '14px',
+                    marginBottom: '8px',
+                    fontSize: '12px',
                     color: '#475569'
                   }}>
                     <div style={{
-                      width: '8px',
-                      height: '8px',
+                      width: '6px',
+                      height: '6px',
                       backgroundColor: '#f59e0b',
                       borderRadius: '50%',
-                      marginRight: '16px',
-                      marginLeft: '4px',
+                      marginRight: '12px',
+                      marginLeft: '3px',
                       flexShrink: 0,
-                      boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.2)'
+                      boxShadow: '0 0 0 2px rgba(245, 158, 11, 0.2)'
                     }}></div>
                     <span><strong style={{ color: '#d97706' }}>Ongoing</strong> students → Marked incomplete</span>
                   </div>
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center',
-                    fontSize: '14px',
+                    fontSize: '12px',
                     color: '#475569'
                   }}>
                     <div style={{
-                      width: '8px',
-                      height: '8px',
+                      width: '6px',
+                      height: '6px',
                       backgroundColor: '#8b5cf6',
                       borderRadius: '50%',
-                      marginRight: '16px',
-                      marginLeft: '4px',
+                      marginRight: '12px',
+                      marginLeft: '3px',
                       flexShrink: 0,
-                      boxShadow: '0 0 0 3px rgba(139, 92, 246, 0.2)'
+                      boxShadow: '0 0 0 2px rgba(139, 92, 246, 0.2)'
                     }}></div>
                     <span>Processes <strong style={{ color: '#7c3aed' }}>ALL sections</strong> in batch {selectedBatchFilter}</span>
                   </div>
@@ -2000,13 +2054,13 @@ export default function Dashboard() {
               </div>
 
               {/* Date Selection */}
-              <div style={{ marginBottom: '24px' }}>
+              <div style={{ marginBottom: '16px' }}>
                 <label style={{ 
                   display: 'block', 
-                  marginBottom: '10px', 
+                  marginBottom: '8px', 
                   fontWeight: '700', 
                   color: '#1e293b',
-                  fontSize: '15px'
+                  fontSize: '13px'
                 }}>
                   Select Processing Date
               </label>
@@ -2017,11 +2071,10 @@ export default function Dashboard() {
                     onChange={(e) => setSendDateState(e.target.value)}
                 style={{
                   width: '100%',
-                      padding: '14px',
-                      paddingRight: '14px',
+                      padding: '10px 12px',
                       border: '2px solid #e2e8f0',
-                      borderRadius: '14px',
-                      fontSize: '15px',
+                      borderRadius: '24px',
+                      fontSize: '13px',
                       color: '#1e293b',
                       backgroundColor: 'white',
                       transition: 'all 0.3s ease',
@@ -2047,7 +2100,7 @@ export default function Dashboard() {
               {/* Action Buttons */}
               <div style={{ 
                 display: 'flex', 
-                gap: '16px', 
+                gap: '12px', 
                 justifyContent: 'flex-end' 
               }}>
               <button
@@ -2059,14 +2112,14 @@ export default function Dashboard() {
                   setCompletedCount(0);
                 }}
                 style={{
-                    padding: '14px 28px',
+                    padding: '10px 20px',
                     border: '2px solid #e2e8f0',
-                    borderRadius: '16px',
+                    borderRadius: '24px',
                   backgroundColor: 'white',
                     color: '#64748b',
                   cursor: 'pointer',
                     fontWeight: '600',
-                    fontSize: '15px',
+                    fontSize: '13px',
                     transition: 'all 0.3s ease'
                   }}
                   onMouseEnter={(e) => {
@@ -2208,16 +2261,16 @@ export default function Dashboard() {
                     }
                   }}
                 style={{
-                    padding: '14px 28px',
+                    padding: '10px 20px',
                   border: '2px solid #e5e7eb',
-                    borderRadius: '16px',
+                    borderRadius: '24px',
                     background: (allDataSent || (existingSendDates.length > 0 && !allDataSent)) 
                       ? 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)' 
                       : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
                   color: '#000000',
                   cursor: (allDataSent || (existingSendDates.length > 0 && !allDataSent)) ? 'not-allowed' : 'pointer',
                     fontWeight: '700',
-                    fontSize: '15px',
+                    fontSize: '13px',
                     transition: 'all 0.3s ease',
                     boxShadow: (allDataSent || (existingSendDates.length > 0 && !allDataSent)) 
                       ? '0 4px 8px rgba(148, 163, 184, 0.2)' 
@@ -2241,8 +2294,8 @@ export default function Dashboard() {
                     }
                   }}
                 >
-                  {allDataSent ? '✅ All Data Already Sent' : 
-                   (existingSendDates.length > 0 && !allDataSent) ? '🔒 Remove Existing Schedule First' : 
+                  {allDataSent ? 'All Data Already Sent' : 
+                   (existingSendDates.length > 0 && !allDataSent) ? 'Remove Existing Schedule First' : 
                    'Schedule Processing'}
               </button>
               </div>
@@ -2593,6 +2646,120 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Import Completion Modal */}
+      {showImportModal && importResult && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }} onClick={() => {
+          setShowImportModal(false);
+          setImportResult(null);
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '24px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            zIndex: 1001
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              marginBottom: '16px'
+            }}>
+              <span style={{ fontSize: '24px' }}>✅</span>
+              <h2 style={{
+                margin: 0,
+                fontSize: '18px',
+                fontWeight: '600',
+                color: '#1e293b'
+              }}>
+                Import completed!
+              </h2>
+            </div>
+
+            <div style={{
+              marginBottom: '20px',
+              fontSize: '14px',
+              color: '#475569',
+              lineHeight: '1.6'
+            }}>
+              <div style={{ marginBottom: '8px' }}>
+                <strong>Files processed:</strong> {importResult.filesProcessed}
+              </div>
+              {importResult.totalCreated > 0 && (
+                <div style={{ marginBottom: '8px' }}>
+                  <strong>Total students created:</strong> {importResult.totalCreated}
+                </div>
+              )}
+              {importResult.totalUpdated > 0 && (
+                <div style={{ marginBottom: '8px' }}>
+                  <strong>Total students updated:</strong> {importResult.totalUpdated}
+                </div>
+              )}
+              {importResult.sections && importResult.sections.length > 0 && (
+                <div style={{ marginBottom: '8px' }}>
+                  <strong>Sections:</strong> {importResult.sections.join(', ')}
+                </div>
+              )}
+              {importResult.failedFiles && importResult.failedFiles.length > 0 && (
+                <div style={{ marginBottom: '8px', color: '#dc2626' }}>
+                  <strong>⚠️ Failed files:</strong> {importResult.failedFiles.join(', ')}
+                </div>
+              )}
+              {importResult.passwords && importResult.passwords.length > 0 && (
+                <div style={{ marginBottom: '8px', color: '#059669' }}>
+                  <strong>📥 Password file downloaded:</strong> {importResult.passwords.length} student passwords
+                </div>
+              )}
+            </div>
+
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportResult(null);
+                }}
+                style={{
+                  padding: '8px 24px',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#2563eb';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#3b82f6';
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

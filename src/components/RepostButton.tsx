@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import RepostModal from './RepostModal';
-import { repostPost, repostForumPost, repostDonation } from '../services/api';
+import { repostPost, repostForumPost, repostDonation, getUserPoints } from '../services/api';
+import './postFooterActions.css';
 
 interface RepostButtonProps {
   originalPost: {
@@ -85,6 +86,27 @@ const RepostButton: React.FC<RepostButtonProps> = ({
       console.log('Repost result:', result);
       setShowRepostModal(false);
       onRepost?.(); // This will refresh the posts to show the new repost
+      
+      // Refresh points after reposting (for Alumni and OJT users)
+      const raw = localStorage.getItem('user');
+      const storedUser = raw ? JSON.parse(raw) : null;
+      if (storedUser && storedUser.account_type && (storedUser.account_type.user || storedUser.account_type.ojt)) {
+        const userId = storedUser.user_id || storedUser.id;
+        if (userId) {
+          // Add a small delay to ensure backend has processed points update
+          setTimeout(async () => {
+            try {
+              const points = await getUserPoints(userId);
+              // Dispatch event to notify Profile component
+              window.dispatchEvent(new CustomEvent('pointsUpdated', { 
+                detail: { userId, points } 
+              }));
+            } catch (error) {
+              console.error('Error refreshing points after repost:', error);
+            }
+          }, 500); // 500ms delay to ensure backend has processed
+        }
+      }
     } catch (error: any) {
       console.error('Error creating repost:', error);
       alert('Failed to create repost. Please try again.');
@@ -95,24 +117,18 @@ const RepostButton: React.FC<RepostButtonProps> = ({
     <>
       <button
         onClick={handleRepostClick}
-        style={{
-          background: 'none',
-          border: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          cursor: 'pointer',
-          color: isReposted ? '#28a745' : '#666',
-          fontSize: '14px',
-          fontWeight: '500',
-          ...style
-        }}
-        className={className}
+        type="button"
+        className={[
+          'post-footer-action',
+          isReposted ? 'active' : '',
+          className
+        ].filter(Boolean).join(' ')}
+        style={style}
       >
-        <span style={{ fontSize: '16px' }}>
+        <span className="post-footer-icon">
           {isReposted ? '🔄' : '🔄'}
         </span>
-        <span>{isReposted ? 'Reposted' : 'Repost'}</span>
+        <span className="post-footer-label">{isReposted ? 'Reposted' : 'Repost'}</span>
       </button>
 
       <RepostModal

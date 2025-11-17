@@ -400,6 +400,100 @@ h3 {
   color: #1e4c7a;
 }
 
+/* ---------------------------
+    Responsive Breakpoints
+  ----------------------------*/
+@media (max-width: 1024px) {
+  .tracker-container {
+    padding: 32px 20px;
+  }
+
+  .tracker-inner {
+    max-width: 100%;
+  }
+
+  .tracker-header {
+    padding: 20px;
+  }
+
+  .card {
+    padding: 12px 14px;
+  }
+}
+
+@media (max-width: 768px) {
+  .tracker-container {
+    padding: 24px 16px;
+  }
+
+  .tracker-inner {
+    gap: 18px;
+  }
+
+  .tracker-header {
+    padding: 18px 16px;
+  }
+
+  .action-button,
+  .button-edit,
+  .button-delete,
+  .button-update,
+  .button-cancel,
+  .button-add,
+  .button-preview {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .floating-button-group {
+    right: 16px;
+    top: 16px;
+  }
+
+  .card {
+    padding: 12px 14px;
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 576px) {
+  .tracker-container {
+    padding: 20px 12px;
+  }
+
+  .tracker-header {
+    padding: 16px 12px;
+  }
+
+  .tracker-inner {
+    gap: 16px;
+  }
+
+  .floating-button-group {
+    position: static;
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .card {
+    padding: 10px 12px;
+  }
+
+  label {
+    font-size: 0.95rem;
+  }
+
+  h2,
+  h3 {
+    font-size: 1rem;
+  }
+}
+
 .file-error {
   margin-top: 8px;
   padding: 8px 12px;

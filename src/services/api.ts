@@ -14,7 +14,7 @@ const API_BASE = ensureApiSuffix(process.env.REACT_APP_API_URL);
 const api = axios.create({
   baseURL: API_BASE,
   withCredentials: false,
-  timeout: 10000, // 10 second timeout for login
+  timeout: 20000, // 20 second timeout for login (increased to handle slower responses)
 });
 
 // Public API instance for endpoints that don't require authentication
@@ -205,25 +205,53 @@ export const loginUser = async (acc_username: string, acc_password: string) => {
       statusText: error.response?.statusText,
       data: error.response?.data,
       message: error.message,
+      code: error.code,
       config: {
         url: error.config?.url,
         method: error.config?.method,
-        headers: error.config?.headers
+        headers: error.config?.headers,
+        baseURL: error.config?.baseURL
       }
     });
     
-    // Provide more specific error messages
-    if (error.response?.status === 400) {
-      return { success: false, message: 'Invalid credentials or request format' };
-    } else if (error.response?.status === 500) {
-      return { success: false, message: 'Server error - please try again later' };
-    } else if (error.code === 'ERR_NETWORK') {
-      return { success: false, message: 'Network error - check your connection' };
-    } else if (error.response?.status === 0) {
-      return { success: false, message: 'CORS error - backend may not be running' };
+    // Handle timeout errors specifically
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      return { 
+        success: false, 
+        message: 'Request timeout - the server is taking too long to respond. Please check if the backend server is running and try again.' 
+      };
     }
     
-    return { success: false, message: 'Login failed - please try again' };
+    // Handle network errors
+    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+      return { 
+        success: false, 
+        message: 'Network error - unable to connect to the server. Please check your connection and ensure the backend server is running.' 
+      };
+    }
+    
+    // Handle CORS errors
+    if (error.response?.status === 0 || (!error.response && error.request)) {
+      return { 
+        success: false, 
+        message: 'Connection error - unable to reach the server. Please verify the backend is running and accessible.' 
+      };
+    }
+    
+    // Provide more specific error messages for HTTP status codes
+    if (error.response?.status === 400) {
+      return { success: false, message: 'Invalid credentials or request format' };
+    } else if (error.response?.status === 401) {
+      return { success: false, message: 'Invalid username or password' };
+    } else if (error.response?.status === 500) {
+      return { success: false, message: 'Server error - please try again later' };
+    }
+    
+    // Default error message
+    return { 
+      success: false, 
+      message: error.response?.data?.message || error.message || 'Login failed - please try again' 
+    };
   }
 };
 
@@ -1018,6 +1046,46 @@ export const getRepostLikes = async (repostId: number) => {
   return response.data;
 };
 
+// Get likes for a specific donation
+export const getDonationLikes = async (donationId: number) => {
+  // Use the detail endpoint which includes likes
+  const response = await api.get(`donations/${donationId}/`);
+  if (response.data && response.data.likes) {
+    // Transform to match the likes format
+    return {
+      likes: response.data.likes.map((like: any) => ({
+        user_id: like.user?.user_id || like.user_id,
+        f_name: like.user?.f_name || like.f_name,
+        m_name: like.user?.m_name || like.m_name,
+        l_name: like.user?.l_name || like.l_name,
+        profile_pic: like.user?.profile_pic || like.profile_pic,
+        initials: like.user?.initials || like.initials
+      }))
+    };
+  }
+  return { likes: [] };
+};
+
+// Get likes for a specific forum post
+export const getForumLikes = async (forumId: number) => {
+  // Use the detail endpoint which includes likes (forum uses post_id but stored separately)
+  const response = await api.get(`forum/${forumId}/`);
+  if (response.data && response.data.likes) {
+    // Transform to match the likes format
+    return {
+      likes: response.data.likes.map((like: any) => ({
+        user_id: like.user?.user_id || like.user_id,
+        f_name: like.user?.f_name || like.f_name,
+        m_name: like.user?.m_name || like.m_name,
+        l_name: like.user?.l_name || like.l_name,
+        profile_pic: like.user?.profile_pic || like.profile_pic,
+        initials: like.user?.initials || like.initials
+      }))
+    };
+  }
+  return { likes: [] };
+};
+
 export const getDonationComments = async (donationId: number) => {
   const response = await api.get(`donations/${donationId}/comments/`);
   return response.data;
@@ -1124,8 +1192,10 @@ export const getUserPoints = async (userId: number) => {
       comments: { points: 0, count: 0 },
       shares: { points: 0, count: 0 },
       replies: { points: 0, count: 0 },
+      posts: { points: 0, count: 0 },
       posts_with_photos: { points: 0, count: 0 },
-      tracker_form: { points: 0, count: 0 }
+      tracker_form: { points: 0, count: 0 },
+      milestones: { points: 0, count: 0 }
     }
   };
 };
@@ -1138,6 +1208,64 @@ export const getEngagementLeaderboard = async (limit: number = 50, userType: str
       user_type: userType
     }
   });
+  return response.data;
+};
+
+// Get engagement points settings
+export const getEngagementPointsSettings = async () => {
+  const response = await api.get('engagement/points-settings/');
+  return response.data;
+};
+
+// Get engagement milestone tasks for the current user
+export const getEngagementTasks = async () => {
+  const response = await api.get('engagement/tasks/');
+  return response.data;
+};
+
+// Get points tasks (Verify Email, Complete Preferences, etc.)
+export const getPointsTasks = async () => {
+  const response = await api.get('engagement/points-tasks/');
+  return response.data;
+};
+
+// Update engagement points settings
+export const updateEngagementPointsSettings = async (settings: {
+  enabled: boolean;
+  like: number;
+  comment: number;
+  share: number;
+  reply: number;
+  post: number;
+  post_with_photo: number;
+  tracker_form: number;
+  tracker_form_enabled?: boolean;
+}) => {
+  const response = await api.post('engagement/points-settings/', settings);
+  return response.data;
+};
+
+// Get milestone tasks points (admin only)
+export const getMilestoneTasksPoints = async () => {
+  const response = await api.get('engagement/milestone-tasks-points/');
+  return response.data;
+};
+
+// Update milestone tasks points (admin only)
+export const updateMilestoneTasksPoints = async (tasks: Array<{
+  task_id: number;
+  points: number;
+  is_active?: boolean;
+  required_count?: number;
+}>, milestoneTasksEnabled?: boolean) => {
+  const payload: any = {};
+  if (tasks && tasks.length > 0) {
+    payload.tasks = tasks;
+  }
+  if (milestoneTasksEnabled !== undefined) {
+    payload.milestone_tasks_enabled = milestoneTasksEnabled;
+  }
+  const response = await api.post('engagement/milestone-tasks-points/', payload);
   return response.data;
 };
 
@@ -1178,17 +1306,61 @@ export const deleteInventoryItem = async (itemId: number) => {
 };
 
 // Give reward to user
-export const giveReward = async (userId: number, rewardId: number) => {
+export const giveReward = async (userId: number, rewardId: number, isTrackerReward: boolean = false) => {
   const response = await api.post('rewards/give/', {
     user_id: userId,
-    reward_id: rewardId
+    reward_id: rewardId,
+    is_tracker_reward: isTrackerReward
   });
   return response.data;
 };
 
 // Get reward history
-export const getRewardHistory = async (limit: number = 50) => {
-  const response = await api.get(`rewards/history/?limit=${limit}`);
+export const getRewardHistory = async (limit: number = 50, trackerOnly: boolean = false) => {
+  const response = await api.get(`rewards/history/?limit=${limit}&tracker_only=${trackerOnly}`);
+  return response.data;
+};
+
+// Request reward (user self-service)
+export const requestReward = async (rewardId: number) => {
+  const response = await api.post('rewards/request/', {
+    reward_id: rewardId
+  });
+  return response.data;
+};
+
+// Get reward requests (admin: all requests, user: own requests)
+export const getRewardRequests = async (status?: string) => {
+  const url = status ? `rewards/requests/?status=${status}` : 'rewards/requests/';
+  const response = await api.get(url);
+  return response.data;
+};
+
+// Approve reward request (admin only)
+export const approveRewardRequest = async (requestId: number, voucherCode?: string, notes?: string, instructions?: string) => {
+  const response = await api.post(`rewards/requests/${requestId}/approve/`, {
+    voucher_code: voucherCode,
+    notes: notes || instructions,
+    instructions: instructions || notes
+  });
+  return response.data;
+};
+
+// Claim reward request (user claims after admin approval)
+export const claimRewardRequest = async (requestId: number) => {
+  const response = await api.post(`rewards/requests/${requestId}/claim/`);
+  return response.data;
+};
+
+// Upload voucher file (admin only)
+export const uploadVoucherFile = async (requestId: number, file: File) => {
+  const formData = new FormData();
+  formData.append('voucher_file', file);
+  const response = await api.post(`rewards/requests/${requestId}/upload-voucher/`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
   return response.data;
 };
 
