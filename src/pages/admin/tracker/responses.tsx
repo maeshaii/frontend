@@ -165,13 +165,13 @@ const Responses: React.FC = () => {
       const responseDate = new Date(res.created_at || res.submitted_at || Date.now());
       const month = responseDate.getMonth();
 
-      // Find the corresponding alumni user to get the course
-      const alumniUser = alumniUsers.find((user) => user.id === res.user_id);
-      const course = alumniUser?.course || 'Unknown';
+      // 🔧 FIX: Get course/program directly from response answers (not from alumniUsers lookup)
+      // Backend includes 'Program Name' in the answers object
+      const course = res.answers?.['Program Name'] || 'Unknown';
 
       console.log('Response user_id:', res.user_id);
-      console.log('Found alumni user:', alumniUser);
-      console.log('Course from alumni record:', course);
+      console.log('Program from response:', course);
+      console.log('Response answers:', res.answers);
 
       // Determine quarter
       let quarter: string;
@@ -553,6 +553,21 @@ const Responses: React.FC = () => {
 
                       // Handle file uploads
                       if (answer && typeof answer === 'object' && answer.type === 'file') {
+                        // 🔧 FIX: Handle broken file references (old bug before fix)
+                        if (!answer.filename || !answer.file_size) {
+                          return (
+                            <div
+                              key={userFieldKeys.length + i}
+                              style={{ marginBottom: '12px', fontSize: '1rem' }}
+                            >
+                              <strong>{label}:</strong>
+                              <div style={{ color: '#999', fontStyle: 'italic', marginLeft: '8px' }}>
+                                No file uploaded (please re-upload if needed)
+                              </div>
+                            </div>
+                          );
+                        }
+                        
                         return (
                           <div
                             key={userFieldKeys.length + i}
