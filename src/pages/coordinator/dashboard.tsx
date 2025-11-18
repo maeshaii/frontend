@@ -1115,7 +1115,8 @@ export default function Dashboard() {
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
               gap: '24px',
-              marginBottom: '32px'
+              marginBottom: '32px',
+              justifyItems: 'start'
             }}>
               {loading ? (
                 <div style={{
@@ -1190,7 +1191,8 @@ export default function Dashboard() {
                         flexDirection: 'column',
                         gap: '16px',
                         position: 'relative',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        width: '320px'
                       }}
                       onClick={() => setSelectedCard({ year: yearData.year, section: yearData.section })}
                       onMouseEnter={(e) => {

@@ -384,9 +384,9 @@ const styles: { [key: string]: React.CSSProperties } = {
 
   // Cards container
   cardsContainer: {
-    padding: '8px 32px 32px 32px',
+    padding: '8px 48px 32px 48px',
     display: 'flex',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     width: '100%',
   },
   cardsHeader: {
@@ -409,10 +409,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   cardsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 280px))',
     gap: '20px',
-    maxWidth: '1200px',
+    width: '100%',
     margin: '0',
+    justifyItems: 'start',
   },
 
   // Year card styles
@@ -424,6 +425,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     border: '1px solid #e5e7eb',
+    width: '280px',
   },
   cardHeader: {
     background: 'linear-gradient(90deg, #1C4E80 0%, #275f9b 100%)',

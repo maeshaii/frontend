@@ -676,6 +676,54 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
       ...prev,
       [qId]: value,
     }));
+
+    // Find the question that was just answered
+    const currentQuestion = categories
+      .flatMap(cat => cat.questions)
+      .find(q => q.id === qId);
+    
+    if (currentQuestion) {
+      const questionText = currentQuestion.text.toLowerCase();
+      
+      // Check if this is the awards/recognition question (question 30)
+      const isAwardsQuestion = 
+        currentQuestion.type === 'radio' && 
+        (questionText.includes('award') || questionText.includes('recognition')) &&
+        (questionText.includes('received') || questionText.includes('during') || questionText.includes('employment'));
+      
+      if (isAwardsQuestion) {
+        // Find the award documents question (question 31)
+        const awardDocsQuestion = categories
+          .flatMap(cat => cat.questions)
+          .find(q => {
+            const qt = q.text.toLowerCase();
+            return q.type === 'file' && 
+                   (qt.includes('supporting document') || qt.includes('supporting documents')) &&
+                   (qt.includes('award') || qt.includes('recognition'));
+          });
+        
+        if (awardDocsQuestion) {
+          // Auto-add first award document when "Yes" is selected
+          if (value === 'Yes') {
+            setAwardDocuments((prev) => {
+              const currentFiles = prev[awardDocsQuestion.id] || [];
+              if (currentFiles.length === 0) {
+                return { ...prev, [awardDocsQuestion.id]: [null as any] };
+              }
+              return prev;
+            });
+          } 
+          // Clear award documents when "No" is selected
+          else if (value === 'No') {
+            setAwardDocuments((prev) => {
+              const newState = { ...prev };
+              delete newState[awardDocsQuestion.id];
+              return newState;
+            });
+          }
+        }
+      }
+    }
   };
 
   // Add back the handleDeleteQuestion function
