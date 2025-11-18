@@ -9,6 +9,7 @@ import ViewStats from './pages/admin/statistics/ViewStats';
 import AlumniData from './pages/admin/statistics/AlumniData';
 import Login from './pages/admin/Login/index';
 import ForgotPassword from './pages/admin/ForgotPassword/index';
+import ResetPassword from './pages/admin/ResetPassword/index';
 import TemporaryPassword from './pages/admin/TemporaryPassword/index';
 import FirstLoginChangePassword from './pages/admin/TemporaryPassword/FirstLoginChangePassword';
 import Tracker from './pages/admin/tracker/index';
@@ -38,6 +39,7 @@ import Messaging from './pages/messaging/Messaging';
 import ReportSettingsPage from './pages/admin/report-settings/index';
 // import other pages like Statistics, Users, etc.
 import { PrivateRoute } from './components/PrivateRoute';
+import { PublicRoute } from './components/PublicRoute';
 import AlumniProfile from './pages/alumni/Profile';
 import UnifiedDashboard from './pages/shared/UnifiedDashboard';
 import MobileDetector from './components/MobileDetector';
@@ -54,11 +56,13 @@ const App: React.FC = () => {
           {/* Redirect root URL to /login */}
           <Route path="/" element={<Navigate to="/login" replace />} />
 
-          {/* Actual routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/temporary-password" element={<TemporaryPassword />} />
-          <Route path="/first-login-change-password" element={<FirstLoginChangePassword />} />
+          {/* 🔒 SECURITY: Public routes - redirect authenticated users to dashboard */}
+          <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+          <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+          <Route path="/reset-password" element={<PublicRoute><ResetPassword /></PublicRoute>} />
+          <Route path="/temporary-password" element={<PublicRoute><TemporaryPassword /></PublicRoute>} />
+          {/* Allow authenticated users on first-login-change-password (they just logged in) */}
+          <Route path="/first-login-change-password" element={<PublicRoute allowAuthenticated><FirstLoginChangePassword /></PublicRoute>} />
           <Route path="/logout" element={<Logout />} />
           <Route
             path="/dashboard"

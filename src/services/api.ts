@@ -582,6 +582,20 @@ export const sendEmailReminders = async (
   return response.data;
 };
 
+// Send SMS reminders to selected alumni
+export const sendSmsReminders = async (
+  user_ids: number[],
+  message: string,
+  tracker_link_base?: string
+) => {
+  const response = await api.post('send-sms-reminder/', {
+    user_ids,
+    message,
+    tracker_link_base: tracker_link_base || window.location.origin
+  });
+  return response.data;
+};
+
 // Fetch notifications for a user
 export const fetchNotifications = async (userId: number) => {
   const response = await api.get(`notifications/?user_id=${userId}`);

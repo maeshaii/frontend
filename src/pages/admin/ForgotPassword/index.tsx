@@ -12,51 +12,30 @@ const alumniLogo = require('../../../images/ctu alumni logo.jpg');
 const ForgotPassword = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [formData, setFormData] = useState({
-    ctu_id: '',
-    email: '',
-    last_name: '',
-    first_name: '',
-    middle_name: '',
-  });
+  const [email, setEmail] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setLoading(true);
 
     try {
-      const response = await axios.post(`${api.defaults.baseURL}forgot-password/`, formData);
+      const response = await axios.post(`${api.defaults.baseURL}forgot-password/`, { email });
       
       if (response.data.success) {
-        // Navigate to temporary password page with the generated password
-        navigate('/temporary-password', { 
-          state: { 
-            tempPassword: response.data.temp_password,
-            userName: response.data.user_name 
-          } 
-        });
+        setSuccess(response.data.message);
+        setEmail(''); // Clear the form
       } else {
-        setError(response.data.message || 'Failed to generate temporary password');
+        setError(response.data.message || 'Failed to send reset link');
       }
     } catch (error: any) {
       console.error('Forgot password error:', error);
       if (error.response?.data?.message) {
         setError(error.response.data.message);
-      } else if (error.response?.status === 404) {
-        setError('Invalid credentials. Please check your information and try again.');
-      } else if (error.response?.status === 403) {
-        setError('Password reset is only available for alumni and OJT students.');
       } else {
         setError('Network error. Please try again later.');
       }
@@ -85,97 +64,42 @@ const ForgotPassword = () => {
           </div>
           
           <p style={styles.subtitle}>
-            Please enter your credentials to generate a temporary password
+            Enter your email address and we'll send you a secure link to reset your password.
           </p>
 
           <form style={styles.form} onSubmit={handleSubmit}>
             <div style={styles.inputGroup}>
-              <label htmlFor="ctu_id" style={styles.label}>
-                CTU ID
-              </label>
-              <input
-                type="text"
-                id="ctu_id"
-                name="ctu_id"
-                placeholder="Enter your CTU ID"
-                required
-                value={formData.ctu_id}
-                onChange={handleInputChange}
-                style={styles.input}
-                className="forgot-password-input"
-              />
-            </div>
-
-            <div style={styles.inputGroup}>
               <label htmlFor="email" style={styles.label}>
-                Email
+                Email Address
               </label>
               <input
                 type="email"
                 id="email"
                 name="email"
-                placeholder="Enter your email"
+                placeholder="Enter your registered email"
                 required
-                value={formData.email}
-                onChange={handleInputChange}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 style={styles.input}
                 className="forgot-password-input"
-              />
-            </div>
-
-            <div style={styles.inputGroup}>
-              <label htmlFor="last_name" style={styles.label}>
-                Last Name
-              </label>
-              <input
-                type="text"
-                id="last_name"
-                name="last_name"
-                placeholder="Enter your last name"
-                required
-                value={formData.last_name}
-                onChange={handleInputChange}
-                style={styles.input}
-                className="forgot-password-input"
-              />
-            </div>
-
-            <div style={styles.inputGroup}>
-              <label htmlFor="first_name" style={styles.label}>
-                First Name
-              </label>
-              <input
-                type="text"
-                id="first_name"
-                name="first_name"
-                placeholder="Enter your first name"
-                required
-                value={formData.first_name}
-                onChange={handleInputChange}
-                style={styles.input}
-                className="forgot-password-input"
-              />
-            </div>
-
-            <div style={styles.inputGroup}>
-              <label htmlFor="middle_name" style={styles.label}>
-                Middle Name
-              </label>
-              <input
-                type="text"
-                id="middle_name"
-                name="middle_name"
-                placeholder="Enter your middle name"
-                value={formData.middle_name}
-                onChange={handleInputChange}
-                style={styles.input}
-                className="forgot-password-input"
+                disabled={loading}
               />
             </div>
 
             {error && (
               <div style={styles.errorContainer}>
                 <p style={styles.errorText}>{error}</p>
+              </div>
+            )}
+
+            {success && (
+              <div style={styles.successContainer}>
+                <p style={styles.successText}>
+                  ✅ {success}
+                </p>
+                <p style={styles.successSubtext}>
+                  Please check your email inbox (and spam folder) for the password reset link.
+                </p>
               </div>
             )}
             
@@ -189,9 +113,20 @@ const ForgotPassword = () => {
               disabled={loading}
             >
               <span style={styles.buttonText}>
-                {loading ? 'Processing...' : 'Generate Password'}
+                {loading ? 'Sending...' : 'Send Reset Link'}
               </span>
             </button>
+
+            <div style={styles.backToLoginContainer}>
+              <button
+                type="button"
+                onClick={() => navigate('/login', { state: { animate: 'right', animateHero: 'left' } })}
+                style={styles.backToLoginButton}
+                className="forgot-password-back-to-login"
+              >
+                ← Back to Login
+              </button>
+            </div>
           </form>
         </div>
       </div>
@@ -444,6 +379,41 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.8rem',
     margin: 0,
     textAlign: 'center',
+  },
+  successContainer: {
+    background: 'rgba(34, 197, 94, 0.1)',
+    border: '1px solid rgba(34, 197, 94, 0.3)',
+    borderRadius: '6px',
+    padding: '0.75rem',
+    marginTop: '0.5rem',
+  },
+  successText: {
+    color: '#bbf7d0',
+    fontSize: '0.9rem',
+    margin: '0 0 0.5rem 0',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  successSubtext: {
+    color: 'rgba(187, 247, 208, 0.8)',
+    fontSize: '0.75rem',
+    margin: 0,
+    textAlign: 'center',
+    lineHeight: '1.4',
+  },
+  backToLoginContainer: {
+    marginTop: '1rem',
+    textAlign: 'center',
+  },
+  backToLoginButton: {
+    background: 'transparent',
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: '0.85rem',
+    fontWeight: '400',
+    padding: '0.5rem 1rem',
+    border: 'none',
+    cursor: 'pointer',
+    transition: 'color 0.3s ease',
   },
   button: {
     background: 'linear-gradient(135deg, #ffffff 0%, #f0f8ff 100%)',

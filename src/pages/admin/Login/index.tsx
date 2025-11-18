@@ -17,6 +17,41 @@ const Login = () => {
   const [show, setShow] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // 🔒 SECURITY: Check if user is already authenticated
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    const user = localStorage.getItem('user');
+    
+    if (token && user) {
+      try {
+        const userData = JSON.parse(user);
+        const userId = userData.user_id || userData.id;
+        const accountType = userData.account_type || {};
+        
+        console.log('[Login Security] User already authenticated - redirecting to dashboard');
+        
+        // Redirect to appropriate dashboard
+        if (accountType.admin) {
+          navigate('/dashboard', { replace: true });
+        } else if (accountType.peso) {
+          navigate(`/peso/dashboard/${userId}`, { replace: true });
+        } else if (accountType.coordinator) {
+          navigate(`/coordinator/dashboard/${userId}`, { replace: true });
+        } else if (accountType.user || accountType.ojt) {
+          navigate(`/dashboard/${userId}`, { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
+      } catch (error) {
+        console.error('[Login Security] Error parsing user data:', error);
+        // Clear invalid data
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+      }
+    }
+  }, [navigate]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
