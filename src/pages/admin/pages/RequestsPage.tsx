@@ -3,6 +3,7 @@ import Sidebar from '../global/sidebar';
 import { fetchCoordinatorRequestsList } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
 import { FaGraduationCap, FaUsers } from 'react-icons/fa';
+import { broadcastCoordinatorRequestCount } from '../utils/requestBadge';
 
 const RequestsPage: React.FC = () => {
   const [items, setItems] = useState<{ batch_year: number; course: string; count: number }[]>([]);
@@ -28,9 +29,12 @@ const RequestsPage: React.FC = () => {
           .sort((a, b) => b.batch_year - a.batch_year);
         console.log('🔍 RequestsPage - Processed items:', processedItems);
         setItems(processedItems);
+        const totalPending = processedItems.reduce((sum, item) => sum + (item.count || 0), 0);
+        broadcastCoordinatorRequestCount(totalPending);
       } catch (e) {
         console.error('🔍 RequestsPage - Error:', e);
         setItems([]);
+        broadcastCoordinatorRequestCount(0);
       }
     };
     load();

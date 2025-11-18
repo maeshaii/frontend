@@ -28,7 +28,9 @@ export default function Dashboard() {
   const [showNoStudentsModal, setShowNoStudentsModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showImportErrorModal, setShowImportErrorModal] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+  const [importError, setImportError] = useState<{ title?: string; message: string; hint?: string; details?: string[] } | null>(null);
   const [exportSection, setExportSection] = useState<string>('ALL');
   const [sendDate, setSendDateState] = useState('');
   const [existingSendDates, setExistingSendDates] = useState<any[]>([]);
@@ -175,6 +177,40 @@ export default function Dashboard() {
               created: 0,
               updated: 0
             });
+
+            const serverMessage = result.message || 'Import failed. Please review your template and try again.';
+            const normalizedMessage = serverMessage.toLowerCase();
+            let hint: string | undefined;
+            let details: string[] | undefined;
+            if (normalizedMessage.includes('second-import template')) {
+              hint = 'Run the First Import (student creation) before uploading a Second Import file with company details.';
+            } else if (normalizedMessage.includes('immediately after creating')) {
+              const recentIds = Array.isArray(result.recent_ctu_ids) ? result.recent_ctu_ids : [];
+              hint = 'Second Import files must be uploaded separately after the First Import finishes.';
+              details = [
+                'Upload the First Import template alone to generate student accounts and download passwords.',
+                'Wait a few minutes before importing company information so each template runs on its own.',
+                recentIds.length
+                  ? `Recently created CTU IDs blocked in this upload: ${recentIds.join(', ')}`
+                  : 'Re-open the Update template later once the students already exist.',
+              ];
+            } else if (normalizedMessage.includes('mixed template')) {
+              hint = 'Separate new students (First Import) and company updates (Second Import) into two different uploads.';
+              details = [
+                'Download the First Import template and create all students first.',
+                'Use the Update Template after the students exist to add company data.',
+                'Never combine both templates into a single file—the system blocks it.',
+              ];
+            }
+            setImportError({
+              title: 'Import blocked',
+              message: serverMessage,
+              hint,
+              details,
+            });
+            setShowImportErrorModal(true);
+            setImportLoading(false);
+            return;
           }
         } catch (error) {
           console.error(`Error importing ${file.name}:`, error);
@@ -186,6 +222,14 @@ export default function Dashboard() {
             created: 0,
             updated: 0
           });
+          const errorMessage = (error as any)?.message || 'Import failed due to a network error.';
+          setImportError({
+            title: 'Import failed',
+            message: errorMessage,
+          });
+          setShowImportErrorModal(true);
+          setImportLoading(false);
+          return;
         }
       }
       
@@ -222,7 +266,12 @@ export default function Dashboard() {
       await refreshOJTData();
     } catch (error: any) {
       console.error('OJT import error:', error);
-      alert(`❌ Import failed: ${error?.message || 'Please try again.'}`);
+      const fallbackMessage = error?.response?.data?.message || error?.message || 'Import failed. Please try again.';
+      setImportError({
+        title: 'Import failed',
+        message: fallbackMessage,
+      });
+      setShowImportErrorModal(true);
     } finally {
       setImportLoading(false);
     }
@@ -2795,6 +2844,133 @@ export default function Dashboard() {
                   Export CSV
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Error Modal */}
+      {showImportErrorModal && importError && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+          }}
+          onClick={() => {
+            setShowImportErrorModal(false);
+            setImportError(null);
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '28px',
+              maxWidth: '420px',
+              width: '92%',
+              boxShadow: '0 8px 20px rgba(0, 0, 0, 0.15)',
+              border: '1px solid #fecaca',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                marginBottom: '12px',
+              }}
+            >
+              <span style={{ fontSize: '28px' }}>⚠️</span>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: '18px',
+                  fontWeight: 700,
+                  color: '#b91c1c',
+                }}
+              >
+                {importError.title || 'Import blocked'}
+              </h2>
+            </div>
+
+            <p
+              style={{
+                margin: '0 0 12px',
+                color: '#1f2937',
+                lineHeight: 1.5,
+                fontSize: '14px',
+              }}
+            >
+              {importError.message}
+            </p>
+
+            {importError.hint && (
+              <div
+                style={{
+                  backgroundColor: '#fef3c7',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  color: '#92400e',
+                  fontSize: '13px',
+                  lineHeight: 1.45,
+                  marginBottom: '12px',
+                }}
+              >
+                {importError.hint}
+              </div>
+            )}
+            {importError.details && importError.details.length > 0 && (
+              <ul
+                style={{
+                  margin: '0 0 12px 18px',
+                  padding: 0,
+                  color: '#374151',
+                  fontSize: '13px',
+                  lineHeight: 1.4,
+                }}
+              >
+                {importError.details.map((detail, idx) => (
+                  <li key={idx} style={{ marginBottom: '6px' }}>
+                    {detail}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowImportErrorModal(false);
+                  setImportError(null);
+                }}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#dc2626';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#ef4444';
+                }}
+              >
+                Got it
+              </button>
             </div>
           </div>
         </div>

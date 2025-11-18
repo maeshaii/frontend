@@ -123,6 +123,26 @@ const Sidebar = () => {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
+  useEffect(() => {
+    const handleCoordinatorRequestCountUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<{ count?: number }>;
+      if (typeof customEvent.detail?.count === 'number') {
+        setPendingRequests(customEvent.detail.count);
+        return;
+      }
+      try {
+        setPendingRequests(Number(localStorage.getItem('coordinatorReqCount')) || 0);
+      } catch {
+        setPendingRequests(0);
+      }
+    };
+
+    window.addEventListener('coordinatorRequestCountUpdated', handleCoordinatorRequestCountUpdated);
+    return () => {
+      window.removeEventListener('coordinatorRequestCountUpdated', handleCoordinatorRequestCountUpdated);
+    };
+  }, []);
+
   // Also listen for custom events from other tabs/windows
   const handleRewardSignal = React.useCallback((event: Event) => {
     const customEvent = event as CustomEvent<{ notification?: any }>;

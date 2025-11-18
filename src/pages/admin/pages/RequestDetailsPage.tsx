@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Sidebar from '../global/sidebar';
-import { fetchOJTByYear, approveCoordinatorRequest } from '../../../services/api';
+import { fetchOJTByYear, approveCoordinatorRequest, fetchCoordinatorRequestsCount } from '../../../services/api';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { broadcastCoordinatorRequestCount } from '../utils/requestBadge';
 
 const RequestDetailsPage: React.FC = () => {
   const { year } = useParams<{ year: string }>();
@@ -101,6 +102,15 @@ const RequestDetailsPage: React.FC = () => {
           alert(`Password file downloaded successfully! ${res.passwords.length} alumni accounts created.`);
         }
         
+        try {
+          const updatedCountResponse = await fetchCoordinatorRequestsCount();
+          const updatedCount = Number(updatedCountResponse?.count) || 0;
+          broadcastCoordinatorRequestCount(updatedCount);
+        } catch (err) {
+          console.warn('Failed to refresh coordinator request count after approval:', err);
+          broadcastCoordinatorRequestCount(0);
+        }
+
         // Navigate back to requests list - the card should now be gone since status changed to "Approved"
         // Force a page reload to ensure fresh data
         window.location.href = '/requests';
