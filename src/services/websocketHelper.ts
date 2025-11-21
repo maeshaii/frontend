@@ -5,7 +5,7 @@ import { connectionManager } from './connectionManager';
 export type WsStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 export type WsEvent = {
-  type: 'message' | 'typing' | 'stop_typing' | 'user_online' | 'user_offline' | 'message_read' | 'read_receipt' | 'rate_limit_exceeded' | 'connection_denied';
+  type: 'message' | 'typing' | 'stop_typing' | 'user_online' | 'user_offline' | 'message_read' | 'read_receipt' | 'rate_limit_exceeded' | 'connection_denied' | 'reaction' | 'edit' | 'delete';
   conversation_id?: number;
   user_id?: number;
   message?: any;
@@ -14,6 +14,7 @@ export type WsEvent = {
   message_id?: number;
   sender_id?: number;
   sender_name?: string;
+  user_name?: string;
   content?: string;
   created_at?: string;
   message_type?: string;
@@ -35,6 +36,9 @@ export type WsEvent = {
   // Rate limiting properties
   reason?: string;
   retry_after?: number;
+  // Reaction-specific properties
+  emoji?: string;
+  action?: 'add' | 'remove';
 };
 
 export class ConversationWebSocket {
@@ -156,6 +160,7 @@ export class ConversationWebSocket {
         this.ws.onclose = (event) => {
           console.log('WebSocket closed:', event.code, event.reason);
           this.isConnecting = false;
+          connectionManager.unregisterConnection(this.connectionId);
           
           // Clear timeout if not already resolved
           clearTimeout(timeout);
@@ -167,7 +172,7 @@ export class ConversationWebSocket {
             resolve();
           }
           
-          // If this is a normal closure, update status
+          // If this is a normal closure (intentional disconnect), update status
           if (event.code === 1000 || event.code === 1001) {
             this.statusCallbacks.forEach(callback => {
               try {
@@ -176,38 +181,36 @@ export class ConversationWebSocket {
                 console.error('Error in WebSocket status callback:', callbackError);
               }
             });
-          } else {
-            // Abnormal closure - update status to error
-            this.statusCallbacks.forEach(callback => {
-              try {
-                callback('error');
-              } catch (callbackError) {
-                console.error('Error in WebSocket status callback:', callbackError);
-              }
-            });
+            // Don't reconnect for normal closures
+            return;
           }
           
-          // Only reconnect for unexpected closures (not 1000 = normal closure)
-          if (event.code !== 1000 && event.code !== 1001 && this.reconnectAttempts < this.maxReconnectAttempts && !this.isDestroyed) {
+          // Abnormal closure - update status to error
+          this.statusCallbacks.forEach(callback => {
+            try {
+              callback('error');
+            } catch (callbackError) {
+              console.error('Error in WebSocket status callback:', callbackError);
+            }
+          });
+          
+          // Only reconnect for unexpected closures if not destroyed
+          if (this.reconnectAttempts < this.maxReconnectAttempts && !this.isDestroyed) {
             this.reconnectAttempts++;
-            const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000); // Exponential backoff with max 30s
-            console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms`);
+            // Use exponential backoff: 2s, 4s, 8s, 16s, 30s
+            const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts), 30000);
+            console.log(`🔄 [WebSocket] Will attempt to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms`);
             setTimeout(() => {
               if (!this.isDestroyed) {
+                console.log(`🔄 [WebSocket] Reconnecting now (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
                 this.connect().catch(error => {
-                  console.warn('Reconnection failed (will retry later):', error.message);
+                  console.warn('Reconnection failed:', error?.message || 'Unknown error');
                   this.statusCallbacks.forEach(callback => callback('error'));
                 });
               }
             }, delay);
-          } else if (event.code === 1011) {
-            // Server error - wait longer before reconnecting
-            console.log('Server error detected, waiting longer before reconnecting...');
-            setTimeout(() => {
-              if (!this.isDestroyed) {
-                this.connect().catch(console.warn);
-              }
-            }, 5000);
+          } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.error('❌ [WebSocket] Max reconnection attempts reached. Please refresh the page.');
           }
         };
 

@@ -65,7 +65,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   const [replyingToMessageId, setReplyingToMessageId] = useState<string | null>(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
-  const [messageReactions, setMessageReactions] = useState<{[key: string]: Array<{emoji: string, userId: number}>}>({});
+  const [messageReactions, setMessageReactions] = useState<{[key: string]: Array<{emoji: string, userId: number, userName?: string}>}>({});
   const [contextMenuMessageId, setContextMenuMessageId] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState<{x: number, y: number} | null>(null);
   
@@ -281,7 +281,26 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
             file_size: attachment.file_size,
           };
         })(),
+        reply_to: (m as any).reply_to ? {
+          message_id: String((m as any).reply_to.message_id),
+          content: (m as any).reply_to.content,
+          sender_name: (m as any).reply_to.sender_name
+        } : undefined,
+        is_edited: (m as any).is_edited || false,
       }));
+      
+      // Load reactions from backend
+      const reactionsFromBackend: { [key: string]: Array<{ emoji: string; userId: number; userName?: string }> } = {};
+      data.results.forEach((m: any) => {
+        if (m.reactions && m.reactions.length > 0) {
+          reactionsFromBackend[String(m.message_id)] = m.reactions;
+        }
+      });
+      
+      // Update reactions state with backend data
+      if (Object.keys(reactionsFromBackend).length > 0) {
+        setMessageReactions(prev => ({ ...prev, ...reactionsFromBackend }));
+      }
 
       setMessages(prev => {
         const joined = cursor ? [...mapped, ...prev] : [...prev.filter(p => !mapped.some(m => m.id === p.id)), ...mapped];
@@ -311,15 +330,23 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
   }, [conversation, scrollToBottom, fetchUserProfilePic]);
 
   const connectWebSocket = useCallback(async () => {
-    if (!conversation || isConnecting) return;
+    if (!conversation) return;
+    
+    // Check if we're already connecting or have an active connection
+    if (isConnecting || (wsRef.current && connectionStatus === 'connected')) {
+      console.log('⏭️ [WebSocket] Already connecting or connected, skipping');
+      return;
+    }
 
     // Disconnect existing WebSocket first
     if (wsRef.current) {
+      console.log('🔌 [WebSocket] Disconnecting existing connection');
       wsRef.current.disconnect();
       wsRef.current = null;
     }
 
     setIsConnecting(true);
+    console.log('🔌 [WebSocket] Starting connection for conversation:', conversation.conversation_id);
 
     try {
       // Only fetch CSRF if needed (WebSockets don't need CSRF tokens)
@@ -379,26 +406,37 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
       // Note: Typing indicator no longer connects separately
 
       const statusCallback = (status: any) => {
+        console.log('🔌 [WebSocket] Status changed:', status);
         setConnectionStatus(status);
         if (status === 'connected' && !hasMarkedRef.current) {
+          console.log('✅ [WebSocket] Connected successfully - Real-time messaging is active!');
           markConversationRead(conversation.conversation_id).catch(() => {});
           hasMarkedRef.current = true;
           setHasMarkedAsRead(true);
           // Optimistically broadcast to parent/other UI that unread is now zero
           window.dispatchEvent(new CustomEvent('conversationRead', { detail: { conversationId: conversation.conversation_id } }));
+        } else if (status === 'error') {
+          console.error('❌ [WebSocket] Connection error - Messages will not be real-time');
+        } else if (status === 'disconnected') {
+          console.warn('⚠️ [WebSocket] Disconnected - Messages will not be real-time');
         }
       };
 
       const messageCallback = (event: WsEvent) => {
         const myId = currentUser?.user_id ?? (currentUser as any)?.id;
+        console.log('📨 [WebSocket] Event received:', event.type);
         switch (event.type) {
           case 'message':
             // Handle nested message structure from WebSocket
             const messageData = event.message || event;
-            if (messageData.sender_id === myId) break;
+            if (messageData.sender_id === myId) {
+              console.log('⏭️ [WebSocket] Skipping own message echo');
+              break;
+            }
             
-            console.log('Received WebSocket message:', messageData); // Debug log
-            console.log('Message content:', messageData.content); // Debug log
+            console.log('📥 [WebSocket] NEW MESSAGE from other user! Real-time working!');
+            console.log('📥 [WebSocket] Message data:', messageData);
+            console.log('📥 [WebSocket] Content:', messageData.content);
             
             const newMessage: UiMessage = {
               id: String(messageData.message_id),
@@ -416,6 +454,12 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                 file_category: messageData.attachments[0].file_category,
                 file_size: messageData.attachments[0].file_size,
               } : undefined),
+              reply_to: messageData.reply_to ? {
+                message_id: String(messageData.reply_to.message_id),
+                content: messageData.reply_to.content,
+                sender_name: messageData.reply_to.sender_name
+              } : undefined,
+              is_edited: messageData.is_edited || false,
             };
             
             console.log('Created new message:', newMessage); // Debug log
@@ -463,6 +507,61 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
             break;
           case 'read_receipt':
             break;
+          case 'reaction':
+            // Handle real-time reaction updates
+            console.log('[Reaction] WebSocket event received:', event);
+            if (event.message_id && event.emoji && event.user_id !== undefined) {
+              const messageId = String(event.message_id);
+              const userId = event.user_id;
+              const userName = event.user_name || 'Unknown';
+              const emoji = event.emoji;
+              const action = event.action;
+              
+              setMessageReactions(prev => {
+                const existing = prev[messageId] || [];
+                
+                if (action === 'add') {
+                  // Add reaction if not already present
+                  if (!existing.find(r => r.userId === userId && r.emoji === emoji)) {
+                    console.log(`[Reaction] Adding ${emoji} from user ${userId} to message ${messageId}`);
+                    return { ...prev, [messageId]: [...existing, { emoji, userId, userName }] };
+                  }
+                } else if (action === 'remove') {
+                  // Remove reaction
+                  const updated = existing.filter(r => !(r.userId === userId && r.emoji === emoji));
+                  if (updated.length === 0) {
+                    const newReactions = { ...prev };
+                    delete newReactions[messageId];
+                    console.log(`[Reaction] Removed ${emoji} from user ${userId}, message ${messageId} has no reactions`);
+                    return newReactions;
+                  }
+                  console.log(`[Reaction] Removed ${emoji} from user ${userId} on message ${messageId}`);
+                  return { ...prev, [messageId]: updated };
+                }
+                return prev;
+              });
+            }
+            break;
+          case 'edit':
+            // Handle message edit
+            console.log('[Edit] WebSocket event received:', event);
+            if (event.message_id && event.content) {
+              const messageId = String(event.message_id);
+              const content = event.content;
+              setMessages(prev => prev.map(m => 
+                m.id === messageId
+                  ? { ...m, content, is_edited: true } 
+                  : m
+              ));
+            }
+            break;
+          case 'delete':
+            // Handle message delete
+            console.log('[Delete] WebSocket event received:', event);
+            if (event.message_id) {
+              setMessages(prev => prev.filter(m => m.id !== String(event.message_id)));
+            }
+            break;
         }
       };
 
@@ -483,8 +582,9 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
     } finally {
       setIsConnecting(false);
     }
-  }, [conversation, currentUser, scrollToBottom, isConnecting]);
+  }, [conversation, scrollToBottom, logger, connectionStatus]);
 
+  // Load messages when conversation changes
   useEffect(() => {
     if (conversation) {
       setMessages([]);
@@ -493,18 +593,28 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
       hasMarkedRef.current = false;
       setTypingUsers(new Set());
       loadMessages();
+    }
+  }, [conversation?.conversation_id]);
+
+  // Connect WebSocket when conversation changes (separate effect to avoid loops)
+  useEffect(() => {
+    if (conversation && currentUser) {
+      console.log('🔌 [WebSocket] Setting up connection for conversation:', conversation.conversation_id);
       connectWebSocket();
     }
 
     return () => {
+      console.log('🔌 [WebSocket] Cleaning up connection');
       if (wsRef.current) {
         wsRef.current.disconnect();
+        wsRef.current = null;
       }
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
+      setIsConnecting(false);
     };
-  }, [conversation, loadMessages, connectWebSocket]);
+  }, [conversation?.conversation_id, currentUser?.user_id]);
 
   const handleSend = async () => {
     const inputText = inputValue.trim();
@@ -521,20 +631,24 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         return;
       }
 
-      // If replying to a message, format the reply with the original message info
+      const tempId = Date.now().toString();
+      
+      // Save reply ID before clearing (needed for API request)
+      const replyToIdForApi = replyingToMessageId;
+      
+      // Build reply_to object if replying
+      let replyToObj = undefined;
       if (replyingToMessageId) {
         const repliedMessage = messages.find(m => m.id === replyingToMessageId);
         if (repliedMessage) {
-          // Format: "Replying to [name]: [original message]\n\n[your reply]"
-          const originalContent = repliedMessage.content || 'Attachment';
-          const truncatedOriginal = originalContent.length > 50 
-            ? originalContent.substring(0, 50) + '...' 
-            : originalContent;
-          sanitizedText = `↩️ Replying to ${repliedMessage.sender_name}: ${truncatedOriginal}\n\n${sanitizedText}`;
+          replyToObj = {
+            message_id: repliedMessage.id,
+            content: repliedMessage.content || 'Attachment',
+            sender_name: repliedMessage.sender_name
+          };
         }
       }
-
-      const tempId = Date.now().toString();
+      
       const tempMessage: UiMessage = {
         id: tempId,
         content: sanitizedText,
@@ -544,7 +658,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         created_at: new Date().toISOString(),
         is_read: false,
         tempId,
-        reply_to: replyingToMessageId || undefined,
+        reply_to: replyToObj,
       };
 
       setMessages(prev => addMessageWithDeduplication(prev, tempMessage));
@@ -557,8 +671,14 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
       }
 
       try {
-        console.log('Sending to API:', { content: sanitizedText, message_type: 'text' }); // Debug log
-        const saved = await sendMessage(conversation.conversation_id, { content: sanitizedText, message_type: 'text' });
+        // Build request payload with optional reply_to_message_id
+        const payload: any = { content: sanitizedText, message_type: 'text' };
+        if (replyToIdForApi) {
+          payload.reply_to_message_id = parseInt(replyToIdForApi);
+        }
+        
+        console.log('Sending to API:', payload); // Debug log
+        const saved = await sendMessage(conversation.conversation_id, payload);
         console.log('Message saved:', saved); // Debug log
       
         const savedMessage: UiMessage = {
@@ -571,6 +691,12 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
           is_read: saved.is_read,
           message_type: (saved as any).message_type,
           attachment_url: ((saved as any).attachments && (saved as any).attachments[0]?.file_url) || null,
+          reply_to: (saved as any).reply_to ? {
+            message_id: String((saved as any).reply_to.message_id),
+            content: (saved as any).reply_to.content,
+            sender_name: (saved as any).reply_to.sender_name
+          } : undefined,
+          is_edited: (saved as any).is_edited || false,
         };
         
         console.log('Created saved message:', savedMessage); // Debug log
@@ -670,6 +796,12 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         is_read: updated.is_read,
         message_type: (updated as any).message_type,
         attachment_url: ((updated as any).attachments && (updated as any).attachments[0]?.file_url) || null,
+        reply_to: (updated as any).reply_to ? {
+          message_id: String((updated as any).reply_to.message_id),
+          content: (updated as any).reply_to.content,
+          sender_name: (updated as any).reply_to.sender_name
+        } : undefined,
+        is_edited: (updated as any).is_edited || true,
       };
       
       setMessages(prev => prev.map(m => m.id === messageId ? updatedMessage : m));
@@ -729,6 +861,9 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
       fetchUserProfilePic(message.sender_id);
     }
     
+    // Default CTU logo path
+    const defaultCTULogo = '/ctu_logo-removebg-preview.png';
+    
     if (avatarUrl) {
       // Add cache-busting parameter
       const separator = avatarUrl.includes('?') ? '&' : '?';
@@ -738,19 +873,34 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         <img 
           src={urlWithBust} 
           alt={message.sender_name}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
           onError={(e) => {
             const target = e.target as HTMLImageElement;
-            target.style.display = 'none';
-            const parent = target.parentElement;
-            if (parent) {
-              parent.innerHTML = `<div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; border-radius: 50%;">${initial}</div>`;
-            }
+            // Fall back to CTU logo on error
+            target.src = defaultCTULogo;
+            target.onerror = null; // Prevent infinite loop if CTU logo also fails
           }}
         />
       );
     }
     
-    return <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 600, fontSize: '14px', borderRadius: '50%' }}>{initial}</div>;
+    // No avatar URL - use CTU logo as default
+    return (
+      <img 
+        src={defaultCTULogo} 
+        alt={message.sender_name}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+        onError={(e) => {
+          // If CTU logo fails, fall back to initial letter
+          const target = e.target as HTMLImageElement;
+          target.style.display = 'none';
+          const parent = target.parentElement;
+          if (parent) {
+            parent.innerHTML = `<div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; border-radius: 50%;">${initial}</div>`;
+          }
+        }}
+      />
+    );
   }, [currentUser, userProfilePics, fetchUserProfilePic]);
 
   const isOwnMessage = useCallback((message: UiMessage) => {
@@ -846,6 +996,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                 const otherUserIdStr = otherUserId ? String(otherUserId) : null;
                 const firstName = otherParticipant?.name?.split(' ')[0] || 'U';
                 const initial = firstName.charAt(0).toUpperCase();
+                const defaultCTULogo = '/ctu_logo-removebg-preview.png';
                 
                 // Check cache first
                 let avatarUrl: string | null = null;
@@ -862,26 +1013,31 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                   fetchUserProfilePic(otherUserId);
                 }
                 
-                if (avatarUrl) {
-                  const separator = avatarUrl.includes('?') ? '&' : '?';
-                  const urlWithBust = `${avatarUrl}${separator}cb=${Date.now()}`;
-                  
-                  return (
-                    <img 
-                      src={urlWithBust} 
-                      alt={otherParticipant?.name || 'User'}
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
+                const finalAvatarUrl = avatarUrl || defaultCTULogo;
+                const separator = finalAvatarUrl.includes('?') ? '&' : '?';
+                const urlWithBust = `${finalAvatarUrl}${separator}cb=${Date.now()}`;
+                
+                return (
+                  <img 
+                    src={urlWithBust} 
+                    alt={otherParticipant?.name || 'User'}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      // Fallback to CTU logo if profile pic fails
+                      if (!target.src.includes('ctu_logo')) {
+                        target.src = defaultCTULogo;
+                      } else {
+                        // If CTU logo also fails, show initials
                         target.style.display = 'none';
                         const parent = target.parentElement;
                         if (parent) {
                           parent.textContent = initial;
                         }
-                      }}
-                    />
-                  );
-                }
-                return initial;
+                      }
+                    }}
+                  />
+                );
               })()}
             </div>
             <div 
@@ -900,17 +1056,6 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
               <p className="chat-header-status">
                 {connectionStatus === 'connected' ? 'Online' : 'Offline'}
               </p>
-            </div>
-            <div className="chat-header-actions">
-              <button className="chat-action-btn" title="Voice Call">
-                📞
-              </button>
-              <button className="chat-action-btn" title="Video Call">
-                📹
-              </button>
-              <button className="chat-action-btn" title="More Options">
-                ⋯
-              </button>
             </div>
           </div>
         )}
@@ -1083,6 +1228,40 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                 </div>
                               ) : (
                                 <>
+                                  {/* Reply Preview */}
+                                  {message.reply_to && (
+                                    <div style={{
+                                      background: isOwn ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                                      padding: '8px 12px',
+                                      borderRadius: '6px',
+                                      marginBottom: '8px',
+                                      borderLeft: `3px solid ${isOwn ? 'rgba(255,255,255,0.5)' : '#007bff'}`,
+                                      fontSize: '13px'
+                                    }}>
+                                      <div style={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '6px',
+                                        color: isOwn ? 'rgba(255,255,255,0.8)' : '#666',
+                                        marginBottom: '4px'
+                                      }}>
+                                        <span style={{ fontSize: '12px' }}>↩️</span>
+                                        <span style={{ fontWeight: 600, fontSize: '12px' }}>
+                                          {message.reply_to.sender_name}
+                                        </span>
+                                      </div>
+                                      <div style={{ 
+                                        color: isOwn ? 'rgba(255,255,255,0.7)' : '#888',
+                                        fontSize: '12px',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap'
+                                      }}>
+                                        {message.reply_to.content || 'Attachment'}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
                                   {message.attachment_url ? (
                                     <div className="attachment-preview">
                                       {message.attachment_info?.file_category === 'image' || isImageFile((message.attachment_info?.file_category as FileCategory) || 'document', message.attachment_info?.file_type) ? (
@@ -1151,6 +1330,16 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                   ) : (
                                     <div className="message-text">
                                       {renderTextWithLinks(message.content, { color: isOwn ? '#ffffff' : '#050505' })}
+                                      {message.is_edited && (
+                                        <span style={{
+                                          fontSize: '11px',
+                                          color: isOwn ? 'rgba(255,255,255,0.6)' : '#888',
+                                          fontStyle: 'italic',
+                                          marginLeft: '8px'
+                                        }}>
+                                          (edited)
+                                        </span>
+                                      )}
                                     </div>
                                   )}
                                   
@@ -1179,8 +1368,24 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             const userId = currentUser?.user_id ?? (currentUser as any)?.id;
+                                            const messageId = message.id;
+                                            const existing = messageReactions[messageId] || [];
+                                            const existingReaction = existing.find(r => r.userId === userId && r.emoji === emoji);
+                                            const action = existingReaction ? 'remove' : 'add';
+                                            
+                                            // Send via WebSocket for real-time sync
+                                            if (wsRef.current) {
+                                              wsRef.current.send({
+                                                type: 'reaction',
+                                                message_id: parseInt(messageId),
+                                                emoji: emoji,
+                                                action: action
+                                              });
+                                              console.log(`[Reaction] Sent via WebSocket: ${action} ${emoji} on message ${messageId}`);
+                                            }
+                                            
+                                            // Optimistic UI update
                                             setMessageReactions(prev => {
-                                              const messageId = message.id;
                                               const existing = prev[messageId] || [];
                                               const existingReactionIndex = existing.findIndex(r => r.userId === userId && r.emoji === emoji);
                                               
@@ -1191,15 +1396,15 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                                 if (updated.length === 0) {
                                                   const newReactions = { ...prev };
                                                   delete newReactions[messageId];
-                                                  console.log('Reaction removed, state:', newReactions);
+                                                  console.log('[Reaction] Removed locally, state:', newReactions);
                                                   return newReactions;
                                                 }
-                                                console.log('Reaction removed (still others), state:', { ...prev, [messageId]: updated });
+                                                console.log('[Reaction] Removed locally (still others), state:', { ...prev, [messageId]: updated });
                                                 return { ...prev, [messageId]: updated };
                                               } else {
                                                 // Add reaction
                                                 const newState = { ...prev, [messageId]: [...existing, { emoji, userId: userId || 0 }] };
-                                                console.log('Reaction added, messageId:', messageId, 'emoji:', emoji, 'state:', newState);
+                                                console.log('[Reaction] Added locally, messageId:', messageId, 'emoji:', emoji, 'state:', newState);
                                                 return newState;
                                               }
                                             });
@@ -1368,6 +1573,33 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    setEditingMessageId(message.id);
+                                    setEditMessageContent(message.content);
+                                    setContextMenuMessageId(null);
+                                    setContextMenuPosition(null);
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 16px',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                    fontSize: '14px',
+                                    color: '#333'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = '#f8f9fa';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'transparent';
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     handleDeleteMessage(message.id);
                                     setContextMenuMessageId(null);
                                     setContextMenuPosition(null);
@@ -1389,7 +1621,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                     e.currentTarget.style.background = 'transparent';
                                   }}
                                 >
-                                  Remove
+                                  Delete
                                 </button>
                             </div>
                             )}

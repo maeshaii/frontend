@@ -15,8 +15,9 @@ interface ConnectionInfo {
 class ConnectionManager {
   private connections = new Map<string, ConnectionInfo>();
   private maxConnectionsPerType = 1;
-  private maxTotalConnections = 3;
-  private connectionTimeout = 30000; // 30 seconds
+  private maxTotalConnections = 5; // Increased for notifications
+  private connectionTimeout = 5000; // 5 seconds - reduced to prevent rapid reconnects
+  private connectionCooldown = 2000; // 2 second cooldown between connection attempts
 
   /**
    * Register a new connection attempt
@@ -31,24 +32,33 @@ class ConnectionManager {
     const existing = this.connections.get(id);
     if (existing) {
       const timeSinceLastConnection = Date.now() - existing.lastConnected;
-      if (timeSinceLastConnection < this.connectionTimeout && existing.isConnecting) {
-        console.warn(`Connection ${id} is already connecting or recently connected`);
+      
+      // If still connecting or recently connected, deny
+      if (existing.isConnecting) {
+        console.warn(`🚫 [ConnectionManager] Connection ${id} is already connecting`);
+        return false;
+      }
+      
+      // Enforce cooldown period to prevent rapid reconnects
+      if (timeSinceLastConnection < this.connectionCooldown) {
+        console.warn(`🚫 [ConnectionManager] Connection ${id} is in cooldown (${timeSinceLastConnection}ms < ${this.connectionCooldown}ms)`);
         return false;
       }
     }
 
     // Check total connection limit
-    if (this.connections.size >= this.maxTotalConnections) {
-      console.warn('Maximum total connections reached');
+    const activeConnections = Array.from(this.connections.values()).filter(c => c.isConnecting);
+    if (activeConnections.length >= this.maxTotalConnections) {
+      console.warn('🚫 [ConnectionManager] Maximum total connections reached');
       return false;
     }
 
-    // Check per-type connection limit
+    // Check per-type connection limit (allow multiple of different types)
     const connectionsOfType = Array.from(this.connections.values()).filter(
-      conn => conn.type === type
+      conn => conn.type === type && conn.isConnecting
     );
     if (connectionsOfType.length >= this.maxConnectionsPerType) {
-      console.warn(`Maximum ${type} connections reached`);
+      console.warn(`🚫 [ConnectionManager] Maximum ${type} connections reached`);
       return false;
     }
 
@@ -62,7 +72,7 @@ class ConnectionManager {
       isConnecting: true,
     });
 
-    console.log(`Registered ${type} connection: ${id}`);
+    console.log(`✅ [ConnectionManager] Registered ${type} connection: ${id}`);
     return true;
   }
 
@@ -153,6 +163,7 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 export default connectionManager;
+
 
 
 

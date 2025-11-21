@@ -873,12 +873,18 @@ export const listMessages = async (
 
 export const sendMessage = async (
   conversationId: number,
-  payload: { content?: string; message_type?: 'text' | 'image' | 'file' | 'system'; attachment_id?: number }
+  payload: { 
+    content?: string; 
+    message_type?: 'text' | 'image' | 'file' | 'system'; 
+    attachment_id?: number;
+    reply_to_message_id?: number;
+  }
 ): Promise<MessageItem> => {
   const body: any = {
     content: payload.content ?? '',
     message_type: payload.message_type ?? 'text',
     attachment_id: payload.attachment_id,
+    reply_to_message_id: payload.reply_to_message_id,
   };
   const { data } = await api.post(`messaging/conversations/${conversationId}/messages/`, body);
   return data as MessageItem;
@@ -890,7 +896,7 @@ export const markConversationRead = async (conversationId: number) => {
 };
 
 export const deleteMessageApi = async (conversationId: number, messageId: number) => {
-  const { data } = await api.delete(`messaging/conversations/${conversationId}/messages/${messageId}/`);
+  const { data } = await api.delete(`messaging/conversations/${conversationId}/messages/${messageId}/delete/`);
   return data as { status: string };
 };
 

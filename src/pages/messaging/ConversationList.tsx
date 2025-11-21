@@ -95,28 +95,33 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   const initial = firstName.charAt(0).toUpperCase();
   const initials = getInitials(conversation.other_participant?.name || 'Unknown');
 
+  const defaultCTULogo = '/ctu_logo-removebg-preview.png';
+
   return (
     <div 
       className={`conversation-item ${isSelected ? 'active' : ''}`}
       onClick={onClick}
     >
       <div className="conversation-avatar">
-        {profilePicUrl ? (
-          <img 
-            src={profilePicUrl} 
-            alt={conversation.other_participant?.name || 'User'}
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
+        <img 
+          src={profilePicUrl || defaultCTULogo} 
+          alt={conversation.other_participant?.name || 'User'}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            // Fallback to CTU logo if profile pic fails
+            if (target.src !== `${window.location.origin}${defaultCTULogo}`) {
+              target.src = defaultCTULogo;
+            } else {
+              // If CTU logo also fails, show initials
               target.style.display = 'none';
               const parent = target.parentElement;
               if (parent) {
                 parent.textContent = initials;
               }
-            }}
-          />
-        ) : (
-          initials
-        )}
+            }
+          }}
+        />
         {isOnline && <div className="online-indicator"></div>}
       </div>
       
