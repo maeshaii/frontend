@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
 import { generateSpecificStats, fetchAlumniEmploymentStats, fetchCoordinatorRequestsCount } from '../../../services/api';
+import { broadcastCoordinatorRequestCount } from '../utils/requestBadge';
 import { normalizeStatusCounts } from '../statistics/index';
 
 const Dashboard = () => {
@@ -110,7 +111,7 @@ const Dashboard = () => {
         const res = await fetchCoordinatorRequestsCount();
         const c = Number(res?.count) || 0;
         setCoordinatorReqCount(c);
-        try { localStorage.setItem('coordinatorReqCount', String(c)); } catch {}
+        broadcastCoordinatorRequestCount(c);
       } catch (e) {
         console.error('Error fetching coordinator requests count:', e);
       }

@@ -16,16 +16,16 @@
    ```
 2. **Resolve Conflicts**
    - Open conflicted files. Look for:
-     ```
-     <<<<<<< HEAD
-     ...your code...
-     =======
-     ...incoming code...
-     >>>>>>> branch-name
-     ```
+    ```
+    &lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD
+    ...your code...
+    =======
+    ...incoming code...
+    &gt;&gt;&gt;&gt;&gt;&gt;&gt; branch-name
+    ```
    - **Best Practice:**
      - Combine logic where possible, do not just pick one side.
-     - Remove all conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`).
+    - Remove all conflict markers (`&lt;&lt;&lt;&lt;&lt;&lt;&lt;`, `=======`, `&gt;&gt;&gt;&gt;&gt;&gt;&gt;`).
      - Test the merged code before committing.
      - For React/TypeScript, always check for:
        - Correct imports
