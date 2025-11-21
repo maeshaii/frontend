@@ -4,7 +4,7 @@ import AlumniTopBar from './AlumniTopBar';
 import ctulogo from '../../images/ctulogo.png';
 import './profile.css';
 import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api, createConversation } from '../../services/api';
-import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment, getUserPoints, getInventoryItems, requestReward, getRewardRequests, claimRewardRequest, getEngagementPointsSettings } from '../../services/api';
+import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment, getUserPoints, getInventoryItems, requestReward, getRewardRequests, claimRewardRequest, getEngagementPointsSettings, cancelRewardRequest } from '../../services/api';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
@@ -218,6 +218,7 @@ const AlumniProfile: React.FC = () => {
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [rewardsLoading, setRewardsLoading] = useState(false);
   const [claimingReward, setClaimingReward] = useState<number | null>(null);
+  const [cancellingReward, setCancellingReward] = useState<number | null>(null);
   const [recentlyClaimedRewardIds, setRecentlyClaimedRewardIds] = useState<number[]>([]);
   const [userRewardRequests, setUserRewardRequests] = useState<any[]>([]);
   const [showApprovedRewardsModal, setShowApprovedRewardsModal] = useState(false);
@@ -232,6 +233,20 @@ const AlumniProfile: React.FC = () => {
   const [showEarnPointsModal, setShowEarnPointsModal] = useState(false);
   const approvedRewardsScrollRef = React.useRef<HTMLDivElement | null>(null);
   const rewardFilterRef = React.useRef<HTMLDivElement | null>(null);
+
+  const deriveRewardAvailability = useCallback((item: any) => {
+    if (item?.availability) {
+      return item.availability;
+    }
+    const units = Math.max(item?.quantity || 0, 0);
+    if (units <= 0) {
+      return { status: 'out_of_stock', label: 'Out of Stock', units_available: 0, is_available: false };
+    }
+    if (units <= 5) {
+      return { status: 'low_stock', label: `Low Stock (${units} left)`, units_available: units, is_available: true };
+    }
+    return { status: 'in_stock', label: 'In Stock', units_available: units, is_available: true };
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -807,11 +822,14 @@ getPosts()
     }
   };
 
+
   const handleRequestReward = async (rewardId: number) => {
     if (claimingReward !== null) return;
     
     const reward = inventoryItems.find(item => item.id === rewardId);
     if (!reward) return;
+    const availability = deriveRewardAvailability(reward);
+    const hasStock = availability.is_available;
 
     const pointsMatch = reward.value?.match(/(\d+)/);
     const requiredPoints = pointsMatch ? parseInt(pointsMatch[1]) : 0;
@@ -822,7 +840,7 @@ getPosts()
       return;
     }
 
-    if (reward.quantity <= 0) {
+    if (!hasStock) {
       alert('This reward is out of stock.');
       return;
     }
@@ -1170,6 +1188,39 @@ getPosts()
       alert(error.response?.data?.message || 'Failed to claim reward');
     } finally {
       setClaimingReward(null);
+    }
+  };
+
+  const handleCancelReward = async (requestId: number) => {
+    if (cancellingReward === requestId) return;
+    const request = userRewardRequests.find((req) => req.request_id === requestId);
+    if (!request) return;
+    if (!['pending', 'approved', 'ready_for_pickup'].includes(request.status)) {
+      alert('This request can no longer be cancelled.');
+      return;
+    }
+    const confirm = window.confirm(`Cancel your request for "${request.reward_name}"?`);
+    if (!confirm) return;
+    try {
+      setCancellingReward(requestId);
+      const response = await cancelRewardRequest(requestId);
+      if (response.success) {
+        alert(response.message || 'Reward request cancelled.');
+        await fetchUserRewardRequests();
+        await fetchInventoryItems();
+        if (selectedRewardDetail?.request_id === requestId) {
+          setSelectedRewardDetail((prev: any | null) =>
+            prev ? { ...prev, status: 'cancelled', notes: response.request?.notes || prev.notes } : prev
+          );
+        }
+      } else {
+        alert(response.message || 'Unable to cancel request.');
+      }
+    } catch (error: any) {
+      console.error('Error cancelling reward request:', error);
+      alert(error.response?.data?.message || 'Failed to cancel request.');
+    } finally {
+      setCancellingReward(null);
     }
   };
 
@@ -4440,12 +4491,13 @@ getPosts()
                     const pointsMatch = item.value?.match(/(\d+)/);
                     const requiredPoints = pointsMatch ? parseInt(pointsMatch[1]) : 0;
                     const canAfford = (userPoints?.total_points || 0) >= requiredPoints;
-                    const requestable = canAfford && item.quantity > 0;
-                    return { item, requiredPoints, canAfford, requestable };
+                    const availability = deriveRewardAvailability(item);
+                    const requestable = canAfford && availability.is_available;
+                    return { item, requiredPoints, canAfford, requestable, availability };
                   })
                   // Sort so requestable rewards come first; non-requestable go to the bottom
                   .sort((a, b) => Number(b.requestable) - Number(a.requestable))
-                  .map(({ item, requiredPoints, canAfford }) => {
+                  .map(({ item, requiredPoints, canAfford, availability }) => {
                   const isVoucher = item.type?.toLowerCase().includes('voucher') || 
                                     item.type?.toLowerCase().includes('gift card') ||
                                     item.type?.toLowerCase().includes('coupon');
@@ -4456,6 +4508,8 @@ getPosts()
                   
                   const pointsShort = Math.max(0, requiredPoints - (userPoints?.total_points || 0));
                   const isClaiming = claimingReward === item.id;
+                  const hasStock = availability.is_available;
+                  const canRequest = canAfford && hasStock;
 
                   return (
                     <div
@@ -4468,9 +4522,8 @@ getPosts()
                         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
                         transition: 'all 0.2s',
                         display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '16px'
+                        flexDirection: 'column',
+                        gap: '12px'
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.08)';
@@ -4481,52 +4534,55 @@ getPosts()
                         e.currentTarget.style.borderColor = '#e5e7eb';
                       }}
                     >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#1f2937', marginBottom: '4px' }}>
-                          {item.name}
-                        </h3>
-                        <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                          <span>Type: {item.type}</span>
-                          <span>Points Cost: <strong style={{ color: '#1e3a5f', fontWeight: '700' }}>{item.value}</strong></span>
-                          <span>Stock: {item.quantity} available</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#1f2937', marginBottom: '4px' }}>
+                            {item.name}
+                          </h3>
+                          <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                            <span>Type: {item.type}</span>
+                            <span>Points Cost: <strong style={{ color: '#1e3a5f', fontWeight: '700' }}>{item.value}</strong></span>
+                            <span>Status: {availability.label}</span>
+                            <span>{availability.units_available} available</span>
+                          </div>
                         </div>
+                        
+                        <button
+                          onClick={() => handleRequestReward(item.id)}
+                          disabled={!canRequest || isClaiming}
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            background: canRequest ? '#1e3a5f' : '#e5e7eb',
+                            color: canRequest ? 'white' : '#9ca3af',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            cursor: canRequest ? 'pointer' : 'not-allowed',
+                            transition: 'all 0.2s',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0
+                          }}
+                          onMouseEnter={(e) => {
+                            if (canRequest) {
+                              e.currentTarget.style.backgroundColor = '#153e75';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (canRequest) {
+                              e.currentTarget.style.backgroundColor = '#1e3a5f';
+                            }
+                          }}
+                        >
+                          {isClaiming
+                            ? 'Processing...'
+                            : canRequest
+                            ? 'Request to Claim Reward'
+                            : !hasStock
+                            ? 'Out of Stock'
+                            : `Need ${pointsShort} more point${pointsShort === 1 ? '' : 's'}`}
+                        </button>
                       </div>
-                      
-                      <button
-                        onClick={() => handleRequestReward(item.id)}
-                        disabled={!canAfford || item.quantity <= 0 || isClaiming}
-                        style={{
-                          padding: '8px 16px',
-                          borderRadius: '6px',
-                          border: 'none',
-                          background: canAfford && item.quantity > 0 ? '#1e3a5f' : '#e5e7eb',
-                          color: canAfford && item.quantity > 0 ? 'white' : '#9ca3af',
-                          fontSize: '13px',
-                          fontWeight: '600',
-                          cursor: canAfford && item.quantity > 0 ? 'pointer' : 'not-allowed',
-                          transition: 'all 0.2s',
-                          whiteSpace: 'nowrap',
-                          flexShrink: 0
-                        }}
-                        onMouseEnter={(e) => {
-                          if (canAfford && item.quantity > 0) {
-                            e.currentTarget.style.backgroundColor = '#153e75';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (canAfford && item.quantity > 0) {
-                            e.currentTarget.style.backgroundColor = '#1e3a5f';
-                          }
-                        }}
-                      >
-                        {isClaiming
-                          ? 'Processing...'
-                          : canAfford && item.quantity > 0
-                          ? 'Request to Claim Reward'
-                          : item.quantity <= 0
-                          ? 'Out of Stock'
-                          : `Need ${pointsShort} more point${pointsShort === 1 ? '' : 's'}`}
-                      </button>
                       
                     </div>
                   );
@@ -4807,6 +4863,7 @@ getPosts()
                                                  req.reward_type?.toLowerCase().includes('item');
                             // Only vouchers can be claimed by user, merchandise must be released by admin
                             const canClaim = isApproved && !isClaimed && !isMerchandise;
+                            const canCancel = isPending || (isApproved && !isClaimed);
 
                   return (
                               <tr 
@@ -4873,34 +4930,55 @@ getPosts()
                                   </td>
                                 )}
                                 <td style={{ padding: '8px', textAlign: 'center' }}>
-                                  <button
-                                    onClick={() => setSelectedRewardDetail(req)}
-                                    style={{
-                                      padding: '6px 12px',
-                                      borderRadius: '6px',
-                                      border: '1px solid #667eea',
-                                      background: 'white',
-                                      color: '#667eea',
-                                      fontSize: '12px',
-                                      fontWeight: '600',
-                                      cursor: 'pointer',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '4px',
-                                      transition: 'all 0.2s'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.background = '#667eea';
-                                      e.currentTarget.style.color = 'white';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.background = 'white';
-                                      e.currentTarget.style.color = '#667eea';
-                                    }}
-                                  >
-                                    <HiOutlineEye size={14} />
-                                    View
-                                  </button>
+                                  <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <button
+                                      onClick={() => setSelectedRewardDetail(req)}
+                                      style={{
+                                        padding: '6px 12px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #667eea',
+                                        background: 'white',
+                                        color: '#667eea',
+                                        fontSize: '12px',
+                                        fontWeight: '600',
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        transition: 'all 0.2s'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = '#667eea';
+                                        e.currentTarget.style.color = 'white';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'white';
+                                        e.currentTarget.style.color = '#667eea';
+                                      }}
+                                    >
+                                      <HiOutlineEye size={14} />
+                                      View
+                                    </button>
+                                    {canCancel && (
+                                      <button
+                                        onClick={() => handleCancelReward(req.request_id)}
+                                        disabled={cancellingReward === req.request_id}
+                                        style={{
+                                          padding: '6px 12px',
+                                          borderRadius: '6px',
+                                          border: '1px solid #f87171',
+                                          background: '#fff5f5',
+                                          color: '#b91c1c',
+                                          fontSize: '12px',
+                                          fontWeight: '600',
+                                          cursor: cancellingReward === req.request_id ? 'not-allowed' : 'pointer',
+                                          transition: 'all 0.2s'
+                                        }}
+                                      >
+                                        {cancellingReward === req.request_id ? 'Cancelling...' : 'Cancel'}
+                                      </button>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             );

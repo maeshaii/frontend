@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
-import { getInventoryItems, addInventoryItem, updateInventoryItem, deleteInventoryItem } from '../../../services/api';
+import { getInventoryItems, addInventoryItem, updateInventoryItem, deleteInventoryItem, getInventoryAnalytics } from '../../../services/api';
+
+type InventoryAvailabilityStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
+
+interface InventoryAvailability {
+  status: InventoryAvailabilityStatus;
+  label: string;
+  units_available: number;
+  is_available: boolean;
+}
 
 interface InventoryItem {
   id: number;
@@ -9,7 +18,40 @@ interface InventoryItem {
   type: string;
   quantity: number;
   value: string;
-  icon: string;
+  icon?: string;
+  availability?: InventoryAvailability;
+}
+
+interface InventoryAnalyticsItem {
+  id: number;
+  name: string;
+  type: string;
+  quantity: number;
+  value: string;
+  total_claims: number;
+  claims_last_30_days: number;
+  avg_daily_redemption: number;
+  projected_run_out_days: number | null;
+  demand_level: 'high' | 'medium' | 'low';
+  last_claimed_at: string | null;
+  stockout_risk: boolean;
+}
+
+interface InventoryAnalyticsSummary {
+  total_items: number;
+  total_stock: number;
+  total_claims_30d: number;
+  avg_daily_redemption: number;
+}
+
+interface InventoryAnalyticsResponse {
+  success: boolean;
+  generated_at: string;
+  lookback_days: number;
+  summary: InventoryAnalyticsSummary;
+  items: InventoryAnalyticsItem[];
+  top_movers: InventoryAnalyticsItem[];
+  slow_movers: InventoryAnalyticsItem[];
 }
 
 const InventoryPage: React.FC = () => {
@@ -26,10 +68,14 @@ const InventoryPage: React.FC = () => {
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [analytics, setAnalytics] = useState<InventoryAnalyticsResponse | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
 
   // Fetch inventory items on component mount
   useEffect(() => {
     fetchInventoryItems();
+    fetchInventoryAnalytics();
   }, []);
 
   const fetchInventoryItems = async () => {
@@ -47,6 +93,26 @@ const InventoryPage: React.FC = () => {
       setError(err.response?.data?.message || 'Failed to fetch inventory');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchInventoryAnalytics = async () => {
+    try {
+      setAnalyticsLoading(true);
+      setAnalyticsError(null);
+      const response = await getInventoryAnalytics();
+      if (response.success) {
+        setAnalytics(response);
+      } else {
+        setAnalytics(null);
+        setAnalyticsError(response.message || 'Failed to load analytics');
+      }
+    } catch (err: any) {
+      console.error('Error fetching inventory analytics:', err);
+      setAnalytics(null);
+      setAnalyticsError(err.response?.data?.message || 'Failed to load analytics');
+    } finally {
+      setAnalyticsLoading(false);
     }
   };
 
@@ -435,12 +501,128 @@ const InventoryPage: React.FC = () => {
       fontWeight: '600',
       cursor: 'pointer',
       transition: 'background-color 0.2s'
+    },
+    analyticsSection: {
+      backgroundColor: 'white',
+      padding: '28px',
+      borderRadius: '12px',
+      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+      marginBottom: '32px',
+      border: '1px solid #e2e8f0'
+    },
+    analyticsHeader: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: '20px',
+      flexWrap: 'wrap' as const,
+      gap: '8px'
+    },
+    analyticsCardGrid: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+      gap: '16px',
+      marginBottom: '24px'
+    },
+    analyticsCard: {
+      backgroundColor: '#f8fafc',
+      border: '1px solid #e2e8f0',
+      borderRadius: '12px',
+      padding: '16px 18px'
+    },
+    analyticsCardLabel: {
+      fontSize: '12px',
+      fontWeight: 600,
+      color: '#64748b',
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.05em',
+      marginBottom: '8px'
+    },
+    analyticsCardValue: {
+      fontSize: '26px',
+      fontWeight: 700,
+      color: '#0f172a'
+    },
+    analyticsLists: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+      gap: '20px',
+      marginBottom: '24px'
+    },
+    analyticsListCard: {
+      border: '1px solid #e2e8f0',
+      borderRadius: '10px',
+      padding: '16px'
+    },
+    analyticsListTitle: {
+      fontSize: '14px',
+      fontWeight: 700,
+      color: '#1f2937',
+      marginBottom: '12px'
+    },
+    analyticsListItem: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      fontSize: '13px',
+      padding: '6px 0',
+      borderBottom: '1px solid #f1f5f9'
+    },
+    analyticsTableSection: {
+      marginTop: '8px',
+      borderTop: '1px solid #e2e8f0',
+      paddingTop: '20px'
+    },
+    analyticsTable: {
+      width: '100%',
+      borderCollapse: 'collapse' as const,
+      fontSize: '13px'
+    },
+    analyticsTableHeader: {
+      backgroundColor: '#f1f5f9',
+      textAlign: 'left' as const
+    },
+    analyticsTableCell: {
+      padding: '10px 12px',
+      borderBottom: '1px solid #f1f5f9'
+    }
+  };
+
+  const deriveAvailability = (item: InventoryItem): InventoryAvailability => {
+    if (item.availability) {
+      return item.availability;
+    }
+    const units = Math.max(item.quantity, 0);
+    if (units <= 0) {
+      return { status: 'out_of_stock', label: 'Out of Stock', units_available: 0, is_available: false };
+    }
+    if (units <= 5) {
+      return { status: 'low_stock', label: `Low Stock (${units} left)`, units_available: units, is_available: true };
+    }
+    return { status: 'in_stock', label: 'In Stock', units_available: units, is_available: true };
+  };
+
+  const getStatusBadgeStyle = (status: InventoryAvailabilityStatus) => {
+    switch (status) {
+      case 'in_stock':
+        return { backgroundColor: '#d1fae5', color: '#065f46' };
+      case 'low_stock':
+        return { backgroundColor: '#fef3c7', color: '#92400e' };
+      case 'out_of_stock':
+        return { backgroundColor: '#fee2e2', color: '#991b1b' };
+      default:
+        return { backgroundColor: '#e5e7eb', color: '#374151' };
     }
   };
 
   const totalItems = inventoryItems.length;
-  const totalStock = inventoryItems.reduce((sum, item) => sum + item.quantity, 0);
-  const lowStockItems = inventoryItems.filter(item => item.quantity < 15).length;
+  const totalStock = inventoryItems.reduce((sum, item) => {
+    const availability = deriveAvailability(item);
+    return sum + availability.units_available;
+  }, 0);
+  const lowStockItems = inventoryItems.filter(item => {
+    const availability = deriveAvailability(item);
+    return availability.status === 'low_stock' || availability.status === 'out_of_stock';
+  }).length;
 
   return (
     <div style={styles.container}>
@@ -486,37 +668,139 @@ const InventoryPage: React.FC = () => {
 
         {/* Content Wrapper */}
         <div style={styles.contentWrapper}>
-          {/* Stats Bar */}
-          <div style={styles.statsBar}>
-          <div 
-            style={styles.statCard}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-          >
-            <div style={styles.statNumber}>{totalItems}</div>
-            <div style={styles.statLabel}>Total Items</div>
-          </div>
-          <div 
-            style={styles.statCard}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-          >
-            <div style={styles.statNumber}>{totalStock}</div>
-            <div style={styles.statLabel}>Total Stock</div>
-          </div>
-          <div 
-            style={{
-              ...styles.statCard,
-              backgroundColor: lowStockItems > 0 ? '#dc2626' : '#1e3a5f'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-          >
-            <div style={styles.statNumber}>
-              {lowStockItems}
+          {/* Analytics Section */}
+          <div style={styles.analyticsSection}>
+            <div style={styles.analyticsHeader}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '20px', color: '#1e3a5f' }}>Inventory Analytics</h2>
+                <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
+                  Tracking redemption trends over the last {analytics?.lookback_days ?? 30} days
+                </p>
+              </div>
+              <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                {analyticsLoading
+                  ? 'Loading analytics...'
+                  : analytics?.generated_at
+                    ? `Updated ${new Date(analytics.generated_at).toLocaleString()}`
+                    : analyticsError || ''}
+              </div>
             </div>
-            <div style={styles.statLabel}>Low Stock Alerts</div>
-          </div>
+            {analytics && !analyticsLoading ? (
+              <>
+                <div style={styles.analyticsCardGrid}>
+                  <div style={styles.analyticsCard}>
+                    <div style={styles.analyticsCardLabel}>Total Redemptions (30d)</div>
+                    <div style={styles.analyticsCardValue}>{analytics.summary.total_claims_30d}</div>
+                  </div>
+                  <div style={styles.analyticsCard}>
+                    <div style={styles.analyticsCardLabel}>Avg Daily Redemption</div>
+                    <div style={styles.analyticsCardValue}>{analytics.summary.avg_daily_redemption}</div>
+                  </div>
+                  <div style={styles.analyticsCard}>
+                    <div style={styles.analyticsCardLabel}>Total Items</div>
+                    <div style={styles.analyticsCardValue}>{analytics.summary.total_items}</div>
+                  </div>
+                  <div style={styles.analyticsCard}>
+                    <div style={styles.analyticsCardLabel}>Total Stock On-hand</div>
+                    <div style={styles.analyticsCardValue}>{analytics.summary.total_stock}</div>
+                  </div>
+                  <div style={{ ...styles.analyticsCard, backgroundColor: lowStockItems > 0 ? '#fef2f2' : '#f8fafc', borderColor: lowStockItems > 0 ? '#fecaca' : '#e2e8f0' }}>
+                    <div style={styles.analyticsCardLabel}>Low Stock Alerts</div>
+                    <div style={{ ...styles.analyticsCardValue, color: lowStockItems > 0 ? '#b91c1c' : '#0f172a' }}>
+                      {lowStockItems}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.analyticsLists}>
+                  <div style={styles.analyticsListCard}>
+                    <div style={styles.analyticsListTitle}>Top Redeemed Items</div>
+                    {analytics.top_movers.length === 0 ? (
+                      <div style={{ fontSize: '13px', color: '#94a3b8' }}>No recent redemptions</div>
+                    ) : (
+                      analytics.top_movers.map((item) => (
+                        <div key={item.id} style={styles.analyticsListItem}>
+                          <span>{item.name}</span>
+                          <span>{item.claims_last_30_days} claims</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div style={styles.analyticsListCard}>
+                    <div style={styles.analyticsListTitle}>Slow Moving Items</div>
+                    {analytics.slow_movers.length === 0 ? (
+                      <div style={{ fontSize: '13px', color: '#94a3b8' }}>All items moved in the last 30 days</div>
+                    ) : (
+                      analytics.slow_movers.map((item) => (
+                        <div key={item.id} style={styles.analyticsListItem}>
+                          <span>{item.name}</span>
+                          <span>0 claims</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div style={styles.analyticsTableSection}>
+                  <h3 style={{ margin: '0 0 12px', fontSize: '16px', color: '#1e3a5f' }}>Demand Forecast</h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={styles.analyticsTable}>
+                      <thead style={styles.analyticsTableHeader}>
+                        <tr>
+                          <th style={styles.analyticsTableCell}>Item</th>
+                          <th style={styles.analyticsTableCell}>Stock</th>
+                          <th style={styles.analyticsTableCell}>Claims (30d)</th>
+                          <th style={styles.analyticsTableCell}>Avg Daily</th>
+                          <th style={styles.analyticsTableCell}>Demand</th>
+                          <th style={styles.analyticsTableCell}>Est. Run-out</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {analytics.items.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} style={styles.analyticsTableCell}>
+                              <span style={{ color: '#94a3b8' }}>No inventory data</span>
+                            </td>
+                          </tr>
+                        ) : (
+                          analytics.items.map((item) => (
+                            <tr key={item.id}>
+                              <td style={styles.analyticsTableCell}>
+                                <div style={{ fontWeight: 600, color: '#0f172a' }}>{item.name}</div>
+                                <div style={{ fontSize: '12px', color: '#94a3b8' }}>{item.type}</div>
+                              </td>
+                              <td style={styles.analyticsTableCell}>{item.quantity}</td>
+                              <td style={styles.analyticsTableCell}>{item.claims_last_30_days}</td>
+                              <td style={styles.analyticsTableCell}>{item.avg_daily_redemption}</td>
+                              <td style={styles.analyticsTableCell} >
+                                <span style={{
+                                  padding: '4px 8px',
+                                  borderRadius: '999px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  textTransform: 'capitalize',
+                                  backgroundColor: item.demand_level === 'high' ? '#fee2e2' : item.demand_level === 'medium' ? '#fef9c3' : '#e2e8f0',
+                                  color: item.demand_level === 'high' ? '#b91c1c' : item.demand_level === 'medium' ? '#92400e' : '#475569'
+                                }}>
+                                  {item.demand_level}
+                                </span>
+                              </td>
+                              <td style={styles.analyticsTableCell}>
+                                {item.projected_run_out_days
+                                  ? `${item.projected_run_out_days} days`
+                                  : '—'}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            ) : analyticsError && !analyticsLoading ? (
+              <div style={{ fontSize: '13px', color: '#dc2626' }}>{analyticsError}</div>
+            ) : null}
           </div>
 
         {/* Inventory Table */}
@@ -552,7 +836,7 @@ const InventoryPage: React.FC = () => {
                 <tr>
                   <th style={{ ...styles.tableHeaderCell, width: '40%' }}>Item</th>
                   <th style={{ ...styles.tableHeaderCell, width: '20%' }}>Type</th>
-                  <th style={{ ...styles.tableHeaderCell, width: '15%', textAlign: 'center' }}>Stock</th>
+                  <th style={{ ...styles.tableHeaderCell, width: '20%', textAlign: 'center' }}>Availability</th>
                   <th style={{ ...styles.tableHeaderCell, width: '15%' }}>Value</th>
                   <th style={{ ...styles.tableHeaderCell, width: '10%', textAlign: 'center' }}>Actions</th>
                 </tr>
@@ -584,12 +868,23 @@ const InventoryPage: React.FC = () => {
                         <span style={{ color: '#6b7280', fontSize: '13px' }}>{item.type}</span>
                       </td>
                       <td style={{ ...styles.tableCell, textAlign: 'center' }}>
-                        <span style={{
-                          ...styles.quantityBadge,
-                          ...(item.quantity < 15 ? styles.lowStockBadge : {})
-                        }}>
-                          {item.quantity}
-                        </span>
+                        {(() => {
+                          const availability = deriveAvailability(item);
+                          const badgeStyle = {
+                            ...styles.quantityBadge,
+                            ...getStatusBadgeStyle(availability.status)
+                          };
+                          return (
+                            <div>
+                              <span style={badgeStyle}>
+                                {availability.label}
+                              </span>
+                              <div style={{ marginTop: '6px', fontSize: '12px', color: '#475569' }}>
+                                Available: {availability.units_available}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td style={styles.tableCell}>
                         <span style={{ fontSize: '13px', color: '#374151', fontWeight: '500' }}>

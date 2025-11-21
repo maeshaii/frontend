@@ -1273,6 +1273,11 @@ export const getInventoryItems = async () => {
   return response.data;
 };
 
+export const getInventoryAnalytics = async () => {
+  const response = await api.get('inventory/analytics/');
+  return response.data;
+};
+
 // Add new inventory item
 export const addInventoryItem = async (itemData: {
   name: string;
@@ -1345,6 +1350,11 @@ export const approveRewardRequest = async (requestId: number, voucherCode?: stri
 // Claim reward request (user claims after admin approval)
 export const claimRewardRequest = async (requestId: number) => {
   const response = await api.post(`rewards/requests/${requestId}/claim/`);
+  return response.data;
+};
+
+export const cancelRewardRequest = async (requestId: number) => {
+  const response = await api.post(`rewards/requests/${requestId}/cancel/`);
   return response.data;
 };
 

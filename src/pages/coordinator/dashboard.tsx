@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
 import Statistics from './statistics';
@@ -36,6 +36,108 @@ export default function Dashboard() {
   const [existingSendDates, setExistingSendDates] = useState<any[]>([]);
   const [allDataSent, setAllDataSent] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
+  const [importTemplateType, setImportTemplateType] = useState<'CREATE' | 'UPDATE' | null>(null);
+  const [showFileRestrictionModal, setShowFileRestrictionModal] = useState(false);
+  const [fileRestrictionMessage, setFileRestrictionMessage] = useState('');
+  const excelJSRef = useRef<any>(null);
+
+  const describeTemplateType = (type: 'CREATE' | 'UPDATE') =>
+    type === 'CREATE' ? 'create accounts' : 'company update';
+
+  const getExcelJS = async () => {
+    if (!excelJSRef.current) {
+      const module = await import('exceljs');
+      excelJSRef.current = module.default || module;
+    }
+    return excelJSRef.current;
+  };
+
+  const normalizeHeaderKey = (value: any) => {
+    if (value == null) return '';
+    if (typeof value === 'object') {
+      if (Array.isArray(value.richText)) {
+        value = value.richText.map((rt: any) => rt.text).join('');
+      } else if ('text' in value) {
+        value = value.text;
+      } else if ('result' in value) {
+        value = value.result;
+      } else if ('hyperlink' in value) {
+        value = value.hyperlink;
+      }
+    }
+    return String(value).toLowerCase().replace(/[^a-z0-9]/g, '');
+  };
+
+  const detectTemplateType = async (file: File): Promise<'CREATE' | 'UPDATE' | 'MIXED' | 'UNKNOWN'> => {
+    try {
+      const ExcelJS = await getExcelJS();
+      const workbook = new ExcelJS.Workbook();
+      const buffer = await file.arrayBuffer();
+      await workbook.xlsx.load(buffer);
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        return 'UNKNOWN';
+      }
+
+      let headerRow = worksheet.getRow(1);
+      if (!headerRow || headerRow.actualCellCount === 0) {
+        for (let i = 2; i <= worksheet.rowCount; i++) {
+          const candidate = worksheet.getRow(i);
+          if (candidate && candidate.actualCellCount > 0) {
+            headerRow = candidate;
+            break;
+          }
+        }
+      }
+
+      if (!headerRow || headerRow.actualCellCount === 0) {
+        return 'UNKNOWN';
+      }
+
+      const headerSet = new Set<string>();
+      headerRow.eachCell((cell: any) => {
+        const normalized = normalizeHeaderKey(cell.value);
+        if (normalized) {
+          headerSet.add(normalized);
+        }
+      });
+
+      if (!headerSet.has('ctuid')) {
+        return 'UNKNOWN';
+      }
+
+      const personalRequiredKeys = ['firstname', 'lastname', 'gender', 'section'];
+      const hasPersonalTemplate = personalRequiredKeys.every(key => headerSet.has(key));
+      const companyKeys = [
+        'company',
+        'companyname',
+        'companyaddress',
+        'companyemail',
+        'companycontact',
+        'contactperson',
+        'position',
+        'status',
+        'ojtstartdate',
+        'ojtenddate',
+        'startdate',
+        'enddate',
+      ];
+      const hasCompanyTemplate = companyKeys.some(key => headerSet.has(key));
+
+      if (hasPersonalTemplate && hasCompanyTemplate) return 'MIXED';
+      if (hasPersonalTemplate) return 'CREATE';
+      if (hasCompanyTemplate) return 'UPDATE';
+      return 'UNKNOWN';
+    } catch (error) {
+      console.error('Failed to inspect template type for', file.name, error);
+      return 'UNKNOWN';
+    }
+  };
+
+  const clearSelectedFiles = () => {
+    setSelectedFiles([]);
+    setImportTemplateType(null);
+  };
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -86,22 +188,72 @@ export default function Dashboard() {
     }
   }, [coordinatorUsername]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files);
-      // Append new files to existing files, avoiding duplicates
-      setSelectedFiles(prevFiles => {
-        const existingFileNames = new Set(prevFiles.map(f => f.name));
-        const uniqueNewFiles = newFiles.filter(f => !existingFileNames.has(f.name));
-        return [...prevFiles, ...uniqueNewFiles];
-      });
-      // Reset input value so same file can be selected again
-      e.target.value = '';
+      const existingFileNames = new Set(selectedFiles.map(f => f.name));
+      const uniqueNewFiles = newFiles.filter(f => !existingFileNames.has(f.name));
+
+      if (uniqueNewFiles.length === 0) {
+        e.target.value = '';
+        return;
+      }
+
+      try {
+        const filesToAdd: File[] = [];
+        let resultingTemplateType = importTemplateType;
+
+        for (const file of uniqueNewFiles) {
+          const templateType = await detectTemplateType(file);
+
+          if (templateType === 'MIXED') {
+            setFileRestrictionMessage(
+              `${file.name} mixes student details and company updates. Please split it into separate templates before importing.`
+            );
+            setShowFileRestrictionModal(true);
+            return;
+          }
+
+          if (templateType === 'UNKNOWN') {
+            setFileRestrictionMessage(
+              `We couldn't recognize the columns in ${file.name}. Please download the official template and try again.`
+            );
+            setShowFileRestrictionModal(true);
+            return;
+          }
+
+          if (!resultingTemplateType) {
+            resultingTemplateType = templateType as 'CREATE' | 'UPDATE';
+          } else if (templateType !== resultingTemplateType) {
+            setFileRestrictionMessage(
+              `You already selected a ${describeTemplateType(resultingTemplateType)} template. Remove it before adding a ${describeTemplateType(templateType as 'CREATE' | 'UPDATE')} file.`
+            );
+            setShowFileRestrictionModal(true);
+            return;
+          }
+
+          filesToAdd.push(file);
+        }
+
+        if (filesToAdd.length > 0) {
+          setSelectedFiles(prevFiles => [...prevFiles, ...filesToAdd]);
+          setImportTemplateType(resultingTemplateType || null);
+        }
+      } finally {
+        // Reset input value so same file can be selected again
+        e.target.value = '';
+      }
     }
   };
 
   const removeFile = (indexToRemove: number) => {
-    setSelectedFiles(prevFiles => prevFiles.filter((_, index) => index !== indexToRemove));
+    setSelectedFiles(prevFiles => {
+      const updated = prevFiles.filter((_, index) => index !== indexToRemove);
+      if (updated.length === 0) {
+        setImportTemplateType(null);
+      }
+      return updated;
+    });
   };
 
   const handleImport = async () => {
@@ -256,7 +408,7 @@ export default function Dashboard() {
       
       // Close import modal and refresh data
       setShowModal(false);
-      setSelectedFiles([]);
+      clearSelectedFiles();
       setSelectedYear(null);
       
       // Show import completion modal
@@ -1390,7 +1542,7 @@ export default function Dashboard() {
               <button
                 onClick={() => {
                   setShowModal(false);
-                  setSelectedFiles([]);
+                  clearSelectedFiles();
                   setSelectedYear(null);
                 }}
                 style={{
@@ -1615,7 +1767,7 @@ export default function Dashboard() {
               <button
                 onClick={() => {
                   setShowModal(false);
-                  setSelectedFiles([]);
+                  clearSelectedFiles();
                   setSelectedYear(null);
                 }}
                 disabled={importLoading}
@@ -3107,6 +3259,66 @@ export default function Dashboard() {
                 OK
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* File Restriction Modal */}
+      {showFileRestrictionModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '20px',
+            padding: '32px',
+            width: '420px',
+            maxWidth: '90vw',
+            textAlign: 'center',
+            boxShadow: '0 30px 60px rgba(15, 23, 42, 0.2)'
+          }}>
+            <h3 style={{
+              margin: '0 0 12px 0',
+              fontSize: '22px',
+              fontWeight: 800,
+              color: '#111827'
+            }}>
+              Import One File at a Time
+            </h3>
+            <p style={{
+              fontSize: '15px',
+              color: '#4b5563',
+              lineHeight: 1.5,
+              marginBottom: '24px'
+            }}>
+              {fileRestrictionMessage || 'Please upload files from only one template type per batch (all create or all update).'}
+            </p>
+            <button
+              onClick={() => {
+                setShowFileRestrictionModal(false);
+                setFileRestrictionMessage('');
+              }}
+              style={{
+                padding: '12px 24px',
+                borderRadius: '10px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                color: 'white',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Got it
+            </button>
           </div>
         </div>
       )}

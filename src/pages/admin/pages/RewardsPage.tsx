@@ -28,6 +28,15 @@ interface LeaderboardEntry {
   last_updated: string;
 }
 
+type InventoryAvailabilityStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
+
+interface InventoryAvailability {
+  status: InventoryAvailabilityStatus;
+  label: string;
+  units_available: number;
+  is_available: boolean;
+}
+
 interface InventoryItem {
   id: number;
   name: string;
@@ -36,6 +45,7 @@ interface InventoryItem {
   value: string;
   created_at: string;
   updated_at: string;
+  availability?: InventoryAvailability;
 }
 
 interface RewardRequest {
@@ -120,6 +130,33 @@ const RewardsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [trackerFormResponsesCount, setTrackerFormResponsesCount] = useState(0);
   const [trackerFormLoading, setTrackerFormLoading] = useState(true);
+
+  const deriveAvailability = (item: InventoryItem): InventoryAvailability => {
+    if (item.availability) {
+      return item.availability;
+    }
+    const units = Math.max(item.quantity, 0);
+    if (units <= 0) {
+      return { status: 'out_of_stock', label: 'Out of Stock', units_available: 0, is_available: false };
+    }
+    if (units <= 5) {
+      return { status: 'low_stock', label: `Low Stock (${units} left)`, units_available: units, is_available: true };
+    }
+    return { status: 'in_stock', label: 'In Stock', units_available: units, is_available: true };
+  };
+
+  const getStatusBadgeStyle = (status: InventoryAvailabilityStatus) => {
+    switch (status) {
+      case 'in_stock':
+        return { backgroundColor: '#d1fae5', color: '#065f46' };
+      case 'low_stock':
+        return { backgroundColor: '#fef3c7', color: '#92400e' };
+      case 'out_of_stock':
+        return { backgroundColor: '#fee2e2', color: '#991b1b' };
+      default:
+        return { backgroundColor: '#e5e7eb', color: '#374151' };
+    }
+  };
 
   // Use real-time notifications hook to detect new reward requests
   const { notifications: realTimeNotifications } = useRealTimeNotifications({
@@ -523,8 +560,9 @@ const RewardsPage: React.FC = () => {
       const response = await getInventoryItems();
       if (response.success) {
         // Filter items that have stock available AND user can afford
-        const availableItems = response.items.filter((item: InventoryItem) => {
-          if (item.quantity <= 0) return false;
+        const availableItems = (response.items || []).filter((item: InventoryItem) => {
+          const availability = item.availability?.is_available ?? item.quantity > 0;
+          if (!availability) return false;
           
           // Extract numeric value from value string (e.g., "100pts" -> 100)
           const pointsMatch = item.value.match(/(\d+)/);
@@ -567,6 +605,11 @@ const RewardsPage: React.FC = () => {
 
     const reward = inventoryItems.find(item => item.id === selectedReward);
     if (!reward) return;
+    const availability = deriveAvailability(reward);
+    if (!availability.is_available) {
+      alert('This reward is currently out of stock. Please select another item.');
+      return;
+    }
 
     try {
       const response = await giveReward(selectedUser.user_id, reward.id);
@@ -598,6 +641,9 @@ const RewardsPage: React.FC = () => {
       alert(`❌ Error: ${error.response?.data?.message || 'Failed to give reward'}`);
     }
   };
+
+  const selectedInventoryItem = selectedReward ? inventoryItems.find(item => item.id === selectedReward) : null;
+  const selectedRewardAvailable = selectedInventoryItem ? deriveAvailability(selectedInventoryItem).is_available : false;
 
   // Sample data - in a real app, this would come from an API
   const rewardProgress = { current: 1, total: 10 };
@@ -1683,14 +1729,16 @@ const RewardsPage: React.FC = () => {
                             'approved': '#10b981',
                             'ready_for_pickup': '#3b82f6',
                             'claimed': '#6366f1',
-                            'rejected': '#ef4444'
+                            'rejected': '#ef4444',
+                            'cancelled': '#6b7280'
                           };
                           const statusBg: { [key: string]: string } = {
                             'pending': '#fef3c7',
                             'approved': '#d1fae5',
                             'ready_for_pickup': '#dbeafe',
                             'claimed': '#e0e7ff',
-                            'rejected': '#fee2e2'
+                            'rejected': '#fee2e2',
+                            'cancelled': '#f3f4f6'
                           };
                           
                           return (
@@ -2080,53 +2128,74 @@ const RewardsPage: React.FC = () => {
                     Select a reward:
                   </div>
                   <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                    {inventoryItems.map((item) => (
-                      <div
-                        key={item.id}
-                        onClick={() => setSelectedReward(item.id)}
-                        style={{
-                          padding: '16px',
-                          border: selectedReward === item.id ? '2px solid #1e3a5f' : '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                          marginBottom: '12px',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          background: selectedReward === item.id ? '#f0f4f8' : 'white',
-                          boxShadow: selectedReward === item.id ? '0 2px 4px rgba(30, 58, 95, 0.1)' : 'none'
-                        }}
-                        onMouseEnter={(e) => {
-                          if (selectedReward !== item.id) {
-                            e.currentTarget.style.borderColor = '#cbd5e1';
-                            e.currentTarget.style.backgroundColor = '#f9fafb';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (selectedReward !== item.id) {
-                            e.currentTarget.style.borderColor = '#e5e7eb';
-                            e.currentTarget.style.backgroundColor = 'white';
-                          }
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '16px', fontWeight: '600', color: '#1f2937', marginBottom: '4px' }}>
-                              {item.name}
+                    {inventoryItems.map((item) => {
+                      const availability = deriveAvailability(item);
+                      const isAvailable = availability.is_available;
+                      const badgeStyle = {
+                        padding: '4px 8px',
+                        borderRadius: '999px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        display: 'inline-block',
+                        ...getStatusBadgeStyle(availability.status)
+                      };
+
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            if (isAvailable) {
+                              setSelectedReward(item.id);
+                            }
+                          }}
+                          style={{
+                            padding: '16px',
+                            border: selectedReward === item.id ? '2px solid #1e3a5f' : '1px solid #e5e7eb',
+                            borderRadius: '8px',
+                            marginBottom: '12px',
+                            cursor: isAvailable ? 'pointer' : 'not-allowed',
+                            transition: 'all 0.2s',
+                            background: selectedReward === item.id ? '#f0f4f8' : 'white',
+                            boxShadow: selectedReward === item.id ? '0 2px 4px rgba(30, 58, 95, 0.1)' : 'none',
+                            opacity: isAvailable ? 1 : 0.6
+                          }}
+                          onMouseEnter={(e) => {
+                            if (selectedReward !== item.id && isAvailable) {
+                              e.currentTarget.style.borderColor = '#cbd5e1';
+                              e.currentTarget.style.backgroundColor = '#f9fafb';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (selectedReward !== item.id && isAvailable) {
+                              e.currentTarget.style.borderColor = '#e5e7eb';
+                              e.currentTarget.style.backgroundColor = 'white';
+                            }
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '16px', fontWeight: '600', color: '#1f2937', marginBottom: '4px' }}>
+                                {item.name}
+                              </div>
+                              <div style={{ fontSize: '13px', color: '#6b7280' }}>
+                                {item.type} • {availability.label}
+                              </div>
+                              <div style={{ marginTop: '6px' }}>
+                                <span style={badgeStyle}>{availability.units_available} available</span>
+                              </div>
                             </div>
-                            <div style={{ fontSize: '13px', color: '#6b7280' }}>
-                              {item.type} • Stock: {item.quantity}
+                            <div style={{
+                              fontSize: '18px',
+                              fontWeight: '700',
+                              color: '#1e3a5f',
+                              marginLeft: '16px'
+                            }}>
+                              {item.value}
                             </div>
-                          </div>
-                          <div style={{
-                            fontSize: '18px',
-                            fontWeight: '700',
-                            color: '#1e3a5f',
-                            marginLeft: '16px'
-                          }}>
-                            {item.value}
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -2156,28 +2225,28 @@ const RewardsPage: React.FC = () => {
                 </button>
                 <button
                   onClick={handleGiveReward}
-                  disabled={!selectedReward || inventoryItems.length === 0}
+                  disabled={!selectedRewardAvailable}
                   style={{
                     flex: 1,
                     padding: '12px',
-                    background: selectedReward && inventoryItems.length > 0 
+                    background: selectedRewardAvailable 
                       ? '#1e3a5f' 
                       : '#e5e7eb',
-                    color: selectedReward && inventoryItems.length > 0 ? 'white' : '#9ca3af',
+                    color: selectedRewardAvailable ? 'white' : '#9ca3af',
                     border: 'none',
                     borderRadius: '8px',
                     fontSize: '14px',
                     fontWeight: '600',
-                    cursor: selectedReward && inventoryItems.length > 0 ? 'pointer' : 'not-allowed',
+                    cursor: selectedRewardAvailable ? 'pointer' : 'not-allowed',
                     transition: 'all 0.2s'
                   }}
                   onMouseEnter={(e) => {
-                    if (selectedReward && inventoryItems.length > 0) {
+                    if (selectedRewardAvailable) {
                       e.currentTarget.style.backgroundColor = '#153e75';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (selectedReward && inventoryItems.length > 0) {
+                    if (selectedRewardAvailable) {
                       e.currentTarget.style.backgroundColor = '#1e3a5f';
                     }
                   }}
