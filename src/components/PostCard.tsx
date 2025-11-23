@@ -27,6 +27,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faThumbsUp, faRetweet } from '@fortawesome/free-solid-svg-icons';
 import { faThumbsUp as faThumbsUpReg, faComment as faCommentReg } from '@fortawesome/free-regular-svg-icons';
 import { IoSend } from 'react-icons/io5';
+import ConfirmModal from './ConfirmModal';
 import './postFooterActions.css';
 
 interface RepostItem {
@@ -176,6 +177,10 @@ const PostCard: React.FC<PostCardProps> = ({
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [inlineImageIndex, setInlineImageIndex] = useState<{ [key: number]: number }>({}); // For inline carousel display per post
   const [showLikesModal, setShowLikesModal] = useState(false);
+  const [showDeleteRepostModal, setShowDeleteRepostModal] = useState(false);
+  const [showDeletePostModal, setShowDeletePostModal] = useState(false);
+  const [showDeleteCommentModal, setShowDeleteCommentModal] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState<number | null>(null);
   // Repost likes modals removed on web
   const [fetchedLikes, setFetchedLikes] = useState<any[]>([]);
   const [likesLoading, setLikesLoading] = useState(false);
@@ -1108,32 +1113,35 @@ const PostCard: React.FC<PostCardProps> = ({
     setShowOptions?.(prev => ({ ...prev, [post.post_id]: false }));
   };
 
-  const handleDeletePost = async () => {
+  const handleDeletePost = () => {
     if (!isOwn) {
       alert('You can only delete your own posts');
       return;
     }
-    
-    if (window.confirm('Are you sure you want to delete this post?')) {
-      try {
-        if (isForum) {
-          // Use forum post API
-          await deleteForumPost(post.post_id);
-        } else if (isDonation) {
-          // Use donation API
-          await deleteDonationRequest(post.post_id);
-        } else {
-          // Use regular post API
-          await deletePost(post.post_id);
-        }
-        onPostUpdate?.();
-        alert('Post deleted successfully');
-      } catch (error) {
-        console.error('Error deleting post:', error);
-        alert('Failed to delete post');
-      }
-    }
     setShowOptions?.(prev => ({ ...prev, [post.post_id]: false }));
+    setShowDeletePostModal(true);
+  };
+
+  const confirmDeletePost = async () => {
+    try {
+      if (isForum) {
+        // Use forum post API
+        await deleteForumPost(post.post_id);
+      } else if (isDonation) {
+        // Use donation API
+        await deleteDonationRequest(post.post_id);
+      } else {
+        // Use regular post API
+        await deletePost(post.post_id);
+      }
+      onPostUpdate?.();
+      alert('Post deleted successfully');
+      setShowDeletePostModal(false);
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      alert('Failed to delete post');
+      setShowDeletePostModal(false);
+    }
   };
 
   const handleSaveEditPost = async () => {
@@ -1186,7 +1194,7 @@ const PostCard: React.FC<PostCardProps> = ({
     }
   };
 
-  const handleDeleteComment = async (commentId: number) => {
+  const handleDeleteComment = (commentId: number) => {
     const comment = post.comments?.find(c => c.comment_id === commentId);
     if (!comment) return;
     
@@ -1197,27 +1205,36 @@ const PostCard: React.FC<PostCardProps> = ({
       return;
     }
     
-    if (window.confirm('Are you sure you want to delete this comment?')) {
-      try {
-        if (isRepostPost) {
-          // Use repost comment API with correct repost_id
-          await deleteRepostComment(repostData?.repost_id || post.post_id, commentId);
-        } else if (isForum) {
-          // Use forum comment API
-          await deleteForumComment(post.post_id, commentId);
-        } else if (isDonation) {
-          // Use donation comment API
-          await deleteDonationComment(post.post_id, commentId);
-        } else {
-          // Use regular post comment API
-          await deleteComment(post.post_id, commentId);
-        }
-        onPostUpdate?.();
-        alert('Comment deleted successfully');
-      } catch (error) {
-        console.error('Error deleting comment:', error);
-        alert('Failed to delete comment');
+    setCommentToDelete(commentId);
+    setShowDeleteCommentModal(true);
+  };
+
+  const confirmDeleteComment = async () => {
+    if (!commentToDelete) return;
+    
+    try {
+      if (isRepostPost) {
+        // Use repost comment API with correct repost_id
+        await deleteRepostComment(repostData?.repost_id || post.post_id, commentToDelete);
+      } else if (isForum) {
+        // Use forum comment API
+        await deleteForumComment(post.post_id, commentToDelete);
+      } else if (isDonation) {
+        // Use donation comment API
+        await deleteDonationComment(post.post_id, commentToDelete);
+      } else {
+        // Use regular post comment API
+        await deleteComment(post.post_id, commentToDelete);
       }
+      onPostUpdate?.();
+      alert('Comment deleted successfully');
+      setShowDeleteCommentModal(false);
+      setCommentToDelete(null);
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      alert('Failed to delete comment');
+      setShowDeleteCommentModal(false);
+      setCommentToDelete(null);
     }
   };
 
@@ -1329,25 +1346,28 @@ const PostCard: React.FC<PostCardProps> = ({
     }
   };
 
-  const handleDeleteRepost = async () => {
+  const handleDeleteRepost = () => {
     if (!repostData?.repost_id) return;
     if (!isOwn) {
       alert('You can only delete your own reposts');
       return;
     }
-    
-    if (window.confirm('Are you sure you want to delete this repost?')) {
-      try {
-        // Use repost delete API with correct repost_id
-        await deleteRepost(repostData.repost_id);
-        onPostUpdate?.();
-        alert('Repost deleted successfully');
-      } catch (error) {
-        console.error('Error deleting repost:', error);
-        alert('Failed to delete repost');
-      }
-    }
     setShowOptions?.(prev => ({ ...prev, [post.post_id]: false }));
+    setShowDeleteRepostModal(true);
+  };
+
+  const confirmDeleteRepost = async () => {
+    try {
+      // Use repost delete API with correct repost_id
+      await deleteRepost(repostData.repost_id);
+      onPostUpdate?.();
+      alert('Repost deleted successfully');
+      setShowDeleteRepostModal(false);
+    } catch (error) {
+      console.error('Error deleting repost:', error);
+      alert('Failed to delete repost');
+      setShowDeleteRepostModal(false);
+    }
   };
 
   // Determine if this is a repost and get the appropriate data
@@ -3811,6 +3831,48 @@ const PostCard: React.FC<PostCardProps> = ({
         onPrevious={handlePreviousPhoto}
         onNext={handleNextPhoto}
         onImageClick={(index) => setCurrentPhotoIndex(index)}
+      />
+
+      {/* Delete Repost Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteRepostModal}
+        title="Delete Repost"
+        message="Are you sure you want to delete this repost?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteRepost}
+        onCancel={() => setShowDeleteRepostModal(false)}
+      />
+
+      {/* Delete Post Confirmation Modal */}
+      <ConfirmModal
+        open={showDeletePostModal}
+        title={isForum ? "Delete Forum Post" : isDonation ? "Delete Donation Request" : "Delete Post"}
+        message={
+          isForum 
+            ? "Are you sure you want to delete this forum post?"
+            : isDonation
+            ? "Are you sure you want to delete this donation request?"
+            : "Are you sure you want to delete this post?"
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeletePost}
+        onCancel={() => setShowDeletePostModal(false)}
+      />
+
+      {/* Delete Comment Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteCommentModal}
+        title="Delete Comment"
+        message="Are you sure you want to delete this comment?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteComment}
+        onCancel={() => {
+          setShowDeleteCommentModal(false);
+          setCommentToDelete(null);
+        }}
       />
     </>
   );

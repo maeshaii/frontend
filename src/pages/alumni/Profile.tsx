@@ -8,8 +8,10 @@ import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, de
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
-import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye, HiOutlineXMark, HiOutlineInformationCircle, HiOutlineTicket, HiOutlineMagnifyingGlass, HiOutlineGlobeAlt, HiOutlineEnvelope } from 'react-icons/hi2';
+import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye, HiOutlineXMark, HiOutlineInformationCircle, HiOutlineTicket, HiOutlineMagnifyingGlass, HiOutlineGlobeAlt, HiOutlineEnvelope, HiOutlineCheck } from 'react-icons/hi2';
+import { getImageUrl } from '../../utils/profilePicUtils';
 import EarnPointsModal from '../../components/EarnPointsModal';
+import PhotoGalleryModal from '../../components/PhotoGalleryModal';
 
 function getCurrentUserId(user: AlumniUser | null): number | null {
   if (!user) return null;
@@ -169,6 +171,8 @@ const AlumniProfile: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id?: string }>();
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [chooseProfilePicModalOpen, setChooseProfilePicModalOpen] = useState(false);
+  const [updateProfilePicModalOpen, setUpdateProfilePicModalOpen] = useState(false);
   const [editProfilePic, setEditProfilePic] = useState<string | undefined>(user?.profile_pic);
   const [editBio, setEditBio] = useState<string>(user?.profile_bio || '');
   const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
@@ -190,6 +194,8 @@ const AlumniProfile: React.FC = () => {
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [following, setFollowing] = useState<any[]>([]);
   const [allMembers, setAllMembers] = useState<any[]>([]);
+  const [showAllPhotosModal, setShowAllPhotosModal] = useState(false);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [showOptions, setShowOptions] = useState<{ [key: string | number]: boolean }>({});
   const [editingPost, setEditingPost] = useState<{ [key: number]: boolean }>({});
   const [editingComment, setEditingComment] = useState<{ [key: number]: boolean }>({});
@@ -1269,6 +1275,92 @@ getPosts()
     setEditModalOpen(true);
   };
 
+  const handleEditProfilePicture = () => {
+    // Open the first modal: Choose Profile Picture
+    setChooseProfilePicModalOpen(true);
+  };
+
+  const handleChooseFromGallery = () => {
+    // Trigger file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.onchange = (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const file = target.files?.[0];
+      if (file) {
+        setProfilePicFile(file);
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setEditProfilePic(ev.target?.result as string);
+          // Close first modal and open second modal
+          setChooseProfilePicModalOpen(false);
+          setUpdateProfilePicModalOpen(true);
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    fileInput.click();
+  };
+
+  const handleChooseDifferentPhoto = () => {
+    // Close update modal and open choose modal again
+    setUpdateProfilePicModalOpen(false);
+    setChooseProfilePicModalOpen(true);
+  };
+
+  const handleSaveProfilePicture = async () => {
+    if (!profilePicFile) {
+      alert('Please choose a photo to upload');
+      return;
+    }
+
+    const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+    const userId = userObj.user_id || userObj.id;
+    if (!userId) {
+      alert('User ID not found. Please log in again.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('profile_pic', profilePicFile);
+    formData.append('bio', editBio);
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(
+        `http://127.0.0.1:8000/api/alumni/profile/update/?user_id=${userId}`,
+        {
+          method: 'PUT',
+          body: formData,
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const updatedUser = {
+          ...userObj,
+          ...data.user,
+          profile_pic: data.user.profile_pic + '?t=' + new Date().getTime(), // force reload
+        };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+        // Dispatch custom event to notify other components (like messaging) of profile update
+        window.dispatchEvent(new CustomEvent('profileUpdated'));
+        setUpdateProfilePicModalOpen(false);
+        setProfilePicFile(null);
+        setEditProfilePic(undefined);
+        alert('Profile picture updated successfully.');
+      } else {
+        const err = await response.json();
+        alert('Failed to update profile: ' + (err.message || 'Unknown error'));
+      }
+    } catch (error) {
+      alert('Network error: ' + error);
+    }
+  };
+
   const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     console.log('Selected file:', file);
@@ -1717,6 +1809,32 @@ getPosts()
   const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
   const isAdmin = currentUser?.account_type?.admin || currentUser?.account_type?.ccict;
   const isPeso = currentUser?.account_type?.peso;
+
+  // Extract all images from user's posts
+  const getAllPostImages = (): string[] => {
+    const allImages: string[] = [];
+    
+    posts.forEach((post) => {
+      // Handle multiple images
+      if (post.post_images && post.post_images.length > 0) {
+        const sortedImages = [...post.post_images].sort((a, b) => a.order - b.order);
+        sortedImages.forEach(img => {
+          if (img.image_url && !allImages.includes(img.image_url)) {
+            allImages.push(img.image_url);
+          }
+        });
+      }
+      // Handle single image (backward compatibility)
+      else if (post.post_image && !allImages.includes(post.post_image)) {
+        allImages.push(post.post_image);
+      }
+    });
+    
+    return allImages;
+  };
+
+  const allPostImages = getAllPostImages();
+  const displayPhotos = allPostImages.slice(0, 9); // Show first 9 photos
 
   return (
     <div className="profile-container">
@@ -2248,6 +2366,111 @@ getPosts()
             </div>
           </div>
           )}
+
+          {/* Photos Section */}
+          {allPostImages.length > 0 && (
+            <div style={{ 
+              marginBottom: '24px',
+              background: 'white',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              padding: '16px',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+            }}>
+              <div className="profile-followers-header" style={{ marginBottom: '12px' }}>
+                <div className="profile-followers-title">Photos ({allPostImages.length})</div>
+                {allPostImages.length > 9 && (
+                  <div
+                    className="profile-followers-seeall"
+                    onClick={() => {
+                      setCurrentPhotoIndex(0);
+                      setShowAllPhotosModal(true);
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    See all
+                  </div>
+                )}
+              </div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '4px',
+                borderRadius: '8px',
+                overflow: 'hidden'
+              }}>
+                {displayPhotos.map((imageUrl, index) => {
+                  const isLastPhoto = index === displayPhotos.length - 1;
+                  const hasMorePhotos = allPostImages.length > 9;
+                  const remainingPhotos = allPostImages.length - 9;
+                  
+                  return (
+                    <div
+                      key={index}
+                      style={{
+                        aspectRatio: '1',
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        backgroundColor: '#e0e0e0'
+                      }}
+                      onClick={() => {
+                        const clickedIndex = allPostImages.indexOf(imageUrl);
+                        setCurrentPhotoIndex(clickedIndex);
+                        setShowAllPhotosModal(true);
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.opacity = '0.9';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.opacity = '1';
+                      }}
+                    >
+                      <img
+                        src={getImageUrl(imageUrl)}
+                        alt={`Photo ${index + 1}`}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          display: 'block'
+                        }}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                        }}
+                      />
+                      {isLastPhoto && hasMorePhotos && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '16px',
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => {
+                            setCurrentPhotoIndex(0);
+                            setShowAllPhotosModal(true);
+                          }}
+                        >
+                          +{remainingPhotos} photos
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Center Content */}
@@ -2267,7 +2490,7 @@ getPosts()
                 {isOwnProfile && (
                   <button
                     className="profile-edit-pic-button"
-                    onClick={handleEditProfile}
+                    onClick={handleEditProfilePicture}
                     aria-label="Edit profile picture"
                     title="Edit profile picture"
                   >
@@ -3146,6 +3369,305 @@ getPosts()
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Choose Profile Picture Modal */}
+      {chooseProfilePicModalOpen && (
+        <div 
+          className="profile-edit-modal-overlay" 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setChooseProfilePicModalOpen(false);
+            }
+          }}
+        >
+          <div style={{
+            background: '#fff',
+            borderRadius: '16px',
+            padding: '24px',
+            maxWidth: '360px',
+            width: '90%',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)',
+            position: 'relative'
+          }}>
+            <h2 style={{
+              margin: '0 0 24px 0',
+              fontSize: '20px',
+              fontWeight: '600',
+              textAlign: 'center',
+              color: '#333'
+            }}>
+              Choose Profile Picture
+            </h2>
+            
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <button
+                onClick={handleChooseFromGallery}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '14px 16px',
+                  backgroundColor: '#fff',
+                  color: '#174f84',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                  e.currentTarget.style.borderColor = '#174f84';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fff';
+                  e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                }}
+              >
+                <HiOutlineCamera size={20} color="#174f84" />
+                <span>Choose from Gallery</span>
+              </button>
+
+              <button
+                onClick={() => setChooseProfilePicModalOpen(false)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '14px 16px',
+                  backgroundColor: '#fff',
+                  color: '#333',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fff';
+                }}
+              >
+                <HiOutlineXMark size={20} color="#333" />
+                <span>Cancel</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update Profile Picture Modal */}
+      {updateProfilePicModalOpen && (
+        <div 
+          className="profile-edit-modal-overlay" 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setUpdateProfilePicModalOpen(false);
+              setProfilePicFile(null);
+              setEditProfilePic(undefined);
+            }
+          }}
+        >
+          <div style={{
+            background: '#fff',
+            borderRadius: '16px',
+            padding: '24px',
+            maxWidth: '360px',
+            width: '90%',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)',
+            position: 'relative'
+          }}>
+            <h2 style={{
+              margin: '0 0 20px 0',
+              fontSize: '20px',
+              fontWeight: '600',
+              textAlign: 'center',
+              color: '#333'
+            }}>
+              Update Profile Picture
+            </h2>
+            
+            {/* Preview */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              marginBottom: '20px'
+            }}>
+              <div style={{
+                width: '120px',
+                height: '120px',
+                borderRadius: '50%',
+                overflow: 'hidden',
+                border: '2px solid rgba(0, 0, 0, 0.1)',
+                marginBottom: '12px'
+              }}>
+                <img
+                  src={editProfilePic || (user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo)}
+                  alt="Profile Preview"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover'
+                  }}
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null;
+                    target.src = ctulogo as unknown as string;
+                  }}
+                />
+              </div>
+              <p style={{
+                margin: 0,
+                fontSize: '13px',
+                color: '#666',
+                textAlign: 'center'
+              }}>
+                Preview of your new profile picture
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <button
+                onClick={handleChooseDifferentPhoto}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '14px 16px',
+                  backgroundColor: '#fff',
+                  color: '#174f84',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                  e.currentTarget.style.borderColor = '#174f84';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fff';
+                  e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                }}
+              >
+                <HiOutlineCamera size={20} color="#174f84" />
+                <span>Choose Different Photo</span>
+              </button>
+
+              <button
+                onClick={handleSaveProfilePicture}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '14px 16px',
+                  backgroundColor: '#174f84',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'center',
+                  boxShadow: '0 2px 8px rgba(23, 79, 132, 0.25)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#0f3d6b';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(23, 79, 132, 0.35)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#174f84';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(23, 79, 132, 0.25)';
+                }}
+              >
+                <HiOutlineCheck size={20} color="#fff" />
+                <span>Save Profile Picture</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setUpdateProfilePicModalOpen(false);
+                  setProfilePicFile(null);
+                  setEditProfilePic(undefined);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '14px 16px',
+                  backgroundColor: '#fff',
+                  color: '#333',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fff';
+                }}
+              >
+                <HiOutlineXMark size={20} color="#333" />
+                <span>Cancel</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -5647,6 +6169,23 @@ getPosts()
         isOpen={showEarnPointsModal}
         onClose={() => setShowEarnPointsModal(false)}
       />
+
+      {/* All Photos Gallery Modal */}
+      {showAllPhotosModal && allPostImages.length > 0 && (
+        <PhotoGalleryModal
+          isOpen={showAllPhotosModal}
+          onClose={() => setShowAllPhotosModal(false)}
+          images={allPostImages.map(url => getImageUrl(url))}
+          currentIndex={currentPhotoIndex}
+          onPrevious={() => {
+            setCurrentPhotoIndex(prev => (prev > 0 ? prev - 1 : allPostImages.length - 1));
+          }}
+          onNext={() => {
+            setCurrentPhotoIndex(prev => (prev < allPostImages.length - 1 ? prev + 1 : 0));
+          }}
+          onImageClick={(index) => setCurrentPhotoIndex(index)}
+        />
+      )}
     </div>
   );
 };

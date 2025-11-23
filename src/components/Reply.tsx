@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { editReply, deleteReply, createReply, searchAlumni, getUserPoints, getFollowingForMentions } from '../services/api';
 import ctulogo from '../images/ctulogo.png';
 import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
+import ConfirmModal from './ConfirmModal';
 
 interface ReplyProps {
   reply: {
@@ -46,6 +47,7 @@ const Reply: React.FC<ReplyProps> = ({
   const [replyContent, setReplyContent] = useState('');
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
   const [followingUsers, setFollowingUsers] = useState<any[]>([]);
+  const [showDeleteReplyModal, setShowDeleteReplyModal] = useState(false);
   const optionsRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -137,14 +139,19 @@ const Reply: React.FC<ReplyProps> = ({
     }
   };
 
-  const handleDelete = async () => {
-    if (window.confirm('Are you sure you want to delete this reply?')) {
-      try {
-        await deleteReply(commentId, reply.reply_id);
-        onReplyUpdate();
-      } catch (error) {
-        console.error('Error deleting reply:', error);
-      }
+  const handleDelete = () => {
+    setShowOptions(false);
+    setShowDeleteReplyModal(true);
+  };
+
+  const confirmDeleteReply = async () => {
+    try {
+      await deleteReply(commentId, reply.reply_id);
+      onReplyUpdate();
+      setShowDeleteReplyModal(false);
+    } catch (error) {
+      console.error('Error deleting reply:', error);
+      setShowDeleteReplyModal(false);
     }
   };
 
@@ -833,6 +840,17 @@ const Reply: React.FC<ReplyProps> = ({
           </div>
         )}
       </div>
+
+      {/* Delete Reply Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteReplyModal}
+        title="Delete Reply"
+        message="Are you sure you want to delete this reply?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteReply}
+        onCancel={() => setShowDeleteReplyModal(false)}
+      />
     </div>
   );
 };

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { fetchNotifications, deleteNotifications, markNotificationAsRead, api, getPostFromComment, getAdminPesoUsers } from '../../services/api';
+import { fetchNotifications, deleteNotifications, markNotificationAsRead, api, getPostFromComment, getAdminPesoUsers, getUserInfo } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import { getProfilePicUrl } from '../../utils/profilePicUtils';
 import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
+import ConfirmModal from '../../components/ConfirmModal';
 import ctulogo from '../../images/ctulogo.png';
 
 function formatHybrid(iso?: string | null): string {
@@ -66,6 +67,8 @@ const NotificationPage: React.FC = () => {
   const loadedProfilePics = React.useRef<Set<string>>(new Set());
   const [adminUserIds, setAdminUserIds] = useState<number[]>([]);
   const [adminProfilePic, setAdminProfilePic] = useState<string | null>(null);
+  const [showDeleteNotificationModal, setShowDeleteNotificationModal] = useState(false);
+  const [deleteNotificationData, setDeleteNotificationData] = useState<{ ids: number[]; message: string } | null>(null);
   const navigate = useNavigate();
 
   const storeRepostHighlightIds = (commentId?: string | null, replyId?: string | null) => {
@@ -352,33 +355,44 @@ const NotificationPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (deleteAll: boolean = false) => {
-    try {
-      let notificationIds: number[];
-      let confirmMessage: string;
-      
-      if (deleteAll) {
-        notificationIds = realTimeNotifications.map(n => n.id);
-        confirmMessage = `Are you sure you want to delete ALL ${realTimeNotifications.length} notifications? This action cannot be undone.`;
-      } else {
-    if (selected.length === 0) return;
-        notificationIds = selected;
-        confirmMessage = `Are you sure you want to delete ${selected.length} selected notification${selected.length > 1 ? 's' : ''}?`;
-      }
-      
-      if (window.confirm(confirmMessage)) {
-        const result = await deleteNotifications(notificationIds);
-    if (result.success) {
-      // Refresh notifications after deletion
-      await refreshNotifications();
-      setSelected([]);
+  const handleDelete = (deleteAll: boolean = false) => {
+    let notificationIds: number[];
+    let confirmMessage: string;
+    
+    if (deleteAll) {
+      notificationIds = realTimeNotifications.map(n => n.id);
+      confirmMessage = `Are you sure you want to delete ALL ${realTimeNotifications.length} notifications? This action cannot be undone.`;
     } else {
-      alert('Failed to delete notifications.');
-        }
+      if (selected.length === 0) return;
+      notificationIds = selected;
+      confirmMessage = `Are you sure you want to delete ${selected.length} selected notification${selected.length > 1 ? 's' : ''}?`;
+    }
+    
+    setDeleteNotificationData({ ids: notificationIds, message: confirmMessage });
+    setShowDeleteNotificationModal(true);
+  };
+
+  const confirmDeleteNotifications = async () => {
+    if (!deleteNotificationData) return;
+    
+    try {
+      const result = await deleteNotifications(deleteNotificationData.ids);
+      if (result.success) {
+        // Refresh notifications after deletion
+        await refreshNotifications();
+        setSelected([]);
+        setShowDeleteNotificationModal(false);
+        setDeleteNotificationData(null);
+      } else {
+        alert('Failed to delete notifications.');
+        setShowDeleteNotificationModal(false);
+        setDeleteNotificationData(null);
       }
     } catch (error) {
       console.error('Error deleting notifications:', error);
       alert('Failed to delete notifications. Please try again.');
+      setShowDeleteNotificationModal(false);
+      setDeleteNotificationData(null);
     }
   };
 
@@ -403,9 +417,35 @@ const NotificationPage: React.FC = () => {
     }
   }, [navigate]);
 
-  const filteredNotifications = realTimeNotifications.filter((n: any) =>
-    n.content.toLowerCase().includes(search.toLowerCase())
+  // Check if current user is admin
+  const currentUser = getUserInfo();
+  const isAdminUser = Boolean(
+    currentUser?.account_type?.admin ||
+    currentUser?.account_type?.ccict ||
+    currentUser?.account_type?.peso ||
+    currentUser?.account_type?.staff ||
+    currentUser?.account_type?.coordinator ||
+    currentUser?.account_type?.super_admin
   );
+
+  const filteredNotifications = realTimeNotifications.filter((n: any) => {
+    // Filter by search text
+    if (!n.content.toLowerCase().includes(search.toLowerCase())) {
+      return false;
+    }
+    
+    // Filter out reward notifications for non-admin users
+    const isRewardNotification = n.type?.toLowerCase() === 'reward' || 
+                                 n.type?.toLowerCase().includes('reward') ||
+                                 n.subject?.toLowerCase().includes('reward') ||
+                                 n.content?.toLowerCase().includes('reward request');
+    
+    if (isRewardNotification && !isAdminUser) {
+      return false;
+    }
+    
+    return true;
+  });
 
   const toggleSelect = (id: number) => {
     setSelected((sel: any[]) => (sel.includes(id) ? sel.filter((i: number) => i !== id) : [...sel, id]));
@@ -1449,7 +1489,7 @@ const NotificationPage: React.FC = () => {
                 Notifications
               </h1>
               <p style={{ margin: 0, color: '#6c757d', fontSize: '14px' }}>
-                {realTimeNotifications.filter(n => !n.is_read).length} unread notifications
+                {filteredNotifications.filter(n => !n.is_read).length} unread notifications
               </p>
             </div>
             
@@ -2747,6 +2787,20 @@ const NotificationPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Notification Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteNotificationModal}
+        title="Delete Notifications"
+        message={deleteNotificationData?.message || "Are you sure you want to delete these notifications?"}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteNotifications}
+        onCancel={() => {
+          setShowDeleteNotificationModal(false);
+          setDeleteNotificationData(null);
+        }}
+      />
     </div>
   );
 };

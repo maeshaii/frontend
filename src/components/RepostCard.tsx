@@ -30,6 +30,7 @@ import { faThumbsUp as faThumbsUpReg, faComment as faCommentReg } from '@fortawe
 import { HiOutlineChevronRight } from 'react-icons/hi2';
 import { IoSend } from 'react-icons/io5';
 import ctulogo from '../images/ctulogo.png';
+import ConfirmModal from './ConfirmModal';
 import './postFooterActions.css';
 
 // Minimal, reusable types for the repost card
@@ -235,6 +236,12 @@ const RepostCard: React.FC<RepostCardProps> = ({
   const [localEditingOriginal, setLocalEditingOriginal] = useState(false);
   const [localEditRepostContent, setLocalEditRepostContent] = useState('');
   const [localEditOriginalContent, setLocalEditOriginalContent] = useState('');
+  
+  // Delete confirmation modals
+  const [showDeleteRepostModal, setShowDeleteRepostModal] = useState(false);
+  const [showDeleteOriginalModal, setShowDeleteOriginalModal] = useState(false);
+  const [showDeleteCommentModal, setShowDeleteCommentModal] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState<number | null>(null);
   
   // Comments state
   const [comments, setComments] = useState<CommentLite[]>(repost.comments || []);
@@ -562,16 +569,25 @@ const RepostCard: React.FC<RepostCardProps> = ({
     setEditCommentContent(prev => ({ ...prev, [commentId]: '' }));
   };
 
-  const handleDeleteComment = async (commentId: number) => {
-    if (!window.confirm('Are you sure you want to delete this comment?')) return;
+  const handleDeleteComment = (commentId: number) => {
+    setCommentToDelete(commentId);
+    setShowDeleteCommentModal(true);
+  };
+
+  const confirmDeleteComment = async () => {
+    if (!commentToDelete) return;
     
     try {
-      await deleteRepostComment(repost.repost_id, commentId);
+      await deleteRepostComment(repost.repost_id, commentToDelete);
       await loadComments();
       onRefresh?.();
+      setShowDeleteCommentModal(false);
+      setCommentToDelete(null);
     } catch (error) {
       console.error('Error deleting comment:', error);
       alert('Failed to delete comment');
+      setShowDeleteCommentModal(false);
+      setCommentToDelete(null);
     }
   };
 
@@ -1030,23 +1046,26 @@ const RepostCard: React.FC<RepostCardProps> = ({
     setLocalShowRepostOptions(false);
   };
 
-  const handleDeleteRepost = async () => {
+  const handleDeleteRepost = () => {
     if (!isOwn) {
       alert('You can only delete your own reposts');
       return;
     }
-    
-    if (window.confirm('Are you sure you want to delete this repost?')) {
-      try {
-        await deleteRepost(repost.repost_id);
-        onRefresh?.();
-        alert('Repost deleted successfully');
-      } catch (error) {
-        console.error('Error deleting repost:', error);
-        alert('Failed to delete repost');
-      }
-    }
     setLocalShowRepostOptions(false);
+    setShowDeleteRepostModal(true);
+  };
+
+  const confirmDeleteRepost = async () => {
+    try {
+      await deleteRepost(repost.repost_id);
+      onRefresh?.();
+      alert('Repost deleted successfully');
+      setShowDeleteRepostModal(false);
+    } catch (error) {
+      console.error('Error deleting repost:', error);
+      alert('Failed to delete repost');
+      setShowDeleteRepostModal(false);
+    }
   };
 
   const handleSaveEditRepost = async () => {
@@ -1102,12 +1121,17 @@ const RepostCard: React.FC<RepostCardProps> = ({
     }
   };
 
-  const handleDeleteOriginalPost = async () => {
+  const handleDeleteOriginalPost = () => {
     if (original.user?.user_id !== currentUserId) {
       alert('You can only delete your own posts');
       return;
     }
+    setLocalShowOriginalOptions(false);
+    setShowOptions?.(prev => ({ ...prev, [`original_${original.post_id}`]: false }));
+    setShowDeleteOriginalModal(true);
+  };
 
+  const confirmDeleteOriginalPost = async () => {
     const donationId =
       original.donation_id ??
       (original as any)?.donation_id ??
@@ -1120,20 +1144,12 @@ const RepostCard: React.FC<RepostCardProps> = ({
       null;
     const contextType: RepostContext = context || (donationId ? 'donation' : 'post');
 
-    const confirmMessage =
-      contextType === 'donation'
-        ? 'Are you sure you want to delete this donation request?'
-        : 'Are you sure you want to delete this original post?';
-
     try {
-      if (!window.confirm(confirmMessage)) {
-        return;
-      }
-
       if (contextType === 'donation') {
         const targetDonationId = donationId ?? postId;
         if (!targetDonationId) {
           alert('Missing donation identifier. Please refresh and try again.');
+          setShowDeleteOriginalModal(false);
           return;
         }
         await deleteDonationRequest(targetDonationId);
@@ -1141,6 +1157,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
       } else if (contextType === 'forum') {
         if (!postId) {
           alert('Missing forum post identifier. Please refresh and try again.');
+          setShowDeleteOriginalModal(false);
           return;
         }
         await deleteForumPost(postId);
@@ -1148,6 +1165,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
       } else {
         if (!postId) {
           alert('Missing post identifier. Please refresh and try again.');
+          setShowDeleteOriginalModal(false);
           return;
         }
         await deletePost(postId);
@@ -1155,12 +1173,11 @@ const RepostCard: React.FC<RepostCardProps> = ({
       }
 
       onRefresh?.();
+      setShowDeleteOriginalModal(false);
     } catch (error) {
       console.error('Error deleting original post:', error);
       alert('Failed to delete original content');
-    } finally {
-      setLocalShowOriginalOptions(false);
-      setShowOptions?.(prev => ({ ...prev, [`original_${original.post_id}`]: false }));
+      setShowDeleteOriginalModal(false);
     }
   };
 
@@ -2639,6 +2656,46 @@ const RepostCard: React.FC<RepostCardProps> = ({
         </div>,
         document.body
       )}
+
+      {/* Delete Repost Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteRepostModal}
+        title="Delete Repost"
+        message="Are you sure you want to delete this repost?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteRepost}
+        onCancel={() => setShowDeleteRepostModal(false)}
+      />
+
+      {/* Delete Original Post Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteOriginalModal}
+        title="Delete Post"
+        message={
+          (context === 'donation' || (original.donation_id ?? (original as any)?.donation_id ?? (original as any)?.donation?.donation_id))
+            ? 'Are you sure you want to delete this donation request?'
+            : 'Are you sure you want to delete this original post?'
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteOriginalPost}
+        onCancel={() => setShowDeleteOriginalModal(false)}
+      />
+
+      {/* Delete Comment Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteCommentModal}
+        title="Delete Comment"
+        message="Are you sure you want to delete this comment?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteComment}
+        onCancel={() => {
+          setShowDeleteCommentModal(false);
+          setCommentToDelete(null);
+        }}
+      />
     </div>
   );
 };
