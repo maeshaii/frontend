@@ -23,6 +23,10 @@ import Reply from './Reply';
 import ReplyInput from './ReplyInput';
 import RepostButton from './RepostButton';
 import PostStatsRow from './PostStatsRow';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faThumbsUp, faRetweet } from '@fortawesome/free-solid-svg-icons';
+import { faThumbsUp as faThumbsUpReg, faComment as faCommentReg } from '@fortawesome/free-regular-svg-icons';
+import { IoSend } from 'react-icons/io5';
 import './postFooterActions.css';
 
 interface RepostItem {
@@ -377,83 +381,311 @@ const PostCard: React.FC<PostCardProps> = ({
     setCurrentPhotoIndex(prev => prev < images.length - 1 ? prev + 1 : 0);
   };
 
+  // Helper function to check if a mention matches a known user
+  const checkMentionMatch = (mentionText: string): { matched: boolean; user?: any } => {
+    const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
+    
+    // Check post author
+    if (post.user) {
+      const postAuthorName = `${post.user.f_name} ${post.user.m_name || ''} ${post.user.l_name}`.trim();
+      const normalizedPostAuthor = postAuthorName.toLowerCase().replace(/\s+/g, '');
+      if (normalizedMention === normalizedPostAuthor) {
+        return { matched: true, user: post.user };
+      }
+    }
+    
+    // Check following users
+    for (const user of followingUsers) {
+      const userName = `${user.f_name} ${user.m_name || ''} ${user.l_name}`.trim();
+      const normalizedUserName = userName.toLowerCase().replace(/\s+/g, '');
+      if (normalizedMention === normalizedUserName) {
+        return { matched: true, user };
+      }
+    }
+    
+    return { matched: false };
+  };
+
+  // Helper function to process mentions in a text segment with partial match support
+  const processMentionsInText = (textSegment: string, keyPrefix: string): React.ReactNode[] => {
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
+    const result: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    let keyCounter = 0;
+    mentionRegex.lastIndex = 0;
+    
+    while ((match = mentionRegex.exec(textSegment)) !== null) {
+      // Add text before the mention
+      if (match.index > lastIndex) {
+        result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{textSegment.substring(lastIndex, match.index)}</span>);
+      }
+      
+      const mentionText = match[1]; // Don't trim yet, we need the original spacing
+      if (mentionText) {
+        const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
+        const matchResult = checkMentionMatch(mentionText);
+        
+        if (matchResult.matched && matchResult.user) {
+          const matchedUserName = `${matchResult.user.f_name} ${matchResult.user.m_name || ''} ${matchResult.user.l_name}`.trim();
+          const normalizedMatchedName = matchedUserName.toLowerCase().replace(/\s+/g, '');
+          const isExactMatch = normalizedMention === normalizedMatchedName;
+          const startsWithName = normalizedMention.startsWith(normalizedMatchedName);
+          
+          if (isExactMatch) {
+            // Exact match - highlight the entire mention
+            const matchedUser = matchResult.user;
+            result.push(
+              <button
+                key={`${keyPrefix}-mention-${keyCounter++}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const userId = matchedUser.user_id || matchedUser.id;
+                  if (userId) {
+                    window.location.href = getProfilePath(userId);
+                  } else {
+                    handleUserSearch(mentionText);
+                  }
+                }}
+                style={{ 
+                  color: '#007bff', 
+                  fontWeight: '600',
+                  background: 'none',
+                  border: 'none',
+                  padding: '0',
+                  cursor: 'pointer',
+                  textDecoration: 'none'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                @{mentionText}
+              </button>
+            );
+          } else if (startsWithName) {
+            // Partial match - find where the user's name ends in the mention text
+            const mentionWords = mentionText.split(/\s+/);
+            const nameWords = matchedUserName.split(/\s+/);
+            
+            let matchedWordCount = 0;
+            for (let i = 0; i < Math.min(mentionWords.length, nameWords.length); i++) {
+              if (mentionWords[i].toLowerCase() === nameWords[i].toLowerCase()) {
+                matchedWordCount++;
+              } else {
+                break;
+              }
+            }
+            
+            if (matchedWordCount > 0 && matchedWordCount <= mentionWords.length) {
+              // Build a regex pattern to match the exact name at the start of mentionText
+              // Escape special regex characters in the name
+              const escapedName = matchedUserName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              // Create a pattern that matches the name followed by optional whitespace and more text
+              const namePattern = new RegExp(`^(${escapedName})(\\s+.*)?$`, 'i');
+              const nameMatch = mentionText.match(namePattern);
+              
+              if (nameMatch && nameMatch[1]) {
+                // Found exact match of the name at the start
+                const matchedPart = nameMatch[1];
+                const remainingPart = mentionText.substring(matchedPart.length);
+                const matchedUser = matchResult.user;
+                
+                result.push(
+                  <button
+                    key={`${keyPrefix}-mention-${keyCounter++}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const userId = matchedUser.user_id || matchedUser.id;
+                      if (userId) {
+                        window.location.href = getProfilePath(userId);
+                      } else {
+                        handleUserSearch(matchedPart.trim());
+                      }
+                    }}
+                    style={{ 
+                      color: '#007bff', 
+                      fontWeight: '600',
+                      background: 'none',
+                      border: 'none',
+                      padding: '0',
+                      cursor: 'pointer',
+                      textDecoration: 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.textDecoration = 'underline';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.textDecoration = 'none';
+                    }}
+                  >
+                    @{matchedPart}
+                  </button>
+                );
+                
+                // Add remaining text as normal text
+                if (remainingPart.trim()) {
+                  result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{remainingPart}</span>);
+                }
+              } else {
+                // Fallback: use word-based matching
+                const matchedWords = mentionWords.slice(0, matchedWordCount);
+                // Find the position where these words end in the original text
+                let searchPos = 0;
+                for (let i = 0; i < matchedWords.length; i++) {
+                  const wordPos = mentionText.indexOf(matchedWords[i], searchPos);
+                  if (wordPos !== -1) {
+                    searchPos = wordPos + matchedWords[i].length;
+                  } else {
+                    break;
+                  }
+                }
+                
+                const matchedPart = mentionText.substring(0, searchPos);
+                const remainingPart = mentionText.substring(searchPos);
+                const matchedUser = matchResult.user;
+                
+                result.push(
+                  <button
+                    key={`${keyPrefix}-mention-${keyCounter++}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const userId = matchedUser.user_id || matchedUser.id;
+                      if (userId) {
+                        window.location.href = getProfilePath(userId);
+                      } else {
+                        handleUserSearch(matchedPart.trim());
+                      }
+                    }}
+                    style={{ 
+                      color: '#007bff', 
+                      fontWeight: '600',
+                      background: 'none',
+                      border: 'none',
+                      padding: '0',
+                      cursor: 'pointer',
+                      textDecoration: 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.textDecoration = 'underline';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.textDecoration = 'none';
+                    }}
+                  >
+                    @{matchedPart}
+                  </button>
+                );
+                
+                if (remainingPart.trim()) {
+                  result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{remainingPart}</span>);
+                }
+              }
+            } else {
+              // No match found - render as normal text
+              result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>@{mentionText}</span>);
+            }
+          } else {
+            // No match found - render as normal text
+            result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>@{mentionText}</span>);
+          }
+        } else {
+          // No match found - render as normal text
+          result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>@{mentionText}</span>);
+        }
+      }
+      
+      lastIndex = mentionRegex.lastIndex;
+    }
+    
+    // Add remaining text after the last mention
+    if (lastIndex < textSegment.length) {
+      result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{textSegment.substring(lastIndex)}</span>);
+    }
+    
+    return result;
+  };
+
   // Helper function to detect and make URLs and names clickable
   const renderTextWithLinks = (text: string | undefined | null) => {
     if (!text) return null;
     
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    // Enhanced URL regex that matches:
+    // - http:// or https:// URLs
+    // - www. URLs
+    // - plain domains (like fb.com, example.com, etc.)
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,})([^\s]*)?)/gi;
     const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
     // Note: We intentionally do NOT auto-detect regular names anymore to avoid
     // over-highlighting common words. Only URLs and @mentions are interactive.
     
-    const parts = text.split(urlRegex);
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    let key = 0;
     
-    return parts.map((part, index) => {
-      if (urlRegex.test(part)) {
-        return (
-          <a
-            key={index}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              color: '#174f84',
-              textDecoration: 'underline',
-              cursor: 'pointer'
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              window.open(part, '_blank', 'noopener,noreferrer');
-            }}
-          >
-            {part}
-          </a>
-        );
+    // Reset regex for global search
+    urlRegex.lastIndex = 0;
+    
+    // First, find all URLs
+    while ((match = urlRegex.exec(text)) !== null) {
+      // Add text before the URL
+      if (match.index > lastIndex) {
+        const textBefore = text.substring(lastIndex, match.index);
+        // Process mentions in the text before URL
+        const mentionParts = processMentionsInText(textBefore, `before-url-${key}`);
+        parts.push(...mentionParts);
       }
       
-      // Handle mentions (@username)
-      const mentionParts = part.split(mentionRegex);
-      const processedMentionParts = mentionParts.map((mentionPart, mentionIndex) => {
-        const isMentionSegment = mentionIndex % 2 === 1;
-        if (isMentionSegment) {
-          const mentionText = mentionPart.trim();
-          if (!mentionText) return null;
-          const display = `@${mentionText}`;
-          
-          return (
-            <button
-              key={`${index}-${mentionIndex}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleUserSearch(mentionText);
-              }}
-              style={{ 
-                color: '#007bff', 
-                fontWeight: '600',
-                background: 'none',
-                border: 'none',
-                padding: '0',
-                cursor: 'pointer',
-                textDecoration: 'none'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.textDecoration = 'underline';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.textDecoration = 'none';
-              }}
-            >
-              {display}
-            </button>
-          );
-        }
-
-        // For non-mention text, return as-is (no name-based highlighting)
-        return mentionPart;
-      });
+      // Create clickable link
+      let url = match[0];
       
-      return processedMentionParts;
-    });
+      // Add protocol if missing
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      
+      parts.push(
+        <a
+          key={`link-${key++}`}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: '#174f84',
+            textDecoration: 'underline',
+            cursor: 'pointer',
+            wordBreak: 'break-all'
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            window.open(url, '_blank', 'noopener,noreferrer');
+          }}
+        >
+          {match[0]}
+        </a>
+      );
+      
+      lastIndex = urlRegex.lastIndex;
+    }
+    
+    // Add remaining text after the last URL
+    if (lastIndex < text.length) {
+      const remainingText = text.substring(lastIndex);
+      // Process mentions in remaining text
+      const mentionParts = processMentionsInText(remainingText, `remaining-${key}`);
+      parts.push(...mentionParts);
+    }
+    
+    // If no URLs or mentions found, return the original text
+    if (parts.length === 0) {
+      return text;
+    }
+    
+    return parts;
   };
 
   // Handle clicking outside the options menu
@@ -1742,7 +1974,13 @@ const PostCard: React.FC<PostCardProps> = ({
                 className={`post-footer-action${likedPosts[repostData?.repost_id] ? ' active' : ''}`}
                 aria-pressed={!!likedPosts[repostData?.repost_id]}
               >
-                <span className="post-footer-icon">👍</span>
+                <span className="post-footer-icon">
+                  <FontAwesomeIcon 
+                    icon={likedPosts[repostData?.repost_id] ? faThumbsUp : faThumbsUpReg} 
+                    size="lg" 
+                    style={{ color: likedPosts[repostData?.repost_id] ? '#1e3a8a' : '#555', fontSize: '18px' }} 
+                  />
+                </span>
                 <span className="post-footer-label">Like</span>
               </button>
               <button
@@ -1751,7 +1989,9 @@ const PostCard: React.FC<PostCardProps> = ({
                 className={`post-footer-action${showCommentInput?.[repostData?.repost_id || post.post_id] ? ' active' : ''}`}
                 aria-expanded={!!showCommentInput?.[repostData?.repost_id || post.post_id]}
               >
-                <span className="post-footer-icon">💬</span>
+                <span className="post-footer-icon">
+                  <FontAwesomeIcon icon={faCommentReg} size="lg" style={{ fontSize: '20px', color: '#555' }} />
+                </span>
                 <span className="post-footer-label">Comment</span>
               </button>
               <RepostButton
@@ -2548,7 +2788,13 @@ const PostCard: React.FC<PostCardProps> = ({
           className={`post-footer-action${likedPosts[post.post_id] ? ' active' : ''}`}
           aria-pressed={!!likedPosts[post.post_id]}
         >
-          <span className="post-footer-icon">👍</span>
+          <span className="post-footer-icon">
+            <FontAwesomeIcon 
+              icon={likedPosts[post.post_id] ? faThumbsUp : faThumbsUpReg} 
+              size="lg" 
+              style={{ color: likedPosts[post.post_id] ? '#1e3a8a' : '#555', fontSize: '18px' }} 
+            />
+          </span>
           <span className="post-footer-label">Like</span>
         </button>
         <button
@@ -2557,7 +2803,9 @@ const PostCard: React.FC<PostCardProps> = ({
           className={`post-footer-action${showCommentInput?.[post.post_id] ? ' active' : ''}`}
           aria-expanded={!!showCommentInput?.[post.post_id]}
         >
-          <span className="post-footer-icon">💬</span>
+          <span className="post-footer-icon">
+            <FontAwesomeIcon icon={faCommentReg} size="lg" style={{ fontSize: '20px', color: '#555' }} />
+          </span>
           <span className="post-footer-label">Comment</span>
         </button>
         <RepostButton
@@ -2643,7 +2891,7 @@ const PostCard: React.FC<PostCardProps> = ({
             onMouseEnter={(e) => { e.currentTarget.style.background = '#0056b3'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = '#007bff'; }}
           >
-            <span style={{ color: 'white', fontSize: '18px', lineHeight: 1 }}>➡️</span>
+            <IoSend size={18} color="#fff" />
           </button>
           
           {/* @mention suggestions dropdown */}

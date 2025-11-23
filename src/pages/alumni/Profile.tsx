@@ -8,7 +8,7 @@ import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, de
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
-import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye, HiOutlineXMark, HiOutlineInformationCircle, HiOutlineTicket, HiOutlineMagnifyingGlass } from 'react-icons/hi2';
+import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye, HiOutlineXMark, HiOutlineInformationCircle, HiOutlineTicket, HiOutlineMagnifyingGlass, HiOutlineGlobeAlt, HiOutlineEnvelope } from 'react-icons/hi2';
 import EarnPointsModal from '../../components/EarnPointsModal';
 
 function getCurrentUserId(user: AlumniUser | null): number | null {
@@ -1771,7 +1771,6 @@ getPosts()
               <div className="profile-contact-info">
                 {/* Social Media */}
                 <div className="profile-contact-item">
-                  <span className="profile-contact-label">Social Media:</span>
                   {user.social_media && user.social_media.trim() ? (
                     <div className="profile-contact-display">
                       <a 
@@ -1779,7 +1778,9 @@ getPosts()
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="profile-contact-link"
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                       >
+                        <HiOutlineGlobeAlt size={16} />
                         {formatSocialMediaLink(user.social_media).platform}
                       </a>
                       {isOwnProfile && (
@@ -1801,23 +1802,29 @@ getPosts()
                         setSocialMediaInput('');
                         setSocialMediaModalOpen(true);
                       }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                     >
+                      <HiOutlineGlobeAlt size={16} />
                       Add social media acc
                     </button>
                   ) : (
-                    <span className="profile-contact-empty">No social media added</span>
+                    <span className="profile-contact-empty" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <HiOutlineGlobeAlt size={16} />
+                      No social media added
+                    </span>
                   )}
                 </div>
 
                 {/* Email */}
                 <div className="profile-contact-item">
-                  <span className="profile-contact-label">Email:</span>
                   {user.email && user.email.trim() ? (
                     <div className="profile-contact-display">
                       <a 
                         href={`mailto:${user.email}`}
                         className="profile-contact-link"
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                       >
+                        <HiOutlineEnvelope size={16} />
                         {user.email}
                       </a>
                       {isOwnProfile && (
@@ -1839,11 +1846,16 @@ getPosts()
                         setEmailInput('');
                         setEmailModalOpen(true);
                       }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                     >
+                      <HiOutlineEnvelope size={16} />
                       Add Email
                     </button>
                   ) : (
-                    <span className="profile-contact-empty">No email added</span>
+                    <span className="profile-contact-empty" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <HiOutlineEnvelope size={16} />
+                      No email added
+                    </span>
                   )}
                 </div>
               </div>
@@ -2955,13 +2967,6 @@ getPosts()
             >
               ×
             </button>
-            <h2 style={{
-              fontSize: '18px',
-              fontWeight: '600',
-              color: '#2c2c2c',
-              marginBottom: '16px',
-              textAlign: 'center'
-            }}>Edit Profile</h2>
             
             {/* Profile Pic Section */}
             <div style={{ 

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { getFollowingForMentions } from '../services/api';
 import ctulogo from '../images/ctulogo.png';
 import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
@@ -173,6 +174,35 @@ const MentionInput: React.FC<MentionInputProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  // Calculate dropdown position when suggestions are shown
+  useEffect(() => {
+    if (showSuggestions && textareaRef.current) {
+      const updatePosition = () => {
+        if (textareaRef.current) {
+          const rect = textareaRef.current.getBoundingClientRect();
+          setDropdownPosition({
+            top: rect.bottom + window.scrollY + 4,
+            left: rect.left + window.scrollX,
+            width: rect.width
+          });
+        }
+      };
+      
+      updatePosition();
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+      
+      return () => {
+        window.removeEventListener('scroll', updatePosition, true);
+        window.removeEventListener('resize', updatePosition);
+      };
+    } else {
+      setDropdownPosition(null);
+    }
+  }, [showSuggestions, value]);
+
   return (
     <div style={{ position: 'relative' }}>
       <textarea
@@ -223,20 +253,20 @@ const MentionInput: React.FC<MentionInputProps> = ({
         }}
       />
       
-      {/* Facebook-style Mention Suggestions Dropdown */}
-      {showSuggestions && suggestions.length > 0 && (
+      {/* Facebook-style Mention Suggestions Dropdown - Rendered via portal to avoid clipping */}
+      {showSuggestions && suggestions.length > 0 && dropdownPosition && ReactDOM.createPortal(
         <div
           ref={suggestionsRef}
           style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
+            position: 'fixed',
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+            width: `${dropdownPosition.width}px`,
             backgroundColor: 'white',
             border: '1px solid #e4e6ea',
             borderRadius: '8px',
             boxShadow: '0 2px 12px rgba(0, 0, 0, 0.15)',
-            zIndex: 1000,
+            zIndex: 10000,
             maxHeight: '300px',
             overflowY: 'auto',
             marginTop: '4px'
@@ -308,7 +338,8 @@ const MentionInput: React.FC<MentionInputProps> = ({
               No users found matching "{mentionQuery}"
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
