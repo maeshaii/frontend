@@ -2637,6 +2637,7 @@ getPosts()
                     user: { 
                       user_id: repostItem.user?.user_id || 0, 
                       f_name: repostItem.user?.f_name, 
+                      m_name: repostItem.user?.m_name,
                       l_name: repostItem.user?.l_name, 
                       profile_pic: repostItem.user?.profile_pic 
                     },
