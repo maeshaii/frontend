@@ -99,10 +99,8 @@ const NotificationPage: React.FC = () => {
     }
   };
 
-  // Debug profile picture updates
+  // Persist profile pictures to localStorage so we keep avatars after logout/login
   React.useEffect(() => {
-    console.log('Profile pictures updated:', userProfilePics);
-    // Persist to localStorage so we keep avatars after logout/login
     try {
       localStorage.setItem('notifUserProfilePics', JSON.stringify(userProfilePics));
     } catch (_) {}
@@ -119,24 +117,18 @@ const NotificationPage: React.FC = () => {
   // Load profile pictures for notifications
   React.useEffect(() => {
     const loadProfilePics = async () => {
-      console.log('🔍 Loading profile pics for notifications:', realTimeNotifications.length);
-
       for (const notif of realTimeNotifications) {
         // Extract user info from ALL notification types
         let userId: string | null = null;
         let userName: string | null = null;
-        
-        console.log('🔍 Processing notification for profile pic loading:', notif.type, notif.content);
         
         // Method 1: Look for ACTOR_ID or AUTHOR_ID in the notification content (most reliable)
         const actorIdMatch = notif.content.match(/<!--ACTOR_ID:(\d+)-->/);
         const authorIdMatch = notif.content.match(/<!--AUTHOR_ID:(\d+)-->/);
         if (actorIdMatch) {
           userId = actorIdMatch[1];
-          console.log('🔍 Found ACTOR_ID for profile pic loading:', userId);
         } else if (authorIdMatch) {
           userId = authorIdMatch[1];
-          console.log('🔍 Found AUTHOR_ID for profile pic loading:', userId);
         }
         
         // Method 2: For follow notifications: "Name|user_id started following you."
@@ -145,7 +137,6 @@ const NotificationPage: React.FC = () => {
           if (match) {
             userName = match[1];
             userId = match[2];
-            console.log('🔍 Follow notification for profile pic loading:', { userName, userId });
           }
         }
         
@@ -154,7 +145,6 @@ const NotificationPage: React.FC = () => {
           const authorNameMatch = notif.content.match(/<!--AUTHOR_NAME:([^>]+)-->/);
           if (authorNameMatch) {
             userName = authorNameMatch[1];
-            console.log('🔍 Found AUTHOR_NAME for profile pic loading:', userName);
           }
         }
         
@@ -170,7 +160,6 @@ const NotificationPage: React.FC = () => {
             const nameMatch = notif.content.match(pattern);
             if (nameMatch) {
               userName = nameMatch[1].trim();
-              console.log('🔍 Extracted user name for profile pic loading:', userName);
               break;
             }
           }
@@ -181,25 +170,19 @@ const NotificationPage: React.FC = () => {
           const idMatch = notif.content.match(/(\d+)/);
           if (idMatch) {
             userId = idMatch[1];
-            console.log('🔍 Found potential userId for profile pic loading:', userId);
           }
         }
-        
-        console.log('🔍 Processing notification for profile pic:', { userId, userName, type: notif.type });
         
         // Check for AUTHOR_PIC marker first (most efficient for peso notifications)
         const authorPicMatch = notif.content.match(/<!--AUTHOR_PIC:([^>]+)-->/);
         if (authorPicMatch && userId) {
           const profilePicUrl = getProfilePicUrl(authorPicMatch[1]);
-          console.log('🔍 Found AUTHOR_PIC for profile pic loading:', profilePicUrl);
           setUserProfilePics(prev => ({ ...prev, [userId!]: profilePicUrl }));
           loadedProfilePics.current.add(userId);
         } else if (userId && !loadedProfilePics.current.has(userId)) {
-          console.log('🔍 Loading profile pic for userId:', userId);
           loadedProfilePics.current.add(userId);
           await fetchUserProfilePic(userId);
         } else if (userName && !userId && !loadedProfilePics.current.has(userName)) {
-          console.log('🔍 Loading profile pic for userName:', userName);
           loadedProfilePics.current.add(userName);
           const userData = await searchUserByName(userName);
           if (userData && userData.profile_pic) {
@@ -433,17 +416,7 @@ const NotificationPage: React.FC = () => {
     if (!n.content.toLowerCase().includes(search.toLowerCase())) {
       return false;
     }
-    
-    // Filter out reward notifications for non-admin users
-    const isRewardNotification = n.type?.toLowerCase() === 'reward' || 
-                                 n.type?.toLowerCase().includes('reward') ||
-                                 n.subject?.toLowerCase().includes('reward') ||
-                                 n.content?.toLowerCase().includes('reward request');
-    
-    if (isRewardNotification && !isAdminUser) {
-      return false;
-    }
-    
+
     return true;
   });
 
@@ -528,9 +501,6 @@ const NotificationPage: React.FC = () => {
 
   const handleNotificationRedirect = async (notif: any) => {
     try {
-      console.log('Attempting to redirect for notification:', notif);
-      console.log('Notification content:', notif.content);
-      
       // Handle ALL post-related notifications (like, comment, mention, reply, repost, admin_peso_post)
       const isPostRelated = ['like', 'comment', 'mention', 'reply', 'repost', 'admin_peso_post'].some(type => 
         notif.type.toLowerCase().includes(type)
@@ -550,24 +520,12 @@ const NotificationPage: React.FC = () => {
         const replyId = replyIdMatch?.[1];
         const repostId = repostIdMatch?.[1];
         
-        console.log('handleNotificationRedirect - Extracted IDs:', { 
-          originalPostId, 
-          commentId, 
-          replyId,
-          repostId,
-          hasForumId: !!forumIdMatch,
-          hasDonationId: !!donationIdMatch,
-          notificationType: notif.type 
-        });
-        
         if (originalPostId || commentId || replyId || repostId) {
           const notificationType = notif.type.toLowerCase();
           
           // Check if it's a repost notification - handle it differently
           if (notificationType === 'repost' && repostId) {
-            console.log('Repost notification detected - redirecting to repost:', repostId);
             if (forumIdMatch) {
-              console.log('Forum repost notification - redirecting to forum page with repost_id:', repostId);
               localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Store forum_id for reference
               localStorage.setItem('pendingRepostId', repostId); // Store repost_id to display
               storeRepostHighlightIds(commentId, replyId);
@@ -575,7 +533,6 @@ const NotificationPage: React.FC = () => {
               navigate('/forum');
               return;
             } else if (donationIdMatch) {
-              console.log('Donation repost notification - redirecting to donation page with repost_id:', repostId);
               localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Store donation_id for reference
               localStorage.setItem('pendingRepostId', repostId); // Store repost_id to display
               storeRepostHighlightIds(commentId, replyId);
@@ -591,7 +548,6 @@ const NotificationPage: React.FC = () => {
               const userStr = localStorage.getItem('user');
               const userData = userStr ? JSON.parse(userStr) : null;
               const currentUserId = userData?.user_id || userData?.id || '';
-              console.log('Redirecting to dashboard for repost modal. userId:', currentUserId);
               
               if (currentUserId) {
                 const isPeso = !!(userData?.account_type?.peso);
@@ -616,13 +572,11 @@ const NotificationPage: React.FC = () => {
           // Check if it's a forum or donation notification and redirect accordingly
           // This catches ALL types of notifications (like, comment, mention, etc.)
           if (forumIdMatch) {
-            console.log('Forum notification detected - redirecting to forum page with forum_id:', forumIdMatch[1]);
             localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
             suppressTrackerReminderForRedirect();
             navigate('/forum');
             return;
           } else if (donationIdMatch) {
-            console.log('Donation notification detected - redirecting to donation page with donation_id:', donationIdMatch[1]);
             localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
             suppressTrackerReminderForRedirect();
             navigate('/donation');
@@ -632,17 +586,13 @@ const NotificationPage: React.FC = () => {
           // For mention notifications, prioritize original post IDs over comment/reply IDs
           if (notificationType === 'mention') {
             if (originalPostId) {
-              console.log('Mention notification - redirecting to original post:', originalPostId);
-              
               // Check if it's a forum or donation mention
               if (forumIdMatch) {
-                console.log('Forum mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
                 localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
                 suppressTrackerReminderForRedirect();
                 navigate('/forum');
                 return;
               } else if (donationIdMatch) {
-                console.log('Donation mention - redirecting to donation page with donation_id:', donationIdMatch[1]);
                 localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
                 suppressTrackerReminderForRedirect();
                 navigate('/donation');
@@ -667,18 +617,15 @@ const NotificationPage: React.FC = () => {
                 return;
               }
             } else if (commentId) {
-              console.log('Mention notification - resolving comment to post:', commentId);
               // Need to resolve comment to post first
               try {
                 const response = await getPostFromComment(parseInt(commentId));
                 if (response.success && response.post_id) {
                   const resolvedPostId = response.post_id.toString();
                   const resolvedPostType = response.post_type;
-                  console.log('Resolved comment to post ID:', resolvedPostId, 'Type:', resolvedPostType);
                   
                   // Check if this is a repost
                   if (resolvedPostType === 'repost') {
-                    console.log('Repost comment mention - redirecting to repost modal');
                     localStorage.setItem('pendingRepostView', resolvedPostId);
                     storeRepostHighlightIds(commentId, replyId);
                     suppressTrackerReminderForRedirect();
@@ -699,12 +646,10 @@ const NotificationPage: React.FC = () => {
                   }
                   // Check if this is a forum or donation post
                   else if (forumIdMatch) {
-                    console.log('Forum comment mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
                     localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
                     suppressTrackerReminderForRedirect();
                     navigate('/forum');
                   } else if (donationIdMatch) {
-                    console.log('Donation comment mention - redirecting to donation page with donation_id:', donationIdMatch[1]);
                     localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
                     suppressTrackerReminderForRedirect();
                     navigate('/donation');
@@ -734,18 +679,15 @@ const NotificationPage: React.FC = () => {
               }
               return;
             } else if (replyId) {
-              console.log('Mention notification - resolving reply to post:', replyId);
               // Need to resolve reply to post first
               try {
                 const response = await getPostFromComment(parseInt(replyId));
                 if (response.success && response.post_id) {
                   const resolvedPostId = response.post_id.toString();
                   const resolvedPostType = response.post_type;
-                  console.log('Resolved reply to post ID:', resolvedPostId, 'Type:', resolvedPostType);
                   
                   // Check if this is a repost
                   if (resolvedPostType === 'repost') {
-                    console.log('Repost reply mention - redirecting to repost modal');
                     localStorage.setItem('pendingRepostView', resolvedPostId);
                     storeRepostHighlightIds(commentId, replyId);
                     suppressTrackerReminderForRedirect();
@@ -766,12 +708,10 @@ const NotificationPage: React.FC = () => {
                   }
                   // Check if this is a forum or donation post
                   else if (forumIdMatch) {
-                    console.log('Forum reply mention - redirecting to forum page with forum_id:', forumIdMatch[1]);
                     localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
                     suppressTrackerReminderForRedirect();
                     navigate('/forum');
                   } else if (donationIdMatch) {
-                    console.log('Donation reply mention - redirecting to donation page with donation_id:', donationIdMatch[1]);
                     localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
                     suppressTrackerReminderForRedirect();
                     navigate('/donation');
@@ -805,14 +745,12 @@ const NotificationPage: React.FC = () => {
           
           // For other notification types (like, comment, reply), check if it's forum/donation first
           let postId = originalPostId || commentId || replyId;
-          console.log(`${notificationType} notification - checking redirect for post:`, postId);
           
           // Validate post ID before redirecting
           if (postId && !isNaN(parseInt(postId))) {
             // Check if this is a forum or donation notification (even for like/comment/reply/repost)
             // Handle forum notifications (posts, reposts, comments, replies)
             if (forumIdMatch) {
-              console.log(`${notificationType} notification - redirecting to forum page with forum_id:`, forumIdMatch[1]);
               localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
               if (repostId) {
                 localStorage.setItem('pendingRepostId', repostId);
@@ -823,7 +761,6 @@ const NotificationPage: React.FC = () => {
             } 
             // Handle donation notifications (posts, reposts, comments, replies)
             else if (donationIdMatch) {
-              console.log(`${notificationType} notification - redirecting to donation page with donation_id:`, donationIdMatch[1]);
               localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
               if (repostId) {
                 localStorage.setItem('pendingRepostId', repostId);
@@ -837,22 +774,17 @@ const NotificationPage: React.FC = () => {
             // This handles reply notifications that now include POST_ID/FORUM_ID/DONATION_ID
             
             // For regular posts (not forum/donation), we need to resolve comment IDs first
-            console.log(`Regular post notification - checking for post:`, postId);
-            
             // If this is a comment-only notification for regular posts, we need to get the post ID first
             if (commentIdMatch && !originalPostId) {
-              console.log('Regular comment-only notification - resolving to post before redirect');
               try {
                 const commentIdNum = parseInt(commentId!);
                 const response = await getPostFromComment(commentIdNum);
                 if (response.success && response.post_id) {
                   const resolvedPostId = response.post_id.toString();
                   const resolvedPostType = response.post_type;
-                  console.log('Resolved comment to post ID:', resolvedPostId, 'Type:', resolvedPostType);
                   
                   // Check if this is a repost
                   if (resolvedPostType === 'repost') {
-                    console.log('Comment is on a repost - redirecting to repost modal');
                     localStorage.setItem('pendingRepostView', resolvedPostId);
                     storeRepostHighlightIds(commentId, replyId);
                     suppressTrackerReminderForRedirect();
@@ -874,7 +806,6 @@ const NotificationPage: React.FC = () => {
                     postId = resolvedPostId;
                   }
                 } else {
-                  console.error('Could not resolve comment to post');
                   alert('Could not find the post for this comment. It may have been deleted.');
                   return;
                 }
@@ -913,7 +844,6 @@ const NotificationPage: React.FC = () => {
                 timestamp: Date.now()
               };
               localStorage.setItem('pendingProfilePic', JSON.stringify(profilePicData));
-              console.log('🔍 Stored profile pic data for redirect:', profilePicData);
             }
             
             // Add a small delay to ensure proper navigation
@@ -930,7 +860,6 @@ const NotificationPage: React.FC = () => {
             }, 100);
             return;
           } else {
-            console.log('Invalid post ID, redirecting to main dashboard');
             // Fallback to main dashboard
             const userStr = localStorage.getItem('user');
             const user = userStr ? JSON.parse(userStr) : null;
@@ -951,26 +880,21 @@ const NotificationPage: React.FC = () => {
       }
       
       // Fallback for non-post-related notifications (follow, system, etc.)
-      console.log('Non-post-related notification, using fallback logic');
       
       // Handle follow/following notifications - redirect to user's profile
       const isFollowNotification = notif.type.toLowerCase().includes('follow');
       if (isFollowNotification) {
-        console.log('Follow notification detected - attempting to extract user ID');
-        
         // Try to extract user ID from ACTOR_ID comment (new format: "Name started following you<!--ACTOR_ID:user_id-->")
         const actorIdMatch = notif.content.match(/<!--ACTOR_ID:(\d+)-->/);
         let userId: string | null = null;
         
         if (actorIdMatch) {
           userId = actorIdMatch[1];
-          console.log('Found user ID from ACTOR_ID in follow notification:', userId);
         } else {
           // Fallback: Extract user ID from old format (format: "Name|user_id started following you")
           const userIdMatch = notif.content.match(/^(.+)\|(\d+)\s+started following you\.?/);
           if (userIdMatch) {
             userId = userIdMatch[2];
-            console.log('Found user ID from old format in follow notification:', userId);
           }
         }
         
@@ -978,8 +902,6 @@ const NotificationPage: React.FC = () => {
           // Redirect to the user's profile
           navigate(`/profile/${userId}`);
           return;
-        } else {
-          console.log('No user ID found in follow notification content');
         }
       }
       
@@ -987,7 +909,6 @@ const NotificationPage: React.FC = () => {
       
       if (visibleIdMatch) {
         const postId = visibleIdMatch[1];
-        console.log('Found visible post ID:', postId);
         
         // Store and redirect
         localStorage.setItem('pendingPostView', postId);
@@ -1007,7 +928,6 @@ const NotificationPage: React.FC = () => {
         }
         return;
       } else {
-        console.log('No post ID found in notification content');
         // Only show alert for notifications that aren't follow notifications
         if (!isFollowNotification) {
           // Old notification format without Post ID
@@ -1059,7 +979,6 @@ const NotificationPage: React.FC = () => {
           dashboardPath = `/dashboard/${userId}`;
         }
         
-        console.log('Redirecting to main dashboard due to error:', dashboardPath);
         navigate(dashboardPath);
       } else {
         alert('Unable to redirect. Please try refreshing the page.');
@@ -1075,7 +994,6 @@ const NotificationPage: React.FC = () => {
 
     // Check if we're already loading this profile pic
     if (loadingProfilePics.has(userId)) {
-      console.log('Profile pic already loading for user', userId);
       return null;
     }
 
@@ -1085,7 +1003,6 @@ const NotificationPage: React.FC = () => {
     if (cached) {
       try {
         const cachedData = JSON.parse(cached);
-        console.log('Using cached profile pic for user', userId);
         setUserProfilePics(prev => ({ ...prev, [userId]: cachedData }));
         return cachedData;
       } catch (e) {
@@ -1097,7 +1014,6 @@ const NotificationPage: React.FC = () => {
     // Rate limiting: prevent too many API calls in a short period
     const now = Date.now();
     if (now - lastApiCall < 1000) { // Wait at least 1 second between API calls
-      console.log('Rate limiting: waiting before API call for user', userId);
       return null; // Don't make the call, just return null
     }
     setLastApiCall(now);
@@ -1107,29 +1023,22 @@ const NotificationPage: React.FC = () => {
 
     try {
       const response = await api.get(`alumni/profile/${userId}/`);
-      console.log('🔍 Profile API response for user', userId, ':', response.data);
       if (response.data && response.data.profile_pic) {
         const baseUrl = getProfilePicUrl(response.data.profile_pic);
         const profilePicUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}cb=${Date.now()}`;
-        console.log('🔍 Setting profile pic URL:', profilePicUrl);
-        setUserProfilePics(prev => {
-          const newPics = { ...prev, [userId]: profilePicUrl };
-          console.log('🔍 Updated userProfilePics:', newPics);
-          return newPics;
-        });
+        setUserProfilePics(prev => ({ ...prev, [userId]: profilePicUrl }));
         setProfilePicUpdateTrigger(prev => prev + 1);
         
         // Cache the result for 10 minutes
         sessionStorage.setItem(cacheKey, JSON.stringify(profilePicUrl));
         return profilePicUrl;
       } else {
-        console.log('🔍 No profile picture found in API response for user', userId);
         // Cache null result for 5 minutes to prevent repeated failed requests
         sessionStorage.setItem(cacheKey, JSON.stringify(null));
         setTimeout(() => sessionStorage.removeItem(cacheKey), 300000);
       }
     } catch (error) {
-      console.error('🔍 Error fetching user profile pic:', error);
+      console.error('Error fetching user profile pic:', error);
       // Cache null result for 2 minutes to prevent repeated failed requests
       sessionStorage.setItem(cacheKey, JSON.stringify(null));
       setTimeout(() => sessionStorage.removeItem(cacheKey), 120000);
@@ -1151,7 +1060,6 @@ const NotificationPage: React.FC = () => {
     if (cached) {
       try {
         const cachedData = JSON.parse(cached);
-        console.log('Using cached search result for', userName);
         return cachedData;
       } catch (e) {
         // If cache is corrupted, remove it
@@ -1162,14 +1070,12 @@ const NotificationPage: React.FC = () => {
     // Check if we're already searching for this user
     const searchKey = `searching_${userName}`;
     if (sessionStorage.getItem(searchKey)) {
-      console.log('Search already in progress for', userName);
       return null;
     }
 
     // Rate limiting: prevent too many API calls in a short period
     const now = Date.now();
     if (now - lastApiCall < 1000) { // Wait at least 1 second between API calls
-      console.log('Rate limiting: waiting before search for', userName);
       return null; // Don't make the call, just return null
     }
     setLastApiCall(now);
@@ -1179,7 +1085,6 @@ const NotificationPage: React.FC = () => {
 
     try {
       const response = await api.get(`alumni/search/?q=${encodeURIComponent(userName)}`);
-      console.log('Search response for', userName, ':', response.data);
       
       if (response.data && response.data.results && response.data.results.length > 0) {
         // Find exact match or first close match
@@ -1189,7 +1094,6 @@ const NotificationPage: React.FC = () => {
           `${user.f_name || ''} ${user.m_name || ''} ${user.l_name || ''}`.trim() === userName
         );
         const user = exactMatch || response.data.results[0];
-        console.log('Found user:', user);
         const result = {
           user_id: user.user_id || user.id,
           profile_pic: user.profile_pic
@@ -1321,12 +1225,9 @@ const NotificationPage: React.FC = () => {
     React.useEffect(() => {
       const loadProfilePic = async () => {
         try {
-          console.log('ProfilePicComponent loading:', { userId, userName, directPicUrl });
-          
           // If we have a direct profile picture URL, use it immediately
           if (directPicUrl) {
             const normalizedUrl = getProfilePicUrl(directPicUrl);
-            console.log('Using direct profile pic URL:', normalizedUrl);
             // Persist mapping by userId when available so list items reuse it by ID
             if (userId) {
               setUserProfilePics(prev => ({ ...prev, [userId]: normalizedUrl }));
@@ -1339,42 +1240,31 @@ const NotificationPage: React.FC = () => {
           if (userId) {
             // Try to get from cache first
             if (userProfilePics[userId]) {
-              console.log('Found cached profile pic for user:', userId);
               setProfilePicUrl(userProfilePics[userId]);
               setIsLoading(false);
               return;
             }
             
             // Fetch from API using the correct alumni/profile endpoint
-            console.log('Fetching profile pic from API for user:', userId);
             const response = await api.get(`alumni/profile/${userId}/`);
-            console.log('API response for user:', userId, response.data);
             
             if (response.data && response.data.profile_pic) {
               const baseUrl = getProfilePicUrl(response.data.profile_pic);
               const withBust = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}cb=${Date.now()}`;
-              console.log('Setting profile pic URL:', withBust);
               setUserProfilePics(prev => ({ ...prev, [userId]: withBust }));
               setProfilePicUrl(withBust);
-            } else {
-              console.log('No profile pic found for user:', userId);
             }
           } else if (userName) {
             // Search by name
-            console.log('Searching user by name:', userName);
             const userData = await searchUserByName(userName);
-            console.log('Search result:', userData);
             
             if (userData && userData.profile_pic) {
               const normalizedUrl = getProfilePicUrl(userData.profile_pic);
-              console.log('Setting profile pic URL from search:', normalizedUrl);
               // Bind to actual user id from search for future lookups by ID
               if (userData.user_id) {
                 setUserProfilePics(prev => ({ ...prev, [String(userData.user_id)]: normalizedUrl }));
               }
               setProfilePicUrl(normalizedUrl);
-            } else {
-              console.log('No profile pic found for user name:', userName);
             }
           }
         } catch (error) {
@@ -2528,7 +2418,6 @@ const NotificationPage: React.FC = () => {
                           }
                         } catch (error: any) {
                           if (error.response && error.response.status === 404) {
-                            console.log('Post not found (404) - likely deleted');
                             // Don't show alert for deleted posts to avoid spam
                           } else {
                             alert('Unable to load the post. It may have been deleted.');
@@ -2689,7 +2578,6 @@ const NotificationPage: React.FC = () => {
                           
                           // If this is a comment ID, we need to get the post from the comment
                           if (commentIdMatch && !postIdMatch && !forumIdMatch && !donationIdMatch) {
-                            console.log('Comment-only notification - resolving to post');
                             const commentIdNum = parseInt(commentIdMatch[1]);
                             const commentResponse = await getPostFromComment(commentIdNum);
                             if (commentResponse.success && commentResponse.post_id) {
@@ -2739,7 +2627,6 @@ const NotificationPage: React.FC = () => {
                         } catch (error: any) {
                           // Post doesn't exist or error occurred
                           if (error.response && error.response.status === 404) {
-                            console.log('Post not found (404) - likely deleted');
                             // Don't show alert for deleted posts to avoid spam
                           } else {
                             alert('Unable to load the post. It may have been deleted.');

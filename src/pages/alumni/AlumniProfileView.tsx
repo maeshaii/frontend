@@ -29,7 +29,7 @@ const AlumniProfileView = () => {
         <strong>Class of:</strong> {alumni.year_graduated}
       </p>
       <p>
-        <strong>Bio:</strong> {alumni && alumni.profile_bio ? alumni.profile_bio : ''}
+        <strong>Bio:</strong> {alumni.profile_bio || ''}
       </p>
     </div>
   );

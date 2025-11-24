@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
-import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardRequests, approveRewardRequest, claimRewardRequest, getRewardHistory, fetchTrackerResponses, getMilestoneTasksPoints, updateMilestoneTasksPoints, getEngagementPointsSettings, updateEngagementPointsSettings } from '../../../services/api';
+import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardRequests, approveRewardRequest, claimRewardRequest, getRewardHistory, fetchEmploymentHistoryRespondents, getMilestoneTasksPoints, updateMilestoneTasksPoints, getEngagementPointsSettings, updateEngagementPointsSettings } from '../../../services/api';
 import { trackerApi } from '../../../services/trackerApi';
 import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineUser, HiOutlineTag } from 'react-icons/hi2';
 import { useRealTimeNotifications } from '../../../hooks/useRealTimeNotifications';
@@ -130,6 +130,11 @@ const RewardsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [trackerFormResponsesCount, setTrackerFormResponsesCount] = useState(0);
   const [trackerFormLoading, setTrackerFormLoading] = useState(true);
+  const [statusModal, setStatusModal] = useState<{
+    title: string;
+    message: string;
+    variant?: 'success' | 'error';
+  } | null>(null);
 
   const deriveAvailability = (item: InventoryItem): InventoryAvailability => {
     if (item.availability) {
@@ -429,14 +434,14 @@ const RewardsPage: React.FC = () => {
   const fetchTrackerFormResponsesCount = async () => {
     setTrackerFormLoading(true);
     try {
-      const response = await fetchTrackerResponses();
+      const response = await fetchEmploymentHistoryRespondents();
       if (response && response.success && response.responses) {
         setTrackerFormResponsesCount(response.responses.length);
       } else {
         setTrackerFormResponsesCount(0);
       }
     } catch (error) {
-      console.error('Error fetching tracker form responses:', error);
+      console.error('Error fetching employment history respondents:', error);
       setTrackerFormResponsesCount(0);
     } finally {
       setTrackerFormLoading(false);
@@ -456,7 +461,11 @@ const RewardsPage: React.FC = () => {
       );
       
       if (response.success) {
-        alert('Reward request approved successfully! User will receive a notification with instructions.');
+        setStatusModal({
+          title: 'Reward Request Approved',
+          message: 'Reward request approved successfully! User will receive a notification with instructions.',
+          variant: 'success'
+        });
         const requestId = selectedRequest.request_id;
         const status = response.status || 'approved';
         try {
@@ -967,10 +976,10 @@ const RewardsPage: React.FC = () => {
                   <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'white' }}>
                     {trackerFormResponsesCount}
                   </div>
-                  <div style={styles.inventorySubtitle}>users answered</div>
+                  <div style={styles.inventorySubtitle}>users updated employment</div>
                 </>
               ) : (
-                <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.9)' }}>No responses</div>
+                <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.9)' }}>No employment updates</div>
               )}
             </div>
           </div>
@@ -2897,6 +2906,95 @@ const RewardsPage: React.FC = () => {
           </div>
           </>
         )}
+
+        {statusModal && (() => {
+          const accentColor = statusModal.variant === 'error' ? '#b91c1c' : '#065f46';
+          const accentBg = statusModal.variant === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.12)';
+          return (
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(15, 23, 42, 0.55)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1100,
+                backdropFilter: 'blur(2px)'
+              }}
+              onClick={() => setStatusModal(null)}
+            >
+              <div
+                style={{
+                  width: '380px',
+                  background: '#fff',
+                  borderRadius: '16px',
+                  padding: '28px',
+                  boxShadow: '0 20px 45px rgba(15, 23, 42, 0.25)',
+                  borderTop: `4px solid ${accentColor}`
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  marginBottom: '18px',
+                  background: accentBg,
+                  borderRadius: '12px',
+                  padding: '12px 14px'
+                }}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: '#fff',
+                    boxShadow: '0 4px 10px rgba(15, 23, 42, 0.08)',
+                    color: accentColor,
+                    fontSize: '20px',
+                    fontWeight: 600,
+                    marginRight: '12px'
+                  }}>
+                    {statusModal.variant === 'error' ? '!' : '✓'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '16px', fontWeight: 600, color: '#0f172a' }}>
+                      {statusModal.title}
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#475569', marginTop: '2px' }}>
+                      System message
+                    </div>
+                  </div>
+                </div>
+                <p style={{ color: '#0f172a', marginBottom: '24px', lineHeight: 1.5 }}>
+                  {statusModal.message}
+                </p>
+                <button
+                  onClick={() => setStatusModal(null)}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: accentColor,
+                    color: '#fff',
+                    fontSize: '15px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    boxShadow: '0 8px 16px rgba(15, 23, 42, 0.15)'
+                  }}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Points Settings Modal */}
         {showPointsSettingsModal && (

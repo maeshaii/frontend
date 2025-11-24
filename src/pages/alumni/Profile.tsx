@@ -164,6 +164,16 @@ interface PostItem {
   liked_by_user?: boolean;
 }
 
+type RewardDialogState = {
+  mode: 'confirm' | 'status';
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm?: () => void;
+  variant?: 'success' | 'error' | 'info';
+};
+
 const AlumniProfile: React.FC = () => {
   const [user, setUser] = useState<AlumniUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -234,6 +244,7 @@ const AlumniProfile: React.FC = () => {
   const [showMonthlyLimitModal, setShowMonthlyLimitModal] = useState(false);
   const [showConfirmRequestModal, setShowConfirmRequestModal] = useState(false);
   const [pendingRewardRequest, setPendingRewardRequest] = useState<{id: number; name: string; value: string; type?: string} | null>(null);
+  const [rewardDialog, setRewardDialog] = useState<RewardDialogState | null>(null);
   const [employmentData, setEmploymentData] = useState<any>(null);
   const [employmentLoading, setEmploymentLoading] = useState(false);
   const [showEarnPointsModal, setShowEarnPointsModal] = useState(false);
@@ -1136,65 +1147,90 @@ getPosts()
     const request = userRewardRequests.find(req => req.request_id === requestId);
     if (!request) return;
 
-    const confirm = window.confirm(`Claim "${request.reward_name}"?\n\nPoints will be deducted: ${request.points_cost}`);
-    if (!confirm) return;
+    const executeClaim = async () => {
+      try {
+        setClaimingReward(requestId);
+        const response = await claimRewardRequest(requestId);
+        
+        if (response.success) {
+          setRewardDialog({
+            mode: 'status',
+            title: 'Reward Claimed',
+            message: response.message || `Reward "${request.reward_name}" claimed successfully!`,
+            confirmLabel: 'Great!',
+            variant: 'success'
+          });
+          setRecentlyClaimedRewardIds((prev) => prev.includes(requestId) ? prev : [...prev, requestId]);
 
-    try {
-      setClaimingReward(requestId);
-      const response = await claimRewardRequest(requestId);
-      
-      if (response.success) {
-        alert(response.message || 'Reward claimed successfully!');
-        setRecentlyClaimedRewardIds((prev) => prev.includes(requestId) ? prev : [...prev, requestId]);
-
-        const updatedRequestData = response.request || response.reward_request || null;
-        setUserRewardRequests((prev) =>
-          prev.map((req) => {
-            if (req.request_id !== requestId) return req;
+          const updatedRequestData = response.request || response.reward_request || null;
+          setUserRewardRequests((prev) =>
+            prev.map((req) => {
+              if (req.request_id !== requestId) return req;
+              const merged = {
+                ...req,
+                ...updatedRequestData,
+                status: updatedRequestData?.status || 'claimed',
+                claimed_at: updatedRequestData?.claimed_at || new Date().toISOString()
+              };
+              return merged;
+            })
+          );
+          setSelectedRewardDetail((prev: any | null) => {
+            if (!prev || prev.request_id !== requestId) return prev;
             const merged = {
-              ...req,
+              ...prev,
               ...updatedRequestData,
               status: updatedRequestData?.status || 'claimed',
               claimed_at: updatedRequestData?.claimed_at || new Date().toISOString()
             };
             return merged;
-          })
-        );
-        setSelectedRewardDetail((prev: any | null) => {
-          if (!prev || prev.request_id !== requestId) return prev;
-          const merged = {
-            ...prev,
-            ...updatedRequestData,
-            status: updatedRequestData?.status || 'claimed',
-            claimed_at: updatedRequestData?.claimed_at || new Date().toISOString()
-          };
-          return merged;
-        });
-        
-        // Refresh points
-        if (currentId) {
-          try {
-            const pointsData = await getUserPoints(Number(currentId));
-            setUserPoints(pointsData);
-          } catch (err) {
-            console.error('Error refreshing points:', err);
+          });
+          
+          if (currentId) {
+            try {
+              const pointsData = await getUserPoints(Number(currentId));
+              setUserPoints(pointsData);
+            } catch (err) {
+              console.error('Error refreshing points:', err);
+            }
           }
+          
+          await fetchUserRewardRequests();
+          await fetchInventoryItems();
+        } else {
+          setRewardDialog({
+            mode: 'status',
+            title: 'Unable to Claim Reward',
+            message: response.message || 'Failed to claim reward',
+            confirmLabel: 'OK',
+            variant: 'error'
+          });
         }
-        
-        // Refresh requests
-        await fetchUserRewardRequests();
-        
-        // Refresh inventory
-        await fetchInventoryItems();
-      } else {
-        alert(response.message || 'Failed to claim reward');
+      } catch (error: any) {
+        console.error('Error claiming reward:', error);
+        setRewardDialog({
+          mode: 'status',
+          title: 'Unable to Claim Reward',
+          message: error.response?.data?.message || 'Failed to claim reward',
+          confirmLabel: 'OK',
+          variant: 'error'
+        });
+      } finally {
+        setClaimingReward(null);
       }
-    } catch (error: any) {
-      console.error('Error claiming reward:', error);
-      alert(error.response?.data?.message || 'Failed to claim reward');
-    } finally {
-      setClaimingReward(null);
-    }
+    };
+
+    setRewardDialog({
+      mode: 'confirm',
+      title: 'Claim Reward',
+      message: `Claim "${request.reward_name}"?\n\nPoints will be deducted: ${request.points_cost}`,
+      confirmLabel: 'Claim Reward',
+      cancelLabel: 'Not now',
+      onConfirm: () => {
+        setRewardDialog(null);
+        void executeClaim();
+      }
+    });
   };
 
   const handleCancelReward = async (requestId: number) => {
@@ -6159,6 +6195,109 @@ getPosts()
                   {claimingReward !== null ? 'Processing...' : 'Confirm Request'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rewardDialog && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '20px',
+            backdropFilter: 'blur(2px)'
+          }}
+          onClick={() => {
+            if (rewardDialog.mode === 'status') {
+              setRewardDialog(null);
+            }
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '18px',
+              padding: '28px',
+              width: '100%',
+              maxWidth: '420px',
+              boxShadow: '0 25px 60px rgba(15, 23, 42, 0.25)',
+              borderTop: `4px solid ${
+                rewardDialog.variant === 'error'
+                  ? '#b91c1c'
+                  : rewardDialog.variant === 'success'
+                    ? '#15803d'
+                    : '#1e3a5f'
+              }`
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p
+              style={{
+                color: '#0f172a',
+                marginBottom: '24px',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-line',
+                marginTop: '8px'
+              }}
+            >
+              {rewardDialog.message}
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              {rewardDialog.mode === 'confirm' && (
+                <button
+                  onClick={() => setRewardDialog(null)}
+                  style={{
+                    padding: '12px 20px',
+                    borderRadius: '10px',
+                    border: '1px solid #e2e8f0',
+                    background: '#fff',
+                    color: '#475569',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    minWidth: '120px'
+                  }}
+                >
+                  {rewardDialog.cancelLabel || 'Cancel'}
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (rewardDialog.mode === 'confirm') {
+                    rewardDialog.onConfirm?.();
+                  } else {
+                    setRewardDialog(null);
+                  }
+                }}
+                style={{
+                  padding: '12px 20px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background:
+                    rewardDialog.variant === 'error'
+                      ? '#b91c1c'
+                      : rewardDialog.variant === 'success'
+                        ? '#15803d'
+                        : '#1e3a5f',
+                  color: '#fff',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  minWidth: '140px',
+                  boxShadow: '0 10px 20px rgba(15, 23, 42, 0.2)'
+                }}
+              >
+                {rewardDialog.confirmLabel ||
+                  (rewardDialog.mode === 'confirm' ? 'Continue' : 'OK')}
+              </button>
             </div>
           </div>
         </div>

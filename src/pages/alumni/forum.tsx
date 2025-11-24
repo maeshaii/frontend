@@ -6,7 +6,7 @@ import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
 import ctulogo from '../../images/ctulogo.png';
-import { getProfilePicUrl, handleProfilePicError } from '../../utils/profilePicUtils';
+import { getProfilePicUrl } from '../../utils/profilePicUtils';
 import { getForums, followUser, unfollowUser, checkFollowStatus } from '../../services/api';
 import './profile.css';
 
@@ -144,13 +144,6 @@ const ForumPage: React.FC = () => {
     }
   }, [currentUserId]);
 
-  // Retry fetching members if currentUserId becomes available
-  useEffect(() => {
-    if (currentUserId && allMembers.length === 0 && !membersLoading) {
-      console.log('Retrying members fetch due to empty results');
-      fetchAllMembers();
-    }
-  }, [currentUserId, allMembers.length, membersLoading]);
 
   const fetchAllMembers = async () => {
     try {
@@ -241,13 +234,11 @@ const ForumPage: React.FC = () => {
   };
 
   const handleViewOriginalPost = async (originalPost: any) => {
-    console.log('handleViewOriginalPost called with original post:', originalPost);
     setPostLoading(true);
     try {
       // Fetch the full post data from the API
       const { api } = await import('../../services/api');
       const response = await api.get(`forum/${originalPost.post_id}/`);
-      console.log('Original post API response:', response.data);
       if (response.data) {
         setOriginalPostModalData(response.data);
         
@@ -258,7 +249,6 @@ const ForumPage: React.FC = () => {
         }));
         
         setShowOriginalPostModal(true);
-        console.log('Original post modal should now be visible');
       }
     } catch (error) {
       console.error('Error fetching original post:', error);
@@ -270,13 +260,10 @@ const ForumPage: React.FC = () => {
 
   // Check for pending repost view from notification
   const handleViewRepostById = async (repostId: string) => {
-    console.log('🔍 handleViewRepostById called with repostId:', repostId);
     setPostLoading(true);
     try {
       const { api } = await import('../../services/api');
-      console.log('🔍 Fetching repost with ID:', repostId);
       const response = await api.get(`reposts/${repostId}/detail/`);
-      console.log('🔍 Repost API response:', response.data);
       if (response.data) {
         // Transform repost data to show repost with original content
         const repostData = response.data;
@@ -312,7 +299,6 @@ const ForumPage: React.FC = () => {
         };
         
         setOriginalPostModalData(transformedData);
-        console.log('🔍 Set repost modal data:', transformedData);
         
         // Update the liked state for the modal repost
         setLikedPosts(prev => ({
@@ -321,13 +307,9 @@ const ForumPage: React.FC = () => {
         }));
         
         setShowOriginalPostModal(true);
-        console.log('✅ Repost modal opened for notification');
-      } else {
-        console.error('❌ No data in API response');
       }
     } catch (error: any) {
-      console.error('❌ Error fetching repost by ID:', error);
-      console.error('❌ Error details:', error.response?.data || error.message);
+      console.error('Error fetching repost by ID:', error);
       alert('Unable to load the repost. It may have been deleted.');
     } finally {
       setPostLoading(false);
@@ -336,13 +318,10 @@ const ForumPage: React.FC = () => {
 
   // Handle viewing a forum post by ID (for notifications)
   const handleViewForumPostById = async (postId: string) => {
-    console.log('handleViewForumPostById called with postId:', postId);
     setPostLoading(true);
     try {
       const { api } = await import('../../services/api');
-      console.log('🔍 Fetching forum post with ID:', postId);
       const response = await api.get(`forum/${postId}/`);
-      console.log('🔍 Forum post API response:', response.data);
       if (response.data) {
         // Transform the response to match the expected format
         const transformedData = {
@@ -360,7 +339,6 @@ const ForumPage: React.FC = () => {
         };
         
         setOriginalPostModalData(transformedData);
-        console.log('🔍 Set original post modal data:', transformedData);
         
         // Update the liked state for the modal post
         setLikedPosts(prev => ({
@@ -369,13 +347,9 @@ const ForumPage: React.FC = () => {
         }));
         
         setShowOriginalPostModal(true);
-        console.log('✅ Forum post modal opened for notification, showOriginalPostModal:', true);
-      } else {
-        console.error('❌ No data in API response');
       }
     } catch (error: any) {
-      console.error('❌ Error fetching forum post by ID:', error);
-      console.error('❌ Error details:', error.response?.data || error.message);
+      console.error('Error fetching forum post by ID:', error);
       alert('Unable to load the forum post. It may have been deleted.');
     } finally {
       setPostLoading(false);
@@ -384,42 +358,24 @@ const ForumPage: React.FC = () => {
 
   // Check for pending forum post view from notification
   useEffect(() => {
-    console.log('🔍 useEffect for pendingForumPostView running...');
-    
     // Check for pending repost ID first
     const pendingRepostId = localStorage.getItem('pendingRepostId');
     if (pendingRepostId) {
-      console.log('🔍 Found pending repost ID:', pendingRepostId);
       localStorage.removeItem('pendingRepostId');
       setTimeout(() => {
-        console.log('🔍 Calling handleViewRepostById with ID:', pendingRepostId);
-        if (typeof handleViewRepostById === 'function') {
-          handleViewRepostById(pendingRepostId);
-        } else {
-          console.error('❌ handleViewRepostById is not a function!');
-        }
+        handleViewRepostById(pendingRepostId);
       }, 500);
       return; // Don't check for regular post view if we have a repost
     }
     
     // Check for regular forum post view
     const pendingForumPostId = localStorage.getItem('pendingForumPostView');
-    console.log('🔍 Raw localStorage value:', pendingForumPostId);
     if (pendingForumPostId) {
-      console.log('🔍 Found pending forum post view:', pendingForumPostId);
-      console.log('🔍 handleViewForumPostById function exists?', typeof handleViewForumPostById === 'function');
       localStorage.removeItem('pendingForumPostView');
       // Wait a bit for the component to fully mount
       setTimeout(() => {
-        console.log('🔍 Calling handleViewForumPostById with ID:', pendingForumPostId);
-        if (typeof handleViewForumPostById === 'function') {
-          handleViewForumPostById(pendingForumPostId);
-        } else {
-          console.error('❌ handleViewForumPostById is not a function!');
-        }
+        handleViewForumPostById(pendingForumPostId);
       }, 500);
-    } else {
-      console.log('🔍 No pending forum post view found');
     }
   }, []); // Run only once on mount
 
@@ -568,9 +524,8 @@ const ForumPage: React.FC = () => {
     setIsRefreshing(true);
     try {
       await fetchForumPosts(false);
-      console.log('✅ Forum refreshed via pull-to-refresh');
     } catch (error) {
-      console.error('❌ Error refreshing forum posts:', error);
+      console.error('Error refreshing forum posts:', error);
     } finally {
       isRefreshingRef.current = false;
       setIsRefreshing(false);
@@ -734,7 +689,6 @@ const ForumPage: React.FC = () => {
                     {(() => {
                       const maxToShow = Math.min(allMembers.length, 6);
                       const rows = Math.ceil(maxToShow / 3);
-                      console.log('Rendering members:', { totalMembers: allMembers.length, maxToShow, rows });
                       return Array.from({ length: rows }).map((_, rowIndex) => (
                       <div key={`row-${rowIndex}`} className="profile-followers-row">
                         {allMembers.slice(rowIndex * 3, Math.min(rowIndex * 3 + 3, maxToShow)).map((member) => (
@@ -745,10 +699,7 @@ const ForumPage: React.FC = () => {
                               const destId = member.id;
                               
                               if (destId && !isNaN(Number(destId))) {
-                                console.log('Members: Navigating to member profile:', destId);
                                 navigate(`/profile/${destId}`);
-                              } else {
-                                console.log('Members: Invalid member ID:', destId);
                               }
                             }}
                             style={{ 
@@ -1606,7 +1557,6 @@ const ForumPage: React.FC = () => {
                   // Refresh the original post data in modal
                   const postId = originalPostModalData.post_id;
                   if (postId) {
-                    console.log('Modal onPostUpdate called, refreshing post:', postId);
                     // Re-fetch the post data from server to get updated like status
                     try {
                       const { api } = await import('../../services/api');

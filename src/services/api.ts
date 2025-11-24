@@ -536,6 +536,12 @@ export const fetchTrackerResponses = async () => {
   return response.data;
 };
 
+// Fetch users with employment history (for tracker respondents page)
+export const fetchEmploymentHistoryRespondents = async () => {
+  const response = await api.get('tracker/employment-respondents/');
+  return response.data;
+};
+
 // Fetch tracker responses by batch year
 export const fetchTrackerResponsesByBatchYear = async (batchYear: string) => {
   const response = await api.get(`tracker/list-responses/?batch_year=${batchYear}`);
