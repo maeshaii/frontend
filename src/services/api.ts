@@ -751,6 +751,11 @@ export const editPost = async (postId: number, postData: { post_content: string 
   return response.data;
 };
 
+export const getPostDetail = async (postId: number) => {
+  const response = await api.get(`posts/${postId}/detail/`);
+  return response.data;
+};
+
 export const deleteComment = async (postId: number, commentId: number) => {
   const response = await api.delete(`posts/${postId}/comments/${commentId}/`);
   return response.data;

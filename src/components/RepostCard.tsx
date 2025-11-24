@@ -18,12 +18,14 @@ import {
   editForumPost,
   searchAlumni,
   getFollowingForMentions,
+  getPostDetail,
 } from '../services/api';
 import { getProfilePicUrl, handleProfilePicError, getImageUrl } from '../utils/profilePicUtils';
 import RepostButton from './RepostButton';
 import ReplyInput from './ReplyInput';
 import Reply from './Reply';
 import PostStatsRow from './PostStatsRow';
+import RepostsModal from './RepostsModal';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faThumbsUp } from '@fortawesome/free-solid-svg-icons';
 import { faThumbsUp as faThumbsUpReg, faComment as faCommentReg } from '@fortawesome/free-regular-svg-icons';
@@ -53,8 +55,10 @@ export interface PostItemLite {
   // Optional interaction fields for embedded originals
   likes?: Array<any>;
   comments?: Array<any>;
+  reposts?: Array<{ repost_id: number; user?: UserLite }>;
   likes_count?: number;
   comments_count?: number;
+  reposts_count?: number;
 }
 
 interface CommentLite {
@@ -181,6 +185,9 @@ const RepostCard: React.FC<RepostCardProps> = ({
   const [showLikesModal, setShowLikesModal] = useState(false);
   const [likesLoading, setLikesLoading] = useState(false);
   const [fetchedLikes, setFetchedLikes] = useState<any[]>(repost.likes || []);
+  const [showRepostsModal, setShowRepostsModal] = useState(false);
+  const [repostsLoading, setRepostsLoading] = useState(false);
+  const [fetchedReposts, setFetchedReposts] = useState<any[]>(repost.original_post?.reposts || []);
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [commentValue, setCommentValue] = useState('');
   const commentInputRef = useRef<HTMLInputElement>(null);
@@ -1341,6 +1348,39 @@ const RepostCard: React.FC<RepostCardProps> = ({
     };
   }, [showLikesModal, repost.repost_id]);
 
+  // Fetch reposts for the original post when modal opens
+  useEffect(() => {
+    if (!showRepostsModal) return;
+    const originalPost = repost.original_post;
+    if (!originalPost?.post_id) return;
+    
+    let mounted = true;
+    const postId = originalPost.post_id;
+    (async () => {
+      setRepostsLoading(true);
+      try {
+        const postData = await getPostDetail(postId);
+        if (mounted && postData && postData.reposts) {
+          setFetchedReposts(postData.reposts || []);
+        } else if (mounted && originalPost.reposts) {
+          setFetchedReposts(originalPost.reposts);
+        }
+      } catch (error) {
+        console.error('Error fetching reposts:', error);
+        if (mounted && originalPost.reposts) {
+          setFetchedReposts(originalPost.reposts);
+        } else if (mounted) {
+          setFetchedReposts([]);
+        }
+      } finally {
+        if (mounted) setRepostsLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [showRepostsModal, repost.original_post?.post_id, repost.original_post?.reposts]);
+
   const goToOriginal = () => {
     const id = original.post_id;
     if (!id) return;
@@ -1919,11 +1959,14 @@ const RepostCard: React.FC<RepostCardProps> = ({
       <PostStatsRow
         likes={fetchedLikes}
         comments={comments}
+        reposts={repost.original_post?.reposts}
+        repostCount={repost.original_post?.reposts_count}
         onLikesClick={() => setShowLikesModal(true)}
         onCommentsClick={() => {
           // Toggle comments section visibility
           setShowCommentsSection(prev => !prev);
         }}
+        onRepostsClick={() => setShowRepostsModal(true)}
         animate={true}
       />
 
@@ -1957,8 +2000,12 @@ const RepostCard: React.FC<RepostCardProps> = ({
           </button>
           <RepostButton
             originalPost={{
-              post_id: original.post_id || 0,
-              post_content: original.post_content || '',
+              post_id: context === 'donation' 
+                ? (original.donation_id || 0)
+                : context === 'forum'
+                ? ((original as any).forum_id || original.post_id || 0)
+                : (original.post_id || 0),
+              post_content: original.post_content || (original as any).description || (original as any).content || '',
               post_image: undefined,
               post_images: getImagesFromPost(original).map((url, index) => ({
                 image_id: index + 1,
@@ -2757,6 +2804,18 @@ const RepostCard: React.FC<RepostCardProps> = ({
             </div>
           </div>
         </div>,
+        document.body
+      )}
+
+      {/* Reposts Modal */}
+      {showRepostsModal && ReactDOM.createPortal(
+        <RepostsModal
+          isOpen={showRepostsModal}
+          onClose={() => setShowRepostsModal(false)}
+          reposts={fetchedReposts}
+          isLoading={repostsLoading}
+          title="People who reposted this"
+        />,
         document.body
       )}
 

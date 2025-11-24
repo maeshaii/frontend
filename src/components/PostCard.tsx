@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost, getPostLikes, getRepostLikes, getDonationLikes, getForumLikes, getUserPoints } from '../services/api';
+import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost, getPostLikes, getRepostLikes, getDonationLikes, getForumLikes, getUserPoints, getPostDetail } from '../services/api';
 import { 
   commentOnForumPost, 
   deleteForumComment, 
@@ -23,6 +23,7 @@ import Reply from './Reply';
 import ReplyInput from './ReplyInput';
 import RepostButton from './RepostButton';
 import PostStatsRow from './PostStatsRow';
+import RepostsModal from './RepostsModal';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faThumbsUp, faRetweet } from '@fortawesome/free-solid-svg-icons';
 import { faThumbsUp as faThumbsUpReg, faComment as faCommentReg } from '@fortawesome/free-regular-svg-icons';
@@ -97,6 +98,7 @@ interface PostItem {
   reposts?: RepostItem[];
   likes?: LikeItem[];
   liked_by_user?: boolean;
+  reposts_count?: number;
 }
 
 interface PostCardProps {
@@ -178,6 +180,7 @@ const PostCard: React.FC<PostCardProps> = ({
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [inlineImageIndex, setInlineImageIndex] = useState<{ [key: number]: number }>({}); // For inline carousel display per post
   const [showLikesModal, setShowLikesModal] = useState(false);
+  const [showRepostsModal, setShowRepostsModal] = useState(false);
   const [showDeleteRepostModal, setShowDeleteRepostModal] = useState(false);
   const [showDeletePostModal, setShowDeletePostModal] = useState(false);
   const [showDeleteCommentModal, setShowDeleteCommentModal] = useState(false);
@@ -185,6 +188,8 @@ const PostCard: React.FC<PostCardProps> = ({
   // Repost likes modals removed on web
   const [fetchedLikes, setFetchedLikes] = useState<any[]>([]);
   const [likesLoading, setLikesLoading] = useState(false);
+  const [fetchedReposts, setFetchedReposts] = useState<any[]>(post.reposts || []);
+  const [repostsLoading, setRepostsLoading] = useState(false);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
 
   // If this item represents a reposted donation (original_post embedded), render a clickable inner card
@@ -201,6 +206,18 @@ const PostCard: React.FC<PostCardProps> = ({
       fetchLikes();
     }
   }, [showLikesModal]);
+
+  useEffect(() => {
+    if (showRepostsModal) {
+      fetchReposts();
+    }
+  }, [showRepostsModal]);
+
+  useEffect(() => {
+    if (post.reposts && post.reposts.length > 0) {
+      setFetchedReposts(post.reposts);
+    }
+  }, [post.reposts]);
 
   // Repost likes modals removed
   const commentOptionsRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
@@ -1366,6 +1383,23 @@ const PostCard: React.FC<PostCardProps> = ({
       setFetchedLikes([]);
     } finally {
       setLikesLoading(false);
+    }
+  };
+
+  const fetchReposts = async () => {
+    setRepostsLoading(true);
+    try {
+      if (post.reposts && post.reposts.length > 0) {
+        setFetchedReposts(post.reposts);
+      } else {
+        const detail = await getPostDetail(post.post_id);
+        setFetchedReposts(detail?.reposts || []);
+      }
+    } catch (error) {
+      console.error('Error fetching reposts:', error);
+      setFetchedReposts([]);
+    } finally {
+      setRepostsLoading(false);
     }
   };
 
@@ -2906,6 +2940,8 @@ const PostCard: React.FC<PostCardProps> = ({
       <PostStatsRow
         likes={post.likes}
         comments={post.comments}
+        reposts={post.reposts}
+        repostCount={post.reposts_count}
         onLikesClick={() => {
           console.log('Like summary clicked (regular post), setting showLikesModal to true');
           setShowLikesModal(true);
@@ -2914,6 +2950,7 @@ const PostCard: React.FC<PostCardProps> = ({
           // Toggle comments section visibility
           setShowCommentsSection(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }));
         }}
+        onRepostsClick={() => setShowRepostsModal(true)}
         animate={true}
       />
 
@@ -3714,6 +3751,17 @@ const PostCard: React.FC<PostCardProps> = ({
             </div>
           </div>
         </div>,
+        document.body
+      )}
+
+      {/* Reposts Modal */}
+      {showRepostsModal && ReactDOM.createPortal(
+        <RepostsModal
+          isOpen={showRepostsModal}
+          onClose={() => setShowRepostsModal(false)}
+          reposts={fetchedReposts}
+          isLoading={repostsLoading}
+        />,
         document.body
       )}
 
