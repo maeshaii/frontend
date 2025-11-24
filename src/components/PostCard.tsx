@@ -28,6 +28,7 @@ import { faThumbsUp, faRetweet } from '@fortawesome/free-solid-svg-icons';
 import { faThumbsUp as faThumbsUpReg, faComment as faCommentReg } from '@fortawesome/free-regular-svg-icons';
 import { IoSend } from 'react-icons/io5';
 import ConfirmModal from './ConfirmModal';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import './postFooterActions.css';
 
 interface RepostItem {
@@ -215,12 +216,34 @@ const PostCard: React.FC<PostCardProps> = ({
   // State to control whether comments section is visible (hidden by default)
   const [showCommentsSection, setShowCommentsSection] = useState<{ [key: number]: boolean }>({});
 
+  // Emoji picker state for comments
+  const [showEmojiPicker, setShowEmojiPicker] = useState<{ [key: number]: boolean }>({});
+  const emojiPickerRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+
   // @mention functionality for comments
   const [followingUsers, setFollowingUsers] = useState<any[]>([]);
   const [showMentionSuggestions, setShowMentionSuggestions] = useState<{ [key: number]: boolean }>({});
   const [mentionSuggestions, setMentionSuggestions] = useState<{ [key: number]: any[] }>({});
   const [mentionStart, setMentionStart] = useState<{ [key: number]: number }>({});
   const [selectedMentionIndex, setSelectedMentionIndex] = useState<{ [key: number]: number }>({});
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      Object.keys(showEmojiPicker).forEach((postIdStr) => {
+        const postId = Number(postIdStr);
+        if (showEmojiPicker[postId] && emojiPickerRefs.current[postId] && !emojiPickerRefs.current[postId]?.contains(target)) {
+          setShowEmojiPicker(prev => ({
+            ...prev,
+            [postId]: false
+          }));
+        }
+      });
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
 
   // Load following users for @mentions
   useEffect(() => {
@@ -2065,20 +2088,117 @@ const PostCard: React.FC<PostCardProps> = ({
                   }}
                   onError={(e) => handleProfilePicError(e)}
                 />
-                <input
-                  type="text"
-                  placeholder="Type your comment..."
-                  value={commentInput[repostData?.repost_id || post.post_id] || ''}
-                  onChange={(e) => handleCommentInputChange(e, repostData?.repost_id || post.post_id)}
-                  onKeyDown={(e) => handleCommentKeyDown(e, repostData?.repost_id || post.post_id)}
-                  style={{
-                    flex: 1,
-                    border: '1px solid #ddd',
-                    borderRadius: '20px',
-                    padding: '10px 16px',
-                    fontSize: '14px'
-                  }}
-                />
+                <div style={{ flex: 1, position: 'relative' }}>
+                  <input
+                    type="text"
+                    placeholder="Type your comment..."
+                    value={commentInput[repostData?.repost_id || post.post_id] || ''}
+                    onChange={(e) => handleCommentInputChange(e, repostData?.repost_id || post.post_id)}
+                    onKeyDown={(e) => handleCommentKeyDown(e, repostData?.repost_id || post.post_id)}
+                    style={{
+                      width: '100%',
+                      border: '1px solid #ddd',
+                      borderRadius: '20px',
+                      padding: '10px 28px 10px 16px',
+                      fontSize: '14px'
+                    }}
+                  />
+                  {/* Emoji Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const id = repostData?.repost_id || post.post_id;
+                      setShowEmojiPicker(prev => ({
+                        ...prev,
+                        [id]: !prev[id]
+                      }));
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      width: '20px',
+                      height: '20px',
+                      transition: 'background-color 0.2s ease, color 0.2s ease',
+                      color: '#65676b',
+                      zIndex: 1,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                      e.currentTarget.style.color = '#333';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.color = '#65676b';
+                    }}
+                    title="Add emoji"
+                  >
+                    <svg 
+                      width="16" 
+                      height="16" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      xmlns="http://www.w3.org/2000/svg"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
+                      <circle cx="15.5" cy="9.5" r="1.5" fill="currentColor" />
+                      <path d="M8 14c1.5 2.5 4.5 2.5 6 0" />
+                    </svg>
+                  </button>
+                  {/* Emoji Picker */}
+                  {showEmojiPicker[repostData?.repost_id || post.post_id] && (
+                    <div
+                      ref={(el) => {
+                        const id = repostData?.repost_id || post.post_id;
+                        if (el) emojiPickerRefs.current[id] = el;
+                      }}
+                      style={{
+                        position: 'absolute',
+                        bottom: 'calc(100% + 8px)',
+                        right: 0,
+                        zIndex: 1000,
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        background: '#fff',
+                        border: '1px solid #e0e0e0',
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <EmojiPicker
+                        onEmojiClick={(emojiData: EmojiClickData) => {
+                          if (setCommentInput) {
+                            const id = repostData?.repost_id || post.post_id;
+                            setCommentInput((prev: { [key: number]: string }) => ({
+                              ...prev,
+                              [id]: (prev[id] || '') + emojiData.emoji
+                            }));
+                          }
+                        }}
+                        width={320}
+                        height={350}
+                        previewConfig={{ showPreview: false }}
+                        skinTonesDisabled
+                      />
+                    </div>
+                  )}
+                </div>
                 <button 
                   onClick={handleCommentSubmit}
                   style={{
@@ -2878,20 +2998,114 @@ const PostCard: React.FC<PostCardProps> = ({
             }}
             onError={(e) => handleProfilePicError(e)}
           />
-          <input
-            type="text"
-            placeholder="Type your comment..."
-            value={commentInput[post.post_id] || ''}
-            onChange={(e) => handleCommentInputChange(e, post.post_id)}
-            onKeyDown={(e) => handleCommentKeyDown(e, post.post_id)}
-            style={{
-              flex: 1,
-              border: '1px solid #ddd',
-              borderRadius: '20px',
-              padding: '10px 16px',
-              fontSize: '14px'
-            }}
-          />
+          <div style={{ flex: 1, position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="Type your comment..."
+              value={commentInput[post.post_id] || ''}
+              onChange={(e) => handleCommentInputChange(e, post.post_id)}
+              onKeyDown={(e) => handleCommentKeyDown(e, post.post_id)}
+              style={{
+                width: '100%',
+                border: '1px solid #ddd',
+                borderRadius: '20px',
+                padding: '10px 0px 10px 5px',
+                fontSize: '14px'
+              }}
+            />
+            {/* Emoji Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowEmojiPicker(prev => ({
+                  ...prev,
+                  [post.post_id]: !prev[post.post_id]
+                }));
+              }}
+              style={{
+                position: 'absolute',
+                right: '8px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '50%',
+                width: '20px',
+                height: '20px',
+                transition: 'background-color 0.2s ease, color 0.2s ease',
+                color: '#65676b',
+                zIndex: 1,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                e.currentTarget.style.color = '#333';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#65676b';
+              }}
+              title="Add emoji"
+            >
+              <svg 
+                width="16" 
+                height="16" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                xmlns="http://www.w3.org/2000/svg"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
+                <circle cx="15.5" cy="9.5" r="1.5" fill="currentColor" />
+                <path d="M8 14c1.5 2.5 4.5 2.5 6 0" />
+              </svg>
+            </button>
+            {/* Emoji Picker */}
+            {showEmojiPicker[post.post_id] && (
+              <div
+                ref={(el) => {
+                  if (el) emojiPickerRefs.current[post.post_id] = el;
+                }}
+                style={{
+                  position: 'absolute',
+                  bottom: 'calc(100% + 8px)',
+                  right: 0,
+                  zIndex: 1000,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  background: '#fff',
+                  border: '1px solid #e0e0e0',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <EmojiPicker
+                  onEmojiClick={(emojiData: EmojiClickData) => {
+                    if (setCommentInput) {
+                      setCommentInput((prev: { [key: number]: string }) => ({
+                        ...prev,
+                        [post.post_id]: (prev[post.post_id] || '') + emojiData.emoji
+                      }));
+                    }
+                  }}
+                  width={320}
+                  height={350}
+                  previewConfig={{ showPreview: false }}
+                  skinTonesDisabled
+                />
+              </div>
+            )}
+          </div>
           <button 
             onClick={handleCommentSubmit}
             style={{

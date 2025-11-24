@@ -3,6 +3,7 @@ import { editReply, deleteReply, createReply, searchAlumni, getUserPoints, getFo
 import ctulogo from '../images/ctulogo.png';
 import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
 import ConfirmModal from './ConfirmModal';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 
 interface ReplyProps {
   reply: {
@@ -48,6 +49,8 @@ const Reply: React.FC<ReplyProps> = ({
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
   const [followingUsers, setFollowingUsers] = useState<any[]>([]);
   const [showDeleteReplyModal, setShowDeleteReplyModal] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
   const optionsRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -126,6 +129,20 @@ const Reply: React.FC<ReplyProps> = ({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (showEmojiPicker && emojiPickerRef.current && !emojiPickerRef.current.contains(target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
 
   const handleEdit = async () => {
     if (editContent.trim() === '') return;
@@ -754,7 +771,7 @@ const Reply: React.FC<ReplyProps> = ({
                   flexShrink: 0
                 }}
               />
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, position: 'relative' }}>
                 <textarea
                   value={replyContent}
                   onChange={(e) => setReplyContent(e.target.value)}
@@ -763,7 +780,7 @@ const Reply: React.FC<ReplyProps> = ({
                     width: '100%',
                     minHeight: '32px',
                     maxHeight: '120px',
-                    padding: '8px 12px',
+                    padding: '10px 0px 10px 5px',
                     border: '1px solid #ccd0d5',
                     borderRadius: '18px',
                     fontSize: '13px',
@@ -782,6 +799,88 @@ const Reply: React.FC<ReplyProps> = ({
                     }
                   }}
                 />
+                {/* Emoji Button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowEmojiPicker(!showEmojiPicker);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '50%',
+                    width: '20px',
+                    height: '20px',
+                    transition: 'background-color 0.2s ease, color 0.2s ease',
+                    color: '#65676b',
+                    zIndex: 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                    e.currentTarget.style.color = '#333';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = '#65676b';
+                  }}
+                  title="Add emoji"
+                >
+                  <svg 
+                    width="16" 
+                    height="16" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    xmlns="http://www.w3.org/2000/svg"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
+                    <circle cx="15.5" cy="9.5" r="1.5" fill="currentColor" />
+                    <path d="M8 14c1.5 2.5 4.5 2.5 6 0" />
+                  </svg>
+                </button>
+                {/* Emoji Picker */}
+                {showEmojiPicker && (
+                  <div
+                    ref={emojiPickerRef}
+                    style={{
+                      position: 'absolute',
+                      bottom: 'calc(100% + 8px)',
+                      right: 0,
+                      zIndex: 1000,
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      background: '#fff',
+                      border: '1px solid #e0e0e0',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <EmojiPicker
+                      onEmojiClick={(emojiData: EmojiClickData) => {
+                        setReplyContent(prev => prev + emojiData.emoji);
+                      }}
+                      width={280}
+                      height={320}
+                      previewConfig={{ showPreview: false }}
+                      skinTonesDisabled
+                    />
+                  </div>
+                )}
                 <div style={{ 
                   display: 'flex', 
                   gap: '8px', 

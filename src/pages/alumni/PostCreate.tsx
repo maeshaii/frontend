@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPost, createForumPost, createDonationRequest, getUserPoints } from '../../services/api';
 import ctulogo from '../../images/ctulogo.png';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import './postcreate.css';
 
 export interface PostCreateProps {
@@ -20,18 +21,23 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
   const [postImages, setPostImages] = useState<string[]>([]); // Multiple images
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  // Removed emoji picker state and logic
-  const [showEmojiPicker] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
 
   // Close emoji picker on outside click
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      // no-op: emoji picker removed
+      if (showEmojiPicker && emojiPickerRef.current && !emojiPickerRef.current.contains(target)) {
+        setShowEmojiPicker(false);
+      }
     };
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', onDocClick);
+    }
     return () => document.removeEventListener('mousedown', onDocClick);
-  }, []);
+  }, [showEmojiPicker]);
 
 
 
@@ -52,8 +58,12 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
       el.setSelectionRange(caret, caret);
       // autoresize
       el.style.height = 'auto';
-      el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+      el.style.height = Math.min(el.scrollHeight, 200) + 'px';
     });
+  };
+
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    insertAtCursor(emojiData.emoji);
   };
 
 
@@ -229,159 +239,463 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
         className="post-create-modal"
         style={{
           background: '#fff',
-          borderRadius: 10,
-          boxShadow: '0 2px 16px rgba(0,0,0,0.15)',
-          maxWidth: 400,
+          borderRadius: '12px',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.15)',
+          maxWidth: showEmojiPicker ? 750 : 500,
           width: '100%',
-          padding: 24,
+          maxHeight: '90vh',
+          minHeight: showEmojiPicker ? 550 : 'auto',
           position: 'relative',
           display: 'flex',
           flexDirection: 'column',
+          transition: 'max-width 0.3s ease, min-height 0.3s ease',
+          overflow: 'visible',
         }}
       >
-        <div className="post-create-header">
-          <h2>✏️ Create Post</h2>
-          <button className="close-button" onClick={onCancel!}>×</button>
+        {/* Top Bar - Matching Mobile */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px 20px',
+          position: 'relative',
+          height: '56px',
+          boxSizing: 'border-box',
+        }}>
+          <button
+            onClick={onCancel}
+            style={{
+              position: 'absolute',
+              left: '20px',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '20px',
+              color: '#333',
+              padding: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+              width: '36px',
+              height: '36px',
+              transition: 'background-color 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+            disabled={isLoading}
+          >
+            ✕
+          </button>
+          <h2 style={{
+            fontWeight: 'bold',
+            fontSize: '16px',
+            color: '#222',
+            margin: 0,
+            textAlign: 'center',
+            letterSpacing: '0.3px',
+          }}>
+            CREATE A POST
+          </h2>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              const form = document.getElementById('post-create-form') as HTMLFormElement;
+              if (form) {
+                form.requestSubmit();
+              }
+            }}
+            style={{
+              position: 'absolute',
+              right: '20px',
+              background: 'transparent',
+              border: 'none',
+              cursor: isLoading || !postContent.trim() ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              color: isLoading || !postContent.trim() ? '#999' : '#222',
+              padding: '8px 12px',
+              transition: 'color 0.2s ease, opacity 0.2s ease',
+              opacity: isLoading || !postContent.trim() ? 0.6 : 1,
+            }}
+            disabled={isLoading || !postContent.trim()}
+          >
+            {isLoading ? '...' : 'POST'}
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="post-create-user">
+        {/* Separator */}
+        <div style={{
+          height: '1px',
+          backgroundColor: '#E0E0E0',
+          width: '100%',
+        }} />
+
+        <form id="post-create-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+          {/* User Info */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            padding: '16px 20px',
+            paddingTop: '12px',
+            paddingBottom: '12px',
+          }}>
             <img 
               src={user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo} 
               alt="Profile" 
-              className="user-avatar"
+              style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '20px',
+                marginRight: '12px',
+                objectFit: 'cover',
+                border: '1px solid #f0f0f0',
+              }}
             />
-            <div>
-              <div className="user-name">{user?.name || 'User'}</div>
-              <div style={{ fontSize: 11, color: '#64748b' }}>is creating a post</div>
+            <div style={{
+              fontWeight: 'bold',
+              fontSize: '15px',
+              color: '#222',
+              lineHeight: '1.4',
+            }}>
+              {user?.name || 'User'}
             </div>
           </div>
 
-          <div className="post-create-content">
-            <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-              <textarea
-                placeholder="What's on your mind?"
-                value={postContent}
-                onChange={(e) => {
-                  setPostContent(e.target.value);
-                  // Auto-resize textarea
-                  e.target.style.height = 'auto';
-                  e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
-                }}
-                className="post-content-textarea"
-                required
-                ref={textareaRef}
-              />
-
-
-            </div>
-
-
-            {/* Multiple Images Preview */}
-            {postImages.length > 0 && (
-              <div className="images-preview" style={{ marginBottom: 16 }}>
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', 
-                  gap: 8,
-                  marginBottom: 8
-                }}>
-                  {postImages.map((image, index) => (
-                    <div key={index} style={{ position: 'relative' }}>
-                      <img 
-                        src={image} 
-                        alt={`Preview ${index + 1}`} 
-                        style={{ 
-                          width: '100%', 
-                          height: 100, 
-                          objectFit: 'cover', 
-                          borderRadius: 8,
-                          border: '1px solid #e0e0e0'
-                        }} 
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeImage(index)}
-                        style={{
-                          position: 'absolute',
-                          top: 4,
-                          right: 4,
-                          background: 'rgba(0,0,0,0.7)',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '50%',
-                          width: 24,
-                          height: 24,
-                          cursor: 'pointer',
-                          fontSize: 12,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        title="Remove image"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ fontSize: 12, color: '#666' }}>
-                  {postImages.length} of 30 images selected
-                </div>
-              </div>
-            )}
-
-            {/* Single Image Preview (backward compatibility) */}
-            {postImage && !postImages.length && (
-              <div className="image-preview">
-                <img src={postImage} alt="Preview" className="preview-image" />
-                <button
-                  type="button"
-                  className="remove-image"
-                  onClick={() => setPostImage('')}
-                >
-                  Remove
-                </button>
-              </div>
-            )}
-
-            <div className="post-actions" style={{ gap: 10 }}>
-              <label className="upload-button">
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageUpload}
-                  style={{ display: 'none' }}
-                  disabled={postImages.length >= 30}
+          {/* Post Content Area */}
+          <div style={{
+            padding: '0 20px 16px 20px',
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'row',
+            gap: '16px',
+            alignItems: 'flex-start',
+            minHeight: '200px',
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+          }}>
+            <div style={{ flex: 1, position: 'relative', overflow: 'visible' }}>
+              <div style={{ position: 'relative', overflow: 'visible' }}>
+                <textarea
+                  className="post-content-textarea"
+                  placeholder="Start a post..."
+                  value={postContent}
+                  onChange={(e) => {
+                    setPostContent(e.target.value);
+                    // Auto-resize textarea
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#3b82f6';
+                    e.target.style.boxShadow = '0 0 0 2px rgba(59, 130, 246, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#eee';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                  style={{
+                    width: '100%',
+                    minHeight: '120px',
+                    padding: '12px 12px 12px 12px',
+                    fontSize: '15px',
+                    border: '1px solid #eee',
+                    borderRadius: '8px',
+                    resize: 'none',
+                    fontFamily: 'inherit',
+                    color: '#222',
+                    backgroundColor: '#fff',
+                    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+                    outline: 'none',
+                    lineHeight: '1.5',
+                    boxSizing: 'border-box',
+                  }}
+                  required
+                  ref={textareaRef}
+                  maxLength={1000}
                 />
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M23 19C23 19.5304 22.7893 20.0391 22.4142 20.4142C22.0391 20.7893 21.5304 21 21 21H3C2.46957 21 1.96086 20.7893 1.58579 20.4142C1.21071 20.0391 1 19.5304 1 19V8C1 7.46957 1.21071 6.96086 1.58579 6.58579C1.96086 6.21071 2.46957 6 3 6H7L9 4H15L17 6H21C21.5304 6 22.0391 6.21071 22.4142 6.58579C22.7893 6.96086 23 7.46957 23 8V19Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="2"/>
-                </svg>
-                {postImages.length >= 30 ? 'Max Photos (30)' : 'Add Photos'}
-              </label>
+
+                {/* Character Count and Emoji Button Container */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: '8px',
+                  right: '1px',
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: '10px',
+                  zIndex: 10,
+                  pointerEvents: 'none',
+                  padding: '4px 8px',
+                }}>
+                  {/* Emoji Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowEmojiPicker(!showEmojiPicker);
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      width: '28px',
+                      height: '28px',
+                      transition: 'background-color 0.2s ease, color 0.2s ease',
+                      color: '#666',
+                      pointerEvents: 'auto',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                      e.currentTarget.style.color = '#333';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.color = '#666';
+                    }}
+                    title="Add emoji"
+                  >
+                    <svg 
+                      width="18" 
+                      height="18" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      xmlns="http://www.w3.org/2000/svg"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
+                      <circle cx="15.5" cy="9.5" r="1.5" fill="currentColor" />
+                      <path d="M8 14c1.5 2.5 4.5 2.5 6 0" />
+                    </svg>
+                  </button>
+
+                  {/* Character Count */}
+                  <div style={{
+                    fontSize: '12px',
+                    color: '#888',
+                    whiteSpace: 'nowrap',
+                    pointerEvents: 'none',
+                  }}>
+                    {postContent.length}/1000
+                  </div>
+                </div>
+              </div>
+
+              {/* Multiple Images Preview */}
+              {postImages.length > 0 && (
+                <div style={{ marginBottom: '16px', marginTop: '16px' }}>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', 
+                    gap: '8px',
+                    marginBottom: '8px'
+                  }}>
+                    {postImages.map((image, index) => (
+                      <div key={index} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden' }}>
+                        <img 
+                          src={image} 
+                          alt={`Preview ${index + 1}`} 
+                          style={{ 
+                            width: '100%', 
+                            height: '100px', 
+                            objectFit: 'cover', 
+                            borderRadius: '8px',
+                            border: '1px solid #e0e0e0',
+                            display: 'block',
+                          }} 
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            background: 'rgba(0,0,0,0.7)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'background-color 0.2s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.9)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.7)';
+                          }}
+                          title="Remove image"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                    {postImages.length} of 30 images selected
+                  </div>
+                </div>
+              )}
+
+              {/* Single Image Preview (backward compatibility) */}
+              {postImage && !postImages.length && (
+                <div style={{ marginBottom: '16px', marginTop: '10px', position: 'relative' }}>
+                  <img 
+                    src={postImage} 
+                    alt="Preview" 
+                    style={{
+                      width: '100%',
+                      height: '150px',
+                      objectFit: 'cover',
+                      borderRadius: '8px',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPostImage('')}
+                    style={{
+                      position: 'absolute',
+                      bottom: '5px',
+                      right: '5px',
+                      background: 'rgba(0,0,0,0.5)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '5px',
+                      padding: '3px 8px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+
+              {error && (
+                <div style={{
+                  color: '#d32f2f',
+                  fontSize: '14px',
+                  marginTop: '8px',
+                  marginBottom: '8px',
+                }}>
+                  {error}
+                </div>
+              )}
             </div>
 
-            {error && <div className="error-message">{error}</div>}
+            {/* Emoji Picker - Side by side with content */}
+            {showEmojiPicker && (
+              <div
+                ref={emojiPickerRef}
+                style={{
+                  flexShrink: 0,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  background: '#fff',
+                  border: '1px solid #e0e0e0',
+                  alignSelf: 'flex-start',
+                  marginTop: '0',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <EmojiPicker
+                  onEmojiClick={handleEmojiClick}
+                  width={320}
+                  height={350}
+                  previewConfig={{ showPreview: false }}
+                  skinTonesDisabled
+                />
+              </div>
+            )}
+          </div>
 
-            <div className="post-buttons">
-              <button 
-                type="button" 
-                className="cancel-button"
-                onClick={onCancel}
-                disabled={isLoading}
+          {/* Add Image Section - Matching Mobile */}
+          <div style={{
+            backgroundColor: '#fff',
+            borderTopLeftRadius: '16px',
+            borderTopRightRadius: '16px',
+            borderTop: '1px solid #eee',
+            padding: '16px 20px',
+            marginTop: 'auto',
+            boxShadow: '0 -2px 8px rgba(0,0,0,0.08)',
+            flexShrink: 0,
+            zIndex: 5,
+          }}>
+            <label style={{
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              cursor: postImages.length >= 30 ? 'not-allowed' : 'pointer',
+              opacity: postImages.length >= 30 ? 0.6 : 1,
+              transition: 'opacity 0.2s ease',
+            }}>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                style={{ display: 'none' }}
+                disabled={postImages.length >= 30}
+              />
+              <svg 
+                width="32" 
+                height="32" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                xmlns="http://www.w3.org/2000/svg"
+                style={{ marginRight: '12px', flexShrink: 0 }}
               >
-                Cancel
-              </button>
-              <button 
-                type="submit" 
-                className="post-button"
-                disabled={isLoading || !postContent.trim()}
-              >
-                {isLoading ? 'Posting...' : '✏️ Post'}
-              </button>
-            </div>
+                <path 
+                  d="M21 19V5C21 3.9 20.1 3 19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19Z" 
+                  stroke="#4B944D" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                />
+                <path 
+                  d="M8.5 13.5L11 16.5L15.5 10.5L19 14.5V19H5V14.5L8.5 13.5Z" 
+                  stroke="#4B944D" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span style={{
+                color: '#4B944D',
+                fontWeight: 'bold',
+                fontSize: '16px',
+                userSelect: 'none',
+              }}>
+                {postImages.length > 0 
+                  ? `${postImages.length} Image${postImages.length > 1 ? 's' : ''} Selected` 
+                  : 'Add Image(s)'}
+              </span>
+            </label>
           </div>
         </form>
       </div>

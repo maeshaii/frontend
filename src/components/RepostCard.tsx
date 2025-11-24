@@ -31,6 +31,7 @@ import { HiOutlineChevronRight } from 'react-icons/hi2';
 import { IoSend } from 'react-icons/io5';
 import ctulogo from '../images/ctulogo.png';
 import ConfirmModal from './ConfirmModal';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import './postFooterActions.css';
 
 // Minimal, reusable types for the repost card
@@ -255,6 +256,24 @@ const RepostCard: React.FC<RepostCardProps> = ({
   
   // State to control whether comments section is visible (hidden by default)
   const [showCommentsSection, setShowCommentsSection] = useState<boolean>(false);
+
+  // Emoji picker state for comments
+  const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (showEmojiPicker && emojiPickerRef.current && !emojiPickerRef.current.contains(target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
  
    const optionsMenuRef = useRef<HTMLDivElement>(null);
    const commentOptionsRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
@@ -1986,22 +2005,106 @@ const RepostCard: React.FC<RepostCardProps> = ({
               }}
               onError={handleProfilePicError}
             />
-            <input
-              ref={commentInputRef}
-              type="text"
-              placeholder="Type your comment..."
-              value={commentValue}
-              onChange={handleCommentInputChange}
-              onKeyDown={handleCommentKeyDown}
-              style={{
-                flex: 1,
-                border: '1px solid #ddd',
-                borderRadius: '20px',
-                padding: '10px 16px',
-                fontSize: '14px'
-              }}
-              autoFocus
-            />
+            <div style={{ flex: 1, position: 'relative' }}>
+              <input
+                ref={commentInputRef}
+                type="text"
+                placeholder="Type your comment..."
+                value={commentValue}
+                onChange={handleCommentInputChange}
+                onKeyDown={handleCommentKeyDown}
+                style={{
+                  width: '100%',
+                  border: '1px solid #ddd',
+                  borderRadius: '20px',
+                  padding: '10px 0px 10px 5px',
+                  fontSize: '14px'
+                }}
+                autoFocus
+              />
+              {/* Emoji Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowEmojiPicker(!showEmojiPicker);
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  width: '20px',
+                  height: '20px',
+                  transition: 'background-color 0.2s ease, color 0.2s ease',
+                  color: '#65676b',
+                  zIndex: 1,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                  e.currentTarget.style.color = '#333';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#65676b';
+                }}
+                title="Add emoji"
+              >
+                <svg 
+                  width="16" 
+                  height="16" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  xmlns="http://www.w3.org/2000/svg"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
+                  <circle cx="15.5" cy="9.5" r="1.5" fill="currentColor" />
+                  <path d="M8 14c1.5 2.5 4.5 2.5 6 0" />
+                </svg>
+              </button>
+              {/* Emoji Picker */}
+              {showEmojiPicker && (
+                <div
+                  ref={emojiPickerRef}
+                  style={{
+                    position: 'absolute',
+                    bottom: 'calc(100% + 8px)',
+                    right: 0,
+                    zIndex: 1000,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    background: '#fff',
+                    border: '1px solid #e0e0e0',
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <EmojiPicker
+                    onEmojiClick={(emojiData: EmojiClickData) => {
+                      setCommentValue(prev => prev + emojiData.emoji);
+                    }}
+                    width={320}
+                    height={350}
+                    previewConfig={{ showPreview: false }}
+                    skinTonesDisabled
+                  />
+                </div>
+              )}
+            </div>
             <button 
               onClick={handleCommentSubmit}
               style={{
