@@ -170,9 +170,17 @@ export const useTracker = (userId: string | null) => {
     }
   }, [state.loading, state.hasSubmitted, state.accepting, state.isCorrectBatch, navigate]);
 
+  // Expose refresh function to allow manual status refresh
+  const refreshStatus = useCallback(async () => {
+    if (!userId) return;
+    await initializeTracker();
+  }, [userId, initializeTracker]);
+
   return {
     state,
     updateState,
     redirectWithMessage,
+    refreshStatus,
   };
 };
+
