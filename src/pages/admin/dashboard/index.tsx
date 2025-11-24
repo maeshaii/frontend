@@ -393,7 +393,7 @@ const Dashboard = () => {
             {/* Banner (left only) */}
             <div style={bannerStyle}>
               <div style={bannerLeftStyle}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: '#0b2a55' }}>DASHBOARD</div>
+                <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#2c5282' }}>Dashboard</div>
                 <div style={{ fontSize: 12, color: '#2b6cb0' }}>Welcome, Admin</div>
               </div>
               <div style={todoTitleStyle}>To Do's</div>

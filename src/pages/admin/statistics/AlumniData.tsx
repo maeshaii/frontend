@@ -205,6 +205,65 @@ const AlumniData: React.FC = () => {
     return salary;
   };
 
+  // Format employment duration: "1_2_years" -> "1-2 years"
+  const formatEmploymentDuration = (duration: string | undefined | null): string => {
+    if (!duration || typeof duration !== 'string') return duration || '';
+    
+    // Handle common patterns
+    // Pattern: "1_2_years" -> "1-2 years"
+    // Pattern: "1_year" -> "1 year"
+    // Pattern: "6_months" -> "6 months"
+    
+    let formatted = duration.trim();
+    
+    // Replace underscores with hyphens first
+    formatted = formatted.replace(/_/g, '-');
+    
+    // Format time units: ensure proper spacing
+    formatted = formatted.replace(/-years$/i, ' years');
+    formatted = formatted.replace(/-year$/i, ' year');
+    formatted = formatted.replace(/-months$/i, ' months');
+    formatted = formatted.replace(/-month$/i, ' month');
+    formatted = formatted.replace(/-days$/i, ' days');
+    formatted = formatted.replace(/-day$/i, ' day');
+    
+    return formatted;
+  };
+
+  // Format supporting document: handle JSON objects or URLs
+  const formatSupportingDocument = (doc: any): string => {
+    if (!doc || doc === '' || doc === null || doc === undefined) return '';
+    
+    // If it's a string, check if it's a URL or JSON string
+    if (typeof doc === 'string') {
+      // Try to parse as JSON
+      try {
+        const parsed = JSON.parse(doc);
+        if (parsed && typeof parsed === 'object') {
+          // If it's an object (like {"type":"file"}), show "Document Available"
+          return 'Document Available';
+        }
+      } catch {
+        // If it's not JSON, check if it's a URL
+        if (doc.startsWith('http') || doc.startsWith('/')) {
+          return 'Document Available';
+        }
+        // If it's a regular string that's not empty, return it
+        return doc.trim() !== '' ? doc : '';
+      }
+    }
+    
+    // If it's already an object (not a string)
+    if (typeof doc === 'object') {
+      // Any object format means there's a document
+      return 'Document Available';
+    }
+    
+    // Fallback: convert to string
+    const stringValue = String(doc).trim();
+    return stringValue !== '' ? stringValue : '';
+  };
+
   const openModal = async (alumni: any) => {
     // Fetch the latest alumni data from the backend
     let latestAlumni = alumni;
@@ -424,7 +483,6 @@ const AlumniData: React.FC = () => {
                           </td>
                           <td style={styles.tableCell}>
                             <div style={styles.nameContainer}>
-                              <FaUser style={styles.nameIcon} />
                               <span style={styles.nameText}>
                                 {alumni.l_name ||
                                   alumni.Last_Name ||
@@ -472,15 +530,12 @@ const AlumniData: React.FC = () => {
                                 alumni.company_name_current ||
                                 trackerAnswersMap[alumni.id]?.position_current ||
                                 trackerAnswersMap[alumni.user_id]?.position_current ? (
-                                <>
-                                  <FaBuilding style={styles.positionIcon} />
-                                  <span>
-                                    {alumni.position_current ||
-                                      alumni.company_name_current ||
-                                      trackerAnswersMap[alumni.id]?.position_current ||
-                                      trackerAnswersMap[alumni.user_id]?.position_current}
-                                  </span>
-                                </>
+                                <span>
+                                  {alumni.position_current ||
+                                    alumni.company_name_current ||
+                                    trackerAnswersMap[alumni.id]?.position_current ||
+                                    trackerAnswersMap[alumni.user_id]?.position_current}
+                                </span>
                               ) : (
                                 <span style={styles.noData}>Not specified</span>
                               )}
@@ -606,9 +661,9 @@ const AlumniData: React.FC = () => {
                     'Company': modalAlumni.company_name_current || modalAlumni['Company name current'] || modalAlumni.company || getTrackerAnswerByLabel('company') || getTrackerAnswerByLabel('employer') || getTrackerAnswerByLabel('current company'),
                     'Position': modalAlumni.position_current || modalAlumni['Position current'] || getTrackerAnswerByLabel('current position'),
                     'Sector': modalAlumni.sector_current || modalAlumni['Sector current'] || getTrackerAnswerByLabel('sector'),
-                    'Employment Duration': modalAlumni.employment_duration_current || modalAlumni['Employment duration current'] || modalAlumni.employment_duration || getTrackerAnswerByLabel('employment duration') || getTrackerAnswerByLabel('how long') || getTrackerAnswerByLabel('duration'),
+                    'Employment Duration': formatEmploymentDuration(modalAlumni.employment_duration_current || modalAlumni['Employment duration current'] || modalAlumni.employment_duration || getTrackerAnswerByLabel('employment duration') || getTrackerAnswerByLabel('how long') || getTrackerAnswerByLabel('duration')),
                     'Salary': formatSalaryRange(modalAlumni.salary_current || modalAlumni['Salary current'] || modalAlumni.salary || getTrackerAnswerByLabel('salary')),
-                    'Supporting Document': modalAlumni.supporting_document_current || modalAlumni['Supporting document current'] || getTrackerAnswerByLabel('supporting document'),
+                    'Supporting Document': formatSupportingDocument(modalAlumni.supporting_document_current || modalAlumni['Supporting document current'] || getTrackerAnswerByLabel('supporting document')),
                     'Awards': modalAlumni.awards_recognition_current || modalAlumni['Awards recognition current'] || getTrackerAnswerByLabel('awards'),
                     'Unemployment Reason': modalAlumni.unemployment_reason || modalAlumni['Unemployment reason'] || getTrackerAnswerByLabel('unemployment'),
                     'Pursuing Further Study': modalAlumni.pursue_further_study || modalAlumni['Pursue further study'] || getTrackerAnswerByLabel('pursue'),

@@ -1497,57 +1497,78 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                   }
                                     }}
                                     >
-                                  {/* Reply Button */}
+                                  {/* Reply Button - Messenger Style */}
                                       <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setReplyingToMessageId(message.id);
                                       inputRef.current?.focus();
                                         }}
+                                        className="message-action-btn"
                                         style={{
-                                      width: '28px',
-                                      height: '28px',
-                                      border: '1px solid #e0e0e0',
+                                      width: '32px',
+                                      height: '32px',
+                                      border: 'none',
                                       borderRadius: '50%',
-                                      background: 'white',
+                                      background: 'rgba(0, 0, 0, 0.05)',
                                           cursor: 'pointer',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
-                                      fontSize: '14px',
                                       padding: 0,
-                                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                      lineHeight: '1'
+                                      transition: 'all 0.2s ease',
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)';
+                                      e.currentTarget.style.transform = 'scale(1.1)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
+                                      e.currentTarget.style.transform = 'scale(1)';
                                     }}
                                     title="Reply"
                                   >
-                                    ↩️
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <path d="M10 9V5L3 12L10 19V14.9C15 14.9 18.5 16.5 21 20C20 15 17 10 10 9Z" fill="currentColor" fillOpacity="0.7"/>
+                                    </svg>
                                       </button>
                                   
-                                  {/* Emoji Reaction Button */}
+                                  {/* Emoji Reaction Button - Messenger Style */}
                                       <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
                                     }}
+                                        className="message-action-btn"
                                         style={{
-                                      width: '28px',
-                                      height: '28px',
-                                      border: '1px solid #e0e0e0',
+                                      width: '32px',
+                                      height: '32px',
+                                      border: 'none',
                                       borderRadius: '50%',
-                                      background: 'white',
+                                      background: 'rgba(0, 0, 0, 0.05)',
                                           cursor: 'pointer',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
-                                      fontSize: '14px',
                                       padding: 0,
-                                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                      lineHeight: '1'
+                                      transition: 'all 0.2s ease',
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)';
+                                      e.currentTarget.style.transform = 'scale(1.1)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
+                                      e.currentTarget.style.transform = 'scale(1)';
                                     }}
                                     title="Add reaction"
                                   >
-                                    😊
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+                                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="none" style={{ opacity: 0.7 }}/>
+                                      <circle cx="9" cy="10" r="1.5" fill="currentColor" style={{ opacity: 0.7 }}/>
+                                      <circle cx="15" cy="10" r="1.5" fill="currentColor" style={{ opacity: 0.7 }}/>
+                                      <path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" style={{ opacity: 0.7 }}/>
+                                    </svg>
                                       </button>
                                 </div>
                                     </div>
@@ -1663,7 +1684,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                 }
                               }}
                               >
-                                {/* Three-dot Menu (for own messages) */}
+                                {/* Three-dot Menu (for own messages) - Messenger Style */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1674,77 +1695,109 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                       y: rect.top
                                     });
                                   }}
+                                  className="message-action-btn"
                                   style={{
-                                    width: '28px',
-                                    height: '28px',
-                                    border: '1px solid #e0e0e0',
+                                    width: '32px',
+                                    height: '32px',
+                                    border: 'none',
                                     borderRadius: '50%',
-                                    background: 'white',
+                                    background: 'rgba(0, 0, 0, 0.05)',
                                     cursor: 'pointer',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    fontSize: '14px',
                                     padding: 0,
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                    lineHeight: '1'
+                                    transition: 'all 0.2s ease',
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)';
+                                    e.currentTarget.style.transform = 'scale(1.1)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
+                                    e.currentTarget.style.transform = 'scale(1)';
                                   }}
                                   title="More options"
                                 >
-                                  ⋯
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="12" cy="6" r="1.5" fill="currentColor" fillOpacity="0.7"/>
+                                    <circle cx="12" cy="12" r="1.5" fill="currentColor" fillOpacity="0.7"/>
+                                    <circle cx="12" cy="18" r="1.5" fill="currentColor" fillOpacity="0.7"/>
+                                  </svg>
                                 </button>
                                 
-                                {/* Reply Button */}
+                                {/* Reply Button - Messenger Style */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setReplyingToMessageId(message.id);
                                     inputRef.current?.focus();
                                   }}
+                                  className="message-action-btn"
                                   style={{
-                                    width: '28px',
-                                    height: '28px',
-                                    border: '1px solid #e0e0e0',
+                                    width: '32px',
+                                    height: '32px',
+                                    border: 'none',
                                     borderRadius: '50%',
-                                    background: 'white',
+                                    background: 'rgba(0, 0, 0, 0.05)',
                                     cursor: 'pointer',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    fontSize: '14px',
                                     padding: 0,
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                    lineHeight: '1'
+                                    transition: 'all 0.2s ease',
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)';
+                                    e.currentTarget.style.transform = 'scale(1.1)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
+                                    e.currentTarget.style.transform = 'scale(1)';
                                   }}
                                   title="Reply"
                                 >
-                                  ↩️
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M10 9V5L3 12L10 19V14.9C15 14.9 18.5 16.5 21 20C20 15 17 10 10 9Z" fill="currentColor" fillOpacity="0.7"/>
+                                  </svg>
                                 </button>
                                 
-                                {/* Emoji Reaction Button */}
+                                {/* Emoji Reaction Button - Messenger Style */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
                                   }}
+                                  className="message-action-btn"
                                   style={{
-                                    width: '28px',
-                                    height: '28px',
-                                    border: '1px solid #e0e0e0',
+                                    width: '32px',
+                                    height: '32px',
+                                    border: 'none',
                                     borderRadius: '50%',
-                                    background: 'white',
+                                    background: 'rgba(0, 0, 0, 0.05)',
                                     cursor: 'pointer',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    fontSize: '14px',
                                     padding: 0,
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                    lineHeight: '1'
+                                    transition: 'all 0.2s ease',
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)';
+                                    e.currentTarget.style.transform = 'scale(1.1)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
+                                    e.currentTarget.style.transform = 'scale(1)';
                                   }}
                                   title="Add reaction"
                                 >
-                                  😊
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="none" opacity="0.7"/>
+                                    <circle cx="9" cy="10" r="1.5" fill="currentColor" opacity="0.7"/>
+                                    <circle cx="15" cy="10" r="1.5" fill="currentColor" opacity="0.7"/>
+                                    <path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.7"/>
+                                  </svg>
                                 </button>
                               </div>
                             </div>
