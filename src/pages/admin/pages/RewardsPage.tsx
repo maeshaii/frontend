@@ -5,6 +5,7 @@ import { getEngagementLeaderboard, getInventoryItems, giveReward, getRewardReque
 import { trackerApi } from '../../../services/trackerApi';
 import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineUser, HiOutlineTag } from 'react-icons/hi2';
 import { useRealTimeNotifications } from '../../../hooks/useRealTimeNotifications';
+import { toast } from '../../../utils/toast';
 import ctulogo from '../../../images/ctulogo.png';
 
 interface LeaderboardEntry {
@@ -119,6 +120,8 @@ const RewardsPage: React.FC = () => {
   const [voucherCode, setVoucherCode] = useState('');
   const [approving, setApproving] = useState(false);
   const [releasing, setReleasing] = useState(false);
+  const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
+  const [requestToRelease, setRequestToRelease] = useState<RewardRequest | null>(null);
   const [rewardHistory, setRewardHistory] = useState<RewardHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [inventoryCount, setInventoryCount] = useState(0);
@@ -294,7 +297,7 @@ const RewardsPage: React.FC = () => {
       
       const milestoneResponse = await updateMilestoneTasksPoints(tasksToUpdate, milestoneTasksEnabled);
       if (!milestoneResponse.success) {
-        alert(`❌ Failed to update milestone tasks: ${milestoneResponse.message || 'Unknown error'}`);
+        toast.error(`Failed to update milestone tasks: ${milestoneResponse.message || 'Unknown error'}`);
         return;
       }
 
@@ -315,7 +318,7 @@ const RewardsPage: React.FC = () => {
         
         if (!trackerFormResponse.success) {
           const errorMessage = trackerFormResponse.message || 'Unknown error';
-          alert(`❌ Failed to update tracker form settings: ${errorMessage}`);
+          toast.error(`Failed to update tracker form settings: ${errorMessage}`);
           // If the error is about accepting responses, refresh the accepting status
           if (errorMessage.includes('accepting responses')) {
             try {
@@ -331,16 +334,16 @@ const RewardsPage: React.FC = () => {
           return;
         }
       } else {
-        alert(`❌ Failed to fetch current settings`);
+        toast.error('Failed to fetch current settings');
         return;
       }
 
-      alert('✅ Settings updated successfully!');
+      toast.success('Settings updated successfully!');
       setShowPointsSettingsModal(false);
     } catch (error: any) {
       console.error('Error updating settings:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to update settings';
-      alert(`❌ Error: ${errorMessage}`);
+      toast.error(`Error: ${errorMessage}`);
       // If the error is about accepting responses, refresh the accepting status
       if (errorMessage.includes('accepting responses')) {
         try {
@@ -493,14 +496,13 @@ const RewardsPage: React.FC = () => {
     }
   };
 
-  const handleReleaseMerchandise = async (requestId: number) => {
+  const handleReleaseMerchandise = async (request: RewardRequest) => {
     if (releasing) return;
     
-    const request = rewardRequests.find(req => req.request_id === requestId);
     if (!request) return;
-
-    const confirm = window.confirm(`Release "${request.reward_name}" to ${request.user_name}?\n\nPoints will be deducted and inventory will be updated.`);
-    if (!confirm) return;
+    const requestId = request.request_id;
+    setShowReleaseConfirm(false);
+    setRequestToRelease(null);
 
     try {
       setReleasing(true);
@@ -538,6 +540,22 @@ const RewardsPage: React.FC = () => {
     } finally {
       setReleasing(false);
     }
+  };
+
+  const openReleaseConfirmation = (request: RewardRequest) => {
+    setRequestToRelease(request);
+    setShowReleaseConfirm(true);
+  };
+
+  const closeReleaseConfirmation = () => {
+    if (releasing) return;
+    setShowReleaseConfirm(false);
+    setRequestToRelease(null);
+  };
+
+  const confirmRelease = () => {
+    if (!requestToRelease) return;
+    handleReleaseMerchandise(requestToRelease);
   };
 
   const fetchLeaderboardData = async () => {
@@ -934,9 +952,6 @@ const RewardsPage: React.FC = () => {
               }}
             >
               <div style={styles.inventoryTitle}>MILESTONE TASKS</div>
-              <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'white' }}>
-                ⚙️
-              </div>
               <div style={styles.inventorySubtitle}>
                 Configure Points
               </div>
@@ -1830,7 +1845,7 @@ const RewardsPage: React.FC = () => {
                                 )}
                                 {req.status === 'ready_for_pickup' && (
                                   <button
-                                    onClick={() => handleReleaseMerchandise(req.request_id)}
+                                    onClick={() => openReleaseConfirmation(req)}
                                     disabled={releasing}
                                     style={{
                                       padding: '6px 12px',
@@ -2532,7 +2547,7 @@ const RewardsPage: React.FC = () => {
                               if (isMerchandise && isReadyForPickup && !isClaimed) {
                                 return (
                                   <button
-                                    onClick={() => handleReleaseMerchandise(req.request_id)}
+                                    onClick={() => openReleaseConfirmation(req)}
                                     disabled={releasing}
                                     style={{
                                       padding: '12px 24px',
@@ -2608,6 +2623,123 @@ const RewardsPage: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Release Confirmation Modal */}
+        {showReleaseConfirm && requestToRelease && (
+          <>
+            <style>
+              {`
+                @keyframes releaseModalSlideIn {
+                  from {
+                    opacity: 0;
+                    transform: translateY(-20px) scale(0.98);
+                  }
+                  to {
+                    opacity: 1;
+                    transform: translateY(0) scale(1);
+                  }
+                }
+              `}
+            </style>
+            <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1002,
+              padding: '20px',
+              backdropFilter: 'blur(3px)'
+            }}
+            onClick={closeReleaseConfirmation}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '18px',
+                padding: '32px',
+                width: '480px',
+                maxWidth: '95%',
+                boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+                borderTop: '4px solid #1e3a5f',
+                animation: 'releaseModalSlideIn 0.25s ease-out'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 style={{ margin: 0, fontSize: '22px', color: '#0f172a', fontWeight: 700 }}>
+                Release Reward?
+              </h2>
+              <p style={{ margin: '16px 0 0 0', color: '#475569', fontSize: '15px', lineHeight: 1.6 }}>
+                Release <strong>"{requestToRelease.reward_name}"</strong> to{' '}
+                <strong>{requestToRelease.user_name}</strong>? Points will be deducted from the user and the
+                inventory count will be updated automatically.
+              </p>
+              <div
+                style={{
+                  marginTop: '20px',
+                  padding: '16px',
+                  borderRadius: '12px',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0'
+                }}
+              >
+                <div style={{ fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                  Reward Details
+                </div>
+                <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a', marginTop: '6px' }}>
+                  {requestToRelease.reward_name}
+                </div>
+                <div style={{ fontSize: '13px', color: '#475569' }}>{requestToRelease.reward_type}</div>
+                <div style={{ marginTop: '8px', fontSize: '13px', color: '#dc2626', fontWeight: 600 }}>
+                  Cost: {requestToRelease.points_cost} pts
+                </div>
+              </div>
+
+              <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button
+                  onClick={closeReleaseConfirmation}
+                  disabled={releasing}
+                  style={{
+                    padding: '12px 20px',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5f5',
+                    background: 'white',
+                    color: '#1d4ed8',
+                    fontWeight: 600,
+                    cursor: releasing ? 'not-allowed' : 'pointer',
+                    opacity: releasing ? 0.6 : 1,
+                    minWidth: '120px'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmRelease}
+                  disabled={releasing}
+                  style={{
+                    padding: '12px 24px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: releasing ? '#9ca3af' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                    color: 'white',
+                    fontWeight: 700,
+                    cursor: releasing ? 'not-allowed' : 'pointer',
+                    minWidth: '150px',
+                    boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.3)'
+                  }}
+                >
+                  {releasing ? 'Releasing...' : 'Confirm Release'}
+                </button>
+              </div>
+              </div>
+            </div>
+          </>
         )}
 
         {/* Approve Request Modal */}

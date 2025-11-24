@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { toast } from '../utils/toast';
 
 function ensureApiSuffix(url: string | undefined): string {
   const base = (url || 'http://127.0.0.1:8000').replace(/\/$/, '');
@@ -53,11 +54,74 @@ let refreshing: Promise<any> | null = null;
 api.interceptors.response.use(
   (response) => {
     if (process.env.NODE_ENV === 'development') {
-      console.log(`API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
-        status: response.status,
-        data: response.data
-      });
+      // Only log full response data for specific endpoints to avoid spam
+      const shouldLogFullData = response.config.url?.includes('posts/') || 
+                                response.config.url?.includes('like') || 
+                                response.config.url?.includes('comment') ||
+                                response.config.url?.includes('follow');
+      
+      if (shouldLogFullData) {
+        console.log(`API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
+          status: response.status,
+          data: response.data
+        });
+      }
     }
+    
+    // Check for task completions in the response
+    const responseData = response.data;
+    
+    // Debug logging - always log to help debug
+    if (responseData) {
+      const hasMilestones = responseData.milestones_unlocked !== undefined;
+      if (hasMilestones) {
+        console.log('🔔 [TOAST DEBUG] Milestones field found in response:', {
+          url: response.config.url,
+          method: response.config.method,
+          hasMilestones: hasMilestones,
+          milestones_unlocked: responseData.milestones_unlocked,
+          type: typeof responseData.milestones_unlocked,
+          isArray: Array.isArray(responseData.milestones_unlocked),
+          length: Array.isArray(responseData.milestones_unlocked) ? responseData.milestones_unlocked.length : 'N/A'
+        });
+      }
+    }
+    
+    // Check for milestones_unlocked in response
+    if (responseData && responseData.milestones_unlocked) {
+      const milestones = responseData.milestones_unlocked;
+      
+      // Handle both array and single object cases
+      const milestonesArray = Array.isArray(milestones) ? milestones : [milestones];
+      
+      if (milestonesArray.length > 0) {
+        console.log('🎉 [TOAST DEBUG] Processing milestones:', milestonesArray);
+        
+        // Show toast notification for each completed task
+        milestonesArray.forEach((milestone: any) => {
+          try {
+            const taskTitle = milestone.title || milestone.task_type || 'Task';
+            const points = milestone.points || 0;
+            
+            console.log('🎉 [TOAST DEBUG] Showing toast for milestone:', { taskTitle, points, milestone });
+            console.log('🎉 [TOAST DEBUG] Calling toast.success with message:', `🎉 Task Completed: ${taskTitle}! You earned ${points} points.`);
+            
+            const toastId = toast.success(
+              `🎉 Task Completed: ${taskTitle}! You earned ${points} points.`,
+              6000
+            );
+            
+            console.log('🎉 [TOAST DEBUG] Toast ID returned:', toastId);
+            console.log('🎉 [TOAST DEBUG] Current toasts in manager:', toast.getToasts());
+          } catch (error) {
+            console.error('❌ [TOAST DEBUG] Error showing toast:', error);
+          }
+        });
+      } else {
+        console.log('⚠️ [TOAST DEBUG] milestones_unlocked is empty array');
+      }
+    }
+    
     return response;
   },
   async (error) => {
@@ -68,18 +132,27 @@ api.interceptors.response.use(
         refreshing = (async () => {
           try {
             const refreshToken = localStorage.getItem('refreshToken');
-            if (!refreshToken) throw new Error('No refresh token available');
+            if (!refreshToken) {
+              console.warn('No refresh token available, redirecting to login');
+              throw new Error('No refresh token available');
+            }
+            console.log('Attempting to refresh token...');
             const response = await axios.post(`${API_BASE}token/refresh/`, { refresh: refreshToken });
             const newAccess = response.data?.access;
-            if (!newAccess) throw new Error('No access token in refresh response');
+            if (!newAccess) {
+              console.error('No access token in refresh response');
+              throw new Error('No access token in refresh response');
+            }
+            console.log('Token refreshed successfully');
             localStorage.setItem('accessToken', newAccess);
             return newAccess;
-          } catch (refreshError) {
-            console.error('Token refresh failed:', refreshError);
+          } catch (refreshError: any) {
+            console.error('Token refresh failed:', refreshError?.response?.status || refreshError?.message);
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
             localStorage.removeItem('user');
             if (window.location.pathname !== '/login') {
+              console.log('Redirecting to login page...');
               window.location.href = '/login';
             }
             throw refreshError;
@@ -89,12 +162,18 @@ api.interceptors.response.use(
         })();
       }
       
-      // Wait for token refresh, then retry the original request
-      const newAccessToken = await refreshing;
-      (originalRequest.headers as any) = (originalRequest.headers as any) || {};
-      (originalRequest.headers as any).Authorization = `Bearer ${newAccessToken}`;
-      // Silently retry - don't log the 401 error since it's being handled
-      return api(originalRequest);
+      try {
+        // Wait for token refresh, then retry the original request
+        const newAccessToken = await refreshing;
+        (originalRequest.headers as any) = (originalRequest.headers as any) || {};
+        (originalRequest.headers as any).Authorization = `Bearer ${newAccessToken}`;
+        console.log('Retrying request with new token...');
+        // Silently retry - don't log the 401 error since it's being handled
+        return api(originalRequest);
+      } catch (refreshError) {
+        // If refresh failed, reject the original error
+        return Promise.reject(error);
+      }
     }
     // Only log other errors in development
     if (process.env.NODE_ENV === 'development' && error.response?.status !== 401) {
@@ -1333,6 +1412,16 @@ export const giveReward = async (userId: number, rewardId: number, isTrackerRewa
     reward_id: rewardId,
     is_tracker_reward: isTrackerReward
   });
+  return response.data;
+};
+
+export const updateUserStatus = async (userId: number, status: 'active' | 'inactive') => {
+  const response = await api.post(`admin/users/${userId}/status/`, { status });
+  return response.data;
+};
+
+export const verifyAdminPassword = async (password: string) => {
+  const response = await api.post('admin/verify-password/', { password });
   return response.data;
 };
 

@@ -71,6 +71,22 @@ const InventoryPage: React.FC = () => {
   const [analytics, setAnalytics] = useState<InventoryAnalyticsResponse | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Show notification helper
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  // Update current time every second for real-time display
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch inventory items on component mount
   useEffect(() => {
@@ -101,41 +117,81 @@ const InventoryPage: React.FC = () => {
       setAnalyticsLoading(true);
       setAnalyticsError(null);
       const response = await getInventoryAnalytics();
-      if (response.success) {
-        setAnalytics(response);
+      console.log('Analytics response:', response);
+      console.log('Response keys:', Object.keys(response || {}));
+      console.log('Has success:', 'success' in (response || {}));
+      console.log('Has summary:', 'summary' in (response || {}));
+      
+      if (response && response.success) {
+        // Ensure response has the expected structure
+        if (response.summary) {
+          // Ensure all required fields exist with defaults
+          const analyticsData = {
+            success: true,
+            generated_at: response.generated_at || new Date().toISOString(),
+            lookback_days: response.lookback_days || 30,
+            summary: {
+              total_items: response.summary?.total_items ?? 0,
+              total_stock: response.summary?.total_stock ?? 0,
+              total_claims_30d: response.summary?.total_claims_30d ?? 0,
+              avg_daily_redemption: response.summary?.avg_daily_redemption ?? 0,
+            },
+            items: response.items || [],
+            top_movers: response.top_movers || [],
+            slow_movers: response.slow_movers || [],
+          };
+          setAnalytics(analyticsData);
+        } else {
+          console.error('Analytics response missing summary:', response);
+          setAnalytics(null);
+          setAnalyticsError('Invalid analytics data structure - missing summary');
+        }
       } else {
         setAnalytics(null);
-        setAnalyticsError(response.message || 'Failed to load analytics');
+        setAnalyticsError(response?.message || 'Failed to load analytics');
       }
     } catch (err: any) {
       console.error('Error fetching inventory analytics:', err);
+      console.error('Error details:', err.response?.data);
       setAnalytics(null);
-      setAnalyticsError(err.response?.data?.message || 'Failed to load analytics');
+      setAnalyticsError(err.response?.data?.message || err.message || 'Failed to load analytics');
     } finally {
       setAnalyticsLoading(false);
     }
   };
 
   const handleAddInventoryItem = async () => {
+    // Validate all required fields
+    if (!newItemName || !newItemName.trim()) {
+      showNotification('error', 'Item name is required');
+      return;
+    }
+    
+    if (!newItemType || !newItemType.trim()) {
+      showNotification('error', 'Item type is required');
+      return;
+    }
+    
     // Validate quantity
     const quantity = parseInt(newItemQuantity);
     if (isNaN(quantity) || quantity < 1) {
-      alert('Quantity must be at least 1');
+      showNotification('error', 'Quantity must be at least 1');
       return;
     }
     
     // Validate value
     if (!newItemValue || newItemValue.trim() === '' || newItemValue.trim() === '0') {
-      alert('Please enter a valid value (e.g., $25, 100 pts)');
+      showNotification('error', 'Please enter a valid value (e.g., $25, 100 pts)');
       return;
     }
     
     try {
+      console.log('Adding inventory item:', { name: newItemName.trim(), type: newItemType.trim(), quantity, value: newItemValue.trim() });
       const response = await addInventoryItem({
-        name: newItemName,
-        type: newItemType,
+        name: newItemName.trim(),
+        type: newItemType.trim(),
         quantity: quantity,
-        value: newItemValue
+        value: newItemValue.trim()
       });
       
       if (response.success) {
@@ -149,14 +205,24 @@ const InventoryPage: React.FC = () => {
         setNewItemValue('');
         setShowAddModal(false);
         
-        alert('Item added successfully!');
+        // Refresh inventory list to ensure consistency
+        await fetchInventoryItems();
+        
+        showNotification('success', 'Item added successfully!');
         console.log('New item added:', response.item);
       } else {
-        alert(response.message || 'Failed to add item');
+        console.error('Failed to add item:', response);
+        showNotification('error', response.message || 'Failed to add item');
       }
     } catch (err: any) {
       console.error('Error adding item:', err);
-      alert(err.response?.data?.message || 'Failed to add item');
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to add item';
+      showNotification('error', errorMessage);
     }
   };
 
@@ -167,13 +233,13 @@ const InventoryPage: React.FC = () => {
         
         if (response.success) {
           setInventoryItems(inventoryItems.filter(item => item.id !== id));
-          alert('Item deleted successfully!');
+          showNotification('success', 'Item deleted successfully!');
         } else {
-          alert(response.message || 'Failed to delete item');
+          showNotification('error', response.message || 'Failed to delete item');
         }
       } catch (err: any) {
         console.error('Error deleting item:', err);
-        alert(err.response?.data?.message || 'Failed to delete item');
+        showNotification('error', err.response?.data?.message || 'Failed to delete item');
       }
     }
   };
@@ -193,13 +259,13 @@ const InventoryPage: React.FC = () => {
     // Validate quantity
     const quantity = parseInt(newItemQuantity);
     if (isNaN(quantity) || quantity < 1) {
-      alert('Quantity must be at least 1');
+      showNotification('error', 'Quantity must be at least 1');
       return;
     }
     
     // Validate value
     if (!newItemValue || newItemValue.trim() === '' || newItemValue.trim() === '0') {
-      alert('Please enter a valid value (e.g., $25, 100 pts)');
+      showNotification('error', 'Please enter a valid value (e.g., $25, 100 pts)');
       return;
     }
 
@@ -225,14 +291,14 @@ const InventoryPage: React.FC = () => {
         setEditingItem(null);
         setShowEditModal(false);
         
-        alert('Item updated successfully!');
+        showNotification('success', 'Item updated successfully!');
         console.log('Item updated:', response.item);
       } else {
-        alert(response.message || 'Failed to update item');
+        showNotification('error', response.message || 'Failed to update item');
       }
     } catch (err: any) {
       console.error('Error updating item:', err);
-      alert(err.response?.data?.message || 'Failed to update item');
+      showNotification('error', err.response?.data?.message || 'Failed to update item');
     }
   };
 
@@ -333,12 +399,15 @@ const InventoryPage: React.FC = () => {
       color: '#374151'
     },
     formInput: {
-      padding: '12px 14px',
-      border: '1px solid #d1d5db',
-      borderRadius: '8px',
+      padding: '12px 16px',
+      border: '2px solid #e2e8f0',
+      borderRadius: '10px',
       fontSize: '14px',
       outline: 'none',
-      transition: 'border-color 0.2s'
+      transition: 'all 0.2s ease',
+      backgroundColor: 'white',
+      fontWeight: '500',
+      color: '#1e293b'
     },
     tableSection: {
       backgroundColor: 'white',
@@ -427,11 +496,12 @@ const InventoryPage: React.FC = () => {
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      backgroundColor: 'rgba(0, 0, 0, 0.6)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 1000
+      zIndex: 1000,
+      backdropFilter: 'blur(4px)'
     },
     modalContent: {
       backgroundColor: 'white',
@@ -441,23 +511,27 @@ const InventoryPage: React.FC = () => {
       maxHeight: '90vh',
       overflow: 'hidden',
       display: 'flex',
-      flexDirection: 'column' as const
+      flexDirection: 'column' as const,
+      boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+      border: '1px solid #e5e7eb'
     },
     modalHeader: {
       padding: '24px 32px',
-      borderBottom: '1px solid #e5e7eb',
+      borderBottom: '2px solid #f3f4f6',
       display: 'flex',
       justifyContent: 'space-between',
-      alignItems: 'center'
+      alignItems: 'center',
+      backgroundColor: '#f9fafb'
     },
     modalTitle: {
-      fontSize: '24px',
-      fontWeight: 'bold',
-      color: '#1f2937',
+      fontSize: '22px',
+      fontWeight: '700',
+      color: '#1e3a5f',
       margin: 0,
       display: 'flex',
       alignItems: 'center',
-      gap: '12px'
+      gap: '12px',
+      letterSpacing: '-0.3px'
     },
     closeButton: {
       background: 'none',
@@ -471,36 +545,42 @@ const InventoryPage: React.FC = () => {
     },
     modalBody: {
       padding: '32px',
-      overflowY: 'auto' as const
+      overflowY: 'auto' as const,
+      backgroundColor: 'white'
     },
     modalFooter: {
-      padding: '20px 32px',
-      borderTop: '1px solid #e5e7eb',
+      padding: '24px 32px',
+      borderTop: '2px solid #f3f4f6',
       display: 'flex',
       justifyContent: 'flex-end',
-      gap: '12px'
+      gap: '12px',
+      backgroundColor: '#f9fafb'
     },
     cancelButton: {
       backgroundColor: '#6b7280',
       color: 'white',
       border: 'none',
-      padding: '12px 24px',
-      borderRadius: '8px',
+      padding: '12px 28px',
+      borderRadius: '10px',
       fontSize: '14px',
       fontWeight: '600',
       cursor: 'pointer',
-      transition: 'background-color 0.2s'
+      transition: 'all 0.2s ease',
+      boxShadow: '0 2px 4px rgba(107, 114, 128, 0.2)',
+      letterSpacing: '0.3px'
     },
     submitButton: {
       backgroundColor: '#10b981',
       color: 'white',
       border: 'none',
-      padding: '12px 24px',
-      borderRadius: '8px',
+      padding: '12px 28px',
+      borderRadius: '10px',
       fontSize: '14px',
       fontWeight: '600',
       cursor: 'pointer',
-      transition: 'background-color 0.2s'
+      transition: 'all 0.2s ease',
+      boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)',
+      letterSpacing: '0.3px'
     },
     analyticsSection: {
       backgroundColor: 'white',
@@ -624,6 +704,24 @@ const InventoryPage: React.FC = () => {
     return availability.status === 'low_stock' || availability.status === 'out_of_stock';
   }).length;
 
+  // Helper function to check if form is valid
+  const isFormValid = () => {
+    const nameValid = newItemName?.trim() && newItemName.trim().length > 0;
+    const typeValid = newItemType && newItemType.length > 0 && newItemType !== '';
+    
+    // Quantity validation - allow 1 or more
+    let quantityValid = false;
+    if (newItemQuantity) {
+      const qty = parseInt(newItemQuantity.toString().trim());
+      quantityValid = !isNaN(qty) && qty >= 1;
+    }
+    
+    const valueValid = newItemValue?.trim() && newItemValue.trim().length > 0 && newItemValue.trim() !== '0';
+    
+    const isValid = nameValid && typeValid && quantityValid && valueValid;
+    return isValid;
+  };
+
   return (
     <div style={styles.container}>
       <Sidebar />
@@ -633,35 +731,20 @@ const InventoryPage: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <h1 style={styles.headerTitle}>INVENTORY MANAGEMENT</h1>
-              <p style={styles.headerSubtitle}>Manage reward items and stock levels</p>
             </div>
             <button
               onClick={() => navigate('/rewards')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                background: 'white',
-                border: '2px solid #1e3a5f',
-                color: '#1e3a5f',
-                fontSize: '15px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                padding: '12px 24px',
-                borderRadius: '10px',
-                transition: 'all 0.2s'
-              }}
+              style={styles.addButton}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#1e3a5f';
-                e.currentTarget.style.color = 'white';
+                (e.target as HTMLButtonElement).style.backgroundColor = '#2c5282';
+                (e.target as HTMLButtonElement).style.transform = 'translateY(-2px)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'white';
-                e.currentTarget.style.color = '#1e3a5f';
+                (e.target as HTMLButtonElement).style.backgroundColor = '#1e3a5f';
+                (e.target as HTMLButtonElement).style.transform = 'translateY(0)';
               }}
             >
-              <span style={{ fontSize: '18px' }}>←</span>
-              <span>Back to Rewards</span>
+              Back to Rewards
             </button>
           </div>
         </div>
@@ -681,28 +764,40 @@ const InventoryPage: React.FC = () => {
                 {analyticsLoading
                   ? 'Loading analytics...'
                   : analytics?.generated_at
-                    ? `Updated ${new Date(analytics.generated_at).toLocaleString()}`
+                    ? currentTime.toLocaleString()
                     : analyticsError || ''}
               </div>
             </div>
-            {analytics && !analyticsLoading ? (
+            {analyticsLoading ? (
+              <div style={{ 
+                padding: '40px', 
+                textAlign: 'center', 
+                color: '#64748b',
+                fontSize: '14px'
+              }}>
+                Loading analytics...
+              </div>
+            ) : analyticsError ? (
+              <div style={{ 
+                padding: '20px', 
+                backgroundColor: '#fee2e2',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                color: '#dc2626',
+                fontSize: '14px'
+              }}>
+                {analyticsError}
+              </div>
+            ) : analytics && analytics.summary ? (
               <>
                 <div style={styles.analyticsCardGrid}>
                   <div style={styles.analyticsCard}>
-                    <div style={styles.analyticsCardLabel}>Total Redemptions (30d)</div>
-                    <div style={styles.analyticsCardValue}>{analytics.summary.total_claims_30d}</div>
-                  </div>
-                  <div style={styles.analyticsCard}>
-                    <div style={styles.analyticsCardLabel}>Avg Daily Redemption</div>
-                    <div style={styles.analyticsCardValue}>{analytics.summary.avg_daily_redemption}</div>
-                  </div>
-                  <div style={styles.analyticsCard}>
                     <div style={styles.analyticsCardLabel}>Total Items</div>
-                    <div style={styles.analyticsCardValue}>{analytics.summary.total_items}</div>
+                    <div style={styles.analyticsCardValue}>{analytics.summary.total_items ?? 0}</div>
                   </div>
                   <div style={styles.analyticsCard}>
                     <div style={styles.analyticsCardLabel}>Total Stock On-hand</div>
-                    <div style={styles.analyticsCardValue}>{analytics.summary.total_stock}</div>
+                    <div style={styles.analyticsCardValue}>{analytics.summary.total_stock ?? 0}</div>
                   </div>
                   <div style={{ ...styles.analyticsCard, backgroundColor: lowStockItems > 0 ? '#fef2f2' : '#f8fafc', borderColor: lowStockItems > 0 ? '#fecaca' : '#e2e8f0' }}>
                     <div style={styles.analyticsCardLabel}>Low Stock Alerts</div>
@@ -715,8 +810,8 @@ const InventoryPage: React.FC = () => {
                 <div style={styles.analyticsLists}>
                   <div style={styles.analyticsListCard}>
                     <div style={styles.analyticsListTitle}>Top Redeemed Items</div>
-                    {analytics.top_movers.length === 0 ? (
-                      <div style={{ fontSize: '13px', color: '#94a3b8' }}>No recent redemptions</div>
+                    {!analytics.top_movers || analytics.top_movers.length === 0 ? (
+                      <div style={{ fontSize: '13px', color: '#94a3b8', padding: '12px 0' }}>No recent redemptions</div>
                     ) : (
                       analytics.top_movers.map((item) => (
                         <div key={item.id} style={styles.analyticsListItem}>
@@ -728,8 +823,12 @@ const InventoryPage: React.FC = () => {
                   </div>
                   <div style={styles.analyticsListCard}>
                     <div style={styles.analyticsListTitle}>Slow Moving Items</div>
-                    {analytics.slow_movers.length === 0 ? (
-                      <div style={{ fontSize: '13px', color: '#94a3b8' }}>All items moved in the last 30 days</div>
+                    {!analytics.slow_movers || analytics.slow_movers.length === 0 ? (
+                      <div style={{ fontSize: '13px', color: '#94a3b8', padding: '12px 0' }}>
+                        {analytics.summary.total_items === 0 
+                          ? 'No items in inventory yet' 
+                          : 'All items moved in the last 30 days'}
+                      </div>
                     ) : (
                       analytics.slow_movers.map((item) => (
                         <div key={item.id} style={styles.analyticsListItem}>
@@ -740,67 +839,17 @@ const InventoryPage: React.FC = () => {
                     )}
                   </div>
                 </div>
-
-                <div style={styles.analyticsTableSection}>
-                  <h3 style={{ margin: '0 0 12px', fontSize: '16px', color: '#1e3a5f' }}>Demand Forecast</h3>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={styles.analyticsTable}>
-                      <thead style={styles.analyticsTableHeader}>
-                        <tr>
-                          <th style={styles.analyticsTableCell}>Item</th>
-                          <th style={styles.analyticsTableCell}>Stock</th>
-                          <th style={styles.analyticsTableCell}>Claims (30d)</th>
-                          <th style={styles.analyticsTableCell}>Avg Daily</th>
-                          <th style={styles.analyticsTableCell}>Demand</th>
-                          <th style={styles.analyticsTableCell}>Est. Run-out</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {analytics.items.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} style={styles.analyticsTableCell}>
-                              <span style={{ color: '#94a3b8' }}>No inventory data</span>
-                            </td>
-                          </tr>
-                        ) : (
-                          analytics.items.map((item) => (
-                            <tr key={item.id}>
-                              <td style={styles.analyticsTableCell}>
-                                <div style={{ fontWeight: 600, color: '#0f172a' }}>{item.name}</div>
-                                <div style={{ fontSize: '12px', color: '#94a3b8' }}>{item.type}</div>
-                              </td>
-                              <td style={styles.analyticsTableCell}>{item.quantity}</td>
-                              <td style={styles.analyticsTableCell}>{item.claims_last_30_days}</td>
-                              <td style={styles.analyticsTableCell}>{item.avg_daily_redemption}</td>
-                              <td style={styles.analyticsTableCell} >
-                                <span style={{
-                                  padding: '4px 8px',
-                                  borderRadius: '999px',
-                                  fontSize: '11px',
-                                  fontWeight: 600,
-                                  textTransform: 'capitalize',
-                                  backgroundColor: item.demand_level === 'high' ? '#fee2e2' : item.demand_level === 'medium' ? '#fef9c3' : '#e2e8f0',
-                                  color: item.demand_level === 'high' ? '#b91c1c' : item.demand_level === 'medium' ? '#92400e' : '#475569'
-                                }}>
-                                  {item.demand_level}
-                                </span>
-                              </td>
-                              <td style={styles.analyticsTableCell}>
-                                {item.projected_run_out_days
-                                  ? `${item.projected_run_out_days} days`
-                                  : '—'}
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
               </>
-            ) : analyticsError && !analyticsLoading ? (
-              <div style={{ fontSize: '13px', color: '#dc2626' }}>{analyticsError}</div>
-            ) : null}
+            ) : (
+              <div style={{ 
+                padding: '40px', 
+                textAlign: 'center', 
+                color: '#64748b',
+                fontSize: '14px'
+              }}>
+                {analyticsError || 'No analytics data available'}
+              </div>
+            )}
           </div>
 
         {/* Inventory Table */}
@@ -947,14 +996,6 @@ const InventoryPage: React.FC = () => {
                 <h2 style={styles.modalTitle}>
                   Add New Reward Item
                 </h2>
-                <button
-                  style={styles.closeButton}
-                  onClick={() => setShowAddModal(false)}
-                  onMouseEnter={(e) => (e.target as HTMLButtonElement).style.color = '#374151'}
-                  onMouseLeave={(e) => (e.target as HTMLButtonElement).style.color = '#6b7280'}
-                >
-                  ×
-                </button>
               </div>
 
               {/* Modal Body */}
@@ -1030,19 +1071,25 @@ const InventoryPage: React.FC = () => {
                   Cancel
                 </button>
                 <button
-                  style={styles.submitButton}
+                  type="button"
+                  style={{
+                    ...styles.submitButton,
+                    backgroundColor: !isFormValid() ? '#9ca3af' : '#10b981',
+                    cursor: !isFormValid() ? 'not-allowed' : 'pointer',
+                    opacity: !isFormValid() ? 0.6 : 1
+                  }}
                   onClick={handleAddInventoryItem}
-                  disabled={
-                    !newItemName || 
-                    !newItemType || 
-                    !newItemQuantity || 
-                    !newItemValue || 
-                    parseInt(newItemQuantity) < 1 ||
-                    newItemValue.trim() === '' ||
-                    newItemValue.trim() === '0'
-                  }
-                  onMouseEnter={(e) => (e.target as HTMLButtonElement).style.backgroundColor = '#059669'}
-                  onMouseLeave={(e) => (e.target as HTMLButtonElement).style.backgroundColor = '#10b981'}
+                  disabled={!isFormValid()}
+                  onMouseEnter={(e) => {
+                    if (isFormValid()) {
+                      e.currentTarget.style.backgroundColor = '#059669';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (isFormValid()) {
+                      e.currentTarget.style.backgroundColor = '#10b981';
+                    }
+                  }}
                 >
                   Add to Inventory
                 </button>
@@ -1161,6 +1208,103 @@ const InventoryPage: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Notification Modal */}
+        {notification && (
+          <div
+            style={{
+              position: 'fixed',
+              top: '20px',
+              right: '20px',
+              zIndex: 10000,
+              minWidth: '320px',
+              maxWidth: '500px',
+              backgroundColor: notification.type === 'success' ? '#10b981' : '#ef4444',
+              color: 'white',
+              padding: '16px 20px',
+              borderRadius: '12px',
+              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              animation: 'slideIn 0.3s ease-out',
+              border: `1px solid ${notification.type === 'success' ? '#059669' : '#dc2626'}`,
+            }}
+            onClick={() => setNotification(null)}
+          >
+            <div
+              style={{
+                fontSize: '24px',
+                fontWeight: 'bold',
+                flexShrink: 0,
+              }}
+            >
+              {notification.type === 'success' ? '✓' : '✕'}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div
+                style={{
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  marginBottom: '2px',
+                }}
+              >
+                {notification.type === 'success' ? 'Success' : 'Error'}
+              </div>
+              <div
+                style={{
+                  fontSize: '14px',
+                  opacity: 0.95,
+                  lineHeight: '1.4',
+                }}
+              >
+                {notification.message}
+              </div>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setNotification(null);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'white',
+                fontSize: '20px',
+                cursor: 'pointer',
+                padding: '0',
+                width: '24px',
+                height: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '4px',
+                transition: 'background-color 0.2s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              ×
+            </button>
+            <style>{`
+              @keyframes slideIn {
+                from {
+                  transform: translateX(100%);
+                  opacity: 0;
+                }
+                to {
+                  transform: translateX(0);
+                  opacity: 1;
+                }
+              }
+            `}</style>
           </div>
         )}
         </div>

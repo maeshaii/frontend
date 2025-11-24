@@ -249,6 +249,10 @@ const TrackerResponsesPage: React.FC = () => {
     return Number(b) - Number(a);
   });
 
+  const totalResponses = trackerResponses.length;
+  const totalRewardsGiven = trackerRewardHistory.length;
+  const uniquePrograms = new Set(trackerResponses.filter(r => r.program).map(r => r.program)).size;
+
   const styles = {
     container: {
       display: 'flex',
@@ -276,11 +280,32 @@ const TrackerResponsesPage: React.FC = () => {
       letterSpacing: '1px',
       textTransform: 'uppercase' as const
     },
-    headerSubtitle: {
-      fontSize: '14px',
-      color: '#4a5568',
-      marginTop: '8px',
-      fontWeight: '400'
+    statsRow: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+      gap: '20px',
+      marginTop: '16px'
+    },
+    statCard: {
+      backgroundColor: 'white',
+      borderRadius: '14px',
+      padding: '20px 24px',
+      border: '1px solid #e2e8f0',
+      boxShadow: '0 6px 20px rgba(30, 58, 95, 0.08)'
+    },
+    statLabel: {
+      fontSize: '13px',
+      textTransform: 'uppercase' as const,
+      color: '#64748b',
+      letterSpacing: '0.1em',
+      marginBottom: '6px',
+      fontWeight: 600
+    },
+    statValue: {
+      fontSize: '28px',
+      fontWeight: 700,
+      color: '#0f172a',
+      margin: 0
     },
     contentWrapper: {
       padding: '0 40px 40px 40px'
@@ -372,7 +397,6 @@ const TrackerResponsesPage: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <h1 style={styles.headerTitle}>TRACKER RESPONDENTS</h1>
-              <p style={styles.headerSubtitle}>Reward users who answered the tracker form</p>
             </div>
             <button
               onClick={() => navigate('/rewards')}
@@ -380,28 +404,42 @@ const TrackerResponsesPage: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                background: 'white',
-                border: '2px solid #1e3a5f',
-                color: '#1e3a5f',
+                background: '#1e3a5f',
+                color: 'white',
                 fontSize: '15px',
-                fontWeight: '600',
+                fontWeight: '700',
                 cursor: 'pointer',
-                padding: '12px 24px',
-                borderRadius: '10px',
-                transition: 'all 0.2s'
+                padding: '14px 28px',
+                borderRadius: '12px',
+                transition: 'all 0.2s',
+                border: 'none',
+                boxShadow: '0 10px 20px rgba(30, 58, 95, 0.25)'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#1e3a5f';
-                e.currentTarget.style.color = 'white';
+                e.currentTarget.style.transform = 'translateY(-2px)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'white';
-                e.currentTarget.style.color = '#1e3a5f';
+                e.currentTarget.style.transform = 'translateY(0)';
               }}
             >
               <span style={{ fontSize: '18px' }}>←</span>
               <span>Back to Rewards</span>
             </button>
+          </div>
+
+          <div style={styles.statsRow}>
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Tracker Responses</div>
+              <p style={styles.statValue}>{totalResponses}</p>
+            </div>
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Rewards Given</div>
+              <p style={styles.statValue}>{totalRewardsGiven}</p>
+            </div>
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Active Programs</div>
+              <p style={styles.statValue}>{uniquePrograms}</p>
+            </div>
           </div>
         </div>
 
