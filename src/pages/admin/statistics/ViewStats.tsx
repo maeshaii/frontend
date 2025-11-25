@@ -140,14 +140,14 @@ const ViewStats: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
+    <div style={{ display: 'flex', height: '100vh', fontFamily: 'Inter, system-ui, -apple-system, sans-serif', overflowX: 'hidden' }}>
       <Sidebar />
       
-      <div className="admin-content-page" style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f8fafc', marginLeft: 'var(--sidebar-width, 220px)', transition: 'margin-left 0.3s ease' }}>
+      <div className="admin-content-page" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', backgroundColor: '#f8fafc', marginLeft: 'var(--sidebar-width, 220px)', transition: 'margin-left 0.3s ease' }}>
         {/* Slim toolbar (no heavy header) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '36px 48px 12px 48px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 48px 4px 48px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#0b2a55' }}>Alumni Users</div>
+            <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#2c5282' }}>Alumni Users</div>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
           <button style={styles.actionButton} onClick={() => setShowExportModal(true)}>
@@ -384,7 +384,7 @@ const styles: { [key: string]: React.CSSProperties } = {
 
   // Cards container
   cardsContainer: {
-    padding: '8px 48px 32px 48px',
+    padding: '0 48px 32px 48px',
     display: 'flex',
     justifyContent: 'flex-start',
     width: '100%',
