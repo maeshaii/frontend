@@ -5427,7 +5427,8 @@ getPosts()
                                                  req.reward_type?.toLowerCase().includes('item');
                             // Only vouchers can be claimed by user, merchandise must be released by admin
                             const canClaim = isApproved && !isClaimed && !isMerchandise;
-                            const canCancel = isPending || (isApproved && !isClaimed);
+                            // Only pending requests can be cancelled (backend restriction)
+                            const canCancel = isPending;
 
                   return (
                               <tr 

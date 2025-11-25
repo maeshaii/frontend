@@ -68,8 +68,12 @@ const Login = () => {
       
       if (data.success) {
         localStorage.setItem('user', JSON.stringify(data.user));
-        if (data.must_change_password) {
-          // Redirect to change password screen for first-time login
+        // Coordinator and Peso accounts are exempt from first-time login password change
+        const isCoordinator = data.user?.account_type?.coordinator;
+        const isPeso = data.user?.account_type?.peso;
+        
+        if (data.must_change_password && !isCoordinator && !isPeso) {
+          // Redirect to change password screen for first-time login (only for non-coordinator/peso accounts)
           navigate('/first-login-change-password', { state: { acc_username, animate: 'right', animateHero: 'right' } });
           return;
         }
