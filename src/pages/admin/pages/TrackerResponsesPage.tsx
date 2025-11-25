@@ -223,6 +223,10 @@ const TrackerResponsesPage: React.FC = () => {
     return Number(b) - Number(a);
   });
 
+  const totalResponses = trackerResponses.length;
+  const totalRewardsGiven = trackerRewardHistory.length;
+  const uniquePrograms = new Set(trackerResponses.filter(r => r.program).map(r => r.program)).size;
+
   const styles = {
     container: {
       display: 'flex',

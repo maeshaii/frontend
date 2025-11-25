@@ -44,6 +44,7 @@ import AlumniProfile from './pages/alumni/Profile';
 import UnifiedDashboard from './pages/shared/UnifiedDashboard';
 import MobileDetector from './components/MobileDetector';
 import PopupNotifications from './components/PopupNotifications';
+import ToastContainer from './components/Toast';
 
 const App: React.FC = () => {
   return (
@@ -52,6 +53,7 @@ const App: React.FC = () => {
         <MobileDetector>
           <Router>
             <PopupNotifications />
+            <ToastContainer />
             <Routes>
           {/* Redirect root URL to /login */}
           <Route path="/" element={<Navigate to="/login" replace />} />

@@ -1536,8 +1536,11 @@ const NotificationPage: React.FC = () => {
             </div>
           ) : (
             filteredNotifications.map((notif: any, index: number) => {
-              const isTrackerNotification = notif.type.toLowerCase().includes('tracker') || notif.type.toLowerCase() === 'ccict' || notif.content.includes('Tracker Form');
-              const isRewardNotification = notif.type?.toLowerCase() === 'reward';
+              const contentLower = (notif.content || '').toLowerCase();
+              const notifTypeLower = (notif.type || '').toLowerCase();
+              const isTrackerNotification = notifTypeLower.includes('tracker') || notifTypeLower === 'ccict' || notif.content.includes('Tracker Form');
+              const isRewardNotification = notifTypeLower.includes('reward');
+              const isNonNavigableReward = isRewardNotification && contentLower.includes('has been submitted');
               const shouldShowCheckbox = selected.length > 0 || hoveredCheckboxId === notif.id;
               
               return (
@@ -1547,7 +1550,7 @@ const NotificationPage: React.FC = () => {
                     background: 'white',
                     borderRadius: '8px',
                     padding: '16px',
-                      cursor: 'pointer',
+                      cursor: isNonNavigableReward ? 'default' : 'pointer',
                     border: selected.includes(notif.id) 
                       ? '2px solid #0066cc' 
                       : !notif.is_read 
@@ -1576,7 +1579,18 @@ const NotificationPage: React.FC = () => {
                       }
                     }}
                     onClick={async () => {
-                    const isRewardNotification = notif.type?.toLowerCase() === 'reward';
+                    if (isNonNavigableReward) {
+                      if (!notif.is_read) {
+                        try {
+                          await markNotificationAsRead(notif.id);
+                          await markAsReadRealTime(notif.id);
+                        } catch (error) {
+                          console.error('Error marking notification as read:', error);
+                        }
+                      }
+                      return;
+                    }
+                    const isRewardNotification = notif.type?.toLowerCase().includes('reward');
                     if (isTrackerNotification || isRewardNotification) {
                       // Show modal for tracker and reward notifications
                       setOpenNotif(notif);
