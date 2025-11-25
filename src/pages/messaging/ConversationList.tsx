@@ -171,8 +171,11 @@ const ConversationList: React.FC<ConversationListProps> = ({
   const [onlineUsersData, setOnlineUsersData] = useState<any[]>([]);
 
   // Calculate message request count
+  // Only count message requests that still have unread messages so badges stay in sync
   const messageRequestCount = useMemo(() => {
-    return conversations.filter(conv => conv.is_message_request).length;
+    return conversations.filter(
+      (conv) => conv.is_message_request && (conv.unread_count || 0) > 0
+    ).length;
   }, [conversations]);
 
   // Load online users

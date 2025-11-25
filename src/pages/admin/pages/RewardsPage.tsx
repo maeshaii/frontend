@@ -701,13 +701,13 @@ const RewardsPage: React.FC = () => {
     },
     pageHeader: {
       backgroundColor: '#ffffff',
-      padding: '32px 40px',
-      marginBottom: '32px',
+      padding: '20px 32px',
+      marginBottom: '20px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: '20px',
-      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+      gap: '16px',
+      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
       borderBottom: '1px solid #e5e7eb'
     },
     headerTitle: {
