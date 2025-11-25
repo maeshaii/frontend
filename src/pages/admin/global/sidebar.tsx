@@ -697,6 +697,7 @@ const Sidebar = () => {
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
             localStorage.removeItem('user');
+            sessionStorage.removeItem('userManagementVerified');
             navigate('/login');
           }}
           onCancel={() => setShowLogoutConfirm(false)}

@@ -227,7 +227,7 @@ export default function Dashboard() {
             resultingTemplateType = templateType as 'CREATE' | 'UPDATE';
           } else if (templateType !== resultingTemplateType) {
             setFileRestrictionMessage(
-              `You can't import both create file and update file at the same time.`
+              `You can only add new student files or update existing student files, not both together.`
             );
             setShowFileRestrictionModal(true);
             return;
@@ -336,23 +336,23 @@ export default function Dashboard() {
             let hint: string | undefined;
             let details: string[] | undefined;
             if (normalizedMessage.includes('second-import template')) {
-              hint = 'Run the First Import (student creation) before uploading a Second Import file with company details.';
+              hint = 'Add students first, then company info.';
             } else if (normalizedMessage.includes('immediately after creating')) {
               const recentIds = Array.isArray(result.recent_ctu_ids) ? result.recent_ctu_ids : [];
-              hint = 'Second Import files must be uploaded separately after the First Import finishes.';
+              hint = 'Add company information after adding students.';
               details = [
-                'Upload the First Import template alone to generate student accounts and download passwords.',
-                'Wait a few minutes before importing company information so each template runs on its own.',
+                'Upload students first.',
+                'Wait a few minutes before adding company information.',
                 recentIds.length
-                  ? `Recently created CTU IDs blocked in this upload: ${recentIds.join(', ')}`
-                  : 'Re-open the Update template later once the students already exist.',
+                  ? `These student IDs need time: ${recentIds.join(', ')}`
+                  : 'Add company information after students are created.',
               ];
             } else if (normalizedMessage.includes('mixed template')) {
-              hint = 'Separate new students (First Import) and company updates (Second Import) into two different uploads.';
+              hint = 'Add students and company information separately.';
               details = [
-                'Download the First Import template and create all students first.',
-                'Use the Update Template after the students exist to add company data.',
-                'Never combine both templates into a single file—the system blocks it.',
+                'Upload students first.',
+                'Then add company details.',
+                'Do not combine both in one file.',
               ];
             }
             setImportError({
@@ -3349,7 +3349,7 @@ export default function Dashboard() {
               lineHeight: 1.5,
               marginBottom: '24px'
             }}>
-              {fileRestrictionMessage || 'Please upload files from only one template type per batch (all create or all update).'}
+              {fileRestrictionMessage || 'You can only add new student files or update existing student files, not both together.'}
             </p>
             <button
               onClick={() => {
