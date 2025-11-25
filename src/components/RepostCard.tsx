@@ -264,9 +264,66 @@ const RepostCard: React.FC<RepostCardProps> = ({
   // State to control whether comments section is visible (hidden by default)
   const [showCommentsSection, setShowCommentsSection] = useState<boolean>(false);
 
+  type EmojiPickerLayout = {
+    position: 'above' | 'below';
+    top: number;
+    left: number;
+    width: number;
+  };
+
   // Emoji picker state for comments
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
+  const [emojiPickerLayout, setEmojiPickerLayout] = useState<EmojiPickerLayout | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
+  const commentInputContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const updateEmojiPickerLayout = useCallback(() => {
+    const inputElement = commentInputContainerRef.current;
+    if (!inputElement) {
+      return;
+    }
+    const rect = inputElement.getBoundingClientRect();
+    const pickerHeight = 320;
+    const gap = 8;
+    const pickerWidth = Math.min(320, window.innerWidth - gap * 2);
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const position =
+      spaceAbove > spaceBelow && spaceAbove >= pickerHeight + gap ? 'above' : 'below';
+    const top =
+      position === 'above'
+        ? Math.max(gap, rect.top - pickerHeight - gap)
+        : Math.min(window.innerHeight - pickerHeight - gap, rect.bottom + gap);
+    const left = Math.min(
+      Math.max(rect.right - pickerWidth, gap),
+      window.innerWidth - pickerWidth - gap
+    );
+
+    setEmojiPickerLayout({ position, top, left, width: pickerWidth });
+  }, []);
+
+  // Calculate emoji picker position (above or below) based on available space
+  useEffect(() => {
+    if (showEmojiPicker) {
+      updateEmojiPickerLayout();
+    }
+  }, [showEmojiPicker, updateEmojiPickerLayout]);
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+
+    const handleWindowChange = () => {
+      updateEmojiPickerLayout();
+    };
+
+    window.addEventListener('resize', handleWindowChange);
+    window.addEventListener('scroll', handleWindowChange, true);
+
+    return () => {
+      window.removeEventListener('resize', handleWindowChange);
+      window.removeEventListener('scroll', handleWindowChange, true);
+    };
+  }, [showEmojiPicker, updateEmojiPickerLayout]);
 
   // Close emoji picker on outside click
   useEffect(() => {
@@ -2052,7 +2109,10 @@ const RepostCard: React.FC<RepostCardProps> = ({
               }}
               onError={handleProfilePicError}
             />
-            <div style={{ flex: 1, position: 'relative' }}>
+            <div 
+              ref={commentInputContainerRef}
+              style={{ flex: 1, position: 'relative' }}
+            >
               <input
                 ref={commentInputRef}
                 type="text"
@@ -2071,9 +2131,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
               />
               {/* Emoji Button */}
               <button
-                type="button"
                 onClick={(e) => {
-                  e.preventDefault();
                   e.stopPropagation();
                   setShowEmojiPicker(!showEmojiPicker);
                 }}
@@ -2085,16 +2143,15 @@ const RepostCard: React.FC<RepostCardProps> = ({
                   background: 'transparent',
                   border: 'none',
                   cursor: 'pointer',
-                  padding: '0',
+                  padding: '4px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  borderRadius: '50%',
-                  width: '20px',
-                  height: '20px',
-                  transition: 'background-color 0.2s ease, color 0.2s ease',
                   color: '#65676b',
-                  zIndex: 1,
+                  borderRadius: '50%',
+                  width: '28px',
+                  height: '28px',
+                  transition: 'background-color 0.2s'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
@@ -2107,8 +2164,8 @@ const RepostCard: React.FC<RepostCardProps> = ({
                 title="Add emoji"
               >
                 <svg 
-                  width="16" 
-                  height="16" 
+                  width="18" 
+                  height="18" 
                   viewBox="0 0 24 24" 
                   fill="none" 
                   xmlns="http://www.w3.org/2000/svg"
@@ -2124,33 +2181,39 @@ const RepostCard: React.FC<RepostCardProps> = ({
                 </svg>
               </button>
               {/* Emoji Picker */}
-              {showEmojiPicker && (
-                <div
-                  ref={emojiPickerRef}
-                  style={{
-                    position: 'absolute',
-                    bottom: 'calc(100% + 8px)',
-                    right: 0,
-                    zIndex: 1000,
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    background: '#fff',
-                    border: '1px solid #e0e0e0',
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <EmojiPicker
-                    onEmojiClick={(emojiData: EmojiClickData) => {
-                      setCommentValue(prev => prev + emojiData.emoji);
+              {showEmojiPicker && emojiPickerLayout &&
+                ReactDOM.createPortal(
+                  <div
+                    ref={(el) => {
+                      emojiPickerRef.current = el;
                     }}
-                    width={320}
-                    height={350}
-                    previewConfig={{ showPreview: false }}
-                    skinTonesDisabled
-                  />
-                </div>
-              )}
+                    style={{
+                      position: 'fixed',
+                      top: emojiPickerLayout.top,
+                      left: emojiPickerLayout.left,
+                      width: emojiPickerLayout.width,
+                      zIndex: 4000,
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      background: '#fff',
+                      border: '1px solid #e0e0e0',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <EmojiPicker
+                      onEmojiClick={(emojiData: EmojiClickData) => {
+                        setCommentValue(prev => prev + emojiData.emoji);
+                      }}
+                      width={emojiPickerLayout.width}
+                      height={320}
+                      previewConfig={{ showPreview: false }}
+                      skinTonesDisabled
+                    />
+                  </div>,
+                  document.body
+                )
+              }
             </div>
             <button 
               onClick={handleCommentSubmit}
