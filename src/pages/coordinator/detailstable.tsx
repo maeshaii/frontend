@@ -106,6 +106,10 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
     tableBodyContainer: {
       maxHeight: '450px',
       overflowY: 'auto' as const,
+      overflowX: 'auto' as const,
+      // Custom scrollbar styling
+      scrollbarWidth: 'thin' as const,
+      scrollbarColor: '#cbd5e1 #f1f5f9',
     },
     tableBodyTable: {
       width: '100%',
@@ -393,14 +397,51 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
 
   if (loading) {
     return (
-      <div style={styles.detailsTable}>
-        <div style={{ textAlign: 'center', padding: '40px' }}>Loading OJT data...</div>
-      </div>
+      <>
+        <style>{`
+          .ojt-table-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+          }
+          .ojt-table-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+          }
+          .ojt-table-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+          }
+          .ojt-table-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+          }
+        `}</style>
+        <div style={styles.detailsTable}>
+          <div style={{ textAlign: 'center', padding: '40px' }}>Loading OJT data...</div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div style={styles.detailsTable}>
+    <>
+      <style>{`
+        .ojt-table-scrollbar::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        .ojt-table-scrollbar::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 4px;
+        }
+        .ojt-table-scrollbar::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 4px;
+        }
+        .ojt-table-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+      `}</style>
+      <div style={styles.detailsTable}>
       {/* Header Bar with Class, Section, Search and Filter */}
       <div style={{
         backgroundColor: 'white',
@@ -497,7 +538,7 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
       </div>
       
       {/* Single Table with Fixed Layout */}
-      <div style={styles.tableBodyContainer}>
+      <div style={styles.tableBodyContainer} className="ojt-table-scrollbar">
         <table style={styles.table}>
           <thead>
             <tr>
@@ -828,5 +869,6 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
       )}
 
     </div>
+    </>
   );
 }

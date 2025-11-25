@@ -12,6 +12,7 @@ import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineA
 import { getImageUrl } from '../../utils/profilePicUtils';
 import EarnPointsModal from '../../components/EarnPointsModal';
 import PhotoGalleryModal from '../../components/PhotoGalleryModal';
+import { toast } from '../../utils/toast';
 
 function getCurrentUserId(user: AlumniUser | null): number | null {
   if (!user) return null;
@@ -235,6 +236,8 @@ const AlumniProfile: React.FC = () => {
   const [rewardsLoading, setRewardsLoading] = useState(false);
   const [claimingReward, setClaimingReward] = useState<number | null>(null);
   const [cancellingReward, setCancellingReward] = useState<number | null>(null);
+  const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
+  const [requestToCancel, setRequestToCancel] = useState<number | null>(null);
   const [recentlyClaimedRewardIds, setRecentlyClaimedRewardIds] = useState<number[]>([]);
   const [userRewardRequests, setUserRewardRequests] = useState<any[]>([]);
   const [showApprovedRewardsModal, setShowApprovedRewardsModal] = useState(false);
@@ -1233,21 +1236,26 @@ getPosts()
     });
   };
 
-  const handleCancelReward = async (requestId: number) => {
+  const handleCancelReward = (requestId: number) => {
     if (cancellingReward === requestId) return;
     const request = userRewardRequests.find((req) => req.request_id === requestId);
     if (!request) return;
     if (!['pending', 'approved', 'ready_for_pickup'].includes(request.status)) {
-      alert('This request can no longer be cancelled.');
+      toast.warning('This request can no longer be cancelled.');
       return;
     }
-    const confirm = window.confirm(`Cancel your request for "${request.reward_name}"?`);
-    if (!confirm) return;
+    setRequestToCancel(requestId);
+    setShowCancelConfirmModal(true);
+  };
+
+  const confirmCancelReward = async () => {
+    if (!requestToCancel) return;
+    const requestId = requestToCancel;
     try {
       setCancellingReward(requestId);
+      setShowCancelConfirmModal(false);
       const response = await cancelRewardRequest(requestId);
       if (response.success) {
-        alert(response.message || 'Reward request cancelled.');
         await fetchUserRewardRequests();
         await fetchInventoryItems();
         if (selectedRewardDetail?.request_id === requestId) {
@@ -1255,14 +1263,17 @@ getPosts()
             prev ? { ...prev, status: 'cancelled', notes: response.request?.notes || prev.notes } : prev
           );
         }
+        // Show success notification
+        toast.success(response.message || 'Reward request cancelled successfully');
       } else {
-        alert(response.message || 'Unable to cancel request.');
+        toast.error(response.message || 'Unable to cancel request.');
       }
     } catch (error: any) {
       console.error('Error cancelling reward request:', error);
-      alert(error.response?.data?.message || 'Failed to cancel request.');
+      toast.error(error.response?.data?.message || 'Failed to cancel request.');
     } finally {
       setCancellingReward(null);
+      setRequestToCancel(null);
     }
   };
 
@@ -6304,6 +6315,332 @@ getPosts()
           </div>
         </div>
       )}
+
+      {/* Cancel Reward Request Confirmation Modal */}
+      {showCancelConfirmModal && requestToCancel && (() => {
+        const request = userRewardRequests.find((req) => req.request_id === requestToCancel);
+        if (!request) return null;
+        
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.6)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '20px',
+              animation: 'fadeIn 0.2s ease-out'
+            }}
+            onClick={() => {
+              if (!cancellingReward) {
+                setShowCancelConfirmModal(false);
+                setRequestToCancel(null);
+              }
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '20px',
+                width: '100%',
+                maxWidth: '500px',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+                border: '1px solid #e5e7eb',
+                overflow: 'hidden',
+                animation: 'slideInModal 0.3s ease-out'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div style={{
+                background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+                padding: '24px 32px',
+                borderBottom: '2px solid #fecaca',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '12px',
+                    backgroundColor: '#dc2626',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '24px',
+                    fontWeight: 'bold',
+                    boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)'
+                  }}>
+                    ⚠
+                  </div>
+                  <div>
+                    <h2 style={{
+                      margin: 0,
+                      fontSize: '24px',
+                      fontWeight: '700',
+                      color: '#991b1b',
+                      letterSpacing: '-0.3px'
+                    }}>
+                      Cancel Reward Request
+                    </h2>
+                    <div style={{ fontSize: '14px', color: '#b91c1c', marginTop: '4px', fontWeight: '500' }}>
+                      Are you sure you want to cancel?
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!cancellingReward) {
+                      setShowCancelConfirmModal(false);
+                      setRequestToCancel(null);
+                    }
+                  }}
+                  disabled={!!cancellingReward}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.8)',
+                    border: 'none',
+                    fontSize: '28px',
+                    cursor: cancellingReward ? 'not-allowed' : 'pointer',
+                    color: '#6b7280',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    transition: 'all 0.2s',
+                    lineHeight: 1,
+                    width: '40px',
+                    height: '40px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: cancellingReward ? 0.5 : 1
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!cancellingReward) {
+                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.color = '#dc2626';
+                      e.currentTarget.style.transform = 'rotate(90deg)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!cancellingReward) {
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+                      e.currentTarget.style.color = '#6b7280';
+                      e.currentTarget.style.transform = 'rotate(0deg)';
+                    }
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div style={{
+                padding: '32px',
+                backgroundColor: '#f9fafb'
+              }}>
+                <div style={{
+                  padding: '20px',
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  border: '1px solid #e5e7eb',
+                  marginBottom: '24px'
+                }}>
+                  <div style={{
+                    fontSize: '16px',
+                    color: '#374151',
+                    marginBottom: '12px',
+                    fontWeight: '600'
+                  }}>
+                    Reward Details:
+                  </div>
+                  <div style={{
+                    fontSize: '18px',
+                    fontWeight: '700',
+                    color: '#1e3a5f',
+                    marginBottom: '8px'
+                  }}>
+                    {request.reward_name}
+                  </div>
+                  <div style={{
+                    fontSize: '14px',
+                    color: '#6b7280',
+                    marginBottom: '4px'
+                  }}>
+                    Type: <span style={{ textTransform: 'capitalize', fontWeight: '600' }}>{request.reward_type || 'N/A'}</span>
+                  </div>
+                  <div style={{
+                    fontSize: '14px',
+                    color: '#6b7280',
+                    marginBottom: '4px'
+                  }}>
+                    Value: <span style={{ fontWeight: '600' }}>{request.reward_value || 'N/A'}</span>
+                  </div>
+                  <div style={{
+                    fontSize: '14px',
+                    color: '#6b7280'
+                  }}>
+                    Points Cost: <span style={{ fontWeight: '600', color: '#dc2626' }}>{request.points_cost || 0} pts</span>
+                  </div>
+                </div>
+                <div style={{
+                  padding: '16px',
+                  backgroundColor: '#fffbeb',
+                  borderRadius: '10px',
+                  border: '1px solid #fde68a',
+                  marginBottom: '24px'
+                }}>
+                  <div style={{
+                    fontSize: '14px',
+                    color: '#92400e',
+                    lineHeight: '1.6'
+                  }}>
+                    <strong>Note:</strong> Cancelling this request will restore your points. This action cannot be undone.
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div style={{
+                padding: '24px 32px',
+                borderTop: '2px solid #f3f4f6',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '12px',
+                backgroundColor: 'white'
+              }}>
+                <button
+                  onClick={() => {
+                    if (!cancellingReward) {
+                      setShowCancelConfirmModal(false);
+                      setRequestToCancel(null);
+                    }
+                  }}
+                  disabled={!!cancellingReward}
+                  style={{
+                    backgroundColor: '#6b7280',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px 28px',
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: cancellingReward ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 8px rgba(107, 114, 128, 0.2)',
+                    letterSpacing: '0.3px',
+                    opacity: cancellingReward ? 0.6 : 1
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!cancellingReward) {
+                      e.currentTarget.style.backgroundColor = '#4b5563';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(107, 114, 128, 0.3)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!cancellingReward) {
+                      e.currentTarget.style.backgroundColor = '#6b7280';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(107, 114, 128, 0.2)';
+                    }
+                  }}
+                >
+                  Keep Request
+                </button>
+                <button
+                  onClick={confirmCancelReward}
+                  disabled={!!cancellingReward}
+                  style={{
+                    backgroundColor: cancellingReward ? '#9ca3af' : '#dc2626',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px 28px',
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: cancellingReward ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: cancellingReward ? 'none' : '0 2px 8px rgba(220, 38, 38, 0.3)',
+                    letterSpacing: '0.3px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!cancellingReward) {
+                      e.currentTarget.style.backgroundColor = '#b91c1c';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.4)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!cancellingReward) {
+                      e.currentTarget.style.backgroundColor = '#dc2626';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 38, 38, 0.3)';
+                    }
+                  }}
+                >
+                  {cancellingReward ? (
+                    <>
+                      <span style={{
+                        display: 'inline-block',
+                        width: '14px',
+                        height: '14px',
+                        border: '2px solid rgba(255, 255, 255, 0.3)',
+                        borderTopColor: 'white',
+                        borderRadius: '50%',
+                        animation: 'spin 0.6s linear infinite'
+                      }}></span>
+                      Cancelling...
+                    </>
+                  ) : (
+                    <>
+                      <span>✓</span>
+                      Yes, Cancel Request
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <style>{`
+                @keyframes fadeIn {
+                  from {
+                    opacity: 0;
+                  }
+                  to {
+                    opacity: 1;
+                  }
+                }
+                @keyframes slideInModal {
+                  from {
+                    transform: scale(0.9) translateY(-20px);
+                    opacity: 0;
+                  }
+                  to {
+                    transform: scale(1) translateY(0);
+                    opacity: 1;
+                  }
+                }
+                @keyframes spin {
+                  to {
+                    transform: rotate(360deg);
+                  }
+                }
+              `}</style>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Earn More Points Modal */}
       <EarnPointsModal
