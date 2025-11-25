@@ -42,7 +42,8 @@ const RequestsPage: React.FC = () => {
 
 
   const openDetails = (year: number, course: string) => {
-    const courseParam = selectedCourse !== 'ALL' ? `?course=${selectedCourse}` : '';
+    // If course is 'ALL', don't filter by course - show all courses for that batch
+    const courseParam = (course === 'ALL' || selectedCourse === 'ALL') ? '' : `?course=${selectedCourse}`;
     navigate(`/admin/requests/${year}${courseParam}`);
   };
 
@@ -61,6 +62,23 @@ const RequestsPage: React.FC = () => {
     const batchMatch = selectedBatch === 'ALL' || item.batch_year.toString() === selectedBatch;
     return courseMatch && batchMatch;
   });
+
+  // Group items by batch_year to combine multiple courses into one card
+  const groupedByBatch = filteredItems.reduce((acc, item) => {
+    const year = item.batch_year;
+    if (!acc[year]) {
+      acc[year] = {
+        batch_year: year,
+        courses: [] as Array<{ course: string; count: number }>,
+        totalCount: 0
+      };
+    }
+    acc[year].courses.push({ course: item.course, count: item.count });
+    acc[year].totalCount += item.count;
+    return acc;
+  }, {} as Record<number, { batch_year: number; courses: Array<{ course: string; count: number }>; totalCount: number }>);
+
+  const groupedItems = Object.values(groupedByBatch).sort((a, b) => b.batch_year - a.batch_year);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8fafc' }}>
@@ -181,7 +199,7 @@ const RequestsPage: React.FC = () => {
         </div>
         
         {/* Results Summary */}
-        {filteredItems.length > 0 && (
+        {groupedItems.length > 0 && (
           <div style={{ 
             marginBottom: '24px',
             display: 'flex',
@@ -193,7 +211,7 @@ const RequestsPage: React.FC = () => {
               fontSize: '14px',
               fontWeight: '500'
             }}>
-              Showing {filteredItems.length} {filteredItems.length === 1 ? 'result' : 'results'}
+              Showing {groupedItems.length} {groupedItems.length === 1 ? 'result' : 'results'}
             </span>
             {(selectedCourse !== 'ALL' || selectedBatch !== 'ALL') && (
               <button
@@ -226,7 +244,7 @@ const RequestsPage: React.FC = () => {
         )}
         
         {/* Cards Grid */}
-        {filteredItems.length === 0 ? (
+        {groupedItems.length === 0 ? (
           <div style={{ 
             backgroundColor: 'white',
             borderRadius: '16px',
@@ -267,12 +285,15 @@ const RequestsPage: React.FC = () => {
             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
             gap: '24px'
           }}>
-            {filteredItems.map((item) => {
-              const studentLabel = `${item.count} Student${item.count === 1 ? '' : 's'}`;
+            {groupedItems.map((group) => {
+              const studentLabel = `${group.totalCount} Student${group.totalCount === 1 ? '' : 's'}`;
+              const coursesText = group.courses.map(c => c.course).join(', ');
+              const primaryCourse = group.courses[0]?.course || 'N/A';
+              
               return (
                 <div
-                  key={`${item.batch_year}-${item.course}`}
-                  onClick={() => openDetails(item.batch_year, item.course)}
+                  key={`${group.batch_year}`}
+                  onClick={() => openDetails(group.batch_year, 'ALL')}
                   style={{ 
                     backgroundColor: 'white',
                     borderRadius: '18px',
@@ -314,12 +335,15 @@ const RequestsPage: React.FC = () => {
                     }}>
                       <FaGraduationCap />
                     </div>
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.015em' }}>
-                        CLASS OF {item.batch_year}
+                        CLASS OF {group.batch_year}
                       </div>
                       <div style={{ fontSize: '14px', fontWeight: 500, opacity: 0.9, marginTop: '4px' }}>
-                        Course : {item.course || 'N/A'}
+                        {group.courses.length === 1 
+                          ? `Course: ${primaryCourse}`
+                          : `Courses: ${coursesText}`
+                        }
                       </div>
                     </div>
                   </div>

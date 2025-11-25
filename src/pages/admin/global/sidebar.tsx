@@ -518,8 +518,8 @@ const Sidebar = () => {
   const links = [
     { to: '/dashboard', label: 'Dashboard' },
     { to: '/statistics', label: 'Statistics' },
-    { to: '/ViewStats', label: 'Alumni Users', childRoutes: ['/AlumniData'] },
     { to: '/user-management', label: 'User Management' },
+    { to: '/ViewStats', label: 'Alumni Users', childRoutes: ['/AlumniData'] },
     { to: profileLink, label: 'Profile' },
     { to: '/tracker/questions', label: 'Tracker' },
     { to: '/requests', label: 'Coordinator Requests' },
