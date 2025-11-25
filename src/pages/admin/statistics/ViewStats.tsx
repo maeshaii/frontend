@@ -145,7 +145,7 @@ const ViewStats: React.FC = () => {
       
       <div className="admin-content-page" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', backgroundColor: '#f8fafc', marginLeft: 'var(--sidebar-width, 220px)', transition: 'margin-left 0.3s ease' }}>
         {/* Slim toolbar (no heavy header) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 48px 12px 48px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 48px 4px 48px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#2c5282' }}>Alumni Users</div>
           </div>
@@ -384,7 +384,7 @@ const styles: { [key: string]: React.CSSProperties } = {
 
   // Cards container
   cardsContainer: {
-    padding: '8px 48px 32px 48px',
+    padding: '0 48px 32px 48px',
     display: 'flex',
     justifyContent: 'flex-start',
     width: '100%',

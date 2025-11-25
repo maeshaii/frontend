@@ -4,6 +4,42 @@ import './Tracker.css';
 import { fetchTrackerResponses, fetchAlumniList } from '../../../services/api';
 import { trackerApi, trackerUtils } from '../../../services/trackerApi';
 
+// Helper function to normalize file URLs returned by the backend
+// Uses environment variable for backend URL (matches api.ts pattern)
+const getBackendBaseUrl = (): string => {
+  const envUrl = process.env.REACT_APP_API_URL;
+  if (envUrl) {
+    // Remove /api/ suffix if present, since file URLs don't need it
+    return envUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+  }
+  // Fallback to default development URL
+  return 'http://127.0.0.1:8000';
+};
+
+const getFileUrl = (fileUrl: string | null | undefined): string => {
+  if (!fileUrl) return '';
+  // If already absolute URL, return as is
+  if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+    return fileUrl;
+  }
+  // If relative URL, prepend backend base URL
+  const baseUrl = getBackendBaseUrl();
+  return `${baseUrl}${fileUrl}`;
+};
+
+const IMAGE_FILE_REGEX = /\.(png|jpe?g|gif|bmp|webp|svg)$/i;
+const isImageFile = (filename?: string | null) => !!filename && IMAGE_FILE_REGEX.test(filename);
+
+const getFileTypeLabel = (filename?: string | null) => {
+  if (!filename || !filename.includes('.')) return 'File';
+  return filename.split('.').pop()?.toUpperCase() || 'File';
+};
+
+const getImageFormat = (filename?: string | null): 'JPEG' | 'PNG' => {
+  if (!filename) return 'JPEG';
+  return filename.toLowerCase().endsWith('.png') ? 'PNG' : 'JPEG';
+};
+
 const Responses: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'summary' | 'view' | 'files'>(() => {
     // Get the saved tab from localStorage, default to 'summary' if not found
@@ -578,7 +614,7 @@ const Responses: React.FC = () => {
                               <div className="file-header">
                                 <span style={{ fontSize: '16px' }}>📎</span>
                                 <a
-                                  href={`http://127.0.0.1:8000${answer.file_url}`}
+                                  href={getFileUrl(answer.file_url)}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="file-link"
@@ -736,6 +772,7 @@ const Responses: React.FC = () => {
                               }
 
                               const file = stat.files[index];
+                              const fileUrl = getFileUrl(file.file_url);
 
                               // Check if we need a new page
                               if (yPosition > 250) {
@@ -748,75 +785,91 @@ const Responses: React.FC = () => {
                               doc.setFont('helvetica', 'bold');
                               doc.text(`${index + 1}. ${file.user}`, 20, yPosition);
 
-                              // Try to add the image
-                              try {
-                                const img = new Image();
-                                img.crossOrigin = 'anonymous';
-
-                                img.onload = () => {
-                                  // Calculate image dimensions to fit on page
-                                  const maxWidth = 160;
-                                  const maxHeight = 120;
-                                  let imgWidth = img.width;
-                                  let imgHeight = img.height;
-
-                                  // Scale down if image is too large
-                                  if (imgWidth > maxWidth) {
-                                    const ratio = maxWidth / imgWidth;
-                                    imgWidth = maxWidth;
-                                    imgHeight = imgHeight * ratio;
-                                  }
-
-                                  if (imgHeight > maxHeight) {
-                                    const ratio = maxHeight / imgHeight;
-                                    imgHeight = maxHeight;
-                                    imgWidth = imgWidth * ratio;
-                                  }
-
-                                  // Check if image will fit on current page
-                                  if (yPosition + 15 + imgHeight > 270) {
-                                    doc.addPage();
-                                    yPosition = 30;
-                                  }
-
-                                  // Add image to PDF
-                                  doc.addImage(
-                                    img,
-                                    'JPEG',
-                                    25,
-                                    yPosition + 15,
-                                    imgWidth,
-                                    imgHeight
-                                  );
-
-                                  // Move position for next file (add extra spacing)
-                                  yPosition += 15 + imgHeight + 40;
-
-                                  // Process next file
+                              if (isImageFile(file.filename)) {
+                                if (!fileUrl) {
+                                  doc.setFontSize(10);
+                                  doc.setFont('helvetica', 'italic');
+                                  doc.text('[File URL missing]', 25, yPosition + 15);
+                                  yPosition += 60;
                                   processNextFile(index + 1);
-                                };
+                                  return;
+                                }
+                                try {
+                                  const img = new Image();
+                                  img.crossOrigin = 'anonymous';
 
-                                img.onerror = () => {
-                                  // If image fails to load, add a placeholder
+                                  img.onload = () => {
+                                    // Calculate image dimensions to fit on page
+                                    const maxWidth = 160;
+                                    const maxHeight = 120;
+                                    let imgWidth = img.width;
+                                    let imgHeight = img.height;
+
+                                    if (imgWidth > maxWidth) {
+                                      const ratio = maxWidth / imgWidth;
+                                      imgWidth = maxWidth;
+                                      imgHeight = imgHeight * ratio;
+                                    }
+
+                                    if (imgHeight > maxHeight) {
+                                      const ratio = maxHeight / imgHeight;
+                                      imgHeight = maxHeight;
+                                      imgWidth = imgWidth * ratio;
+                                    }
+
+                                    if (yPosition + 15 + imgHeight > 270) {
+                                      doc.addPage();
+                                      yPosition = 30;
+                                    }
+
+                                    doc.addImage(
+                                      img,
+                                      getImageFormat(file.filename),
+                                      25,
+                                      yPosition + 15,
+                                      imgWidth,
+                                      imgHeight
+                                    );
+
+                                    yPosition += 15 + imgHeight + 40;
+                                    processNextFile(index + 1);
+                                  };
+
+                                  img.onerror = () => {
+                                    doc.setFontSize(10);
+                                    doc.setFont('helvetica', 'italic');
+                                    doc.text('[Image could not be loaded]', 25, yPosition + 15);
+                                    yPosition += 60;
+                                    processNextFile(index + 1);
+                                  };
+
+                                  img.src = fileUrl || '';
+                                } catch (error) {
+                                  console.error('Error loading image:', error);
                                   doc.setFontSize(10);
                                   doc.setFont('helvetica', 'italic');
                                   doc.text('[Image could not be loaded]', 25, yPosition + 15);
-                                  yPosition += 60; // Add spacing for placeholder
-
-                                  // Process next file
+                                  yPosition += 60;
                                   processNextFile(index + 1);
-                                };
-
-                                // Set image source
-                                img.src = `http://127.0.0.1:8000${file.file_url}`;
-                              } catch (error) {
-                                console.error('Error loading image:', error);
+                                }
+                              } else {
                                 doc.setFontSize(10);
                                 doc.setFont('helvetica', 'italic');
-                                doc.text('[Image could not be loaded]', 25, yPosition + 15);
-                                yPosition += 60; // Add spacing for error
-
-                                // Process next file
+                                doc.text(
+                                  `[${getFileTypeLabel(file.filename)} preview not supported in PDF]`,
+                                  25,
+                                  yPosition + 15
+                                );
+                                if (fileUrl) {
+                                  doc.setFont('helvetica', 'normal');
+                                  doc.textWithLink(
+                                    'Download original file',
+                                    25,
+                                    yPosition + 30,
+                                    { url: fileUrl }
+                                  );
+                                }
+                                yPosition += 60;
                                 processNextFile(index + 1);
                               }
                             };
@@ -862,7 +915,7 @@ const Responses: React.FC = () => {
                               </div>
                               <div>
                                 <a
-                                  href={`http://127.0.0.1:8000${file.file_url}`}
+                                  href={getFileUrl(file.file_url)}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="file-link"
@@ -887,63 +940,89 @@ const Responses: React.FC = () => {
                                       doc.setFont('helvetica', 'bold');
                                       doc.text(`1. ${file.user}`, 20, 50);
 
-                                      // Try to add the image
-                                      const img = new Image();
-                                      img.crossOrigin = 'anonymous';
-
-                                      img.onload = () => {
-                                        // Calculate image dimensions to fit on page
-                                        const maxWidth = 160;
-                                        const maxHeight = 150;
-                                        let imgWidth = img.width;
-                                        let imgHeight = img.height;
-
-                                        // Scale down if image is too large
-                                        if (imgWidth > maxWidth) {
-                                          const ratio = maxWidth / imgWidth;
-                                          imgWidth = maxWidth;
-                                          imgHeight = imgHeight * ratio;
+                                      const fileUrl = getFileUrl(file.file_url);
+                                      const safeFilename = (file.filename || 'file').replace(
+                                        /[^a-zA-Z0-9.]/g,
+                                        '_'
+                                      );
+                                      if (isImageFile(file.filename)) {
+                                        if (!fileUrl) {
+                                          doc.setFontSize(10);
+                                          doc.setFont('helvetica', 'italic');
+                                          doc.text('[File URL missing]', 25, 65);
+                                          doc.save(`${safeFilename}_info.pdf`);
+                                          return;
                                         }
+                                        const img = new Image();
+                                        img.crossOrigin = 'anonymous';
 
-                                        if (imgHeight > maxHeight) {
-                                          const ratio = maxHeight / imgHeight;
-                                          imgHeight = maxHeight;
-                                          imgWidth = imgWidth * ratio;
-                                        }
+                                        img.onload = () => {
+                                          const maxWidth = 160;
+                                          const maxHeight = 150;
+                                          let imgWidth = img.width;
+                                          let imgHeight = img.height;
 
-                                        // Check if image will fit on current page
-                                        if (65 + imgHeight > 270) {
-                                          doc.addPage();
-                                          // Reset position for new page
-                                          doc.setFontSize(16);
-                                          doc.setFont('helvetica', 'bold');
-                                          doc.text(stat.question_text, 20, 30);
-                                          doc.setFontSize(12);
-                                          doc.setFont('helvetica', 'bold');
-                                          doc.text(`1. ${file.user}`, 20, 50);
-                                        }
+                                          if (imgWidth > maxWidth) {
+                                            const ratio = maxWidth / imgWidth;
+                                            imgWidth = maxWidth;
+                                            imgHeight = imgHeight * ratio;
+                                          }
 
-                                        // Add image to PDF
-                                        doc.addImage(img, 'JPEG', 25, 65, imgWidth, imgHeight);
+                                          if (imgHeight > maxHeight) {
+                                            const ratio = maxHeight / imgHeight;
+                                            imgHeight = maxHeight;
+                                            imgWidth = imgWidth * ratio;
+                                          }
 
-                                        // Save the PDF
-                                        const filename = `${file.filename.replace(/[^a-zA-Z0-9.]/g, '_')}.pdf`;
-                                        doc.save(filename);
-                                      };
+                                          if (65 + imgHeight > 270) {
+                                            doc.addPage();
+                                            doc.setFontSize(16);
+                                            doc.setFont('helvetica', 'bold');
+                                            doc.text(stat.question_text, 20, 30);
+                                            doc.setFontSize(12);
+                                            doc.setFont('helvetica', 'bold');
+                                            doc.text(`1. ${file.user}`, 20, 50);
+                                          }
 
-                                      img.onerror = () => {
-                                        // If image fails to load, add a note and save
+                                          doc.addImage(
+                                            img,
+                                            getImageFormat(file.filename),
+                                            25,
+                                            65,
+                                            imgWidth,
+                                            imgHeight
+                                          );
+                                          doc.save(`${safeFilename}.pdf`);
+                                        };
+
+                                        img.onerror = () => {
+                                          doc.setFontSize(10);
+                                          doc.setFont('helvetica', 'italic');
+                                          doc.text('[Image could not be loaded]', 25, 65);
+                                          doc.save(`${safeFilename}_info.pdf`);
+                                        };
+
+                                        img.src = fileUrl || '';
+                                      } else {
                                         doc.setFontSize(10);
                                         doc.setFont('helvetica', 'italic');
-                                        doc.text('[Image could not be loaded]', 25, 65);
-
-                                        // Save the PDF
-                                        const filename = `${file.filename.replace(/[^a-zA-Z0-9.]/g, '_')}_info.pdf`;
-                                        doc.save(filename);
-                                      };
-
-                                      // Set image source
-                                      img.src = `http://127.0.0.1:8000${file.file_url}`;
+                                        doc.text(
+                                          `[${getFileTypeLabel(file.filename)} preview not supported in PDF output]`,
+                                          25,
+                                          65,
+                                          { maxWidth: 160 }
+                                        );
+                                        if (fileUrl) {
+                                          doc.setFont('helvetica', 'normal');
+                                          doc.textWithLink(
+                                            'Download original file',
+                                            25,
+                                            80,
+                                            { url: fileUrl }
+                                          );
+                                        }
+                                        doc.save(`${safeFilename}_info.pdf`);
+                                      }
                                     } catch (error) {
                                       console.error('Error generating PDF:', error);
                                       alert('Error generating PDF. Please try again.');
