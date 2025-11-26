@@ -7,6 +7,7 @@ import {
   sendMessage, 
   markConversationRead,
   getUserInfo,
+  getOnlineUsers,
   uploadAttachment,
   deleteMessageApi,
   updateMessageApi,
@@ -43,6 +44,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
   const [inputValue, setInputValue] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
   const [typingUsers, setTypingUsers] = useState<Set<number>>(new Set());
+  const [isParticipantOnline, setIsParticipantOnline] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMarkedAsRead, setHasMarkedAsRead] = useState(false);
@@ -184,6 +186,55 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         document.removeEventListener('mousedown', handleClickOutside);
       };
   }, [showEmojiPicker, contextMenuMessageId, reactionPickerMessageId]);
+
+  // Track whether the other participant is currently online via the shared API
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let isMounted = true;
+    const participantId = conversation?.other_participant?.user_id;
+
+    const updateParticipantStatus = async () => {
+      if (!participantId) {
+        setIsParticipantOnline(false);
+        return;
+      }
+
+      try {
+        const response = await getOnlineUsers();
+        if (!isMounted) return;
+        if (!response?.success) {
+          setIsParticipantOnline(false);
+          return;
+        }
+
+        const onlineIds = new Set<number>(
+          (Array.isArray(response.online_users) ? response.online_users : []).map((user: any) =>
+            Number(user.user_id)
+          )
+        );
+        setIsParticipantOnline(onlineIds.has(Number(participantId)));
+      } catch (error) {
+        console.error('Failed to determine participant online status:', error);
+        if (isMounted) {
+          setIsParticipantOnline(false);
+        }
+      }
+    };
+
+    if (participantId) {
+      updateParticipantStatus();
+      intervalId = setInterval(updateParticipantStatus, 30000);
+    } else {
+      setIsParticipantOnline(false);
+    }
+
+    return () => {
+      isMounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [conversation?.other_participant?.user_id]);
 
   // Fetch profile picture from API (similar to notifications) - MUST BE DEFINED BEFORE loadMessages
   const fetchUserProfilePic = useCallback(async (userId: number | string): Promise<string | null> => {
@@ -1053,8 +1104,15 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
               <h2 className="chat-header-name">
                 {conversation.other_participant?.name || 'Unknown User'}
               </h2>
-              <p className="chat-header-status">
-                {connectionStatus === 'connected' ? 'Online' : 'Offline'}
+              <p className={`chat-header-status ${isParticipantOnline ? 'status-online' : 'status-offline'}`}>
+                {isParticipantOnline ? 'Online' : 'Offline'}
+                <span className="chat-header-connection-status">
+                  {connectionStatus === 'connected'
+                    ? 'Connected'
+                    : connectionStatus === 'connecting'
+                      ? 'Connecting…'
+                      : 'Disconnected'}
+                </span>
               </p>
             </div>
           </div>
@@ -1497,57 +1555,78 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                   }
                                     }}
                                     >
-                                  {/* Reply Button */}
+                                  {/* Reply Button - Messenger Style */}
                                       <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setReplyingToMessageId(message.id);
                                       inputRef.current?.focus();
                                         }}
+                                        className="message-action-btn"
                                         style={{
-                                      width: '28px',
-                                      height: '28px',
-                                      border: '1px solid #e0e0e0',
+                                      width: '32px',
+                                      height: '32px',
+                                      border: 'none',
                                       borderRadius: '50%',
-                                      background: 'white',
+                                      background: 'rgba(0, 0, 0, 0.05)',
                                           cursor: 'pointer',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
-                                      fontSize: '14px',
                                       padding: 0,
-                                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                      lineHeight: '1'
+                                      transition: 'all 0.2s ease',
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)';
+                                      e.currentTarget.style.transform = 'scale(1.1)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
+                                      e.currentTarget.style.transform = 'scale(1)';
                                     }}
                                     title="Reply"
                                   >
-                                    ↩️
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <path d="M10 9V5L3 12L10 19V14.9C15 14.9 18.5 16.5 21 20C20 15 17 10 10 9Z" fill="currentColor" fillOpacity="0.7"/>
+                                    </svg>
                                       </button>
                                   
-                                  {/* Emoji Reaction Button */}
+                                  {/* Emoji Reaction Button - Messenger Style */}
                                       <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
                                     }}
+                                        className="message-action-btn"
                                         style={{
-                                      width: '28px',
-                                      height: '28px',
-                                      border: '1px solid #e0e0e0',
+                                      width: '32px',
+                                      height: '32px',
+                                      border: 'none',
                                       borderRadius: '50%',
-                                      background: 'white',
+                                      background: 'rgba(0, 0, 0, 0.05)',
                                           cursor: 'pointer',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
-                                      fontSize: '14px',
                                       padding: 0,
-                                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                      lineHeight: '1'
+                                      transition: 'all 0.2s ease',
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)';
+                                      e.currentTarget.style.transform = 'scale(1.1)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
+                                      e.currentTarget.style.transform = 'scale(1)';
                                     }}
                                     title="Add reaction"
                                   >
-                                    😊
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+                                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="none" style={{ opacity: 0.7 }}/>
+                                      <circle cx="9" cy="10" r="1.5" fill="currentColor" style={{ opacity: 0.7 }}/>
+                                      <circle cx="15" cy="10" r="1.5" fill="currentColor" style={{ opacity: 0.7 }}/>
+                                      <path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" style={{ opacity: 0.7 }}/>
+                                    </svg>
                                       </button>
                                 </div>
                                     </div>
@@ -1663,7 +1742,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                 }
                               }}
                               >
-                                {/* Three-dot Menu (for own messages) */}
+                                {/* Three-dot Menu (for own messages) - Messenger Style */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1674,77 +1753,109 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                       y: rect.top
                                     });
                                   }}
+                                  className="message-action-btn"
                                   style={{
-                                    width: '28px',
-                                    height: '28px',
-                                    border: '1px solid #e0e0e0',
+                                    width: '32px',
+                                    height: '32px',
+                                    border: 'none',
                                     borderRadius: '50%',
-                                    background: 'white',
+                                    background: 'rgba(0, 0, 0, 0.05)',
                                     cursor: 'pointer',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    fontSize: '14px',
                                     padding: 0,
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                    lineHeight: '1'
+                                    transition: 'all 0.2s ease',
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)';
+                                    e.currentTarget.style.transform = 'scale(1.1)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
+                                    e.currentTarget.style.transform = 'scale(1)';
                                   }}
                                   title="More options"
                                 >
-                                  ⋯
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="12" cy="6" r="1.5" fill="currentColor" fillOpacity="0.7"/>
+                                    <circle cx="12" cy="12" r="1.5" fill="currentColor" fillOpacity="0.7"/>
+                                    <circle cx="12" cy="18" r="1.5" fill="currentColor" fillOpacity="0.7"/>
+                                  </svg>
                                 </button>
                                 
-                                {/* Reply Button */}
+                                {/* Reply Button - Messenger Style */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setReplyingToMessageId(message.id);
                                     inputRef.current?.focus();
                                   }}
+                                  className="message-action-btn"
                                   style={{
-                                    width: '28px',
-                                    height: '28px',
-                                    border: '1px solid #e0e0e0',
+                                    width: '32px',
+                                    height: '32px',
+                                    border: 'none',
                                     borderRadius: '50%',
-                                    background: 'white',
+                                    background: 'rgba(0, 0, 0, 0.05)',
                                     cursor: 'pointer',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    fontSize: '14px',
                                     padding: 0,
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                    lineHeight: '1'
+                                    transition: 'all 0.2s ease',
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)';
+                                    e.currentTarget.style.transform = 'scale(1.1)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
+                                    e.currentTarget.style.transform = 'scale(1)';
                                   }}
                                   title="Reply"
                                 >
-                                  ↩️
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M10 9V5L3 12L10 19V14.9C15 14.9 18.5 16.5 21 20C20 15 17 10 10 9Z" fill="currentColor" fillOpacity="0.7"/>
+                                  </svg>
                                 </button>
                                 
-                                {/* Emoji Reaction Button */}
+                                {/* Emoji Reaction Button - Messenger Style */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
                                   }}
+                                  className="message-action-btn"
                                   style={{
-                                    width: '28px',
-                                    height: '28px',
-                                    border: '1px solid #e0e0e0',
+                                    width: '32px',
+                                    height: '32px',
+                                    border: 'none',
                                     borderRadius: '50%',
-                                    background: 'white',
+                                    background: 'rgba(0, 0, 0, 0.05)',
                                     cursor: 'pointer',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    fontSize: '14px',
                                     padding: 0,
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                    lineHeight: '1'
+                                    transition: 'all 0.2s ease',
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)';
+                                    e.currentTarget.style.transform = 'scale(1.1)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
+                                    e.currentTarget.style.transform = 'scale(1)';
                                   }}
                                   title="Add reaction"
                                 >
-                                  😊
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="none" opacity="0.7"/>
+                                    <circle cx="9" cy="10" r="1.5" fill="currentColor" opacity="0.7"/>
+                                    <circle cx="15" cy="10" r="1.5" fill="currentColor" opacity="0.7"/>
+                                    <path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.7"/>
+                                  </svg>
                                 </button>
                               </div>
                             </div>

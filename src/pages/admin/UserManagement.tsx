@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../admin/global/sidebar';
 import { api, updateUserStatus, verifyAdminPassword } from '../../services/api';
@@ -77,12 +77,17 @@ const UserManagement: React.FC = () => {
   const [showStatusConfirm, setShowStatusConfirm] = useState(false);
   const [pendingStatusAction, setPendingStatusAction] = useState<'activate' | 'deactivate' | null>(null);
   const [accountFilter, setAccountFilter] = useState<'all' | 'alumni' | 'ojt'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [securityVerified, setSecurityVerified] = useState(false);
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [securityPassword, setSecurityPassword] = useState('');
   const [securityError, setSecurityError] = useState('');
   const [securityLoading, setSecurityLoading] = useState(false);
   const [showSecurityPassword, setShowSecurityPassword] = useState(false);
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailValue, setEmailValue] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
+  const userUpdatesSocketRef = useRef<WebSocket | null>(null);
   
   // Create user form state
   const [formData, setFormData] = useState({
@@ -106,48 +111,55 @@ const UserManagement: React.FC = () => {
     job_code: '',
   });
 
-  // Check if already verified in this session
-  useEffect(() => {
-    const sessionVerified = sessionStorage.getItem('userManagementVerified');
-    if (sessionVerified === 'true') {
-      setSecurityVerified(true);
-      setShowSecurityModal(false);
-    } else {
-      setShowSecurityModal(true);
+  const downloadCredentialsExcel = useCallback(async (username: string, password: string) => {
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const { saveAs } = await import('file-saver');
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Credentials');
+
+      worksheet.columns = [
+        { header: 'CTU ID / Username', key: 'username', width: 28 },
+        { header: 'Temporary Password', key: 'password', width: 28 },
+        { header: 'Generated At', key: 'generatedAt', width: 32 },
+      ];
+
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+      worksheet.addRow({
+        username,
+        password,
+        generatedAt: new Date().toLocaleString(),
+      });
+
+      worksheet.eachRow((row, rowNumber) => {
+        row.alignment = { vertical: 'middle', horizontal: rowNumber === 1 ? 'center' : 'left' };
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+        });
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+
+      const filename = `alumni_credentials_${username || 'user'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      saveAs(blob, filename);
+    } catch (err) {
+      console.error('Failed to generate credentials workbook:', err);
+      toast.error('User created, but failed to download the credentials file.');
     }
   }, []);
 
-  useEffect(() => {
-    if (!securityVerified) return;
-    fetchUsers();
-  }, [securityVerified]);
-
-  useEffect(() => {
-    if (!securityVerified) return;
-    const interval = setInterval(() => {
-      fetchUsers();
-    }, 15000); // refresh every 15 seconds for near real-time updates
-    return () => clearInterval(interval);
-  }, [securityVerified]);
-
-  // Reset password form when selected user doesn't have permission to change password
-  useEffect(() => {
-    if (selectedUser) {
-      const isCoordinator = !!selectedUser?.account_type?.coordinator;
-      const isPeso = !!selectedUser?.account_type?.peso;
-      const canChange = isCoordinator || isPeso;
-      if (!canChange) {
-        setShowPasswordForm(false);
-        setNewPassword('');
-        setConfirmPassword('');
-        setError('');
-        setShowNewPassword(false);
-        setShowConfirmPassword(false);
-      }
-    }
-  }, [selectedUser]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       setError(''); // Clear any previous errors
@@ -175,7 +187,95 @@ const UserManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Check if already verified in this session
+  useEffect(() => {
+    const sessionVerified = sessionStorage.getItem('userManagementVerified');
+    if (sessionVerified === 'true') {
+      setSecurityVerified(true);
+      setShowSecurityModal(false);
+    } else {
+      setShowSecurityModal(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!securityVerified) return;
+    fetchUsers();
+  }, [securityVerified, fetchUsers]);
+
+  useEffect(() => {
+    if (!securityVerified) {
+      if (userUpdatesSocketRef.current) {
+        userUpdatesSocketRef.current.close(1000, 'Security verification revoked');
+        userUpdatesSocketRef.current = null;
+      }
+      return;
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.hostname;
+    const token = localStorage.getItem('accessToken');
+    let wsUrl = `${protocol}//${host}:8000/ws/admin/user-management/`;
+    if (token) {
+      wsUrl += `?token=${encodeURIComponent(token)}`;
+    }
+
+    const socket = new WebSocket(wsUrl);
+    userUpdatesSocketRef.current = socket;
+
+    socket.onopen = () => {
+      console.log('✅ User management WebSocket connected');
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data?.type === 'user_management_update') {
+          console.log('📡 User management update received', data);
+          fetchUsers();
+        }
+      } catch (error) {
+        console.warn('Failed to parse user management WebSocket payload', error);
+      }
+    };
+
+    socket.onerror = (event) => {
+      console.warn('User management WebSocket error', event);
+    };
+
+    socket.onclose = (event) => {
+      console.log('User management WebSocket closed', event.code, event.reason);
+    };
+
+    return () => {
+      socket.close(1000, 'Component cleanup');
+      if (userUpdatesSocketRef.current === socket) {
+        userUpdatesSocketRef.current = null;
+      }
+    };
+  }, [securityVerified, fetchUsers]);
+
+  // Reset password form and email when selected user changes
+  useEffect(() => {
+    if (selectedUser) {
+      const isCoordinator = !!selectedUser?.account_type?.coordinator;
+      const isPeso = !!selectedUser?.account_type?.peso;
+      const canChange = isCoordinator || isPeso;
+      if (!canChange) {
+        setShowPasswordForm(false);
+        setNewPassword('');
+        setConfirmPassword('');
+        setError('');
+        setShowNewPassword(false);
+        setShowConfirmPassword(false);
+      }
+      // Set email value when user is selected
+      setEmailValue(getEmailValue(selectedUser));
+      setEditingEmail(false);
+    }
+  }, [selectedUser]);
 
   const handlePasswordChange = async () => {
     if (!selectedUser) return;
@@ -185,9 +285,8 @@ const UserManagement: React.FC = () => {
       return;
     }
 
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{16,}$/;
-    if (!passwordRegex.test(newPassword)) {
-      setError('Password must be 16+ characters with upper, lower, number, and symbol.');
+    if (!newPassword) {
+      setError('Password is required');
       return;
     }
 
@@ -195,7 +294,7 @@ const UserManagement: React.FC = () => {
       setPasswordLoading(true);
       setError('');
       
-      await api.put(`/admin/users/${selectedUser.user_id}/password/`, {
+      await api.post(`/admin/users/${selectedUser.user_id}/password/`, {
         new_password: newPassword
       });
       
@@ -211,6 +310,49 @@ const UserManagement: React.FC = () => {
       setError(error.response?.data?.message || 'Failed to update password');
     } finally {
       setPasswordLoading(false);
+    }
+  };
+
+  const handleUpdateEmail = async () => {
+    if (!selectedUser) return;
+    
+    const isOJT = !!selectedUser?.account_type?.ojt;
+    const isAlumni = !!selectedUser?.account_type?.user;
+    
+    if (!isOJT && !isAlumni) {
+      setError('Email can only be updated for OJT and Alumni accounts');
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (emailValue && !emailRegex.test(emailValue)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
+    try {
+      setEmailLoading(true);
+      setError('');
+      
+      await api.put(`/userprofile/${selectedUser.user_id}/email/`, {
+        email: emailValue || ''
+      });
+      
+      toast.success('Email updated successfully');
+      setEditingEmail(false);
+      await fetchUsers();
+      // Update selected user with new email
+      const updatedUsers = await api.get('/admin/users/');
+      const updatedUser = updatedUsers.data.users.find((u: User) => u.user_id === selectedUser.user_id);
+      if (updatedUser) {
+        setSelectedUser(updatedUser);
+      }
+    } catch (error: any) {
+      console.error('Error updating email:', error);
+      setError(error.response?.data?.error || error.response?.data?.message || 'Failed to update email');
+    } finally {
+      setEmailLoading(false);
     }
   };
 
@@ -357,8 +499,22 @@ const UserManagement: React.FC = () => {
       return;
     }
     
-    if (!formData.acc_username) {
-      setError('Username is required');
+    const trimmedUsername = (formData.acc_username || '').trim();
+    if (!trimmedUsername) {
+      setError('CTU ID / Username is required');
+      toast.error('CTU ID / Username is required');
+      return;
+    }
+
+    const requiredNameFields: Array<{ value: string; label: string }> = [
+      { value: (formData.f_name || '').trim(), label: 'First Name' },
+      { value: (formData.l_name || '').trim(), label: 'Last Name' },
+    ];
+
+    const missingName = requiredNameFields.find(field => !field.value);
+    if (missingName) {
+      setError(`${missingName.label} is required`);
+      toast.error(`${missingName.label} is required`);
       return;
     }
     
@@ -377,11 +533,6 @@ const UserManagement: React.FC = () => {
         setError('Password is required for coordinator and peso accounts');
         return;
       }
-      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{16,}$/;
-      if (!passwordRegex.test(formData.acc_password)) {
-        setError('Password must be 16+ characters with upper, lower, number, and symbol.');
-        return;
-      }
       if (formData.acc_password !== formData.acc_password_confirm) {
         setError('Passwords do not match');
         return;
@@ -392,6 +543,21 @@ const UserManagement: React.FC = () => {
     if ((formData.account_type === 'alumni' || formData.account_type === 'ojt') && !formData.acc_password) {
       // Password will be auto-generated by backend, no need to send it
     }
+    
+    // Validate phone number if provided - must be exactly 11 digits
+    if (formData.phone_number && formData.phone_number.trim()) {
+      const phoneDigits = formData.phone_number.replace(/\D/g, '');
+      if (phoneDigits.length !== 11) {
+        setError('Phone number must be exactly 11 digits');
+        toast.error('Phone number must be exactly 11 digits');
+        return;
+      }
+    }
+
+    const normalizedFirstName = (formData.f_name || '').trim();
+    const normalizedLastName = (formData.l_name || '').trim();
+    const normalizedMiddleName = (formData.m_name || '').trim() || 'N/A';
+    const createdUsername = trimmedUsername;
 
     try {
       setCreateLoading(true);
@@ -401,8 +567,9 @@ const UserManagement: React.FC = () => {
       // Backend expects: ctu_id, password, f_name, l_name, account_type
       const accountTypeValue = formData.account_type === 'alumni' ? 'user' : formData.account_type;
       const submitData: any = {
-        ctu_id: formData.acc_username, // Backend expects 'ctu_id' not 'acc_username'
+        ctu_id: createdUsername, // Backend expects 'ctu_id' not 'acc_username'
         account_type: accountTypeValue,
+        m_name: normalizedMiddleName,
       };
 
       // Password handling:
@@ -425,11 +592,10 @@ const UserManagement: React.FC = () => {
         submitData.l_name = formData.l_name || 'Account';
       } else {
         // For other account types, include all fields
-        submitData.f_name = formData.f_name;
-        submitData.l_name = formData.l_name;
+        submitData.f_name = normalizedFirstName;
+        submitData.l_name = normalizedLastName;
         
         // Add optional fields only if they have values
-        if (formData.m_name) submitData.m_name = formData.m_name;
         if (formData.email) submitData.email = formData.email;
         if (formData.phone_number) submitData.phone_num = formData.phone_number; // Backend expects 'phone_num' not 'phone_number'
         if (formData.gender) submitData.gender = formData.gender;
@@ -454,6 +620,10 @@ const UserManagement: React.FC = () => {
         setCreatedPassword(response.data.password || '');
         toast.success('Account created successfully!');
         setShowPasswordDisplay(true);
+
+        if (formData.account_type === 'alumni' && response.data.password) {
+          await downloadCredentialsExcel(createdUsername, response.data.password);
+        }
         // Reset form
         setFormData({
           acc_username: '',
@@ -575,9 +745,9 @@ const UserManagement: React.FC = () => {
   const isCoordinatorSelected = formData.account_type === 'coordinator';
   const isPesoSelected = formData.account_type === 'peso';
   const isAlumniSelected = formData.account_type === 'alumni';
-  const passwordRequired = isAlumniSelected;
+  const passwordRequired = isCoordinatorSelected || isPesoSelected;
   const passwordHelperText = passwordRequired
-    ? 'Must be 16+ chars with upper, lower, number, and symbol.'
+    ? ''
     : 'Leave empty to auto-generate';
 
   const filteredUsers = users.filter((user) => {
@@ -585,8 +755,12 @@ const UserManagement: React.FC = () => {
       accountFilter === 'all' ||
       (accountFilter === 'alumni' && user.account_type?.user) ||
       (accountFilter === 'ojt' && user.account_type?.ojt);
-    
-    return matchesFilter;
+
+    const fullName = getDisplayName(user).toLowerCase();
+    const searchTerm = searchQuery.trim().toLowerCase();
+    const matchesSearch = !searchTerm || fullName.includes(searchTerm);
+
+    return matchesFilter && matchesSearch;
   });
 
   const isSelectedAlumni = !!selectedUser?.account_type?.user;
@@ -631,25 +805,44 @@ const UserManagement: React.FC = () => {
           gap: '16px',
           flexWrap: 'wrap'
         }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '200px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '160px', flexShrink: 0 }}>
             <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>Filter Accounts</label>
             <select
               value={accountFilter}
               onChange={(e) => setAccountFilter(e.target.value as 'all' | 'alumni' | 'ojt')}
-            style={{
+              style={{
                 padding: '10px 14px',
                 borderRadius: '8px',
                 border: '1px solid #d1d5db',
-              fontSize: '14px',
+                fontSize: '14px',
                 color: '#1f2937',
                 backgroundColor: '#f8fafc',
-                minWidth: '180px'
+                minWidth: '140px'
               }}
             >
               <option value="all">All Accounts</option>
               <option value="alumni">Alumni</option>
               <option value="ojt">OJT</option>
             </select>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '280px', flexShrink: 0 }}>
+            <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>Search by Name</label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search name (e.g., Juan Dela Cruz)"
+              style={{
+                padding: '10px 14px',
+                borderRadius: '8px',
+                border: '1px solid #d1d5db',
+                fontSize: '14px',
+                color: '#1f2937',
+                backgroundColor: '#f8fafc',
+                width: '100%'
+              }}
+            />
           </div>
           <button
             onClick={() => {
@@ -778,56 +971,88 @@ const UserManagement: React.FC = () => {
             border: '1px solid #e2e8f0',
             overflow: 'hidden'
           }}>
-            <div style={{ overflowX: 'auto' }}>
+            <style>{`
+              .user-table-scrollbar::-webkit-scrollbar {
+                width: 8px;
+              }
+              .user-table-scrollbar::-webkit-scrollbar-track {
+                background: transparent;
+              }
+              .user-table-scrollbar::-webkit-scrollbar-thumb {
+                background-color: rgba(99, 102, 241, 0.35);
+                border-radius: 999px;
+                transition: background-color 0.2s ease;
+              }
+              .user-table-scrollbar::-webkit-scrollbar-thumb:hover {
+                background-color: rgba(99, 102, 241, 0.65);
+              }
+              .user-table-scrollbar::-webkit-scrollbar-thumb:active {
+                background-color: rgba(79, 70, 229, 0.8);
+              }
+            `}</style>
+            <table style={{ 
+              width: '100%', 
+              borderCollapse: 'collapse',
+              fontSize: '14px'
+            }}>
+              <colgroup>
+                <col style={{ width: '45%' }} />
+                <col style={{ width: '30%' }} />
+                <col style={{ width: '25%' }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th style={{ 
+                    backgroundColor: '#5A6DFE',
+                    color: 'white',
+                    padding: '18px 20px',
+                    textAlign: 'left',
+                    fontWeight: '600',
+                    fontSize: '13px',
+                    letterSpacing: '0.3px',
+                    textTransform: 'uppercase'
+                  }}>Name</th>
+                  <th style={{ 
+                    backgroundColor: '#5A6DFE',
+                    color: 'white',
+                    padding: '18px 20px',
+                    textAlign: 'left',
+                    fontWeight: '600',
+                    fontSize: '13px',
+                    letterSpacing: '0.3px',
+                    textTransform: 'uppercase'
+                  }}>Account Type</th>
+                  <th style={{ 
+                    backgroundColor: '#5A6DFE',
+                    color: 'white',
+                    padding: '18px 20px',
+                    textAlign: 'left',
+                    fontWeight: '600',
+                    fontSize: '13px',
+                    letterSpacing: '0.3px',
+                    textTransform: 'uppercase'
+                  }}>Status</th>
+                </tr>
+              </thead>
+            </table>
+            <div style={{ 
+              overflowX: 'auto',
+              overflowY: 'auto',
+              maxHeight: '600px',
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#64748b #f8fafc'
+            }} className="user-table-scrollbar">
               <table style={{ 
                 width: '100%', 
                 borderCollapse: 'collapse',
-                fontSize: '14px'
+                fontSize: '14px',
+                tableLayout: 'fixed'
               }}>
-                <thead>
-                  <tr>
-                    <th style={{ 
-                      backgroundColor: '#5A6DFE',
-                      color: 'white',
-                      padding: '18px 20px',
-                      textAlign: 'left',
-                      fontWeight: '600',
-                      fontSize: '13px',
-                      letterSpacing: '0.3px',
-                      textTransform: 'uppercase'
-                    }}>Name</th>
-                    <th style={{ 
-                      backgroundColor: '#5A6DFE',
-                      color: 'white',
-                      padding: '18px 20px',
-                      textAlign: 'left',
-                      fontWeight: '600',
-                      fontSize: '13px',
-                      letterSpacing: '0.3px',
-                      textTransform: 'uppercase'
-                    }}>Email</th>
-                    <th style={{ 
-                      backgroundColor: '#5A6DFE',
-                      color: 'white',
-                      padding: '18px 20px',
-                      textAlign: 'left',
-                      fontWeight: '600',
-                      fontSize: '13px',
-                      letterSpacing: '0.3px',
-                      textTransform: 'uppercase'
-                    }}>Account Type</th>
-                    <th style={{ 
-                      backgroundColor: '#5A6DFE',
-                      color: 'white',
-                      padding: '18px 20px',
-                      textAlign: 'left',
-                      fontWeight: '600',
-                      fontSize: '13px',
-                      letterSpacing: '0.3px',
-                      textTransform: 'uppercase'
-                    }}>Status</th>
-                  </tr>
-                </thead>
+                <colgroup>
+                  <col style={{ width: '45%' }} />
+                  <col style={{ width: '30%' }} />
+                  <col style={{ width: '25%' }} />
+                </colgroup>
                 <tbody>
                   {filteredUsers.map((user, index) => (
                     <tr 
@@ -881,11 +1106,6 @@ const UserManagement: React.FC = () => {
                           return 'N/A';
                         })()}
                       </td>
-                      <td style={{ 
-                        padding: '18px 20px',
-                        color: '#475569',
-                        fontSize: '14px'
-                      }}>{user.email || 'N/A'}</td>
                       <td style={{ padding: '18px 20px' }}>
                         <span style={{
                           backgroundColor: getAccountTypeColor(user.account_type),
@@ -1082,39 +1302,202 @@ const UserManagement: React.FC = () => {
               borderRadius: '14px',
               padding: '14px',
               border: '1px solid #e2e8f0',
-              marginBottom: '16px'
+              marginBottom: '16px',
+              overflow: 'visible'
             }}>
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: '10px'
+              gap: '10px',
+              overflow: 'visible'
             }}>
-              {[
-                { label: 'First Name', value: getFirstName(selectedUser) },
-                { label: 'Last Name', value: getLastName(selectedUser) },
-                { label: 'Middle Name', value: getMiddleName(selectedUser) },
-                { label: 'Email', value: getEmailValue(selectedUser) },
-                { label: 'Address', value: getAddressValue(selectedUser) },
-                { label: 'Contact Number', value: getContactValue(selectedUser) },
-              ].map((detail) => (
-                <div
-                  key={detail.label}
-                  style={{
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '10px',
-                    padding: '9px 12px',
-                    backgroundColor: 'white',
-                    boxShadow: '0 4px 10px rgba(15, 23, 42, 0.04)'
-                  }}
-                >
-                  <p style={{ margin: '0 0 4px 0', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', fontWeight: 700 }}>
-                    {detail.label}
-                  </p>
-                  <p style={{ margin: 0, fontSize: '14px', color: '#0f172a', fontWeight: 600 }}>
-                    {detail.value}
-                  </p>
-                </div>
-              ))}
+              {(() => {
+                const isOJT = !!selectedUser?.account_type?.ojt;
+                const isAlumni = !!selectedUser?.account_type?.user;
+                const isCoordinator = !!selectedUser?.account_type?.coordinator;
+                const isPeso = !!selectedUser?.account_type?.peso;
+                const isAdmin = !!selectedUser?.account_type?.admin;
+                
+                // For Coordinator, Admin, and PESO: Show minimal account info
+                if (isCoordinator || isAdmin || isPeso) {
+                  const accountDetails = [];
+                  
+                  // Username/CTU ID
+                  accountDetails.push({
+                    label: 'Username',
+                    value: selectedUser.acc_username || selectedUser.ctu_id || selectedUser.username || 'N/A'
+                  });
+                  
+                  // Program for Coordinators
+                  if (isCoordinator && selectedUser.course) {
+                    accountDetails.push({
+                      label: 'Program',
+                      value: selectedUser.course
+                    });
+                  }
+                  
+                  return accountDetails.map((detail) => (
+                    <div
+                      key={detail.label}
+                      style={{
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '10px',
+                        padding: '9px 12px',
+                        backgroundColor: 'white',
+                        boxShadow: '0 4px 10px rgba(15, 23, 42, 0.04)',
+                        position: 'relative'
+                      }}
+                    >
+                      <p style={{ margin: '0 0 4px 0', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', fontWeight: 700 }}>
+                        {detail.label}
+                      </p>
+                      <p style={{ margin: 0, fontSize: '14px', color: '#0f172a', fontWeight: 600 }}>
+                        {detail.value}
+                      </p>
+                    </div>
+                  ));
+                }
+                
+                // For Alumni and OJT: Show all personal details
+                return [
+                  { label: 'First Name', value: getFirstName(selectedUser) },
+                  { label: 'Last Name', value: getLastName(selectedUser) },
+                  { label: 'Middle Name', value: getMiddleName(selectedUser) },
+                  { label: 'Email', value: getEmailValue(selectedUser), isEmail: true },
+                  { label: 'Address', value: getAddressValue(selectedUser) },
+                  { label: 'Contact Number', value: getContactValue(selectedUser) },
+                ].map((detail) => {
+                  const canEditEmail = detail.isEmail && (isOJT || isAlumni);
+                
+                return (
+                  <div
+                    key={detail.label}
+                    style={{
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '10px',
+                      padding: '9px 12px',
+                      backgroundColor: 'white',
+                      boxShadow: '0 4px 10px rgba(15, 23, 42, 0.04)',
+                      position: 'relative',
+                      gridColumn: canEditEmail && editingEmail ? 'span 2' : 'span 1',
+                      minWidth: canEditEmail && editingEmail ? '300px' : 'auto',
+                      overflow: 'visible'
+                    }}
+                  >
+                    <p style={{ margin: '0 0 4px 0', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', fontWeight: 700 }}>
+                      {detail.label}
+                    </p>
+                    {canEditEmail && editingEmail ? (
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', width: '100%', minWidth: 0 }}>
+                        <input
+                          type="email"
+                          value={emailValue}
+                          onChange={(e) => setEmailValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleUpdateEmail();
+                            } else if (e.key === 'Escape') {
+                              setEmailValue(getEmailValue(selectedUser));
+                              setEditingEmail(false);
+                            }
+                          }}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: '6px 8px',
+                            border: '2px solid #3b82f6',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            outline: 'none'
+                          }}
+                          autoFocus
+                        />
+                        <button
+                          onClick={handleUpdateEmail}
+                          disabled={emailLoading}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#10b981',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            cursor: emailLoading ? 'not-allowed' : 'pointer',
+                            opacity: emailLoading ? 0.6 : 1,
+                            flexShrink: 0,
+                            minWidth: '36px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          {emailLoading ? '...' : '✓'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEmailValue(getEmailValue(selectedUser));
+                            setEditingEmail(false);
+                          }}
+                          disabled={emailLoading}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#6b7280',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            cursor: emailLoading ? 'not-allowed' : 'pointer',
+                            flexShrink: 0,
+                            minWidth: '36px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', width: '100%', minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: '14px', color: '#0f172a', fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {detail.value}
+                        </p>
+                        {canEditEmail && (
+                          <button
+                            onClick={() => setEditingEmail(true)}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: '#f8f9fa',
+                              color: '#495057',
+                              border: '1px solid #dee2e6',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              fontWeight: '500',
+                              transition: 'all 0.2s ease',
+                              flexShrink: 0
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#e9ecef';
+                              e.currentTarget.style.borderColor = '#adb5bd';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#f8f9fa';
+                              e.currentTarget.style.borderColor = '#dee2e6';
+                            }}
+                            title="Edit email"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+              })()}
             </div>
             </div>
 
@@ -1145,7 +1528,7 @@ const UserManagement: React.FC = () => {
                     disabled={updatingStatusId === selectedUser.user_id}
                     style={{
                       padding: '10px 18px',
-                      borderRadius: '999px',
+                      borderRadius: '28px',
                       border: 'none',
                       backgroundColor: selectedUserStatus === 'active' ? '#dc2626' : '#16a34a',
                       color: 'white',
@@ -1451,79 +1834,87 @@ const UserManagement: React.FC = () => {
                 )}
               </div>
             )}
+
           </div>
         </div>
       )}
 
       {showSecurityModal && (
-        <div 
+        <div
           style={{
             position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(12, 19, 38, 0.55)',
+            inset: 0,
             display: 'flex',
-            alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1500,
-            padding: '20px',
-            backdropFilter: 'blur(6px)'
+            alignItems: 'center',
+            padding: '24px',
+            background: 'rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 1600
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSecurityPassword('');
+              setShowSecurityPassword(false);
+              setSecurityError('');
+              setShowSecurityModal(false);
+            }
           }}
         >
           <form
             onSubmit={handleSecuritySubmit}
             style={{
-              width: 'min(420px, 94vw)',
-              borderRadius: '28px',
-              boxShadow: '0 40px 90px rgba(15, 23, 42, 0.4)',
-              border: '1px solid rgba(148, 163, 184, 0.2)',
-              overflow: 'hidden',
-              backgroundColor: 'white'
+              width: 'min(400px, 90vw)',
+              borderRadius: '16px',
+              padding: '32px',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+              backgroundColor: '#ffffff',
+              position: 'relative'
             }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div style={{
-              padding: '28px 32px 24px',
-              background: 'linear-gradient(135deg, #f8fbff 0%, #eef2ff 60%, #e2e8ff 100%)'
+            <h2 style={{
+              margin: '0 0 24px 0',
+              fontSize: '22px',
+              fontWeight: 700,
+              color: '#1f2937',
+              textAlign: 'center'
             }}>
-              <p style={{ margin: '0 0 6px 0', fontSize: '12px', letterSpacing: '0.18em', color: '#64748b', fontWeight: 700 }}>
-                SECURITY CHECK
-              </p>
-              <h2 style={{ margin: 0, fontSize: '24px', color: '#0f172a', letterSpacing: '-0.02em' }}>
-                Confirm Admin Password
-              </h2>
-              <p style={{ margin: '12px 0 0 0', color: '#475569', fontSize: '14px', lineHeight: 1.65 }}>
-                Only verified administrators can update users. Enter your password to continue.
-              </p>
-            </div>
-            <div style={{ 
-              padding: '28px 32px 34px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '20px',
-              alignItems: 'center'
-            }}>
+              Confirm Admin Password
+            </h2>
+
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '20px'
+              }}
+            >
               {securityError && (
-                <div style={{
-                  backgroundColor: '#fef2f2',
-                  color: '#b91c1c',
-                  border: '1px solid #fecaca',
-                  borderRadius: '12px',
-                  padding: '12px 14px',
-                  width: '100%',
-                  maxWidth: '360px',
-                  fontSize: '13px'
-                }}>
+                <div
+                  style={{
+                    width: '100%',
+                    borderRadius: '8px',
+                    padding: '12px 14px',
+                    background: '#fef2f2',
+                    color: '#b91c1c',
+                    border: '1px solid #fecaca',
+                    fontSize: '13px'
+                  }}
+                >
                   {securityError}
                 </div>
               )}
-              <div style={{ 
-                width: '100%',
-                maxWidth: '360px'
-              }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>
-                  Admin Password
+
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  color: '#1f2937',
+                  marginBottom: '8px'
+                }}>
+                  Password:
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -1533,21 +1924,21 @@ const UserManagement: React.FC = () => {
                     placeholder="Enter password"
                     style={{
                       width: '100%',
-                      padding: '12px 50px 12px 14px',
-                      borderRadius: '14px',
-                      border: '2px solid #e2e8f0',
+                      padding: '12px 56px 12px 16px',
+                      borderRadius: '8px',
+                      border: '1px solid #d1d5db',
+                      backgroundColor: '#ffffff',
                       fontSize: '15px',
-                      backgroundColor: '#f8fafc',
+                      color: '#1f2937',
                       outline: 'none',
-                      transition: 'all 0.2s ease'
+                      transition: 'border-color 0.2s ease',
+                      boxSizing: 'border-box'
                     }}
                     onFocus={(e) => {
                       e.currentTarget.style.borderColor = '#2563eb';
-                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.15)';
                     }}
                     onBlur={(e) => {
-                      e.currentTarget.style.borderColor = '#e2e8f0';
-                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.borderColor = '#d1d5db';
                     }}
                   />
                   <button
@@ -1555,25 +1946,36 @@ const UserManagement: React.FC = () => {
                     onClick={() => setShowSecurityPassword(!showSecurityPassword)}
                     style={{
                       position: 'absolute',
-                      right: '14px',
+                      right: '12px',
                       top: '50%',
                       transform: 'translateY(-50%)',
-                      border: 'none',
-                      background: 'none',
-                      cursor: 'pointer',
-                      padding: '6px',
+                      width: '32px',
+                      height: '32px',
                       borderRadius: '50%',
-                      transition: 'background-color 0.2s ease'
+                      border: 'none',
+                      backgroundColor: 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'opacity 0.2s ease, background-color 0.2s ease'
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#e2e8f0'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.opacity = '0.7';
+                      e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.opacity = '1';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
                     aria-label={showSecurityPassword ? 'Hide password' : 'Show password'}
                   >
-                    <PasswordVisibilityIcon show={showSecurityPassword} size={20} color="#475569" />
+                    <PasswordVisibilityIcon show={showSecurityPassword} size={26} color="#4b5563" />
                   </button>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '12px', width: '100%', maxWidth: '360px' }}>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
                 <button
                   type="button"
                   onClick={() => {
@@ -1585,17 +1987,21 @@ const UserManagement: React.FC = () => {
                   style={{
                     flex: 1,
                     padding: '12px 0',
-                    borderRadius: '12px',
-                    border: '1px solid #cbd5f5',
-                    backgroundColor: 'white',
-                    color: '#1d4ed8',
+                    borderRadius: '8px',
+                    border: '1px solid #d1d5db',
+                    backgroundColor: '#ffffff',
+                    color: '#374151',
+                    fontSize: '15px',
                     fontWeight: 600,
                     cursor: 'pointer',
-                    fontSize: '15px',
-                    transition: 'all 0.2s ease'
+                    transition: 'background-color 0.2s ease'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#eef2ff'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f9fafb';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#ffffff';
+                  }}
                 >
                   Cancel
                 </button>
@@ -1605,26 +2011,23 @@ const UserManagement: React.FC = () => {
                   style={{
                     flex: 1,
                     padding: '12px 0',
-                    borderRadius: '12px',
+                    borderRadius: '8px',
                     border: 'none',
-                    background: securityLoading 
-                      ? '#94a3b8' 
-                      : 'linear-gradient(120deg, #2563eb, #1d4ed8)',
+                    backgroundColor: securityLoading ? '#9ca3af' : '#2563eb',
                     color: 'white',
-                    fontWeight: 600,
-                    cursor: securityLoading ? 'not-allowed' : 'pointer',
                     fontSize: '15px',
-                    boxShadow: securityLoading ? 'none' : '0 14px 24px rgba(37, 99, 235, 0.35)',
-                    transition: 'transform 0.2s ease'
+                    fontWeight: 700,
+                    cursor: securityLoading ? 'not-allowed' : 'pointer',
+                    transition: 'background-color 0.2s ease'
                   }}
                   onMouseEnter={(e) => {
-                    if (!securityLoading) e.currentTarget.style.transform = 'translateY(-1px)';
+                    if (!securityLoading) e.currentTarget.style.backgroundColor = '#1d4ed8';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
+                    if (!securityLoading) e.currentTarget.style.backgroundColor = '#2563eb';
                   }}
                 >
-                  {securityLoading ? 'Verifying...' : 'Unlock Access'}
+                  {securityLoading ? 'Verifying...' : 'Submit'}
                 </button>
               </div>
             </div>
@@ -1914,7 +2317,7 @@ const UserManagement: React.FC = () => {
                 <>
                   <div>
                     <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#212529' }}>
-                      Password <span style={{ fontSize: '12px', color: '#6c757d', fontWeight: 'normal' }}>Must be 16+ chars with upper, lower, number, and symbol.</span>
+                      Password
                     </label>
                     <div style={{ position: 'relative' }}>
                       <input
@@ -2163,7 +2566,7 @@ const UserManagement: React.FC = () => {
                     e.target.style.borderColor = '#e2e8f0';
                     e.target.style.boxShadow = 'none';
                   }}
-                  placeholder="Enter middle name"
+                  placeholder="Enter middle name (type N/A if none)"
                 />
               </div>
 
@@ -2289,12 +2692,13 @@ const UserManagement: React.FC = () => {
                   name="phone_number"
                   value={formData.phone_number}
                   onChange={(e) => {
-                    // Only allow numbers, spaces, dashes, and plus sign
-                    const value = e.target.value.replace(/[^\d\s\-+]/g, '');
+                    // Only allow numbers and limit to 11 digits
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 11);
                     setFormData({ ...formData, phone_number: value });
                   }}
                   inputMode="numeric"
-                  pattern="[0-9\s\-+]*"
+                  pattern="[0-9]{11}"
+                  maxLength={11}
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -2316,13 +2720,13 @@ const UserManagement: React.FC = () => {
                     e.target.style.boxShadow = 'none';
                   }}
                   onKeyPress={(e) => {
-                    // Prevent non-numeric characters (except space, dash, plus)
+                    // Only allow numeric characters
                     const char = String.fromCharCode(e.which || e.keyCode);
-                    if (!/[0-9\s\-+]/.test(char)) {
+                    if (!/[0-9]/.test(char)) {
                       e.preventDefault();
                     }
                   }}
-                  placeholder="Enter phone number (numbers only)"
+                  placeholder="Enter phone number (11 digits)"
                 />
               </div>
 
@@ -2335,6 +2739,7 @@ const UserManagement: React.FC = () => {
                   name="birthdate"
                   value={formData.birthdate}
                   onChange={handleInputChange}
+                  max="2100-12-31"
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -2360,25 +2765,25 @@ const UserManagement: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#495057' }}>
-                  Course/Program
+                  Year Graduated
                 </label>
                 <select
-                  name="course"
-                  value={formData.course}
+                  name="year_graduated"
+                  value={formData.year_graduated}
                   onChange={handleInputChange}
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '10px 12px',
                     border: '2px solid #e2e8f0',
                     borderRadius: '10px',
                     fontSize: '14px',
-                    backgroundColor: 'white',
-                    cursor: 'pointer',
                     transition: 'all 0.2s ease',
                     boxSizing: 'border-box',
                     fontWeight: '500',
-                    color: '#1e293b',
-                    outline: 'none'
+                    color: formData.year_graduated ? '#1e293b' : '#9ca3af',
+                    backgroundColor: '#ffffff',
+                    outline: 'none',
+                    cursor: 'pointer'
                   }}
                   onFocus={(e) => {
                     e.target.style.borderColor = '#3b82f6';
@@ -2389,93 +2794,23 @@ const UserManagement: React.FC = () => {
                     e.target.style.boxShadow = 'none';
                   }}
                 >
-                  <option value="">Select course/program</option>
-                  <option value="BSIT">BSIT</option>
-                  <option value="BITCT">BITCT</option>
-                  <option value="BSIS">BSIS</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#495057' }}>
-                  Section
-                </label>
-                <input
-                  type="text"
-                  name="section"
-                  value={formData.section}
-                  onChange={handleInputChange}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    border: '2px solid #e2e8f0',
-                    borderRadius: '10px',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease',
-                    boxSizing: 'border-box',
-                    fontWeight: '500',
-                    color: '#1e293b',
-                    outline: 'none'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#3b82f6';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '#e2e8f0';
-                    e.target.style.boxShadow = 'none';
-                  }}
-                  placeholder="Enter section"
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#495057' }}>
-                  Year Graduated
-                </label>
-                <input
-                  type="number"
-                  name="year_graduated"
-                  value={formData.year_graduated}
-                  onChange={handleInputChange}
-                  min="1950"
-                  max={new Date().getFullYear() + 5}
-                  step="1"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    border: '2px solid #e2e8f0',
-                    borderRadius: '10px',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease',
-                    boxSizing: 'border-box',
-                    fontWeight: '500',
-                    color: '#1e293b',
-                    outline: 'none'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#3b82f6';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                  }}
-                  onBlur={(e) => {
-                    // Validate year format (4 digits)
-                    const year = e.target.value;
-                    if (year) {
-                      const yearNum = parseInt(year, 10);
-                      if (year.length !== 4 || isNaN(yearNum) || yearNum < 1950 || yearNum > new Date().getFullYear() + 5) {
-                        e.target.style.borderColor = '#dc3545';
-                        e.target.style.boxShadow = '0 0 0 3px rgba(220, 53, 69, 0.1)';
-                      } else {
-                        e.target.style.borderColor = '#e2e8f0';
-                        e.target.style.boxShadow = 'none';
-                      }
-                    } else {
-                      e.target.style.borderColor = '#e2e8f0';
-                      e.target.style.boxShadow = 'none';
+                  <option value="">Select year graduated</option>
+                  {(() => {
+                    const currentYear = new Date().getFullYear();
+                    const startYear = 1980; // Start from 1980 to accommodate older alumni
+                    const endYear = currentYear + 1; // Allow current year + 1 for next academic year
+                    const options = [];
+                    for (let year = startYear; year <= endYear; year++) {
+                      const nextYear = year + 1;
+                      options.push(
+                        <option key={year} value={year}>
+                          {year}-{nextYear}
+                        </option>
+                      );
                     }
-                  }}
-                  placeholder="e.g. 2024"
-                />
+                    return options;
+                  })()}
+                </select>
               </div>
 
               <div>

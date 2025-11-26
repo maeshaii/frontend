@@ -10,6 +10,8 @@ interface UserSearchProps {
 type UserRow = { 
   user_id: number; 
   f_name: string; 
+  m_name?: string | null;
+  middle_name?: string | null;
   l_name: string;
   avatar_url?: string | null;
   profile_pic?: string | null;
@@ -42,7 +44,14 @@ const UserSearch: React.FC<UserSearchProps> = ({ onConversationCreated, onClose 
     searchTimeoutRef.current = setTimeout(async () => {
       try {
         const data = await searchUsersForMessaging(trimmedQuery);
-        setResults(data.users || []);
+        // Normalize user data to ensure m_name is included
+        const normalizedUsers = (data.users || []).map((user: any) => ({
+          ...user,
+          m_name: user.m_name || user.middle_name || null,
+          avatar_url: user.avatar_url || user.profile_pic || null,
+        }));
+        console.log('[UserSearch] Normalized users:', normalizedUsers);
+        setResults(normalizedUsers);
         setError(null);
       } catch (err) {
         console.error('Search failed:', err);
@@ -103,15 +112,24 @@ const UserSearch: React.FC<UserSearchProps> = ({ onConversationCreated, onClose 
     }
   };
 
-  const getInitials = (user: UserRow) => {
-    const first = user.f_name?.charAt(0).toUpperCase() || '';
-    const last = user.l_name?.charAt(0).toUpperCase() || '';
-    return first + last;
+  const formatFullName = (user: UserRow) => {
+    const first = user.f_name?.trim() || '';
+    const middle = (user.m_name || user.middle_name)?.trim() || '';
+    const last = user.l_name?.trim() || '';
+    
+    const nameParts: string[] = [];
+    if (first) nameParts.push(first);
+    if (middle) nameParts.push(middle);
+    if (last) nameParts.push(last);
+    
+    return nameParts.length > 0 ? nameParts.join(' ') : 'User';
   };
 
   const getAvatarUrl = (user: UserRow) => {
     const avatar = user.avatar_url || user.profile_pic;
-    if (!avatar) return null;
+    if (!avatar || avatar === 'null' || avatar === 'undefined' || avatar.trim() === '') {
+      return null;
+    }
     
     if (avatar.startsWith('http')) {
       return avatar;
@@ -265,30 +283,30 @@ const UserSearch: React.FC<UserSearchProps> = ({ onConversationCreated, onClose 
                     }}
                     aria-label={`Start conversation with ${user.f_name} ${user.l_name}`}
                   >
-                    <div className="user-item-avatar">
+                    <div className="user-item-avatar" style={{ overflow: 'hidden', borderRadius: '50%' }}>
                       {avatarUrl ? (
                         <img 
                           src={avatarUrl} 
-                          alt={`${user.f_name} ${user.l_name}`}
+                          alt={formatFullName(user)}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                           onError={(e) => {
                             const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            const parent = target.parentElement;
-                            if (parent) {
-                              const initials = getInitials(user);
-                              parent.innerHTML = `<div class="avatar-fallback">${initials}</div>`;
-                            }
+                            // Replace with CTU logo on error
+                            target.src = '/ctu_logo-removebg-preview.png';
+                            target.onerror = null; // Prevent infinite loop
                           }}
                         />
                       ) : (
-                        <div className="avatar-fallback">
-                          {getInitials(user)}
-                        </div>
+                        <img 
+                          src="/ctu_logo-removebg-preview.png" 
+                          alt="CTU Logo"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
                       )}
                     </div>
                     <div className="user-item-info">
                       <div className="user-item-name">
-                        {user.f_name} {user.l_name}
+                        {formatFullName(user)}
                       </div>
                       <div className="user-item-subtitle">
                         Tap to start chatting

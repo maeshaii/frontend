@@ -322,6 +322,8 @@ export const loginUser = async (acc_username: string, acc_password: string) => {
       return { success: false, message: 'Invalid credentials or request format' };
     } else if (error.response?.status === 401) {
       return { success: false, message: 'Invalid username or password' };
+    } else if (error.response?.status === 403) {
+      return { success: false, message: 'This account is deactivated. Please contact the admin.' };
     } else if (error.response?.status === 500) {
       return { success: false, message: 'Server error - please try again later' };
     }
@@ -997,7 +999,13 @@ export const updateMessageApi = async (conversationId: number, messageId: number
 
 export const searchUsersForMessaging = async (q: string) => {
   const { data } = await api.get(`messaging/users/search/?q=${encodeURIComponent(q)}`);
-  return data as { users: Array<{ user_id: number; f_name: string; l_name: string }>; count: number; query: string };
+  // Normalize response to ensure all fields are present
+  const users = (data?.users || []).map((user: any) => ({
+    ...user,
+    m_name: user.m_name || user.middle_name || null,
+    avatar_url: user.avatar_url || user.profile_pic || null,
+  }));
+  return { ...data, users } as { users: Array<{ user_id: number; f_name: string; m_name?: string | null; l_name: string; avatar_url?: string | null; profile_pic?: string | null }>; count: number; query: string };
 };
 
 export const searchAlumni = async (q: string) => {

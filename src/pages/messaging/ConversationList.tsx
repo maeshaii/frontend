@@ -16,13 +16,15 @@ interface ConversationItemProps {
   isSelected: boolean;
   onClick: () => void;
   isOnline?: boolean;
+  showMinimal?: boolean; // If true, only show avatar and name (for Online tab)
 }
 
 const ConversationItem: React.FC<ConversationItemProps> = ({ 
   conversation, 
   isSelected, 
   onClick,
-  isOnline = false
+  isOnline = false,
+  showMinimal = false
 }) => {
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
   const [isLoadingPic, setIsLoadingPic] = useState(false);
@@ -131,27 +133,31 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
             <h3 className="conversation-name">
               {conversation.other_participant?.name || 'Unknown User'}
             </h3>
-            {conversation.is_message_request && (
+            {!showMinimal && conversation.is_message_request && (
               <span className="message-request-indicator" title="Message Request">
                 📩
               </span>
             )}
           </div>
-          <span className="conversation-time">
-            {conversation.updated_at ? formatTime(conversation.updated_at) : ''}
-          </span>
-        </div>
-        
-        <div className="conversation-meta">
-          <p className="conversation-preview">
-            {conversation.last_message?.content || 'No messages yet'}
-          </p>
-          {conversation.unread_count && conversation.unread_count > 0 && (
-            <div className="unread-badge">
-              {conversation.unread_count > 99 ? '99+' : conversation.unread_count}
-            </div>
+          {!showMinimal && (
+            <span className="conversation-time">
+              {conversation.updated_at ? formatTime(conversation.updated_at) : ''}
+            </span>
           )}
         </div>
+        
+        {!showMinimal && (
+          <div className="conversation-meta">
+            <p className="conversation-preview">
+              {conversation.last_message?.content || 'No messages yet'}
+            </p>
+            {conversation.unread_count && conversation.unread_count > 0 && (
+              <div className="unread-badge">
+                {conversation.unread_count > 99 ? '99+' : conversation.unread_count}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -169,24 +175,46 @@ const ConversationList: React.FC<ConversationListProps> = ({
   const [filteredConversations, setFilteredConversations] = useState<ConversationSummary[]>(conversations);
   const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set());
   const [onlineUsersData, setOnlineUsersData] = useState<any[]>([]);
+  const [isLoadingOnlineUsers, setIsLoadingOnlineUsers] = useState(true);
 
   // Calculate message request count
+  // Only count message requests that still have unread messages so badges stay in sync
   const messageRequestCount = useMemo(() => {
-    return conversations.filter(conv => conv.is_message_request).length;
+    return conversations.filter(
+      (conv) => conv.is_message_request && (conv.unread_count || 0) > 0
+    ).length;
   }, [conversations]);
 
   // Load online users
   useEffect(() => {
     const loadOnlineUsers = async () => {
+      setIsLoadingOnlineUsers(true);
       try {
         const response = await getOnlineUsers();
+        console.log('[Online Users] API Response:', response);
         if (response.success) {
-          const onlineUserIds = new Set<number>(response.online_users.map((user: any) => user.user_id));
+          // Ensure all user_ids are numbers for consistent Set operations
+          const onlineUserIds = new Set<number>(
+            response.online_users.map((user: any) => Number(user.user_id))
+          );
+          console.log('[Online Users] Setting online users:', {
+            count: onlineUserIds.size,
+            userIds: Array.from(onlineUserIds),
+            users: response.online_users.map((u: any) => ({ user_id: u.user_id, name: u.name }))
+          });
           setOnlineUsers(onlineUserIds);
-          setOnlineUsersData(response.online_users);
+          setOnlineUsersData(response.online_users || []);
+        } else {
+          console.warn('[Online Users] API returned success=false:', response);
+          setOnlineUsers(new Set());
+          setOnlineUsersData([]);
         }
       } catch (error) {
-        console.error('Failed to load online users:', error);
+        console.error('[Online Users] Failed to load online users:', error);
+        setOnlineUsers(new Set());
+        setOnlineUsersData([]);
+      } finally {
+        setIsLoadingOnlineUsers(false);
       }
     };
 
@@ -204,9 +232,24 @@ const ConversationList: React.FC<ConversationListProps> = ({
 
   // Filter conversations based on search query and active filter
   useEffect(() => {
-    // Default: All Messages should EXCLUDE message requests
+    // Default: All Messages should EXCLUDE message requests AND empty conversations (no messages sent)
     let filtered = activeFilter === 'all'
-      ? conversations.filter(conv => !conv.is_message_request)
+      ? conversations.filter(conv => {
+          // CRITICAL: Exclude message requests - they should NEVER appear in All Messages
+          // Double-check to ensure is_message_request is properly set
+          if (conv.is_message_request === true) {
+            return false;
+          }
+          // Additional safety check: if is_message_request is undefined/null, treat as false (regular conversation)
+          // But if it's explicitly true, exclude it
+          if (conv.is_message_request) {
+            return false;
+          }
+          // Exclude conversations with no messages (empty conversations)
+          // A conversation should only appear if it has at least one message
+          if (!conv.last_message || !conv.last_message.content) return false;
+          return true;
+        })
       : conversations;
     
     // Apply search filter
@@ -222,38 +265,89 @@ const ConversationList: React.FC<ConversationListProps> = ({
       // Filter for message requests (conversations with is_message_request = true)
       filtered = filtered.filter(conv => conv.is_message_request);
     } else if (activeFilter === 'online') {
-      // 1) Existing conversations whose other participant is online
-      const existingOnline = conversations.filter(conv => {
-        const otherUserId = conv.other_participant?.user_id;
-        return otherUserId && onlineUsers.has(otherUserId);
-      });
+      // If still loading online users, don't filter yet (show loading state)
+      if (isLoadingOnlineUsers) {
+        console.log('[Online Filter] Still loading online users, skipping filter');
+        filtered = [];
+      } else {
+        // Debug logging
+        console.log('[Online Filter] Checking online status:', {
+          totalConversations: conversations.length,
+          onlineUsersCount: onlineUsers.size,
+          onlineUsersDataCount: onlineUsersData.length,
+          onlineUserIds: Array.from(onlineUsers),
+          onlineUsersData: onlineUsersData.map((u: any) => ({ user_id: u.user_id, name: u.name }))
+        });
 
-      // 2) Virtual items for online mutuals without an existing conversation
-      const existingOtherIds = new Set<number>(
-        conversations.map(c => c.other_participant?.user_id).filter(Boolean) as number[]
-      );
-
-      const virtualItems: ConversationSummary[] = onlineUsersData
-        .filter((u: any) => !existingOtherIds.has(u.user_id))
-        .map((u: any) => ({
-          conversation_id: -u.user_id, // sentinel negative id indicates virtual row
-          updated_at: new Date().toISOString(),
-          is_message_request: false,
-          last_message: undefined,
-          unread_count: 0,
-          participants: [],
-          other_participant: {
-            user_id: u.user_id,
-            name: u.name || `${u.f_name || ''} ${u.l_name || ''}`.trim(),
-            avatar_url: u.profile_pic || null,
+        // 1) Existing conversations whose other participant is online
+        // IMPORTANT: Check ALL conversations (not filtered), and ensure user_id matches
+        const existingOnline = conversations.filter(conv => {
+          const otherUserId = conv.other_participant?.user_id;
+          if (!otherUserId) {
+            return false;
           }
-        }));
+          
+          // Check if user is in onlineUsers Set (ensure type consistency)
+          const isOnline = onlineUsers.has(Number(otherUserId));
+          
+          // Also check onlineUsersData as fallback
+          const isInOnlineData = onlineUsersData.some((u: any) => Number(u.user_id) === Number(otherUserId));
+          
+          if (isOnline || isInOnlineData) {
+            console.log(`[Online Filter] Found online conversation: ${conv.other_participant?.name} (user_id: ${otherUserId})`);
+            return true;
+          }
+          
+          return false;
+        });
 
-      filtered = [...existingOnline, ...virtualItems];
+        console.log(`[Online Filter] Found ${existingOnline.length} existing online conversations`);
+
+        // 2) Virtual items for online mutuals without an existing conversation
+        const existingOtherIds = new Set<number>(
+          conversations
+            .map(c => {
+              const userId = c.other_participant?.user_id;
+              return userId ? Number(userId) : null;
+            })
+            .filter((id): id is number => id !== null)
+        );
+
+        console.log(`[Online Filter] Existing conversation user IDs:`, Array.from(existingOtherIds));
+
+        const virtualItems: ConversationSummary[] = (onlineUsersData || [])
+          .filter((u: any) => {
+            if (!u || !u.user_id) return false;
+            const userId = Number(u.user_id);
+            const isExisting = existingOtherIds.has(userId);
+            if (!isExisting) {
+              console.log(`[Online Filter] Adding virtual item for: ${u.name || `${u.f_name || ''} ${u.l_name || ''}`.trim()} (user_id: ${userId})`);
+            }
+            return !isExisting;
+          })
+          .map((u: any) => ({
+            conversation_id: -Number(u.user_id), // sentinel negative id indicates virtual row
+            updated_at: new Date().toISOString(),
+            is_message_request: false,
+            last_message: undefined,
+            unread_count: 0,
+            participants: [],
+            other_participant: {
+              user_id: Number(u.user_id),
+              name: u.name || `${u.f_name || ''} ${u.l_name || ''}`.trim(),
+              avatar_url: u.profile_pic || null,
+            }
+          }));
+
+        console.log(`[Online Filter] Created ${virtualItems.length} virtual items`);
+        console.log(`[Online Filter] Total filtered conversations: ${existingOnline.length + virtualItems.length}`);
+
+        filtered = [...existingOnline, ...virtualItems];
+      }
     }
     
     setFilteredConversations(filtered);
-  }, [conversations, searchQuery, activeFilter, onlineUsers, onlineUsersData]);
+  }, [conversations, searchQuery, activeFilter, onlineUsers, onlineUsersData, isLoadingOnlineUsers]);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
@@ -342,10 +436,16 @@ const ConversationList: React.FC<ConversationListProps> = ({
                 </div>
               </div>
             ))
+          ) : isLoadingOnlineUsers && activeFilter === 'online' ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">⏳</div>
+              <h3 className="empty-state-title">Loading online users...</h3>
+              <p className="empty-state-message">Please wait while we check who's online</p>
+            </div>
           ) : filteredConversations.length > 0 ? (
             filteredConversations.map((conversation) => {
               const otherUserId = conversation.other_participant?.user_id;
-              const isOnline = otherUserId ? onlineUsers.has(otherUserId) : false;
+              const isOnline = otherUserId ? (onlineUsers.has(Number(otherUserId)) || onlineUsersData.some((u: any) => Number(u.user_id) === Number(otherUserId))) : false;
               
               return (
                 <ConversationItem
@@ -354,6 +454,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   isSelected={conversation.conversation_id === selectedConversationId}
                   onClick={() => handleConversationClick(conversation)}
                   isOnline={isOnline}
+                  showMinimal={activeFilter === 'online'}
                 />
               );
             })
@@ -362,7 +463,11 @@ const ConversationList: React.FC<ConversationListProps> = ({
               <div className="empty-state-icon">💬</div>
               <h3 className="empty-state-title">No conversations found</h3>
               <p className="empty-state-message">
-                {searchQuery ? 'Try adjusting your search terms' : 'Start a new conversation to get started'}
+                {activeFilter === 'online' 
+                  ? 'No online users found. Make sure you have mutual follows with online users.' 
+                  : searchQuery 
+                    ? 'Try adjusting your search terms' 
+                    : 'Start a new conversation to get started'}
               </p>
             </div>
           )}

@@ -36,6 +36,7 @@ const AdminNotificationPage: React.FC = () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
+    sessionStorage.removeItem('userManagementVerified');
     navigate('/login');
   };
 

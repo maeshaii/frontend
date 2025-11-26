@@ -496,9 +496,6 @@ const RequestDetailsPage: React.FC = () => {
                 <p style={{ fontSize: '15px', lineHeight: 1.6, color: '#4b5563', margin: 0 }}>
                   Are you sure you want to approve all completed OJT students for <strong>Class of {year}</strong>?
                 </p>
-                <p style={{ fontSize: '14px', lineHeight: 1.6, color: '#6b7280', margin: '12px 0 0 0' }}>
-                  This will convert them to alumni and generate new passwords.
-                </p>
               </div>
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
                 <button

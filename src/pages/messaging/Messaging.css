@@ -448,9 +448,22 @@
 
 .chat-header-status {
   font-size: 13px;
-  color: #42b883;
   font-weight: 500;
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-secondary);
+}
+.chat-header-status.status-online {
+  color: #42b883;
+}
+.chat-header-status.status-offline {
+  color: #6f7b8c;
+}
+.chat-header-connection-status {
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .chat-header-actions {
@@ -689,6 +702,52 @@
 
 .status-icon.read {
   color: #42b883;
+}
+
+/* Message Action Buttons - Messenger Style */
+.message-action-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+}
+
+.message-action-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+  transform: scale(1.1);
+}
+
+.message-action-btn:active {
+  transform: scale(0.95);
+}
+
+.message-action-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Message Actions Container */
+.message-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.message-item:hover .message-actions,
+.message-bubble:hover ~ .message-actions,
+.message-actions:hover {
+  opacity: 1;
 }
 
 /* Typing Indicator */

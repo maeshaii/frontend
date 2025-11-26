@@ -313,13 +313,14 @@ export default function Statistics() {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', position: 'relative' }}>
+    <div style={{ display: 'flex', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <Sidebar />
 
-      <div className="admin-content-page" style={{ padding: '32px 48px', fontFamily: 'Arial, sans-serif', flex: 1, position: 'relative', overflowY: 'auto', marginLeft: 'var(--sidebar-width, 220px)' }}>
-        <h2 style={{ fontSize: '22px', marginBottom: '16px' }}>Statistics</h2>
+      <div className="admin-content-page" style={{ padding: '20px 48px 32px 48px', fontFamily: 'Arial, sans-serif', flex: 1, position: 'relative', overflowY: 'auto', overflowX: 'hidden', marginLeft: 'var(--sidebar-width, 220px)', display: 'flex', flexDirection: 'column', gap: '12px', height: '100vh' }}>
+        <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h2 style={{ fontSize: '22px', margin: 0, marginTop: 0, paddingTop: 0, fontWeight: 'bold', color: '#2c5282' }}>Statistics</h2>
 
-        {/* Filters */}
+          {/* Filters */}
         <div className="filter-container">
           <div style={styles.filterControls}>
             <div style={styles.filterGroup}>
@@ -370,9 +371,10 @@ export default function Statistics() {
             </button>
           </div>
         </div>
+        </div>
 
         {/* Enhanced Bar Chart */}
-        <div style={styles.chartContainer}>
+        <div style={{ ...styles.chartContainer, flex: '1 1 auto', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={styles.chartHeader}>
             <div>
               <div style={styles.chartTitleContainer}>
@@ -393,8 +395,8 @@ export default function Statistics() {
             </div>
           </div>
           
-          <div style={styles.chartWrapper}>
-            <ResponsiveContainer width="100%" height={400}>
+          <div style={{ ...styles.chartWrapper, flex: '1 1 auto', minHeight: 0 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <BarChart 
                 data={chartData} 
                 margin={{ top: 30, right: 40, left: 40, bottom: 60 }}
@@ -489,7 +491,7 @@ export default function Statistics() {
           </div>
 
           {/* Dynamic Chart Summary Cards */}
-          <div style={styles.summaryCards}>
+          <div style={{ ...styles.summaryCards, flex: '0 0 auto' }}>
             {chartData.map((entry, index) => (
               <div 
                 key={entry.category} 
@@ -949,8 +951,8 @@ export default function Statistics() {
             align-items: center;
             justify-content: space-between;
             flex-wrap: wrap;
-            gap: 16px;
-            margin-bottom: 16px;
+            gap: 12px;
+            margin-bottom: 8px;
           }
 
           .filter-group {
@@ -1090,8 +1092,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '20px',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
     border: '1px solid #e5e7eb',
-    marginTop: '16px',
-    maxHeight: 'fit-content',
+    marginTop: '8px',
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
   },
   chartHeader: {
     display: 'flex',
@@ -1159,7 +1163,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     textAlign: 'center',
   },
   chartWrapper: {
-    height: '400px',
+    flex: '1 1 auto',
+    minHeight: 0,
     marginBottom: '24px',
   },
   summaryCards: {

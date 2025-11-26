@@ -126,7 +126,7 @@ const RewardsPage: React.FC = () => {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [inventoryCount, setInventoryCount] = useState(0);
   const [tableFilter, setTableFilter] = useState<'requests' | 'history'>('requests');
-  const [requestStatusFilter, setRequestStatusFilter] = useState<'all' | 'pending' | 'approved' | 'ready_for_pickup'>('all');
+  const [requestStatusFilter, setRequestStatusFilter] = useState<'all' | 'pending' | 'approved' | 'ready_for_pickup' | 'cancelled'>('all');
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [rewardTypeFilter, setRewardTypeFilter] = useState<'all' | string>('all');
   const [showRewardTypeDropdown, setShowRewardTypeDropdown] = useState(false);
@@ -701,13 +701,13 @@ const RewardsPage: React.FC = () => {
     },
     pageHeader: {
       backgroundColor: '#ffffff',
-      padding: '32px 40px',
-      marginBottom: '32px',
+      padding: '20px 32px',
+      marginBottom: '20px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: '20px',
-      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+      gap: '16px',
+      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
       borderBottom: '1px solid #e5e7eb'
     },
     headerTitle: {
@@ -1046,9 +1046,10 @@ const RewardsPage: React.FC = () => {
                             : nonClaimedRequests.filter(req => 
                                 requestStatusFilter === 'pending' ? req.status === 'pending' :
                                 requestStatusFilter === 'approved' ? req.status === 'approved' :
-                                requestStatusFilter === 'ready_for_pickup' ? req.status === 'ready_for_pickup' : true
+                                requestStatusFilter === 'ready_for_pickup' ? req.status === 'ready_for_pickup' :
+                                requestStatusFilter === 'cancelled' ? req.status === 'cancelled' : true
                               ).length;
-                          return `${filteredCount} ${requestStatusFilter === 'all' ? 'total' : requestStatusFilter === 'pending' ? 'pending' : requestStatusFilter === 'approved' ? 'approved' : 'ready for pickup'} requests`;
+                          return `${filteredCount} ${requestStatusFilter === 'all' ? 'total' : requestStatusFilter === 'pending' ? 'pending' : requestStatusFilter === 'approved' ? 'approved' : requestStatusFilter === 'cancelled' ? 'cancelled' : 'ready for pickup'} requests`;
                         })()
                       : (() => {
                           const filteredHistory = rewardHistory.filter((entry) => {
@@ -1176,6 +1177,7 @@ const RewardsPage: React.FC = () => {
                         {requestStatusFilter === 'all' ? 'All' : 
                          requestStatusFilter === 'pending' ? 'Pending' : 
                          requestStatusFilter === 'approved' ? 'Approved' :
+                         requestStatusFilter === 'cancelled' ? 'Cancelled' :
                          'Ready for Pickup'}
                       </span>
                       <span style={{ 
@@ -1349,6 +1351,39 @@ const RewardsPage: React.FC = () => {
                           }}
                         >
                           Ready for Pickup
+                        </div>
+                        <div
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Close dropdown first, then update filter after a brief delay for smooth transition
+                            setShowStatusDropdown(false);
+                            setTimeout(() => {
+                              setRequestStatusFilter('cancelled');
+                              setSearchTerm('');
+                            }, 150);
+                          }}
+                          style={{
+                            padding: '10px 16px',
+                            cursor: 'pointer',
+                            backgroundColor: requestStatusFilter === 'cancelled' ? '#f3f4f6' : 'white',
+                            color: requestStatusFilter === 'cancelled' ? '#1e3a5f' : '#374151',
+                            fontSize: '13px',
+                            fontWeight: requestStatusFilter === 'cancelled' ? '600' : '400',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (requestStatusFilter !== 'cancelled') {
+                              e.currentTarget.style.backgroundColor = '#f9fafb';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (requestStatusFilter !== 'cancelled') {
+                              e.currentTarget.style.backgroundColor = 'white';
+                            }
+                          }}
+                        >
+                          Cancelled
                         </div>
                       </div>
                     )}
@@ -1606,6 +1641,7 @@ const RewardsPage: React.FC = () => {
                         if (requestStatusFilter === 'pending') return req.status === 'pending';
                         if (requestStatusFilter === 'approved') return req.status === 'approved';
                         if (requestStatusFilter === 'ready_for_pickup') return req.status === 'ready_for_pickup';
+                        if (requestStatusFilter === 'cancelled') return req.status === 'cancelled';
                         return true;
                       });
                     }
@@ -1653,7 +1689,7 @@ const RewardsPage: React.FC = () => {
                           <div>
                             {requestStatusFilter === 'ready_for_pickup' && searchTerm.trim() 
                               ? `No results found for "${searchTerm}"`
-                              : `No ${requestStatusFilter === 'all' ? '' : requestStatusFilter === 'pending' ? 'pending' : requestStatusFilter === 'approved' ? 'approved' : 'ready for pickup'} requests yet`}
+                              : `No ${requestStatusFilter === 'all' ? '' : requestStatusFilter === 'pending' ? 'pending' : requestStatusFilter === 'approved' ? 'approved' : requestStatusFilter === 'cancelled' ? 'cancelled' : 'ready for pickup'} requests yet`}
                           </div>
                         </div>
                       );

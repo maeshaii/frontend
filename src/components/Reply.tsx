@@ -430,16 +430,82 @@ const Reply: React.FC<ReplyProps> = ({
                   }
                 }
               } else {
-                // No match found - render as normal text
-                result.push(`@${mentionText}`);
+                // No match found - but still highlight in blue and make clickable
+                result.push(
+                  <button
+                    key={`${index}-mention-${match.index}`}
+                    onClick={() => handleUserSearch(mentionText)}
+                    style={{ 
+                      color: '#007bff', 
+                      fontWeight: '600',
+                      background: 'none',
+                      border: 'none',
+                      padding: '0',
+                      cursor: 'pointer',
+                      textDecoration: 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.textDecoration = 'underline';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.textDecoration = 'none';
+                    }}
+                  >
+                    @{mentionText}
+                  </button>
+                );
               }
             } else {
-              // No match found - render as normal text
-              result.push(`@${mentionText}`);
+              // No match found - but still highlight in blue and make clickable
+              result.push(
+                <button
+                  key={`${index}-mention-${match.index}`}
+                  onClick={() => handleUserSearch(mentionText)}
+                  style={{ 
+                    color: '#007bff', 
+                    fontWeight: '600',
+                    background: 'none',
+                    border: 'none',
+                    padding: '0',
+                    cursor: 'pointer',
+                    textDecoration: 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.textDecoration = 'underline';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.textDecoration = 'none';
+                  }}
+                >
+                  @{mentionText}
+                </button>
+              );
             }
           } else {
-            // No match found - render as normal text
-            result.push(`@${mentionText}`);
+            // No match found - but still highlight in blue and make clickable
+            result.push(
+              <button
+                key={`${index}-mention-${match.index}`}
+                onClick={() => handleUserSearch(mentionText)}
+                style={{ 
+                  color: '#007bff', 
+                  fontWeight: '600',
+                  background: 'none',
+                  border: 'none',
+                  padding: '0',
+                  cursor: 'pointer',
+                  textDecoration: 'none'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                @{mentionText}
+              </button>
+            );
           }
         }
         
@@ -490,7 +556,11 @@ const Reply: React.FC<ReplyProps> = ({
         {/* Reply Content Container */}
         <div style={{
           backgroundColor: isHighlighted ? (highlightColor || '#fff2e6') : '#f0f2f5',
-          boxShadow: isHighlighted ? '0 0 0 2px rgba(255,137,33,0.25)' : 'none',
+          boxShadow: isHighlighted && highlightColor === '#fff3e0' 
+            ? '0 0 0 2px rgba(255,137,33,0.25)' 
+            : isHighlighted && highlightColor === '#fff8e1'
+              ? '0 0 0 1px #ffb74d'
+              : 'none',
           transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
           borderRadius: '18px',
           padding: '6px 10px',

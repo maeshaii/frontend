@@ -152,7 +152,8 @@ const Dashboard = () => {
   };
   const layoutStyle: React.CSSProperties = {
     display: 'flex',
-    minHeight: '100vh',
+    height: '100vh',
+    overflow: 'hidden',
   };
 
   const contentStyle: React.CSSProperties = {
@@ -161,7 +162,9 @@ const Dashboard = () => {
     backgroundColor: '#f5f6fa',
     marginLeft: 'var(--sidebar-width, 220px)',
     height: '100vh',
-    overflowY: 'auto',
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
     transition: 'margin-left 0.3s ease',
   };
 
@@ -234,7 +237,8 @@ const Dashboard = () => {
     gridTemplateColumns: '1fr 320px',
     gridTemplateRows: 'auto 1fr',
     gap: 16,
-    alignItems: 'stretch'
+    alignItems: 'stretch',
+    minHeight: 0,
   };
 
   const calendarStyle: React.CSSProperties = {
@@ -259,6 +263,8 @@ const Dashboard = () => {
     display: 'flex',
     marginTop: '32px',
     gap: '24px',
+    flex: '0 0 auto',
+    minHeight: 0,
   };
 
   // Unified color mapping across widgets
@@ -387,13 +393,13 @@ const Dashboard = () => {
       <Sidebar />
       <div style={contentStyle} data-dashboard-content>
         {/* Left column: Banner on top, quick filters + actions, cards below | Right column: Calendar spanning both rows */}
-        <div style={topGridStyle}>
+        <div style={{ ...topGridStyle, flex: 1, minHeight: 0, overflow: 'hidden' }}>
           {/* Left column container */}
           <div style={{ display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: 16, gridColumn: 1 }}>
             {/* Banner (left only) */}
             <div style={bannerStyle}>
               <div style={bannerLeftStyle}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: '#0b2a55' }}>DASHBOARD</div>
+                <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#2c5282' }}>Dashboard</div>
                 <div style={{ fontSize: 12, color: '#2b6cb0' }}>Welcome, Admin</div>
               </div>
               <div style={todoTitleStyle}>To Do's</div>

@@ -133,6 +133,8 @@ interface PostCardProps {
   isDonation?: boolean; // New prop to indicate donation context
   // Repost props removed
   onViewOriginalPost?: (originalPost: PostItem) => void; // Callback to view original post in modal
+  highlightCommentId?: string; // Comment ID to highlight when post is opened
+  highlightReplyId?: string; // Reply ID to highlight when post is opened
 }
 
 const PostCard: React.FC<PostCardProps> = ({
@@ -166,6 +168,8 @@ const PostCard: React.FC<PostCardProps> = ({
   isDonation = false, // Default to false for backward compatibility
   // Repost flags removed
   onViewOriginalPost, // Optional callback to view original post
+  highlightCommentId, // Optional comment ID to highlight
+  highlightReplyId, // Optional reply ID to highlight
 }) => {
   console.log('PostCard currentUserId:', currentUserId);
   // Repost removed on web
@@ -222,6 +226,14 @@ const PostCard: React.FC<PostCardProps> = ({
   // Repost likes modals removed
   const commentOptionsRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   const [showCommentOptions, setShowCommentOptions] = useState<{ [key: number]: boolean }>({});
+  // Highlighting refs and state
+  const commentRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const replyRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const processedCommentHighlightRef = useRef<string | null>(null);
+  const processedReplyHighlightRef = useRef<string | null>(null);
+  const requestedReplyLoadsRef = useRef<Set<number>>(new Set());
+  const [activeCommentHighlight, setActiveCommentHighlight] = useState<number | null>(null);
+  const [activeReplyHighlight, setActiveReplyHighlight] = useState<number | null>(null);
   const [editingRepostCaption, setEditingRepostCaption] = useState<{ [key: number]: boolean }>({});
   const [editRepostCaptionContent, setEditRepostCaptionContent] = useState<{ [key: number]: string }>({});
   
@@ -437,6 +449,110 @@ const PostCard: React.FC<PostCardProps> = ({
       })();
     }
   }, [post.comments, loadReplies]);
+
+  // Highlighting functionality
+  const highlightTimerRef = useRef<number | null>(null);
+  const highlightDuration = 3000; // 3 seconds for bright highlight, then transitions to subtle permanent highlight
+  const [isHighlightActive, setIsHighlightActive] = useState(false); // Bright highlight state
+  const [permanentCommentHighlight, setPermanentCommentHighlight] = useState<number | null>(null);
+  const [permanentReplyHighlight, setPermanentReplyHighlight] = useState<number | null>(null);
+
+  const scrollIntoViewSmooth = useCallback((element: HTMLElement | null) => {
+    if (!element) return;
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
+
+  const startHighlightTimer = useCallback(() => {
+    if (highlightTimerRef.current) {
+      window.clearTimeout(highlightTimerRef.current);
+    }
+    setIsHighlightActive(true); // Start with bright highlight
+    highlightTimerRef.current = window.setTimeout(() => {
+      setIsHighlightActive(false); // Transition to subtle permanent highlight
+      // Don't clear the highlight IDs - keep them permanent
+    }, highlightDuration);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) {
+        window.clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Handle comment highlighting
+  useEffect(() => {
+    processedCommentHighlightRef.current = null;
+  }, [highlightCommentId]);
+
+  useEffect(() => {
+    if (!highlightCommentId) return;
+    if (processedCommentHighlightRef.current === highlightCommentId) return;
+
+    const commentIdNum = Number(highlightCommentId);
+    if (Number.isNaN(commentIdNum)) return;
+    if (!post.comments || post.comments.length === 0) return;
+
+    const commentExists = post.comments.some(comment => Number(comment.comment_id) === commentIdNum);
+    if (!commentExists) return;
+
+    processedCommentHighlightRef.current = highlightCommentId;
+    if (setShowCommentsSection) {
+      setShowCommentsSection(prev => ({ ...prev, [post.post_id]: true }));
+    }
+    if (setShowAllComments) {
+      setShowAllComments(prev => ({ ...prev, [post.post_id]: true }));
+    }
+    setActiveCommentHighlight(commentIdNum);
+    setPermanentCommentHighlight(commentIdNum); // Set permanent highlight
+    startHighlightTimer();
+    requestAnimationFrame(() => {
+      scrollIntoViewSmooth(commentRefs.current[commentIdNum]);
+    });
+  }, [highlightCommentId, post.comments, post.post_id, startHighlightTimer, scrollIntoViewSmooth, setShowCommentsSection, setShowAllComments]);
+
+  // Handle reply highlighting
+  useEffect(() => {
+    if (!highlightReplyId) return;
+    if (processedReplyHighlightRef.current === highlightReplyId) return;
+
+    const replyIdNum = Number(highlightReplyId);
+    if (Number.isNaN(replyIdNum)) return;
+    if (!post.comments || post.comments.length === 0) return;
+
+    const entry = Object.entries(commentReplies).find(([, replies]) =>
+      replies?.some(reply => Number(reply.reply_id) === replyIdNum)
+    );
+
+    if (entry) {
+      processedReplyHighlightRef.current = highlightReplyId;
+      const commentIdNum = Number(entry[0]);
+      if (setShowCommentsSection) {
+        setShowCommentsSection(prev => ({ ...prev, [post.post_id]: true }));
+      }
+      if (setShowAllComments) {
+        setShowAllComments(prev => ({ ...prev, [post.post_id]: true }));
+      }
+      setShowReplies(prev => ({ ...prev, [commentIdNum]: true }));
+      setActiveCommentHighlight(commentIdNum);
+      setActiveReplyHighlight(replyIdNum);
+      setPermanentCommentHighlight(commentIdNum); // Set permanent highlight for parent comment
+      setPermanentReplyHighlight(replyIdNum); // Set permanent highlight for reply
+      startHighlightTimer();
+      requestAnimationFrame(() => {
+        scrollIntoViewSmooth(replyRefs.current[replyIdNum] || commentRefs.current[commentIdNum]);
+      });
+    } else {
+      // Load replies for all comments to find the one containing the reply
+      post.comments.forEach(comment => {
+        if (!commentReplies[comment.comment_id] && !requestedReplyLoadsRef.current.has(comment.comment_id)) {
+          requestedReplyLoadsRef.current.add(comment.comment_id);
+          loadReplies(comment.comment_id);
+        }
+      });
+    }
+  }, [highlightReplyId, post.comments, post.post_id, commentReplies, loadReplies, startHighlightTimer, scrollIntoViewSmooth]);
 
   // Photo gallery helpers
   const getImagesFromPost = (post: PostItem): string[] => {
@@ -703,12 +819,62 @@ const PostCard: React.FC<PostCardProps> = ({
               result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>@{mentionText}</span>);
             }
           } else {
-            // No match found - render as normal text
-            result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>@{mentionText}</span>);
+            // No match found - but still highlight in blue and make clickable
+            result.push(
+              <button
+                key={`${keyPrefix}-mention-${keyCounter++}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleUserSearch(mentionText);
+                }}
+                style={{ 
+                  color: '#007bff', 
+                  fontWeight: '600',
+                  background: 'none',
+                  border: 'none',
+                  padding: '0',
+                  cursor: 'pointer',
+                  textDecoration: 'none'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                @{mentionText}
+              </button>
+            );
           }
         } else {
-          // No match found - render as normal text
-          result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>@{mentionText}</span>);
+          // No match found - but still highlight in blue and make clickable
+          result.push(
+            <button
+              key={`${keyPrefix}-mention-${keyCounter++}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUserSearch(mentionText);
+              }}
+              style={{ 
+                color: '#007bff', 
+                fontWeight: '600',
+                background: 'none',
+                border: 'none',
+                padding: '0',
+                cursor: 'pointer',
+                textDecoration: 'none'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.textDecoration = 'underline';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.textDecoration = 'none';
+              }}
+            >
+              @{mentionText}
+            </button>
+          );
         }
       }
       
@@ -3225,14 +3391,32 @@ const PostCard: React.FC<PostCardProps> = ({
         <div className="comments-section" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #eee' }}>
                   {(showAllComments[post.post_id] ? post.comments : post.comments.slice(0, 5)).map((comment) => {
                     console.log('PostCard comment user_id:', comment.user.user_id);
+                    const isCommentHighlighted = activeCommentHighlight === comment.comment_id && isHighlightActive;
+                    const isPermanentlyHighlighted = permanentCommentHighlight === comment.comment_id;
+                    const highlightColor = '#fff3e0'; // Light orange for bright highlight
+                    const permanentHighlightColor = '#fff8e1'; // Very light yellow for permanent subtle highlight
+                    const permanentBorderColor = '#ffb74d'; // Light orange border for permanent highlight
+                    
                     return (
-                      <div key={comment.comment_id} className="comment-item" style={{ 
-                        display: 'flex', 
-                        gap: '8px', 
-                        marginBottom: '6px', 
-                        marginLeft: '12px',
-                        marginRight: '12px'
-                      }}>
+                      <div 
+                        key={comment.comment_id} 
+                        className="comment-item" 
+                        ref={(el) => {
+                          if (el) {
+                            commentRefs.current[comment.comment_id] = el;
+                          } else {
+                            delete commentRefs.current[comment.comment_id];
+                          }
+                        }}
+                        style={{ 
+                          display: 'flex', 
+                          gap: '8px', 
+                          marginBottom: '6px', 
+                          marginLeft: '12px',
+                          marginRight: '12px',
+                          scrollMarginTop: '96px'
+                        }}
+                      >
                         <img
                           src={getProfilePicUrl(comment.user.profile_pic)}
                           alt="Profile"
@@ -3244,7 +3428,17 @@ const PostCard: React.FC<PostCardProps> = ({
                         <div style={{ flex: 1 }}>
                           {/* Comment bubble container */}
                           <div style={{
-                            backgroundColor: '#f0f2f5',
+                            backgroundColor: isCommentHighlighted 
+                              ? highlightColor 
+                              : isPermanentlyHighlighted 
+                                ? permanentHighlightColor 
+                                : '#f0f2f5',
+                            boxShadow: isCommentHighlighted 
+                              ? '0 0 0 2px rgba(255,137,33,0.25)' 
+                              : isPermanentlyHighlighted 
+                                ? `0 0 0 1px ${permanentBorderColor}` 
+                                : 'none',
+                            transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
                             borderRadius: '18px',
                             padding: '6px 10px',
                             display: 'inline-block',
@@ -3504,18 +3698,34 @@ const PostCard: React.FC<PostCardProps> = ({
                                 commentReplies[comment.comment_id].length < 3 ? 
                                   commentReplies[comment.comment_id].length : 
                                   (showReplies[comment.comment_id] ? commentReplies[comment.comment_id].length : 3)
-                              ).map((reply) => (
-                                <Reply
-                                  key={reply.reply_id}
-                                  reply={reply}
-                                  commentId={comment.comment_id}
-                                  currentUserId={currentUserId || undefined}
-                                  formatTime={formatTime}
-                                  onReplyUpdate={() => loadReplies(comment.comment_id)}
-                                  displayName={displayName}
-                                  displayAvatar={displayAvatar}
-                                />
-                              ))}
+                              ).map((reply) => {
+                                const isReplyHighlighted = activeReplyHighlight === reply.reply_id && isHighlightActive;
+                                const isPermanentlyHighlighted = permanentReplyHighlight === reply.reply_id;
+                                const highlightColor = '#fff3e0'; // Light orange for bright highlight
+                                const permanentHighlightColor = '#fff8e1'; // Very light yellow for permanent subtle highlight
+                                
+                                return (
+                                  <Reply
+                                    key={reply.reply_id}
+                                    reply={reply}
+                                    commentId={comment.comment_id}
+                                    currentUserId={currentUserId || undefined}
+                                    formatTime={formatTime}
+                                    onReplyUpdate={() => loadReplies(comment.comment_id)}
+                                    displayName={displayName}
+                                    displayAvatar={displayAvatar}
+                                    registerHighlightRef={(replyId, element) => {
+                                      if (element) {
+                                        replyRefs.current[replyId] = element;
+                                      } else {
+                                        delete replyRefs.current[replyId];
+                                      }
+                                    }}
+                                    isHighlighted={isReplyHighlighted || isPermanentlyHighlighted}
+                                    highlightColor={isReplyHighlighted ? highlightColor : isPermanentlyHighlighted ? permanentHighlightColor : undefined}
+                                  />
+                                );
+                              })}
                               
                               {/* Show more/less replies button */}
                               {commentReplies[comment.comment_id].length > 3 && (

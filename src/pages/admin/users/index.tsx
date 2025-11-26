@@ -1,7 +1,9 @@
 // index.tsx
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../global/sidebar';
-import { fetchAlumniStatistics, fetchAlumniByYear } from '../../../services/api';
+import { fetchAlumniStatistics, fetchAlumniByYear, importAlumni } from '../../../services/api';
+import ExcelJS from 'exceljs';
+import { FaUpload, FaDownload } from 'react-icons/fa';
 
 const UsersIndex: React.FC = () => {
   const [batchList, setBatchList] = useState<{ year: number; count: number }[]>([]);
@@ -11,6 +13,12 @@ const UsersIndex: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProgram, setSelectedProgram] = useState('All');
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [batchYear, setBatchYear] = useState('');
+  const [selectedProgramImport, setSelectedProgramImport] = useState('');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     const loadBatches = async () => {
@@ -68,15 +76,360 @@ const UsersIndex: React.FC = () => {
     return Math.abs(ageDt.getUTCFullYear() - 1970);
   };
 
+  // Generate Excel template with all required and optional columns (including tracker questions)
+  // Based on backend import_alumni_view function analysis - NO PASSWORD COLUMN (auto-generated)
+  const downloadTemplate = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Alumni Import Template');
+
+    // REQUIRED COLUMNS (based on backend lines 1075-1076)
+    // Password column is NOT included - passwords are auto-generated after import
+    
+    // BASIC INFORMATION (Required)
+    const basicHeaders = [
+      { header: 'CTU_ID', key: 'ctu_id', width: 15 },
+      { header: 'First_Name', key: 'first_name', width: 20 },
+      { header: 'Last_Name', key: 'last_name', width: 20 },
+      { header: 'Gender', key: 'gender', width: 10 },
+      { header: 'Year_Graduated', key: 'year_graduated', width: 18 },
+      { header: 'Program', key: 'program', width: 15 },
+    ];
+
+    // BASIC INFORMATION (Optional)
+    const optionalBasicHeaders = [
+      { header: 'Middle_Name', key: 'middle_name', width: 20 },
+      { header: 'Birthdate', key: 'birthdate', width: 15 },
+      { header: 'Phone_Number', key: 'phone_number', width: 18 },
+      { header: 'Address', key: 'address', width: 30 },
+      { header: 'Civil Status', key: 'civil_status', width: 15 },
+      { header: 'Social Media', key: 'social_media', width: 25 },
+      { header: 'Section', key: 'section', width: 15 },
+    ];
+
+    // TRACKER QUESTION COLUMNS (for alumni who already answered tracker questions)
+    // Based on backend lines 1246, 1262, 1274, 1280, 1286, 1299 - EXACT column names
+    const trackerHeaders = [
+      { header: 'Are you PRESENTLY employed?', key: 'are_you_presently_employed', width: 30 },
+      { header: 'Current Company Name', key: 'current_company_name', width: 30 },
+      { header: 'Current Position', key: 'current_position', width: 30 },
+      { header: 'Current Sector of your Job', key: 'current_sector_of_your_job', width: 30 },
+      { header: 'Current Salary Range', key: 'current_salary_range', width: 25 },
+      { header: 'Please specify post graduate/degree.', key: 'please_specify_post_graduate_degree', width: 35 },
+    ];
+
+    // Combine all headers
+    const headers = [...basicHeaders, ...optionalBasicHeaders, ...trackerHeaders];
+    worksheet.columns = headers;
+
+    // Style header row
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1C4E80' }
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    headerRow.height = 25;
+
+    // Sample data rows - Example 1: Basic info only (no tracker data)
+    const sampleDataBasic = {
+      ctu_id: '1337580',
+      first_name: 'John',
+      last_name: 'Doe',
+      middle_name: 'Michael',
+      gender: 'M',
+      year_graduated: '2024',
+      program: 'BSIT',
+      birthdate: '2003-04-12',
+      phone_number: '09123456789',
+      address: '123 Main Street, Cebu City, Cebu',
+      civil_status: 'Single',
+      social_media: '@johndoe',
+      section: '',
+      are_you_presently_employed: '',
+      current_company_name: '',
+      current_position: '',
+      current_sector_of_your_job: '',
+      current_salary_range: '',
+      please_specify_post_graduate_degree: '',
+    };
+
+    // Example 2: With tracker data (employed)
+    const sampleDataWithTracker = {
+      ctu_id: '1337581',
+      first_name: 'Jane',
+      last_name: 'Smith',
+      middle_name: 'Marie',
+      gender: 'F',
+      year_graduated: '2024',
+      program: 'BSIS',
+      birthdate: '2002-05-15',
+      phone_number: '09187654321',
+      address: '456 Oak Avenue, Mandaue City, Cebu',
+      civil_status: 'Single',
+      social_media: '@janesmith',
+      section: '',
+      are_you_presently_employed: 'Yes',
+      current_company_name: 'ABC Technology Solutions Inc.',
+      current_position: 'Software Developer',
+      current_sector_of_your_job: 'Private',
+      current_salary_range: '20,000 - 30,000',
+      please_specify_post_graduate_degree: '',
+    };
+
+    // Example 3: With tracker data (unemployed, pursuing further study)
+    const sampleDataUnemployed = {
+      ctu_id: '1337582',
+      first_name: 'Mark',
+      last_name: 'Johnson',
+      middle_name: 'Paul',
+      gender: 'M',
+      year_graduated: '2024',
+      program: 'BIT-CT',
+      birthdate: '2003-08-20',
+      phone_number: '09234567890',
+      address: '789 Pine Road, Lapu-Lapu City, Cebu',
+      civil_status: 'Married',
+      social_media: '@markjohnson',
+      section: '',
+      are_you_presently_employed: 'No',
+      current_company_name: '',
+      current_position: '',
+      current_sector_of_your_job: '',
+      current_salary_range: '',
+      please_specify_post_graduate_degree: 'Master of Science in Information Technology',
+    };
+
+    // Add sample data rows
+    worksheet.addRow(sampleDataBasic);
+    worksheet.addRow(sampleDataWithTracker);
+    worksheet.addRow(sampleDataUnemployed);
+
+    // Add instructions sheet
+    const instructionsSheet = workbook.addWorksheet('Instructions');
+    instructionsSheet.columns = [{ header: 'Instructions', key: 'instructions', width: 100 }];
+    
+    const instructionData = [
+      { instructions: 'ALUMNI IMPORT TEMPLATE - INSTRUCTIONS' },
+      { instructions: '' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: 'REQUIRED COLUMNS (Must be filled for all alumni):' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: '  • CTU_ID: Unique identifier for the alumni (e.g., 1337580)' },
+      { instructions: '  • First_Name: First name of the alumni' },
+      { instructions: '  • Last_Name: Last name of the alumni' },
+      { instructions: '  • Gender: Must be exactly "M" for Male or "F" for Female (case-sensitive)' },
+      { instructions: '  • Year_Graduated: Graduation year (e.g., 2024)' },
+      { instructions: '  • Program: Must be exactly one of: BSIT, BSIS, or BIT-CT' },
+      { instructions: '' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: 'OPTIONAL BASIC COLUMNS (Can be left empty):' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: '  • Middle_Name: Middle name of the alumni' },
+      { instructions: '  • Birthdate: Date of birth (Format: YYYY-MM-DD or MM/DD/YYYY)' },
+      { instructions: '    Examples: 2003-04-12 or 04/12/2003' },
+      { instructions: '  • Phone_Number: Contact number (e.g., 09123456789)' },
+      { instructions: '  • Address: Complete address' },
+      { instructions: '  • Civil Status: Marital status (e.g., Single, Married, etc.)' },
+      { instructions: '  • Social Media: Social media handle (e.g., @username)' },
+      { instructions: '  • Section: Class section (if applicable)' },
+      { instructions: '' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: 'TRACKER QUESTION COLUMNS (For alumni who answered tracker questions):' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: '  These columns are for importing alumni who have already answered tracker questions.' },
+      { instructions: '  Leave these empty if the alumni has not answered the tracker yet.' },
+      { instructions: '' },
+      { instructions: '  • Are you PRESENTLY employed?: Must be "Yes" or "No" (or "Y"/"N")' },
+      { instructions: '  • Current Company Name: Name of current employer' },
+      { instructions: '  • Current Position: Job title/position (e.g., Software Developer)' },
+      { instructions: '  • Current Sector of your Job: Must be "Private", "Government", or "Public"' },
+      { instructions: '  • Current Salary Range: Salary range (e.g., 20,000 - 30,000)' },
+      { instructions: '  • Please specify post graduate/degree.: Post-graduate degree if pursuing further study' },
+      { instructions: '' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: 'IMPORTANT NOTES:' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: '  ⚠️  Password column is NOT included - passwords are AUTO-GENERATED' },
+      { instructions: '      After import, you will receive a separate Excel file with auto-generated passwords' },
+      { instructions: '' },
+      { instructions: '  • Gender must be exactly "M" or "F" (case-sensitive, uppercase)' },
+      { instructions: '  • Program must be exactly: BSIT, BSIS, or BIT-CT' },
+      { instructions: '  • CTU_ID must be unique - duplicates will be skipped during import' },
+      { instructions: '  • Date format: Use YYYY-MM-DD (e.g., 2003-04-12) or MM/DD/YYYY (e.g., 04/12/2003)' },
+      { instructions: '  • Tracker columns use exact question text as column headers (case-sensitive)' },
+      { instructions: '  • You can provide Year_Graduated and Program via form fields during import' },
+      { instructions: '    instead of including them in each row of the Excel file' },
+      { instructions: '' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: 'EXAMPLE SCENARIOS:' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: '  1. Basic Import (No tracker data):' },
+      { instructions: '     - Fill required columns: CTU_ID, First_Name, Last_Name, Gender, Year_Graduated, Program' },
+      { instructions: '     - Leave tracker columns empty' },
+      { instructions: '' },
+      { instructions: '  2. Import with Tracker Data (Alumni already answered tracker):' },
+      { instructions: '     - Fill all required columns' },
+      { instructions: '     - Fill tracker columns if alumni answered them' },
+      { instructions: '     - "Are you PRESENTLY employed?" must be "Yes" or "No"' },
+      { instructions: '     - If "Yes", fill employment-related tracker columns' },
+      { instructions: '     - If "No" and pursuing further study, fill post-graduate degree column' },
+    ];
+
+    instructionData.forEach((row, index) => {
+      const instructionRow = instructionsSheet.addRow(row);
+      const text = row.instructions;
+      if (text.includes('══════') || text.startsWith('ALUMNI IMPORT') || 
+          text.includes('REQUIRED COLUMNS') || text.includes('OPTIONAL') || 
+          text.includes('TRACKER QUESTION') || text.includes('IMPORTANT NOTES') ||
+          text.includes('EXAMPLE SCENARIOS') || text.startsWith('  ⚠️')) {
+        instructionRow.font = { bold: true };
+        instructionRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF0F0F0' }
+        };
+      }
+    });
+
+    // Style data rows
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        row.alignment = { vertical: 'middle', horizontal: 'left' };
+        row.height = 20;
+        // Alternate row colors for better readability
+        if (rowNumber % 2 === 0) {
+          row.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF9F9F9' }
+          };
+        }
+      }
+    });
+
+    // Add borders to all cells
+    worksheet.eachRow((row) => {
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+    });
+
+    // Generate Excel file and download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'alumni_import_template.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        setSelectedFile(file);
+        setImportMessage(null);
+      } else {
+        setImportMessage({ type: 'error', text: 'Please select an Excel file (.xlsx or .xls)' });
+        setSelectedFile(null);
+      }
+    }
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile || !batchYear || !selectedProgramImport) {
+      setImportMessage({ type: 'error', text: 'Please fill in all fields and select a file' });
+      return;
+    }
+
+    setImportLoading(true);
+    setImportMessage(null);
+
+    try {
+      const result = await importAlumni(selectedFile, batchYear, selectedProgramImport);
+      
+      if (result.success) {
+        setImportMessage({
+          type: 'success',
+          text: `Import successful! ${result.created_count || 0} alumni created. ${result.skipped_count || 0} duplicates skipped.`,
+        });
+        // Reload batch list
+        const data = await fetchAlumniStatistics();
+        setBatchList(data.years || []);
+        // Reset form
+        setSelectedFile(null);
+        setBatchYear('');
+        setSelectedProgramImport('');
+        setTimeout(() => {
+          setShowImportModal(false);
+          setImportMessage(null);
+        }, 3000);
+      } else {
+        setImportMessage({ type: 'error', text: result.message || 'Import failed' });
+      }
+    } catch (error: any) {
+      setImportMessage({ type: 'error', text: error.message || 'An unexpected error occurred' });
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const closeImportModal = () => {
+    setShowImportModal(false);
+    setSelectedFile(null);
+    setBatchYear('');
+    setSelectedProgramImport('');
+    setImportMessage(null);
+  };
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar />
-      <div className="admin-content-page" style={{ flexGrow: 1, padding: '20px 40px 40px', backgroundColor: '#f5f7fa', overflowY: 'auto', marginLeft: 'var(--sidebar-width, 220px)' }}>
+      <div className="admin-content-page" style={{ flexGrow: 1, padding: '20px 48px 40px 48px', backgroundColor: '#f5f7fa', overflowY: 'auto', overflowX: 'hidden', marginLeft: 'var(--sidebar-width, 220px)', height: '100vh' }}>
         {/* Header: Only show in batch card view */}
         {!selectedBatch && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '25px' }}>
-            <span style={{ fontSize: '24px' }}>👥</span>
-            <span style={{ fontWeight: 'bold', fontSize: '18px' }}>Users</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '25px', marginTop: 0, paddingTop: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '24px' }}>👥</span>
+              <span style={{ fontWeight: 'bold', fontSize: '22px', color: '#2c5282' }}>Alumni Users</span>
+            </div>
+            <button
+              onClick={() => setShowImportModal(true)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#1D4E89',
+                color: '#fff',
+                borderRadius: '20px',
+                border: 'none',
+                fontWeight: 'bold',
+                fontSize: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'background-color 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#163b66';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#1D4E89';
+              }}
+            >
+              <FaUpload style={{ fontSize: '14px' }} />
+              Import/Export
+            </button>
           </div>
         )}
 
@@ -363,6 +716,262 @@ const UsersIndex: React.FC = () => {
               </button>
             </div>
           </div>
+        )}
+
+        {/* Import Modal */}
+        {showImportModal && (
+          <>
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                zIndex: 1000,
+              }}
+              onClick={closeImportModal}
+            />
+            <div
+              style={{
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                backgroundColor: 'white',
+                padding: '32px',
+                borderRadius: '10px',
+                zIndex: 1001,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                width: '500px',
+                maxWidth: '90%',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 style={{ marginTop: 0, marginBottom: '20px', color: '#2c5282' }}>Import Alumni Data</h2>
+
+              {importMessage && (
+                <div
+                  style={{
+                    padding: '12px',
+                    borderRadius: '6px',
+                    marginBottom: '16px',
+                    fontSize: '14px',
+                    backgroundColor: importMessage.type === 'success' ? '#d4edda' : '#f8d7da',
+                    color: importMessage.type === 'success' ? '#155724' : '#721c24',
+                    border: `1px solid ${importMessage.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`,
+                  }}
+                >
+                  {importMessage.text}
+                </div>
+              )}
+
+              {/* Download Template Section */}
+              <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                <h3 style={{ marginTop: 0, marginBottom: '8px', fontSize: '16px', fontWeight: '600' }}>
+                  📥 Download Template
+                </h3>
+                <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#6b7280' }}>
+                  Download an Excel template with all required columns and sample data to help you format your import file correctly.
+                </p>
+                <button
+                  type="button"
+                  onClick={downloadTemplate}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#059669';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#10b981';
+                  }}
+                >
+                  <FaDownload style={{ fontSize: '14px' }} />
+                  Download Excel Template
+                </button>
+              </div>
+
+              <div style={{ height: '1px', background: '#e5e7eb', margin: '20px 0' }} />
+
+              {/* Import Section */}
+              <div style={{ marginBottom: '20px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontWeight: '600',
+                    color: '#374151',
+                    fontSize: '14px',
+                  }}
+                >
+                  Batch Graduated:
+                </label>
+                <select
+                  value={batchYear}
+                  onChange={(e) => setBatchYear(e.target.value)}
+                  disabled={importLoading}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '2px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    color: '#374151',
+                    backgroundColor: 'white',
+                  }}
+                >
+                  <option value="">Select graduation year</option>
+                  {batchList.map((batch) => (
+                    <option key={batch.year} value={String(batch.year)}>
+                      {batch.year}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontWeight: '600',
+                    color: '#374151',
+                    fontSize: '14px',
+                  }}
+                >
+                  Program:
+                </label>
+                <select
+                  value={selectedProgramImport}
+                  onChange={(e) => setSelectedProgramImport(e.target.value)}
+                  disabled={importLoading}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '2px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    color: '#374151',
+                    backgroundColor: 'white',
+                  }}
+                >
+                  <option value="">Select course</option>
+                  <option value="BSIT">BSIT</option>
+                  <option value="BSIS">BSIS</option>
+                  <option value="BIT-CT">BIT-CT</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontWeight: '600',
+                    color: '#374151',
+                    fontSize: '14px',
+                  }}
+                >
+                  Upload Excel File:
+                </label>
+                <div
+                  style={{
+                    border: '2px dashed #d1d5db',
+                    borderRadius: '8px',
+                    padding: '20px',
+                    textAlign: 'center',
+                    backgroundColor: '#f9fafb',
+                    cursor: 'pointer',
+                    position: 'relative',
+                  }}
+                >
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleFileChange}
+                    disabled={importLoading}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      opacity: 0,
+                      cursor: 'pointer',
+                    }}
+                  />
+                  <div style={{ fontSize: '48px', color: '#6b7280', marginBottom: '12px' }}>📄</div>
+                  <div style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                    {selectedFile ? selectedFile.name : 'Choose Excel File'}
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                    {selectedFile ? 'File selected - Click to change' : 'Click to browse or drag and drop'}
+                  </div>
+                </div>
+                <small
+                  style={{
+                    color: '#6b7280',
+                    marginTop: '8px',
+                    display: 'block',
+                    fontSize: '12px',
+                    lineHeight: '1.4',
+                  }}
+                >
+                  <strong>Required columns:</strong> CTU_ID, First_Name, Last_Name, Gender<br />
+                  <strong>Optional:</strong> Middle_Name, Birthdate, Phone_Number, Address, Civil Status, Social Media, Password<br />
+                  <strong>Date format:</strong> YYYY-MM-DD or MM/DD/YYYY
+                </small>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button
+                  onClick={closeImportModal}
+                  disabled={importLoading}
+                  style={{
+                    padding: '10px 18px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    backgroundColor: '#ccc',
+                    color: '#000',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  style={{
+                    backgroundColor: '#1D4E89',
+                    color: '#fff',
+                    padding: '10px 18px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 'bold',
+                    cursor: importLoading ? 'not-allowed' : 'pointer',
+                    opacity: importLoading ? 0.6 : 1,
+                  }}
+                  onClick={handleImport}
+                  disabled={importLoading}
+                >
+                  {importLoading ? 'Importing...' : 'Import Alumni'}
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>

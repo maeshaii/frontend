@@ -6,6 +6,21 @@ import { getProfilePicUrl } from '../../utils/profilePicUtils';
 import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
 import ConfirmModal from '../../components/ConfirmModal';
 import ctulogo from '../../images/ctulogo.png';
+import logo from '../../images/logo.png';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faComment, 
+  faHeart, 
+  faUserPlus, 
+  faClipboard, 
+  faFileText, 
+  faBullhorn, 
+  faBriefcase, 
+  faRetweet, 
+  faDollarSign, 
+  faAt,
+  faGift 
+} from '@fortawesome/free-solid-svg-icons';
 
 function formatHybrid(iso?: string | null): string {
   if (!iso) return 'Unknown time';
@@ -30,6 +45,101 @@ function formatHybrid(iso?: string | null): string {
   if (hr  >= 1) return hr  === 1 ? '1 hour ago'   : `${hr} hours ago`;
   if (min >= 1) return min === 1 ? '1 minute ago' : `${min} minutes ago`;
   return 'Just now';
+}
+
+// Get notification icon based on type and content (matching mobile implementation)
+function getNotificationIcon(notif: any): { icon: any } | null {
+  const message = notif.content || '';
+  const fullMessage = notif.content || message;
+  const name = notif.name || '';
+  const type = (notif.type || '').toLowerCase();
+  const subject = notif.subject || '';
+  
+  // Use the pre-detected notification source (check for markers in content)
+  const isAdminNotification = message.includes('<!--ADMIN_NOTIFICATION-->') || 
+                              (notif.isAdminNotification !== undefined ? notif.isAdminNotification : false);
+  const isPesoNotification = message.includes('<!--PESO_NOTIFICATION-->') || 
+                             (notif.isPesoNotification !== undefined ? notif.isPesoNotification : false);
+
+  // Check for tracker notification FIRST (before other admin notifications)
+  const isTrackerNotification = 
+    type === 'tracker_submission' ||
+    type.includes('tracker') ||
+    type === 'ccict' ||
+    subject.toLowerCase().includes('tracker') ||
+    fullMessage.toLowerCase().includes('tracker form') ||
+    fullMessage.toLowerCase().includes('tracker') ||
+    message.toLowerCase().includes('tracker form') ||
+    message.toLowerCase().includes('tracker');
+
+  if (isTrackerNotification) {
+    return { icon: faClipboard };
+  }
+
+  // Handle specific notification types
+  if (type === 'comment' || type === 'reply' || message.toLowerCase().includes('commented') || message.toLowerCase().includes('replied')) {
+    return { icon: faComment };
+  }
+
+  if (type === 'like' || message.toLowerCase().includes('liked')) {
+    return { icon: faHeart };
+  }
+
+  if (type === 'admin_peso_post' || name.toLowerCase() === 'admin_peso_post') {
+    return { icon: faFileText };
+  }
+
+  // Format admin/CCICT notifications
+  if (isAdminNotification) {
+    if (message.toLowerCase().includes('announcement')) {
+      return { icon: faBullhorn };
+    }
+    if (message.toLowerCase().includes('post')) {
+      return { icon: faFileText };
+    }
+    return { icon: faBullhorn };
+  }
+
+  // Format PESO notifications
+  if (isPesoNotification) {
+    if (message.toLowerCase().includes('job') || message.toLowerCase().includes('employment')) {
+      return { icon: faBriefcase };
+    }
+    if (message.toLowerCase().includes('post')) {
+      return { icon: faFileText };
+    }
+    return { icon: faBriefcase };
+  }
+
+  // Format user notifications
+  if (type === 'follow' || message.toLowerCase().includes('follow')) {
+    return { icon: faUserPlus };
+  }
+  if (type === 'repost' || message.toLowerCase().includes('repost') || message.toLowerCase().includes('shared')) {
+    return { icon: faRetweet };
+  }
+  if (type === 'donation' || message.toLowerCase().includes('donation')) {
+    return { icon: faDollarSign };
+  }
+
+  // Format mention notifications
+  if (type === 'mention' || message.toLowerCase().includes('mentioned')) {
+    return { icon: faAt };
+  }
+
+  // Format reward notifications
+  // Check for "Reward Request" type (with space) or "Reward" type, or if message contains reward-related keywords
+  if (type === 'reward' || 
+      type === 'reward request' || 
+      type.includes('reward') ||
+      message.toLowerCase().includes('reward') ||
+      message.toLowerCase().includes('voucher') ||
+      message.toLowerCase().includes('request for') ||
+      subject.toLowerCase().includes('reward')) {
+    return { icon: faGift };
+  }
+
+  return null;
 }
 
 const NotificationPage: React.FC = () => {
@@ -82,6 +192,20 @@ const NotificationPage: React.FC = () => {
       localStorage.setItem('pendingRepostReplyId', replyId);
     } else {
       localStorage.removeItem('pendingRepostReplyId');
+    }
+  };
+
+  const storePostHighlightIds = (commentId?: string | null, replyId?: string | null) => {
+    if (commentId) {
+      localStorage.setItem('pendingPostCommentId', commentId);
+    } else {
+      localStorage.removeItem('pendingPostCommentId');
+    }
+
+    if (replyId) {
+      localStorage.setItem('pendingPostReplyId', replyId);
+    } else {
+      localStorage.removeItem('pendingPostReplyId');
     }
   };
 
@@ -315,12 +439,25 @@ const NotificationPage: React.FC = () => {
 
   const handleReplyNotificationClick = async (notif: any) => {
     try {
-      // Extract comment ID from notification content
+      // Extract comment ID and reply ID from notification content
       const commentIdMatch = notif.content.match(/<!--COMMENT_ID:(\d+)-->/);
+      const replyIdMatch = notif.content.match(/<!--REPLY_ID:(\d+)-->/);
+      const commentId = commentIdMatch?.[1];
+      const replyId = replyIdMatch?.[1];
+      
       if (commentIdMatch) {
-        const commentId = parseInt(commentIdMatch[1]);
-        const response = await getPostFromComment(commentId);
+        const commentIdNum = parseInt(commentIdMatch[1]);
+        const response = await getPostFromComment(commentIdNum);
         if (response.success) {
+          // Store post ID and highlight IDs for regular posts
+          if (response.post_type === 'post') {
+            localStorage.setItem('pendingPostView', response.post_id.toString());
+            storePostHighlightIds(commentId, replyId);
+          } else if (response.post_type === 'repost') {
+            localStorage.setItem('pendingRepostView', response.post_id.toString());
+            storeRepostHighlightIds(commentId, replyId);
+          }
+          
           // Redirect to the post page
           const currentPath = window.location.pathname;
           if (currentPath.startsWith('/peso')) {
@@ -600,7 +737,7 @@ const NotificationPage: React.FC = () => {
               } else {
                 // Regular post mention
                 localStorage.setItem('pendingPostView', originalPostId);
-                storeRepostHighlightIds(null, null);
+                storePostHighlightIds(commentId, replyId);
               
                 // Redirect to dashboard
                 const currentPath = window.location.pathname;
@@ -718,6 +855,7 @@ const NotificationPage: React.FC = () => {
                   } else {
                     // Regular post
                     localStorage.setItem('pendingPostView', resolvedPostId);
+                    storePostHighlightIds(commentId, replyId);
                     
                     // Redirect to dashboard with resolved post ID
                     const currentPath = window.location.pathname;
@@ -831,7 +969,7 @@ const NotificationPage: React.FC = () => {
             } else {
               // Otherwise open the original post modal
               localStorage.setItem('pendingPostView', postId);
-              storeRepostHighlightIds(null, null);
+              storePostHighlightIds(commentId, replyId);
             }
             
             // Store profile picture information from notification for peso posts
@@ -1703,35 +1841,12 @@ const NotificationPage: React.FC = () => {
                       const authorPicMatch = notif.content.match(/<!--AUTHOR_PIC:([^>]+)-->/);
                       const directPicUrl = authorPicMatch ? authorPicMatch[1] : undefined;
 
-                      // For tracker and reward notifications, use admin profile
-                      if ((isTrackerNotification || isRewardNotification) && adminProfilePic) {
+                      // For tracker and reward notifications, use logo.png
+                      if (isTrackerNotification || isRewardNotification) {
                         return (
                           <img
-                            src={adminProfilePic}
-                            alt="Admin"
-                            style={{
-                              width: '48px',
-                              height: '48px',
-                              borderRadius: '50%',
-                              objectFit: 'cover',
-                              border: '2px solid #e9ecef'
-                            }}
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = ctulogo;
-                            }}
-                          />
-                        );
-                      }
-                      
-                      // For reward notifications, use admin profile from notification content
-                      if (isRewardNotification && directPicUrl) {
-                        const profilePicUrl = directPicUrl.startsWith('http') 
-                          ? directPicUrl 
-                          : `http://127.0.0.1:8000${directPicUrl}`;
-                        return (
-                          <img
-                            src={profilePicUrl}
-                            alt="Admin"
+                            src={logo}
+                            alt="Logo"
                             style={{
                               width: '48px',
                               height: '48px',
@@ -1756,76 +1871,36 @@ const NotificationPage: React.FC = () => {
                       );
                     })()}
 
-                    {/* Minimalist type icon badge */}
-                    <div style={{
-                      position: 'absolute',
-                      right: '-6px',
-                      bottom: '-6px',
-                      width: '20px',
-                      height: '20px',
-                      borderRadius: '50%',
-                      background: '#ffffff',
-                      border: '2px solid #ffffff',
-                      outline: '1px solid #e5e7eb',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 2px 6px rgba(0,0,0,0.12)'
-                    }}>
-                      {(() => {
-                        const t = (notif.type || '').toLowerCase();
-                        const svgProps = { width: 10, height: 10, viewBox: '0 0 24 24', fill: 'none', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-                        if (t.includes('like')) {
-                          return (
-                            <svg {...svgProps} stroke="#ef4444">
-                              <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
-                            </svg>
-                          );
-                        }
-                        if (t.includes('comment')) {
-                          return (
-                            <svg {...svgProps} stroke="#3b82f6">
-                              <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
-                            </svg>
-                          );
-                        }
-                        if (t.includes('repost') || t.includes('re-share') || t.includes('share')) {
-                          return (
-                            <svg {...svgProps} stroke="#10b981">
-                              <polyline points="17 1 21 5 17 9" />
-                              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-                              <polyline points="7 23 3 19 7 15" />
-                              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
-                            </svg>
-                          );
-                        }
-                        if (t.includes('follow')) {
-                          return (
-                            <svg {...svgProps} stroke="#f59e0b">
-                              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                              <circle cx="9" cy="7" r="4" />
-                              <path d="M20 8v6" />
-                              <path d="M23 11h-6" />
-                            </svg>
-                          );
-                        }
-                        if (t.includes('mention')) {
-                          return (
-                            <svg {...svgProps} stroke="#8b5cf6">
-                              <path d="M16 8a6 6 0 1 0 2 4.9V8" />
-                              <path d="M12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
-                            </svg>
-                          );
-                        }
-                        // default: notification bell
-                        return (
-                          <svg {...svgProps} stroke="#6b7280">
-                            <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-                            <path d="M13.73 21a2 2 0 01-3.46 0" />
-                          </svg>
-                        );
-                      })()}
-                    </div>
+                    {/* Notification icon badge (matching mobile) */}
+                    {(() => {
+                      const iconData = getNotificationIcon(notif);
+                      if (!iconData) return null;
+                      
+                      return (
+                        <div style={{
+                          position: 'absolute',
+                          right: '-2px',
+                          bottom: '-2px',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '10px',
+                          background: '#1e3a8a',
+                          border: '2px solid #ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.12)'
+                        }}>
+                          <FontAwesomeIcon 
+                            icon={iconData.icon} 
+                            style={{ 
+                              fontSize: '12px', 
+                              color: '#ffffff' 
+                            }} 
+                          />
+                        </div>
+                      );
+                    })()}
                   </div>
                   
                   {/* Notification Icon Overlay removed */}
@@ -2633,7 +2708,7 @@ const NotificationPage: React.FC = () => {
                                 storeRepostHighlightIds(commentId, replyId);
                               } else if (postId) {
                                 localStorage.setItem('pendingPostView', postId);
-                                storeRepostHighlightIds(null, null);
+                                storePostHighlightIds(commentId, replyId);
                               }
                               navigate(dashboardPath);
                             }

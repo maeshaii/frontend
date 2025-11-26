@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ChangeEvent, useRef } from 'react';
+import React, { useState, useEffect, ChangeEvent, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import './Tracker.css';
 import { trackerApi } from '../../../services/trackerApi';
@@ -109,6 +109,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   }, [categories]);
 
   // Helper function to sanitize loaded draft data
+  // IMPORTANT: Preserve file upload markers ({ type: 'file', uploaded: true, ... })
   const sanitizeDraftData = (answers: Record<string, any>): Record<string, any> => {
     const sanitized: Record<string, any> = {};
     
@@ -116,10 +117,20 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
       // Skip null, undefined
       if (value === null || value === undefined) continue;
       
-      // Skip empty objects (the main culprit!)
-      if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0) {
-        console.warn(`⚠️ Skipping empty object for question ${key}`);
-        continue;
+      // PRESERVE file markers (indicate files were uploaded but lost after refresh)
+      if (typeof value === 'object' && !Array.isArray(value)) {
+        // Check if it's a file marker (has 'type' and 'uploaded' keys)
+        if (value.type === 'file' && value.uploaded === true) {
+          // This is a file marker - PRESERVE IT
+          sanitized[key] = value;
+          console.log(`✅ Web: Preserved file marker for question ${key}:`, value);
+          continue;
+        }
+        // Skip empty objects (but file markers are not empty)
+        if (Object.keys(value).length === 0) {
+          console.warn(`⚠️ Skipping empty object for question ${key}`);
+          continue;
+        }
       }
       
       // Skip empty strings (but keep "0", spaces, etc.)
@@ -141,15 +152,37 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
           const response = await trackerApi.loadDraft(userId);
           
           if (response.success && response.has_draft && Object.keys(response.answers).length > 0) {
-            console.log('✅ Draft found with', Object.keys(response.answers).length, 'answers - loading...');
+            console.log('✅ Web: Draft found with', Object.keys(response.answers).length, 'answers - loading...');
+            console.log('📋 Web: Draft answers:', JSON.stringify(response.answers, null, 2));
             
             // SANITIZE: Clean any invalid values before setting state
             const sanitizedAnswers = sanitizeDraftData(response.answers);
-            console.log(`🧹 Sanitized ${Object.keys(response.answers).length - Object.keys(sanitizedAnswers).length} invalid values`);
+            console.log(`🧹 Web: Sanitized ${Object.keys(response.answers).length - Object.keys(sanitizedAnswers).length} invalid values`);
+            
+            // Restore award documents state from file markers if needed
+            const restoredAwardDocs: { [questionId: number]: File[] } = {};
+            for (const [key, value] of Object.entries(sanitizedAnswers)) {
+              if (value && typeof value === 'object' && !Array.isArray(value) && value.type === 'file' && value.multiple === true && value.uploaded === true) {
+                const questionId = parseInt(key);
+                const question = categories.flatMap(cat => cat.questions).find(q => q.id === questionId);
+                const lowerText = question?.text.toLowerCase() || '';
+                const isAwardSupportingDocs = (lowerText.includes('supporting documents') || lowerText.includes('supporting document')) && 
+                                              (lowerText.includes('awards') || lowerText.includes('award') || lowerText.includes('recognition'));
+                if (isAwardSupportingDocs) {
+                  // Create empty slots for files that were uploaded but lost
+                  restoredAwardDocs[questionId] = Array(value.count || 1).fill(null);
+                  console.log(`📋 Web: Restored award documents state for question ${key} (${value.count} files were uploaded)`);
+                }
+              }
+            }
+            if (Object.keys(restoredAwardDocs).length > 0) {
+              setAwardDocuments(prev => ({ ...prev, ...restoredAwardDocs }));
+            }
             
             setFormResponses(sanitizedAnswers);
             setSaveStatus('saved');
             setHasDraftData(true); // Prevents user data from overwriting
+            console.log('✅ Web: Draft loaded with file markers preserved');
           } else {
             console.log('ℹ️ No saved draft found');
             setHasDraftData(false); // Will allow user data to load
@@ -189,19 +222,59 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
     autoSaveTimerRef.current = setTimeout(async () => {
       try {
         setSaveStatus('saving');
-        console.log('💾 Auto-saving draft...');
+        console.log('💾 Web: Auto-saving draft...');
+        console.log('📋 Web: Total responses to save:', Object.keys(formResponses).length);
         
-        await trackerApi.saveDraft(userId, formResponses);
+        // Save draft responses - INCLUDING file markers (file markers indicate files were uploaded)
+        // Note: Actual File objects can't be saved, but markers can be saved to remember uploads after refresh
+        const draftResponses: Record<string, any> = {};
+        let fileMarkerCount = 0;
+        
+        for (const [key, value] of Object.entries(formResponses)) {
+          // Skip actual File objects (can't be serialized to JSON)
+          if (value instanceof File) {
+            // This is an actual File object - skip it but save a marker
+            draftResponses[key] = { type: 'file', uploaded: true, filename: value.name };
+            fileMarkerCount++;
+            console.log(`✅ Web: Saving file marker for question ${key}:`, { type: 'file', uploaded: true, filename: value.name });
+            continue;
+          }
+          
+          // Check if it's an array of Files (for multiple file uploads)
+          if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
+            const validFiles = value.filter(f => f instanceof File);
+            if (validFiles.length > 0) {
+              draftResponses[key] = { type: 'file', multiple: true, uploaded: true, count: validFiles.length };
+              fileMarkerCount++;
+              console.log(`✅ Web: Saving multiple file marker for question ${key}:`, { type: 'file', multiple: true, uploaded: true, count: validFiles.length });
+              continue;
+            }
+          }
+          
+          // Keep file markers (already in marker format)
+          if (value && typeof value === 'object' && !Array.isArray(value) && value.type === 'file' && value.uploaded === true) {
+            draftResponses[key] = value;
+            fileMarkerCount++;
+            console.log(`✅ Web: Keeping existing file marker for question ${key}:`, value);
+            continue;
+          }
+          
+          // Save all other responses (including file markers)
+          draftResponses[key] = value;
+        }
+        
+        console.log(`💾 Web: Saving ${Object.keys(draftResponses).length} responses (${fileMarkerCount} file markers)`);
+        await trackerApi.saveDraft(userId, draftResponses);
         
         setSaveStatus('saved');
-        console.log('✅ Draft auto-saved successfully');
+        console.log('✅ Web: Draft auto-saved successfully');
         
         // Reset to null after 2 seconds
         setTimeout(() => {
           setSaveStatus(null);
         }, 2000);
       } catch (error) {
-        console.error('❌ Auto-save failed:', error);
+        console.error('❌ Web: Auto-save failed:', error);
         setSaveStatus('unsaved');
       }
     }, 3000); // 3 second debounce
@@ -751,18 +824,48 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   };
 
   // Helper: get flat list of all questions with their number
-  const getFlatQuestions = () => {
+  const isAwardSupportingDocsQuestion = (q: QuestionItem) => {
+    const lowerText = (q.text || '').toLowerCase();
+    return (
+      (lowerText.includes('supporting documents') || lowerText.includes('supporting document')) &&
+      (lowerText.includes('awards') || lowerText.includes('award') || lowerText.includes('recognition'))
+    );
+  };
+
+  const awardDocsVisible = useMemo(() => {
+    const awardQuestion = categories
+      .flatMap(cat => cat.questions)
+      .find(ques => {
+        const qt = (ques.text || '').toLowerCase();
+        return (
+          ques.type === 'radio' &&
+          (qt.includes('awards') || qt.includes('award') || qt.includes('recognition')) &&
+          (qt.includes('received') || qt.includes('during') || qt.includes('employment'))
+        );
+      });
+    if (!awardQuestion) return false;
+    return formResponses[awardQuestion.id] === 'Yes';
+  }, [categories, formResponses]);
+
+  const flatQuestions = useMemo(() => {
     const flat: { catIdx: number; qIdx: number; number: number }[] = [];
     let num = 1;
+
     categories.forEach((cat, catIdx) => {
-      cat.questions.forEach((q, qIdx) => {
-        if (shouldHideQuestionText(q.text)) return; // don't count hidden questions
+      if (!shouldShowCategory(cat)) return;
+
+      const sortedQuestions = [...cat.questions].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+      sortedQuestions.forEach((q, qIdx) => {
+        if (shouldHideQuestionText(q.text)) return;
+        if (isAwardSupportingDocsQuestion(q) && !awardDocsVisible) return;
         flat.push({ catIdx, qIdx, number: num++ });
       });
     });
+
     return flat;
-  };
-  const flatQuestions = getFlatQuestions();
+  }, [categories, awardDocsVisible, formResponses]);
+
   const getQuestionNumber = (catIdx: number, qIdx: number) => {
     const found = flatQuestions.find((fq) => fq.catIdx === catIdx && fq.qIdx === qIdx);
     return found ? found.number : '';
@@ -907,7 +1010,17 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
       // Validate required questions
       const missingRequiredQuestions = [];
       for (const category of categories) {
+        // Skip validation for hidden categories
+        if (!shouldShowCategory(category)) {
+          continue;
+        }
+        
         for (const question of category.questions) {
+          // Skip validation for hidden questions (like "Current Scope of your Job")
+          if (shouldHideQuestionText(question.text)) {
+            continue;
+          }
+          
           if (question.required) {
             const answer = formResponses[question.id];
             // Check if question 31 (award supporting docs) - needs at least one file
@@ -916,15 +1029,53 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                                            (lowerText.includes('awards') || lowerText.includes('award') || lowerText.includes('recognition'));
             
             if (isAwardSupportingDocs) {
-              // For award documents, check if array has at least one valid file
+              // Only validate if the parent award question is answered "Yes"
+              const awardQuestion = categories
+                .flatMap(cat => cat.questions)
+                .find((ques: any) => {
+                  const qt = ques.text.toLowerCase();
+                  return ques.type === 'radio' && 
+                         (qt.includes('awards') || qt.includes('award') || qt.includes('recognition')) &&
+                         (qt.includes('received') || qt.includes('during') || qt.includes('employment'));
+                });
+              
+              // Only validate if parent question exists and is answered "Yes"
+              if (!awardQuestion || formResponses[awardQuestion.id] !== 'Yes') {
+                continue; // Skip validation - question shouldn't be shown
+              }
+              
+              // For award documents, check both actual files AND file markers (for draft persistence)
               const files = awardDocuments[question.id] || [];
               const hasValidFile = Array.isArray(files) && files.some(file => file !== null && file !== undefined);
+              
+              // Check if there's a file marker indicating files were uploaded (even if lost after refresh)
+              const hasFileMarker = answer && 
+                typeof answer === 'object' && 
+                !Array.isArray(answer) &&
+                answer.type === 'file' && 
+                answer.uploaded === true &&
+                answer.multiple === true;
+              
+              // For FINAL SUBMISSION, require actual files (not just markers)
+              // File markers are only for draft persistence, not for submission
               if (!hasValidFile) {
                 missingRequiredQuestions.push({
                   questionNumber: getQuestionNumber(categories.indexOf(category), category.questions.indexOf(question)),
-                  questionText: question.text
+                  questionText: question.text + (hasFileMarker ? ' (Files were uploaded but need to be re-uploaded after page refresh)' : '')
                 });
               }
+            } else if (answer instanceof File) {
+              // File object exists - valid
+              // Do nothing, continue to next question
+            } else if (answer && typeof answer === 'object' && !Array.isArray(answer) && 
+                       answer.type === 'file' && answer.uploaded === true) {
+              // File marker exists but actual file is missing (lost after refresh)
+              // For FINAL SUBMISSION, we need actual files, not just markers
+              // Markers are only for draft persistence, not for submission
+              missingRequiredQuestions.push({
+                questionNumber: getQuestionNumber(categories.indexOf(category), category.questions.indexOf(question)),
+                questionText: question.text + ' (Please re-upload the file)'
+              });
             } else if (!answer || (typeof answer === 'string' && answer.trim() === '') || 
                      (Array.isArray(answer) && answer.length === 0)) {
               missingRequiredQuestions.push({
@@ -1179,8 +1330,8 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   }
 
   return (
-    <div className="tracker-container">
-      <div className="tracker-inner">
+    <div className={`tracker-container ${previewMode ? 'preview-mode' : ''}`}>
+      <div className={`tracker-inner ${previewMode ? 'preview-mode' : ''}`}>
         {previewModeFromParent ? null : (
           <>
             <button
@@ -1240,9 +1391,12 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
             {categories.length === 0 && (
               <p style={{ color: '#888' }}>No categories/questions to display.</p>
             )}
-            {categories
-              .filter((cat) => shouldShowCategory(cat))
-              .map((cat, catIdx) => (
+            {categories.map((cat, catIdx) => {
+              if (!shouldShowCategory(cat)) return null;
+                const sortedQuestions = [...cat.questions].sort(
+                  (a, b) => (a.order || 0) - (b.order || 0)
+                );
+                return (
                 <div key={cat.id} style={{ marginBottom: 32 }}>
                   <h2>{cat.title}</h2>
                   <p>{cat.description}</p>
@@ -1250,35 +1404,18 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                   {cat.title.toLowerCase().includes('employment status') ||
                     cat.title.toLowerCase().includes('unemployed') ||
                     cat.title.toLowerCase().includes('further study')}
-                  {cat.questions.sort((a, b) => (a.order || 0) - (b.order || 0)).map((q, qIdx) => {
+                  {sortedQuestions.map((q, qIdx) => {
                     if (shouldHideQuestionText(q.text)) return null;
                     
                     // Check if this is question 31 (Supporting Documents for awards/recognition)
                     // Only show if question 30 (awards/recognition) is answered "Yes"
-                    const lowerText = q.text.toLowerCase();
-                    const isAwardSupportingDocs = (lowerText.includes('supporting documents') || lowerText.includes('supporting document')) && 
-                                                   (lowerText.includes('awards') || lowerText.includes('award') || lowerText.includes('recognition'));
-                    
-                    if (isAwardSupportingDocs) {
-                      // Find question 30 (awards/recognition question)
-                      const awardQuestion = categories
-                        .flatMap(cat => cat.questions)
-                        .find(ques => {
-                          const qt = ques.text.toLowerCase();
-                          return ques.type === 'radio' && 
-                                 (qt.includes('awards') || qt.includes('award') || qt.includes('recognition')) &&
-                                 (qt.includes('received') || qt.includes('during') || qt.includes('employment'));
-                        });
-                      
-                      // Only show question 31 if question 30 is answered "Yes"
-                      if (!awardQuestion || formResponses[awardQuestion.id] !== 'Yes') {
-                        return null;
-                      }
+                    if (isAwardSupportingDocsQuestion(q) && !awardDocsVisible) {
+                      return null;
                     }
                     
                     if (q.text.toLowerCase().includes('current position')) {
                       return (
-                        <div key={q.id} style={{ marginBottom: 16 }}>
+                        <div key={q.id} className="preview-question" style={{ marginBottom: 16 }}>
                           <label style={{ fontWeight: 500 }}>
                             {getQuestionNumber(catIdx, qIdx)}. {q.text}
                             {q.required && <span style={{ color: 'red', marginLeft: 4 }}>*</span>}
@@ -1298,7 +1435,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                       );
                     }
                     return (
-                      <div key={q.id} style={{ marginBottom: 16 }}>
+                      <div key={q.id} className="preview-question" style={{ marginBottom: 16 }}>
                         <label style={{ fontWeight: 500 }}>
                           {getQuestionNumber(catIdx, qIdx)}. {q.text}
                           {q.required && <span style={{ color: 'red', marginLeft: 4 }}>*</span>}
@@ -1417,7 +1554,13 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                                 const updatedFiles = [...currentFiles];
                                 updatedFiles[index] = file;
                                 setAwardDocuments({ ...awardDocuments, [q.id]: updatedFiles });
-                                handleResponseChange(cat.id, q.id, updatedFiles);
+                                
+                                // Also save file marker in formResponses for draft persistence
+                                const validFiles = updatedFiles.filter(f => f !== null);
+                                handleResponseChange(cat.id, q.id, { type: 'file', multiple: true, uploaded: true, count: validFiles.length });
+                                
+                                // Keep the actual files array in a separate state (awardDocuments) for submission
+                                // The marker in formResponses will persist after refresh
                               };
 
                               const addAnotherAward = () => {
@@ -1498,9 +1641,14 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                                   >
                                     + Add Another Award
                                   </button>
-                                  {currentFiles.length === 0 && (
+                                  {currentFiles.length === 0 && !(formResponses[q.id] && typeof formResponses[q.id] === 'object' && !Array.isArray(formResponses[q.id]) && formResponses[q.id].type === 'file' && formResponses[q.id].multiple === true && formResponses[q.id].uploaded === true) && (
                                     <div style={{ marginTop: 8, color: '#888', fontSize: 12 }}>
                                       Click the button above to add your first award document.
+                                    </div>
+                                  )}
+                                  {currentFiles.length === 0 && formResponses[q.id] && typeof formResponses[q.id] === 'object' && !Array.isArray(formResponses[q.id]) && formResponses[q.id].type === 'file' && formResponses[q.id].multiple === true && formResponses[q.id].uploaded === true && (
+                                    <div style={{ marginTop: 8, padding: 12, backgroundColor: '#fff3cd', borderRadius: 6, border: '1px solid #ffc107' }}>
+                                      <strong style={{ color: '#856404', fontSize: 12 }}>⚠️ Files were uploaded but need to be re-uploaded after page refresh. Please select your files again.</strong>
                                     </div>
                                   )}
                                 </div>
@@ -1542,13 +1690,24 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                                         return;
                                       }
                                     }
+                                    
+                                    // Save actual file for submission
                                     handleResponseChange(cat.id, q.id, file);
                                   }}
                                 />
-                                {formResponses[q.id] && (
+                                {(formResponses[q.id] instanceof File) && (
                                   <div className="file-info">
-                                    <strong>Selected file:</strong> {formResponses[q.id].name}(
+                                    <strong>Selected file:</strong> {formResponses[q.id].name} (
                                     {(formResponses[q.id].size / 1024 / 1024).toFixed(2)} MB)
+                                  </div>
+                                )}
+                                {formResponses[q.id] && typeof formResponses[q.id] === 'object' && 
+                                 !(formResponses[q.id] instanceof File) && 
+                                 formResponses[q.id].type === 'file' && 
+                                 formResponses[q.id].uploaded === true && 
+                                 !formResponses[q.id].multiple && (
+                                  <div className="file-info" style={{ padding: 12, backgroundColor: '#fff3cd', borderRadius: 6, border: '1px solid #ffc107', marginTop: 8 }}>
+                                    <strong style={{ color: '#856404' }}>⚠️ File was uploaded but needs to be re-uploaded after page refresh. Please select your file again.</strong>
                                   </div>
                                 )}
                               </div>
@@ -1619,7 +1778,8 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                     );
                   })}
                 </div>
-              ))}
+              );
+            })}
             {/* Only one submit button at the end of the form */}
             {categories.length > 0 && (
               <button type="submit" className="action-button">
@@ -1801,7 +1961,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                       {cat.questions.length === 0 && (
                         <p style={{ color: '#888' }}>No questions yet.</p>
                       )}
-                      {cat.questions.sort((a, b) => (a.order || 0) - (b.order || 0)).map((q, qIdx) => (
+                      {[...cat.questions].sort((a, b) => (a.order || 0) - (b.order || 0)).map((q, qIdx) => (
                         <div className="card question-box" key={q.id} style={{ marginBottom: 8 }}>
                           {editingQuestion &&
                           editingQuestion.catIdx === catIdx &&

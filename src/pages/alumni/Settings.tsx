@@ -19,6 +19,72 @@ interface UserData {
   profile_pic?: string;
 }
 
+// Utility function to format employment duration: "1_2_years" -> "1-2 years"
+const formatEmploymentDuration = (duration: string | undefined | null): string => {
+  if (!duration || typeof duration !== 'string') return duration || 'N/A';
+  
+  const durationMap: Record<string, string> = {
+    'less_than_6_months': 'Less than 6 months',
+    '6_months_1_year': '6 months – 1 year',
+    '1_2_years': '1-2 years',
+    '3_5_years': '3-5 years',
+    'more_than_5_years': 'More than 5 years'
+  };
+  
+  // Check if it's a known value
+  if (durationMap[duration]) {
+    return durationMap[duration];
+  }
+  
+  // Fallback: Try to format unknown patterns
+  let formatted = duration.trim();
+  formatted = formatted.replace(/_/g, '-');
+  formatted = formatted.replace(/-years$/i, ' years');
+  formatted = formatted.replace(/-year$/i, ' year');
+  formatted = formatted.replace(/-months$/i, ' months');
+  formatted = formatted.replace(/-month$/i, ' month');
+  
+  return formatted;
+};
+
+// Utility function to format salary range: "10001_20000" -> "10,001 - 20,000"
+const formatSalaryRange = (salary: string | undefined | null): string => {
+  if (!salary || typeof salary !== 'string') return salary || 'N/A';
+  
+  const salaryMap: Record<string, string> = {
+    'below_5000': '5,000 below',
+    '5001_10000': '5,001 - 10,000',
+    '10001_20000': '10,001 - 20,000',
+    '20001_30000': '20,001 - 30,000',
+    'above_30000': '30,000 above'
+  };
+  
+  // Check if it's a known value
+  if (salaryMap[salary]) {
+    return salaryMap[salary];
+  }
+  
+  // Fallback: Try to parse as numeric range (e.g., "10001_20000")
+  if (salary.includes('_')) {
+    const parts = salary.split('_');
+    if (parts.length === 2) {
+      const start = parseInt(parts[0], 10);
+      const end = parseInt(parts[1], 10);
+      if (!isNaN(start) && !isNaN(end)) {
+        return `${start.toLocaleString()} - ${end.toLocaleString()}`;
+      }
+    }
+  }
+  
+  // If not a range, try to format as number if possible
+  const num = parseFloat(salary.replace(/[^\d.]/g, ''));
+  if (!isNaN(num)) {
+    return num.toLocaleString();
+  }
+  
+  return salary;
+};
+
 const Settings: React.FC = () => {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<string>(() => {
@@ -1129,7 +1195,7 @@ const Settings: React.FC = () => {
                             
                             <TextField
                               label="Employment Duration"
-                              value={employmentData.employment_duration || 'N/A'}
+                              value={formatEmploymentDuration(employmentData.employment_duration)}
                               variant="outlined"
                               fullWidth
                               disabled={true}
@@ -1138,7 +1204,7 @@ const Settings: React.FC = () => {
                             
                             <TextField
                               label="Salary Range"
-                              value={employmentData.salary_range || 'N/A'}
+                              value={formatSalaryRange(employmentData.salary_range)}
                               variant="outlined"
                               fullWidth
                               disabled={true}
