@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import RepostModal from './RepostModal';
 import { repostPost, repostForumPost, repostDonation, getUserPoints } from '../services/api';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faRetweet } from '@fortawesome/free-solid-svg-icons';
 import './postFooterActions.css';
 
 interface RepostButtonProps {
@@ -126,7 +128,7 @@ const RepostButton: React.FC<RepostButtonProps> = ({
         style={style}
       >
         <span className="post-footer-icon">
-          {isReposted ? '🔄' : '🔄'}
+          <FontAwesomeIcon icon={faRetweet} size="lg" style={{ fontSize: '18px', color: '#555' }} />
         </span>
         <span className="post-footer-label">{isReposted ? 'Reposted' : 'Repost'}</span>
       </button>

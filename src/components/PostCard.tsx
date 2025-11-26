@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost, getPostLikes, getRepostLikes, getDonationLikes, getForumLikes, getUserPoints } from '../services/api';
+import { api, likePost, unlikePost, commentOnPost, deletePost, editPost, deleteComment, editComment, likeDonation, unlikeDonation, commentOnDonation, deleteDonationComment, editDonationComment, repostDonation, deleteDonationRequest, updateDonationRequest, createReply, getCommentReplies, editReply, deleteReply, searchAlumni, getFollowingForMentions, likeRepost, unlikeRepost, getPostLikes, getRepostLikes, getDonationLikes, getForumLikes, getUserPoints, getPostDetail } from '../services/api';
 import { 
   commentOnForumPost, 
   deleteForumComment, 
@@ -23,6 +23,13 @@ import Reply from './Reply';
 import ReplyInput from './ReplyInput';
 import RepostButton from './RepostButton';
 import PostStatsRow from './PostStatsRow';
+import RepostsModal from './RepostsModal';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faThumbsUp, faRetweet } from '@fortawesome/free-solid-svg-icons';
+import { faThumbsUp as faThumbsUpReg, faComment as faCommentReg } from '@fortawesome/free-regular-svg-icons';
+import { IoSend } from 'react-icons/io5';
+import ConfirmModal from './ConfirmModal';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import './postFooterActions.css';
 
 interface RepostItem {
@@ -91,6 +98,7 @@ interface PostItem {
   reposts?: RepostItem[];
   likes?: LikeItem[];
   liked_by_user?: boolean;
+  reposts_count?: number;
 }
 
 interface PostCardProps {
@@ -125,6 +133,8 @@ interface PostCardProps {
   isDonation?: boolean; // New prop to indicate donation context
   // Repost props removed
   onViewOriginalPost?: (originalPost: PostItem) => void; // Callback to view original post in modal
+  highlightCommentId?: string; // Comment ID to highlight when post is opened
+  highlightReplyId?: string; // Reply ID to highlight when post is opened
 }
 
 const PostCard: React.FC<PostCardProps> = ({
@@ -158,6 +168,8 @@ const PostCard: React.FC<PostCardProps> = ({
   isDonation = false, // Default to false for backward compatibility
   // Repost flags removed
   onViewOriginalPost, // Optional callback to view original post
+  highlightCommentId, // Optional comment ID to highlight
+  highlightReplyId, // Optional reply ID to highlight
 }) => {
   console.log('PostCard currentUserId:', currentUserId);
   // Repost removed on web
@@ -172,9 +184,16 @@ const PostCard: React.FC<PostCardProps> = ({
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [inlineImageIndex, setInlineImageIndex] = useState<{ [key: number]: number }>({}); // For inline carousel display per post
   const [showLikesModal, setShowLikesModal] = useState(false);
+  const [showRepostsModal, setShowRepostsModal] = useState(false);
+  const [showDeleteRepostModal, setShowDeleteRepostModal] = useState(false);
+  const [showDeletePostModal, setShowDeletePostModal] = useState(false);
+  const [showDeleteCommentModal, setShowDeleteCommentModal] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState<number | null>(null);
   // Repost likes modals removed on web
   const [fetchedLikes, setFetchedLikes] = useState<any[]>([]);
   const [likesLoading, setLikesLoading] = useState(false);
+  const [fetchedReposts, setFetchedReposts] = useState<any[]>(post.reposts || []);
+  const [repostsLoading, setRepostsLoading] = useState(false);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
 
   // If this item represents a reposted donation (original_post embedded), render a clickable inner card
@@ -192,9 +211,29 @@ const PostCard: React.FC<PostCardProps> = ({
     }
   }, [showLikesModal]);
 
+  useEffect(() => {
+    if (showRepostsModal) {
+      fetchReposts();
+    }
+  }, [showRepostsModal]);
+
+  useEffect(() => {
+    if (post.reposts && post.reposts.length > 0) {
+      setFetchedReposts(post.reposts);
+    }
+  }, [post.reposts]);
+
   // Repost likes modals removed
   const commentOptionsRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   const [showCommentOptions, setShowCommentOptions] = useState<{ [key: number]: boolean }>({});
+  // Highlighting refs and state
+  const commentRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const replyRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const processedCommentHighlightRef = useRef<string | null>(null);
+  const processedReplyHighlightRef = useRef<string | null>(null);
+  const requestedReplyLoadsRef = useRef<Set<number>>(new Set());
+  const [activeCommentHighlight, setActiveCommentHighlight] = useState<number | null>(null);
+  const [activeReplyHighlight, setActiveReplyHighlight] = useState<number | null>(null);
   const [editingRepostCaption, setEditingRepostCaption] = useState<{ [key: number]: boolean }>({});
   const [editRepostCaptionContent, setEditRepostCaptionContent] = useState<{ [key: number]: string }>({});
   
@@ -206,12 +245,103 @@ const PostCard: React.FC<PostCardProps> = ({
   // State to control whether comments section is visible (hidden by default)
   const [showCommentsSection, setShowCommentsSection] = useState<{ [key: number]: boolean }>({});
 
+  type EmojiPickerLayout = {
+    position: 'above' | 'below';
+    top: number;
+    left: number;
+    width: number;
+  };
+
+  // Emoji picker state for comments
+  const [showEmojiPicker, setShowEmojiPicker] = useState<{ [key: number]: boolean }>({});
+  const [emojiPickerLayouts, setEmojiPickerLayouts] = useState<{ [key: number]: EmojiPickerLayout }>({});
+  const emojiPickerRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const commentInputRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+
   // @mention functionality for comments
   const [followingUsers, setFollowingUsers] = useState<any[]>([]);
   const [showMentionSuggestions, setShowMentionSuggestions] = useState<{ [key: number]: boolean }>({});
   const [mentionSuggestions, setMentionSuggestions] = useState<{ [key: number]: any[] }>({});
   const [mentionStart, setMentionStart] = useState<{ [key: number]: number }>({});
   const [selectedMentionIndex, setSelectedMentionIndex] = useState<{ [key: number]: number }>({});
+
+  const updateEmojiPickerLayout = useCallback((postId: number) => {
+    const inputElement = commentInputRefs.current[postId];
+    if (!inputElement) {
+      return;
+    }
+    const rect = inputElement.getBoundingClientRect();
+    const pickerHeight = 320;
+    const gap = 8;
+    const pickerWidth = Math.min(320, window.innerWidth - gap * 2);
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const position =
+      spaceAbove > spaceBelow && spaceAbove >= pickerHeight + gap ? 'above' : 'below';
+    const top =
+      position === 'above'
+        ? Math.max(gap, rect.top - pickerHeight - gap)
+        : Math.min(window.innerHeight - pickerHeight - gap, rect.bottom + gap);
+    const left = Math.min(
+      Math.max(rect.right - pickerWidth, gap),
+      window.innerWidth - pickerWidth - gap
+    );
+
+    setEmojiPickerLayouts(prev => ({
+      ...prev,
+      [postId]: { position, top, left, width: pickerWidth },
+    }));
+  }, []);
+
+  // Calculate emoji picker position (above or below) based on available space
+  useEffect(() => {
+    Object.keys(showEmojiPicker).forEach((postIdStr) => {
+      const postId = Number(postIdStr);
+      if (showEmojiPicker[postId]) {
+        updateEmojiPickerLayout(postId);
+      }
+    });
+  }, [showEmojiPicker, updateEmojiPickerLayout]);
+
+  useEffect(() => {
+    const hasOpenPickers = Object.values(showEmojiPicker).some(Boolean);
+    if (!hasOpenPickers) return;
+
+    const handleWindowChange = () => {
+      Object.keys(showEmojiPicker).forEach((postIdStr) => {
+        const postId = Number(postIdStr);
+        if (showEmojiPicker[postId]) {
+          updateEmojiPickerLayout(postId);
+        }
+      });
+    };
+
+    window.addEventListener('resize', handleWindowChange);
+    window.addEventListener('scroll', handleWindowChange, true);
+
+    return () => {
+      window.removeEventListener('resize', handleWindowChange);
+      window.removeEventListener('scroll', handleWindowChange, true);
+    };
+  }, [showEmojiPicker, updateEmojiPickerLayout]);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      Object.keys(showEmojiPicker).forEach((postIdStr) => {
+        const postId = Number(postIdStr);
+        if (showEmojiPicker[postId] && emojiPickerRefs.current[postId] && !emojiPickerRefs.current[postId]?.contains(target)) {
+          setShowEmojiPicker(prev => ({
+            ...prev,
+            [postId]: false
+          }));
+        }
+      });
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
 
   // Load following users for @mentions
   useEffect(() => {
@@ -320,6 +450,110 @@ const PostCard: React.FC<PostCardProps> = ({
     }
   }, [post.comments, loadReplies]);
 
+  // Highlighting functionality
+  const highlightTimerRef = useRef<number | null>(null);
+  const highlightDuration = 3000; // 3 seconds for bright highlight, then transitions to subtle permanent highlight
+  const [isHighlightActive, setIsHighlightActive] = useState(false); // Bright highlight state
+  const [permanentCommentHighlight, setPermanentCommentHighlight] = useState<number | null>(null);
+  const [permanentReplyHighlight, setPermanentReplyHighlight] = useState<number | null>(null);
+
+  const scrollIntoViewSmooth = useCallback((element: HTMLElement | null) => {
+    if (!element) return;
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
+
+  const startHighlightTimer = useCallback(() => {
+    if (highlightTimerRef.current) {
+      window.clearTimeout(highlightTimerRef.current);
+    }
+    setIsHighlightActive(true); // Start with bright highlight
+    highlightTimerRef.current = window.setTimeout(() => {
+      setIsHighlightActive(false); // Transition to subtle permanent highlight
+      // Don't clear the highlight IDs - keep them permanent
+    }, highlightDuration);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) {
+        window.clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Handle comment highlighting
+  useEffect(() => {
+    processedCommentHighlightRef.current = null;
+  }, [highlightCommentId]);
+
+  useEffect(() => {
+    if (!highlightCommentId) return;
+    if (processedCommentHighlightRef.current === highlightCommentId) return;
+
+    const commentIdNum = Number(highlightCommentId);
+    if (Number.isNaN(commentIdNum)) return;
+    if (!post.comments || post.comments.length === 0) return;
+
+    const commentExists = post.comments.some(comment => Number(comment.comment_id) === commentIdNum);
+    if (!commentExists) return;
+
+    processedCommentHighlightRef.current = highlightCommentId;
+    if (setShowCommentsSection) {
+      setShowCommentsSection(prev => ({ ...prev, [post.post_id]: true }));
+    }
+    if (setShowAllComments) {
+      setShowAllComments(prev => ({ ...prev, [post.post_id]: true }));
+    }
+    setActiveCommentHighlight(commentIdNum);
+    setPermanentCommentHighlight(commentIdNum); // Set permanent highlight
+    startHighlightTimer();
+    requestAnimationFrame(() => {
+      scrollIntoViewSmooth(commentRefs.current[commentIdNum]);
+    });
+  }, [highlightCommentId, post.comments, post.post_id, startHighlightTimer, scrollIntoViewSmooth, setShowCommentsSection, setShowAllComments]);
+
+  // Handle reply highlighting
+  useEffect(() => {
+    if (!highlightReplyId) return;
+    if (processedReplyHighlightRef.current === highlightReplyId) return;
+
+    const replyIdNum = Number(highlightReplyId);
+    if (Number.isNaN(replyIdNum)) return;
+    if (!post.comments || post.comments.length === 0) return;
+
+    const entry = Object.entries(commentReplies).find(([, replies]) =>
+      replies?.some(reply => Number(reply.reply_id) === replyIdNum)
+    );
+
+    if (entry) {
+      processedReplyHighlightRef.current = highlightReplyId;
+      const commentIdNum = Number(entry[0]);
+      if (setShowCommentsSection) {
+        setShowCommentsSection(prev => ({ ...prev, [post.post_id]: true }));
+      }
+      if (setShowAllComments) {
+        setShowAllComments(prev => ({ ...prev, [post.post_id]: true }));
+      }
+      setShowReplies(prev => ({ ...prev, [commentIdNum]: true }));
+      setActiveCommentHighlight(commentIdNum);
+      setActiveReplyHighlight(replyIdNum);
+      setPermanentCommentHighlight(commentIdNum); // Set permanent highlight for parent comment
+      setPermanentReplyHighlight(replyIdNum); // Set permanent highlight for reply
+      startHighlightTimer();
+      requestAnimationFrame(() => {
+        scrollIntoViewSmooth(replyRefs.current[replyIdNum] || commentRefs.current[commentIdNum]);
+      });
+    } else {
+      // Load replies for all comments to find the one containing the reply
+      post.comments.forEach(comment => {
+        if (!commentReplies[comment.comment_id] && !requestedReplyLoadsRef.current.has(comment.comment_id)) {
+          requestedReplyLoadsRef.current.add(comment.comment_id);
+          loadReplies(comment.comment_id);
+        }
+      });
+    }
+  }, [highlightReplyId, post.comments, post.post_id, commentReplies, loadReplies, startHighlightTimer, scrollIntoViewSmooth]);
+
   // Photo gallery helpers
   const getImagesFromPost = (post: PostItem): string[] => {
     const images: string[] = [];
@@ -377,52 +611,247 @@ const PostCard: React.FC<PostCardProps> = ({
     setCurrentPhotoIndex(prev => prev < images.length - 1 ? prev + 1 : 0);
   };
 
-  // Helper function to detect and make URLs and names clickable
-  const renderTextWithLinks = (text: string | undefined | null) => {
-    if (!text) return null;
+  // Helper function to check if a mention matches a known user
+  const checkMentionMatch = (mentionText: string): { matched: boolean; user?: any } => {
+    const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
     
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    // Check post author
+    if (post.user) {
+      const postAuthorName = `${post.user.f_name} ${post.user.m_name || ''} ${post.user.l_name}`.trim();
+      const normalizedPostAuthor = postAuthorName.toLowerCase().replace(/\s+/g, '');
+      if (normalizedMention === normalizedPostAuthor) {
+        return { matched: true, user: post.user };
+      }
+    }
+    
+    // Check following users
+    for (const user of followingUsers) {
+      const userName = `${user.f_name} ${user.m_name || ''} ${user.l_name}`.trim();
+      const normalizedUserName = userName.toLowerCase().replace(/\s+/g, '');
+      if (normalizedMention === normalizedUserName) {
+        return { matched: true, user };
+      }
+    }
+    
+    return { matched: false };
+  };
+
+  // Helper function to process mentions in a text segment with partial match support
+  const processMentionsInText = (textSegment: string, keyPrefix: string): React.ReactNode[] => {
     const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
-    // Note: We intentionally do NOT auto-detect regular names anymore to avoid
-    // over-highlighting common words. Only URLs and @mentions are interactive.
+    const result: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    let keyCounter = 0;
+    mentionRegex.lastIndex = 0;
     
-    const parts = text.split(urlRegex);
-    
-    return parts.map((part, index) => {
-      if (urlRegex.test(part)) {
-        return (
-          <a
-            key={index}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              color: '#174f84',
-              textDecoration: 'underline',
-              cursor: 'pointer'
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              window.open(part, '_blank', 'noopener,noreferrer');
-            }}
-          >
-            {part}
-          </a>
-        );
+    while ((match = mentionRegex.exec(textSegment)) !== null) {
+      // Add text before the mention
+      if (match.index > lastIndex) {
+        result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{textSegment.substring(lastIndex, match.index)}</span>);
       }
       
-      // Handle mentions (@username)
-      const mentionParts = part.split(mentionRegex);
-      const processedMentionParts = mentionParts.map((mentionPart, mentionIndex) => {
-        const isMentionSegment = mentionIndex % 2 === 1;
-        if (isMentionSegment) {
-          const mentionText = mentionPart.trim();
-          if (!mentionText) return null;
-          const display = `@${mentionText}`;
+      const mentionText = match[1]; // Don't trim yet, we need the original spacing
+      if (mentionText) {
+        const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
+        const matchResult = checkMentionMatch(mentionText);
+        
+        if (matchResult.matched && matchResult.user) {
+          const matchedUserName = `${matchResult.user.f_name} ${matchResult.user.m_name || ''} ${matchResult.user.l_name}`.trim();
+          const normalizedMatchedName = matchedUserName.toLowerCase().replace(/\s+/g, '');
+          const isExactMatch = normalizedMention === normalizedMatchedName;
+          const startsWithName = normalizedMention.startsWith(normalizedMatchedName);
           
-          return (
+          if (isExactMatch) {
+            // Exact match - highlight the entire mention
+            const matchedUser = matchResult.user;
+            result.push(
+              <button
+                key={`${keyPrefix}-mention-${keyCounter++}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const userId = matchedUser.user_id || matchedUser.id;
+                  if (userId) {
+                    window.location.href = getProfilePath(userId);
+                  } else {
+                    handleUserSearch(mentionText);
+                  }
+                }}
+                style={{ 
+                  color: '#007bff', 
+                  fontWeight: '600',
+                  background: 'none',
+                  border: 'none',
+                  padding: '0',
+                  cursor: 'pointer',
+                  textDecoration: 'none'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                @{mentionText}
+              </button>
+            );
+          } else if (startsWithName) {
+            // Partial match - find where the user's name ends in the mention text
+            const mentionWords = mentionText.split(/\s+/);
+            const nameWords = matchedUserName.split(/\s+/);
+            
+            let matchedWordCount = 0;
+            for (let i = 0; i < Math.min(mentionWords.length, nameWords.length); i++) {
+              if (mentionWords[i].toLowerCase() === nameWords[i].toLowerCase()) {
+                matchedWordCount++;
+              } else {
+                break;
+              }
+            }
+            
+            if (matchedWordCount > 0 && matchedWordCount <= mentionWords.length) {
+              // Build a regex pattern to match the exact name at the start of mentionText
+              // Escape special regex characters in the name
+              const escapedName = matchedUserName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              // Create a pattern that matches the name followed by optional whitespace and more text
+              const namePattern = new RegExp(`^(${escapedName})(\\s+.*)?$`, 'i');
+              const nameMatch = mentionText.match(namePattern);
+              
+              if (nameMatch && nameMatch[1]) {
+                // Found exact match of the name at the start
+                const matchedPart = nameMatch[1];
+                const remainingPart = mentionText.substring(matchedPart.length);
+                const matchedUser = matchResult.user;
+                
+                result.push(
+                  <button
+                    key={`${keyPrefix}-mention-${keyCounter++}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const userId = matchedUser.user_id || matchedUser.id;
+                      if (userId) {
+                        window.location.href = getProfilePath(userId);
+                      } else {
+                        handleUserSearch(matchedPart.trim());
+                      }
+                    }}
+                    style={{ 
+                      color: '#007bff', 
+                      fontWeight: '600',
+                      background: 'none',
+                      border: 'none',
+                      padding: '0',
+                      cursor: 'pointer',
+                      textDecoration: 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.textDecoration = 'underline';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.textDecoration = 'none';
+                    }}
+                  >
+                    @{matchedPart}
+                  </button>
+                );
+                
+                // Add remaining text as normal text
+                if (remainingPart.trim()) {
+                  result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{remainingPart}</span>);
+                }
+              } else {
+                // Fallback: use word-based matching
+                const matchedWords = mentionWords.slice(0, matchedWordCount);
+                // Find the position where these words end in the original text
+                let searchPos = 0;
+                for (let i = 0; i < matchedWords.length; i++) {
+                  const wordPos = mentionText.indexOf(matchedWords[i], searchPos);
+                  if (wordPos !== -1) {
+                    searchPos = wordPos + matchedWords[i].length;
+                  } else {
+                    break;
+                  }
+                }
+                
+                const matchedPart = mentionText.substring(0, searchPos);
+                const remainingPart = mentionText.substring(searchPos);
+                const matchedUser = matchResult.user;
+                
+                result.push(
+                  <button
+                    key={`${keyPrefix}-mention-${keyCounter++}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const userId = matchedUser.user_id || matchedUser.id;
+                      if (userId) {
+                        window.location.href = getProfilePath(userId);
+                      } else {
+                        handleUserSearch(matchedPart.trim());
+                      }
+                    }}
+                    style={{ 
+                      color: '#007bff', 
+                      fontWeight: '600',
+                      background: 'none',
+                      border: 'none',
+                      padding: '0',
+                      cursor: 'pointer',
+                      textDecoration: 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.textDecoration = 'underline';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.textDecoration = 'none';
+                    }}
+                  >
+                    @{matchedPart}
+                  </button>
+                );
+                
+                if (remainingPart.trim()) {
+                  result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{remainingPart}</span>);
+                }
+              }
+            } else {
+              // No match found - render as normal text
+              result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>@{mentionText}</span>);
+            }
+          } else {
+            // No match found - but still highlight in blue and make clickable
+            result.push(
+              <button
+                key={`${keyPrefix}-mention-${keyCounter++}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleUserSearch(mentionText);
+                }}
+                style={{ 
+                  color: '#007bff', 
+                  fontWeight: '600',
+                  background: 'none',
+                  border: 'none',
+                  padding: '0',
+                  cursor: 'pointer',
+                  textDecoration: 'none'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                @{mentionText}
+              </button>
+            );
+          }
+        } else {
+          // No match found - but still highlight in blue and make clickable
+          result.push(
             <button
-              key={`${index}-${mentionIndex}`}
+              key={`${keyPrefix}-mention-${keyCounter++}`}
               onClick={(e) => {
                 e.stopPropagation();
                 handleUserSearch(mentionText);
@@ -443,17 +872,100 @@ const PostCard: React.FC<PostCardProps> = ({
                 e.currentTarget.style.textDecoration = 'none';
               }}
             >
-              {display}
+              @{mentionText}
             </button>
           );
         }
-
-        // For non-mention text, return as-is (no name-based highlighting)
-        return mentionPart;
-      });
+      }
       
-      return processedMentionParts;
-    });
+      lastIndex = mentionRegex.lastIndex;
+    }
+    
+    // Add remaining text after the last mention
+    if (lastIndex < textSegment.length) {
+      result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{textSegment.substring(lastIndex)}</span>);
+    }
+    
+    return result;
+  };
+
+  // Helper function to detect and make URLs and names clickable
+  const renderTextWithLinks = (text: string | undefined | null) => {
+    if (!text) return null;
+    
+    // Enhanced URL regex that matches:
+    // - http:// or https:// URLs
+    // - www. URLs
+    // - plain domains (like fb.com, example.com, etc.)
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,})([^\s]*)?)/gi;
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
+    // Note: We intentionally do NOT auto-detect regular names anymore to avoid
+    // over-highlighting common words. Only URLs and @mentions are interactive.
+    
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+    
+    // Reset regex for global search
+    urlRegex.lastIndex = 0;
+    
+    // First, find all URLs
+    while ((match = urlRegex.exec(text)) !== null) {
+      // Add text before the URL
+      if (match.index > lastIndex) {
+        const textBefore = text.substring(lastIndex, match.index);
+        // Process mentions in the text before URL
+        const mentionParts = processMentionsInText(textBefore, `before-url-${key}`);
+        parts.push(...mentionParts);
+      }
+      
+      // Create clickable link
+      let url = match[0];
+      
+      // Add protocol if missing
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      
+      parts.push(
+        <a
+          key={`link-${key++}`}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: '#174f84',
+            textDecoration: 'underline',
+            cursor: 'pointer',
+            wordBreak: 'break-all'
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            window.open(url, '_blank', 'noopener,noreferrer');
+          }}
+        >
+          {match[0]}
+        </a>
+      );
+      
+      lastIndex = urlRegex.lastIndex;
+    }
+    
+    // Add remaining text after the last URL
+    if (lastIndex < text.length) {
+      const remainingText = text.substring(lastIndex);
+      // Process mentions in remaining text
+      const mentionParts = processMentionsInText(remainingText, `remaining-${key}`);
+      parts.push(...mentionParts);
+    }
+    
+    // If no URLs or mentions found, return the original text
+    if (parts.length === 0) {
+      return text;
+    }
+    
+    return parts;
   };
 
   // Handle clicking outside the options menu
@@ -876,32 +1388,35 @@ const PostCard: React.FC<PostCardProps> = ({
     setShowOptions?.(prev => ({ ...prev, [post.post_id]: false }));
   };
 
-  const handleDeletePost = async () => {
+  const handleDeletePost = () => {
     if (!isOwn) {
       alert('You can only delete your own posts');
       return;
     }
-    
-    if (window.confirm('Are you sure you want to delete this post?')) {
-      try {
-        if (isForum) {
-          // Use forum post API
-          await deleteForumPost(post.post_id);
-        } else if (isDonation) {
-          // Use donation API
-          await deleteDonationRequest(post.post_id);
-        } else {
-          // Use regular post API
-          await deletePost(post.post_id);
-        }
-        onPostUpdate?.();
-        alert('Post deleted successfully');
-      } catch (error) {
-        console.error('Error deleting post:', error);
-        alert('Failed to delete post');
-      }
-    }
     setShowOptions?.(prev => ({ ...prev, [post.post_id]: false }));
+    setShowDeletePostModal(true);
+  };
+
+  const confirmDeletePost = async () => {
+    try {
+      if (isForum) {
+        // Use forum post API
+        await deleteForumPost(post.post_id);
+      } else if (isDonation) {
+        // Use donation API
+        await deleteDonationRequest(post.post_id);
+      } else {
+        // Use regular post API
+        await deletePost(post.post_id);
+      }
+      onPostUpdate?.();
+      alert('Post deleted successfully');
+      setShowDeletePostModal(false);
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      alert('Failed to delete post');
+      setShowDeletePostModal(false);
+    }
   };
 
   const handleSaveEditPost = async () => {
@@ -954,7 +1469,7 @@ const PostCard: React.FC<PostCardProps> = ({
     }
   };
 
-  const handleDeleteComment = async (commentId: number) => {
+  const handleDeleteComment = (commentId: number) => {
     const comment = post.comments?.find(c => c.comment_id === commentId);
     if (!comment) return;
     
@@ -965,27 +1480,36 @@ const PostCard: React.FC<PostCardProps> = ({
       return;
     }
     
-    if (window.confirm('Are you sure you want to delete this comment?')) {
-      try {
-        if (isRepostPost) {
-          // Use repost comment API with correct repost_id
-          await deleteRepostComment(repostData?.repost_id || post.post_id, commentId);
-        } else if (isForum) {
-          // Use forum comment API
-          await deleteForumComment(post.post_id, commentId);
-        } else if (isDonation) {
-          // Use donation comment API
-          await deleteDonationComment(post.post_id, commentId);
-        } else {
-          // Use regular post comment API
-          await deleteComment(post.post_id, commentId);
-        }
-        onPostUpdate?.();
-        alert('Comment deleted successfully');
-      } catch (error) {
-        console.error('Error deleting comment:', error);
-        alert('Failed to delete comment');
+    setCommentToDelete(commentId);
+    setShowDeleteCommentModal(true);
+  };
+
+  const confirmDeleteComment = async () => {
+    if (!commentToDelete) return;
+    
+    try {
+      if (isRepostPost) {
+        // Use repost comment API with correct repost_id
+        await deleteRepostComment(repostData?.repost_id || post.post_id, commentToDelete);
+      } else if (isForum) {
+        // Use forum comment API
+        await deleteForumComment(post.post_id, commentToDelete);
+      } else if (isDonation) {
+        // Use donation comment API
+        await deleteDonationComment(post.post_id, commentToDelete);
+      } else {
+        // Use regular post comment API
+        await deleteComment(post.post_id, commentToDelete);
       }
+      onPostUpdate?.();
+      alert('Comment deleted successfully');
+      setShowDeleteCommentModal(false);
+      setCommentToDelete(null);
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      alert('Failed to delete comment');
+      setShowDeleteCommentModal(false);
+      setCommentToDelete(null);
     }
   };
 
@@ -1097,25 +1621,45 @@ const PostCard: React.FC<PostCardProps> = ({
     }
   };
 
-  const handleDeleteRepost = async () => {
+  const fetchReposts = async () => {
+    setRepostsLoading(true);
+    try {
+      if (post.reposts && post.reposts.length > 0) {
+        setFetchedReposts(post.reposts);
+      } else {
+        const detail = await getPostDetail(post.post_id);
+        setFetchedReposts(detail?.reposts || []);
+      }
+    } catch (error) {
+      console.error('Error fetching reposts:', error);
+      setFetchedReposts([]);
+    } finally {
+      setRepostsLoading(false);
+    }
+  };
+
+  const handleDeleteRepost = () => {
     if (!repostData?.repost_id) return;
     if (!isOwn) {
       alert('You can only delete your own reposts');
       return;
     }
-    
-    if (window.confirm('Are you sure you want to delete this repost?')) {
-      try {
-        // Use repost delete API with correct repost_id
-        await deleteRepost(repostData.repost_id);
-        onPostUpdate?.();
-        alert('Repost deleted successfully');
-      } catch (error) {
-        console.error('Error deleting repost:', error);
-        alert('Failed to delete repost');
-      }
-    }
     setShowOptions?.(prev => ({ ...prev, [post.post_id]: false }));
+    setShowDeleteRepostModal(true);
+  };
+
+  const confirmDeleteRepost = async () => {
+    try {
+      // Use repost delete API with correct repost_id
+      await deleteRepost(repostData.repost_id);
+      onPostUpdate?.();
+      alert('Repost deleted successfully');
+      setShowDeleteRepostModal(false);
+    } catch (error) {
+      console.error('Error deleting repost:', error);
+      alert('Failed to delete repost');
+      setShowDeleteRepostModal(false);
+    }
   };
 
   // Determine if this is a repost and get the appropriate data
@@ -1742,7 +2286,13 @@ const PostCard: React.FC<PostCardProps> = ({
                 className={`post-footer-action${likedPosts[repostData?.repost_id] ? ' active' : ''}`}
                 aria-pressed={!!likedPosts[repostData?.repost_id]}
               >
-                <span className="post-footer-icon">👍</span>
+                <span className="post-footer-icon">
+                  <FontAwesomeIcon 
+                    icon={likedPosts[repostData?.repost_id] ? faThumbsUp : faThumbsUpReg} 
+                    size="lg" 
+                    style={{ color: likedPosts[repostData?.repost_id] ? '#1e3a8a' : '#555', fontSize: '18px' }} 
+                  />
+                </span>
                 <span className="post-footer-label">Like</span>
               </button>
               <button
@@ -1751,7 +2301,9 @@ const PostCard: React.FC<PostCardProps> = ({
                 className={`post-footer-action${showCommentInput?.[repostData?.repost_id || post.post_id] ? ' active' : ''}`}
                 aria-expanded={!!showCommentInput?.[repostData?.repost_id || post.post_id]}
               >
-                <span className="post-footer-icon">💬</span>
+                <span className="post-footer-icon">
+                  <FontAwesomeIcon icon={faCommentReg} size="lg" style={{ fontSize: '20px', color: '#555' }} />
+                </span>
                 <span className="post-footer-label">Comment</span>
               </button>
               <RepostButton
@@ -1805,20 +2357,27 @@ const PostCard: React.FC<PostCardProps> = ({
                   }}
                   onError={(e) => handleProfilePicError(e)}
                 />
-                <input
-                  type="text"
-                  placeholder="Type your comment..."
-                  value={commentInput[repostData?.repost_id || post.post_id] || ''}
-                  onChange={(e) => handleCommentInputChange(e, repostData?.repost_id || post.post_id)}
-                  onKeyDown={(e) => handleCommentKeyDown(e, repostData?.repost_id || post.post_id)}
-                  style={{
-                    flex: 1,
-                    border: '1px solid #ddd',
-                    borderRadius: '20px',
-                    padding: '10px 16px',
-                    fontSize: '14px'
-                  }}
-                />
+          <div
+            ref={(el) => {
+              commentInputRefs.current[post.post_id] = el;
+            }}
+            style={{ flex: 1, position: 'relative' }}
+          >
+                  <input
+                    type="text"
+                    placeholder="Type your comment..."
+                    value={commentInput[repostData?.repost_id || post.post_id] || ''}
+                    onChange={(e) => handleCommentInputChange(e, repostData?.repost_id || post.post_id)}
+                    onKeyDown={(e) => handleCommentKeyDown(e, repostData?.repost_id || post.post_id)}
+                    style={{
+                      width: '100%',
+                      border: '1px solid #ddd',
+                      borderRadius: '20px',
+                      padding: '10px 28px 10px 16px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
                 <button 
                   onClick={handleCommentSubmit}
                   style={{
@@ -2526,6 +3085,8 @@ const PostCard: React.FC<PostCardProps> = ({
       <PostStatsRow
         likes={post.likes}
         comments={post.comments}
+        reposts={post.reposts}
+        repostCount={post.reposts_count}
         onLikesClick={() => {
           console.log('Like summary clicked (regular post), setting showLikesModal to true');
           setShowLikesModal(true);
@@ -2534,6 +3095,7 @@ const PostCard: React.FC<PostCardProps> = ({
           // Toggle comments section visibility
           setShowCommentsSection(prev => ({ ...prev, [post.post_id]: !prev[post.post_id] }));
         }}
+        onRepostsClick={() => setShowRepostsModal(true)}
         animate={true}
       />
 
@@ -2548,7 +3110,13 @@ const PostCard: React.FC<PostCardProps> = ({
           className={`post-footer-action${likedPosts[post.post_id] ? ' active' : ''}`}
           aria-pressed={!!likedPosts[post.post_id]}
         >
-          <span className="post-footer-icon">👍</span>
+          <span className="post-footer-icon">
+            <FontAwesomeIcon 
+              icon={likedPosts[post.post_id] ? faThumbsUp : faThumbsUpReg} 
+              size="lg" 
+              style={{ color: likedPosts[post.post_id] ? '#1e3a8a' : '#555', fontSize: '18px' }} 
+            />
+          </span>
           <span className="post-footer-label">Like</span>
         </button>
         <button
@@ -2557,7 +3125,9 @@ const PostCard: React.FC<PostCardProps> = ({
           className={`post-footer-action${showCommentInput?.[post.post_id] ? ' active' : ''}`}
           aria-expanded={!!showCommentInput?.[post.post_id]}
         >
-          <span className="post-footer-icon">💬</span>
+          <span className="post-footer-icon">
+            <FontAwesomeIcon icon={faCommentReg} size="lg" style={{ fontSize: '20px', color: '#555' }} />
+          </span>
           <span className="post-footer-label">Comment</span>
         </button>
         <RepostButton
@@ -2610,20 +3180,120 @@ const PostCard: React.FC<PostCardProps> = ({
             }}
             onError={(e) => handleProfilePicError(e)}
           />
-          <input
-            type="text"
-            placeholder="Type your comment..."
-            value={commentInput[post.post_id] || ''}
-            onChange={(e) => handleCommentInputChange(e, post.post_id)}
-            onKeyDown={(e) => handleCommentKeyDown(e, post.post_id)}
-            style={{
-              flex: 1,
-              border: '1px solid #ddd',
-              borderRadius: '20px',
-              padding: '10px 16px',
-              fontSize: '14px'
+          <div 
+            ref={(el) => {
+              if (el) {
+                commentInputRefs.current[post.post_id] = el;
+              }
             }}
-          />
+            style={{ flex: 1, position: 'relative' }}
+          >
+            <input
+              type="text"
+              placeholder="Type your comment..."
+              value={commentInput[post.post_id] || ''}
+              onChange={(e) => handleCommentInputChange(e, post.post_id)}
+              onKeyDown={(e) => handleCommentKeyDown(e, post.post_id)}
+              style={{
+                width: '100%',
+                border: '1px solid #ddd',
+                borderRadius: '20px',
+                padding: '10px 0px 10px 5px',
+                fontSize: '14px'
+              }}
+            />
+            {/* Emoji Button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowEmojiPicker(prev => ({
+                  ...prev,
+                  [post.post_id]: !prev[post.post_id]
+                }));
+              }}
+              style={{
+                position: 'absolute',
+                right: '8px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#65676b',
+                borderRadius: '50%',
+                width: '28px',
+                height: '28px',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                e.currentTarget.style.color = '#333';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#65676b';
+              }}
+              title="Add emoji"
+            >
+              <svg 
+                width="18" 
+                height="18" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                xmlns="http://www.w3.org/2000/svg"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
+                <circle cx="15.5" cy="9.5" r="1.5" fill="currentColor" />
+                <path d="M8 14c1.5 2.5 4.5 2.5 6 0" />
+              </svg>
+            </button>
+            {/* Emoji Picker */}
+            {showEmojiPicker[post.post_id] && emojiPickerLayouts[post.post_id] &&
+              ReactDOM.createPortal(
+                <div
+                  ref={(el) => {
+                    emojiPickerRefs.current[post.post_id] = el;
+                  }}
+                  style={{
+                    position: 'fixed',
+                    top: emojiPickerLayouts[post.post_id].top,
+                    left: emojiPickerLayouts[post.post_id].left,
+                    width: emojiPickerLayouts[post.post_id].width,
+                    zIndex: 4000,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    background: '#fff',
+                    border: '1px solid #e0e0e0',
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <EmojiPicker
+                    onEmojiClick={(emojiData: EmojiClickData) => {
+                      setCommentInput?.(prev => ({
+                        ...prev,
+                        [post.post_id]: (prev[post.post_id] || '') + emojiData.emoji
+                      }));
+                    }}
+                    width={emojiPickerLayouts[post.post_id].width}
+                    height={320}
+                    previewConfig={{ showPreview: false }}
+                    skinTonesDisabled
+                  />
+                </div>,
+                document.body
+              )
+            }
+          </div>
           <button 
             onClick={handleCommentSubmit}
             style={{
@@ -2643,7 +3313,7 @@ const PostCard: React.FC<PostCardProps> = ({
             onMouseEnter={(e) => { e.currentTarget.style.background = '#0056b3'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = '#007bff'; }}
           >
-            <span style={{ color: 'white', fontSize: '18px', lineHeight: 1 }}>➡️</span>
+            <IoSend size={18} color="#fff" />
           </button>
           
           {/* @mention suggestions dropdown */}
@@ -2721,14 +3391,32 @@ const PostCard: React.FC<PostCardProps> = ({
         <div className="comments-section" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #eee' }}>
                   {(showAllComments[post.post_id] ? post.comments : post.comments.slice(0, 5)).map((comment) => {
                     console.log('PostCard comment user_id:', comment.user.user_id);
+                    const isCommentHighlighted = activeCommentHighlight === comment.comment_id && isHighlightActive;
+                    const isPermanentlyHighlighted = permanentCommentHighlight === comment.comment_id;
+                    const highlightColor = '#fff3e0'; // Light orange for bright highlight
+                    const permanentHighlightColor = '#fff8e1'; // Very light yellow for permanent subtle highlight
+                    const permanentBorderColor = '#ffb74d'; // Light orange border for permanent highlight
+                    
                     return (
-                      <div key={comment.comment_id} className="comment-item" style={{ 
-                        display: 'flex', 
-                        gap: '8px', 
-                        marginBottom: '6px', 
-                        marginLeft: '12px',
-                        marginRight: '12px'
-                      }}>
+                      <div 
+                        key={comment.comment_id} 
+                        className="comment-item" 
+                        ref={(el) => {
+                          if (el) {
+                            commentRefs.current[comment.comment_id] = el;
+                          } else {
+                            delete commentRefs.current[comment.comment_id];
+                          }
+                        }}
+                        style={{ 
+                          display: 'flex', 
+                          gap: '8px', 
+                          marginBottom: '6px', 
+                          marginLeft: '12px',
+                          marginRight: '12px',
+                          scrollMarginTop: '96px'
+                        }}
+                      >
                         <img
                           src={getProfilePicUrl(comment.user.profile_pic)}
                           alt="Profile"
@@ -2740,7 +3428,17 @@ const PostCard: React.FC<PostCardProps> = ({
                         <div style={{ flex: 1 }}>
                           {/* Comment bubble container */}
                           <div style={{
-                            backgroundColor: '#f0f2f5',
+                            backgroundColor: isCommentHighlighted 
+                              ? highlightColor 
+                              : isPermanentlyHighlighted 
+                                ? permanentHighlightColor 
+                                : '#f0f2f5',
+                            boxShadow: isCommentHighlighted 
+                              ? '0 0 0 2px rgba(255,137,33,0.25)' 
+                              : isPermanentlyHighlighted 
+                                ? `0 0 0 1px ${permanentBorderColor}` 
+                                : 'none',
+                            transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
                             borderRadius: '18px',
                             padding: '6px 10px',
                             display: 'inline-block',
@@ -3000,18 +3698,34 @@ const PostCard: React.FC<PostCardProps> = ({
                                 commentReplies[comment.comment_id].length < 3 ? 
                                   commentReplies[comment.comment_id].length : 
                                   (showReplies[comment.comment_id] ? commentReplies[comment.comment_id].length : 3)
-                              ).map((reply) => (
-                                <Reply
-                                  key={reply.reply_id}
-                                  reply={reply}
-                                  commentId={comment.comment_id}
-                                  currentUserId={currentUserId || undefined}
-                                  formatTime={formatTime}
-                                  onReplyUpdate={() => loadReplies(comment.comment_id)}
-                                  displayName={displayName}
-                                  displayAvatar={displayAvatar}
-                                />
-                              ))}
+                              ).map((reply) => {
+                                const isReplyHighlighted = activeReplyHighlight === reply.reply_id && isHighlightActive;
+                                const isPermanentlyHighlighted = permanentReplyHighlight === reply.reply_id;
+                                const highlightColor = '#fff3e0'; // Light orange for bright highlight
+                                const permanentHighlightColor = '#fff8e1'; // Very light yellow for permanent subtle highlight
+                                
+                                return (
+                                  <Reply
+                                    key={reply.reply_id}
+                                    reply={reply}
+                                    commentId={comment.comment_id}
+                                    currentUserId={currentUserId || undefined}
+                                    formatTime={formatTime}
+                                    onReplyUpdate={() => loadReplies(comment.comment_id)}
+                                    displayName={displayName}
+                                    displayAvatar={displayAvatar}
+                                    registerHighlightRef={(replyId, element) => {
+                                      if (element) {
+                                        replyRefs.current[replyId] = element;
+                                      } else {
+                                        delete replyRefs.current[replyId];
+                                      }
+                                    }}
+                                    isHighlighted={isReplyHighlighted || isPermanentlyHighlighted}
+                                    highlightColor={isReplyHighlighted ? highlightColor : isPermanentlyHighlighted ? permanentHighlightColor : undefined}
+                                  />
+                                );
+                              })}
                               
                               {/* Show more/less replies button */}
                               {commentReplies[comment.comment_id].length > 3 && (
@@ -3232,6 +3946,17 @@ const PostCard: React.FC<PostCardProps> = ({
             </div>
           </div>
         </div>,
+        document.body
+      )}
+
+      {/* Reposts Modal */}
+      {showRepostsModal && ReactDOM.createPortal(
+        <RepostsModal
+          isOpen={showRepostsModal}
+          onClose={() => setShowRepostsModal(false)}
+          reposts={fetchedReposts}
+          isLoading={repostsLoading}
+        />,
         document.body
       )}
 
@@ -3563,6 +4288,48 @@ const PostCard: React.FC<PostCardProps> = ({
         onPrevious={handlePreviousPhoto}
         onNext={handleNextPhoto}
         onImageClick={(index) => setCurrentPhotoIndex(index)}
+      />
+
+      {/* Delete Repost Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteRepostModal}
+        title="Delete Repost"
+        message="Are you sure you want to delete this repost?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteRepost}
+        onCancel={() => setShowDeleteRepostModal(false)}
+      />
+
+      {/* Delete Post Confirmation Modal */}
+      <ConfirmModal
+        open={showDeletePostModal}
+        title={isForum ? "Delete Forum Post" : isDonation ? "Delete Donation Request" : "Delete Post"}
+        message={
+          isForum 
+            ? "Are you sure you want to delete this forum post?"
+            : isDonation
+            ? "Are you sure you want to delete this donation request?"
+            : "Are you sure you want to delete this post?"
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeletePost}
+        onCancel={() => setShowDeletePostModal(false)}
+      />
+
+      {/* Delete Comment Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteCommentModal}
+        title="Delete Comment"
+        message="Are you sure you want to delete this comment?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteComment}
+        onCancel={() => {
+          setShowDeleteCommentModal(false);
+          setCommentToDelete(null);
+        }}
       />
     </>
   );

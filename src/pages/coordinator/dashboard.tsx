@@ -6,6 +6,7 @@ import DetailsTable from './detailstable'; // ✅ Your new table component
 import { fetchOJTStatistics, importOJT, setSendDate, getSendDates, checkAllSentStatus, deleteSendDate } from '../../services/api';
 import logoLogin from '../../images/logo.png';
 import { FaUpload, FaChartBar, FaSignOutAlt, FaDownload, FaCalendarAlt, FaUsers } from 'react-icons/fa';
+import { toast } from '../../utils/toast';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -226,7 +227,7 @@ export default function Dashboard() {
             resultingTemplateType = templateType as 'CREATE' | 'UPDATE';
           } else if (templateType !== resultingTemplateType) {
             setFileRestrictionMessage(
-              `You already selected a ${describeTemplateType(resultingTemplateType)} template. Remove it before adding a ${describeTemplateType(templateType as 'CREATE' | 'UPDATE')} file.`
+              `You can only add new student files or update existing student files, not both together.`
             );
             setShowFileRestrictionModal(true);
             return;
@@ -258,7 +259,7 @@ export default function Dashboard() {
 
   const handleImport = async () => {
     if (selectedFiles.length === 0) {
-      alert('Please select at least one file');
+      toast.warning('Please select at least one file');
       return;
     }
 
@@ -335,23 +336,23 @@ export default function Dashboard() {
             let hint: string | undefined;
             let details: string[] | undefined;
             if (normalizedMessage.includes('second-import template')) {
-              hint = 'Run the First Import (student creation) before uploading a Second Import file with company details.';
+              hint = 'Add students first, then company info.';
             } else if (normalizedMessage.includes('immediately after creating')) {
               const recentIds = Array.isArray(result.recent_ctu_ids) ? result.recent_ctu_ids : [];
-              hint = 'Second Import files must be uploaded separately after the First Import finishes.';
+              hint = 'Add company information after adding students.';
               details = [
-                'Upload the First Import template alone to generate student accounts and download passwords.',
-                'Wait a few minutes before importing company information so each template runs on its own.',
+                'Upload students first.',
+                'Wait a few minutes before adding company information.',
                 recentIds.length
-                  ? `Recently created CTU IDs blocked in this upload: ${recentIds.join(', ')}`
-                  : 'Re-open the Update template later once the students already exist.',
+                  ? `These student IDs need time: ${recentIds.join(', ')}`
+                  : 'Add company information after students are created.',
               ];
             } else if (normalizedMessage.includes('mixed template')) {
-              hint = 'Separate new students (First Import) and company updates (Second Import) into two different uploads.';
+              hint = 'Add students and company information separately.';
               details = [
-                'Download the First Import template and create all students first.',
-                'Use the Update Template after the students exist to add company data.',
-                'Never combine both templates into a single file—the system blocks it.',
+                'Upload students first.',
+                'Then add company details.',
+                'Do not combine both in one file.',
               ];
             }
             setImportError({
@@ -638,10 +639,10 @@ export default function Dashboard() {
       
       FileSaver.saveAs(blob, filename);
 
-      alert(`✅ Exported ${students.length} student${students.length !== 1 ? 's' : ''}${selectedSection && selectedSection !== 'ALL' ? ` from section ${selectedSection}` : ' from all sections'}! Status column has dropdown (Ongoing/Completed). Open in Excel desktop app to use dropdown.`);
+      toast.success(`✅ Exported ${students.length} student${students.length !== 1 ? 's' : ''}${selectedSection && selectedSection !== 'ALL' ? ` from section ${selectedSection}` : ' from all sections'}! Status column has dropdown (Ongoing/Completed). Open in Excel desktop app to use dropdown.`);
     } catch (error) {
       console.error('Export error:', error);
-      alert('Failed to export students. Please try again.');
+      toast.error('Failed to export students. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -2095,13 +2096,20 @@ export default function Dashboard() {
                             }
                           }
 
-                          // Refresh the send dates list
+                          // Refresh the send dates list and status in real-time
                           try {
                             const result = await getSendDates(coordinatorUsername);
                             if (result.success && result.scheduled_dates) {
                               setExistingSendDates(result.scheduled_dates);
                             } else {
                               setExistingSendDates([]);
+                            }
+                            
+                            // Refresh all sent status
+                            const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
+                            if (statusResult.success) {
+                              setAllDataSent(statusResult.all_sent);
+                              setCompletedCount(statusResult.total_completed || 0);
                             }
                           } catch (error) {
                             console.error('Error refreshing send dates:', error);
@@ -2112,27 +2120,34 @@ export default function Dashboard() {
                             const message = failCount > 0 
                               ? `Schedules Removed!\n\n✓ Removed: ${successCount}\n✗ Failed: ${failCount}\n\n${errors.slice(0, 3).join('\n')}`
                               : `All ${successCount} schedule(s) removed successfully!`;
-                            alert(message);
+                            toast.success(message);
                           } else {
-                            alert(`Failed to remove schedules.\n\n${errors.slice(0, 3).join('\n')}`);
+                            toast.error(`Failed to remove schedules.\n\n${errors.slice(0, 3).join('\n')}`);
                           }
                         } else {
                           // Remove schedule for specific year
                           const batchYear = parseInt(selectedBatchFilter);
                           if (isNaN(batchYear)) {
-                            alert('Invalid batch year selected');
+                            toast.error('Invalid batch year selected');
                             return;
                           }
 
                           const result = await deleteSendDate(coordinatorUsername, batchYear);
 
-                          // Refresh the send dates list after removal
+                          // Refresh the send dates list and status after removal in real-time
                           try {
                             const refreshResult = await getSendDates(coordinatorUsername);
                             if (refreshResult.success && refreshResult.scheduled_dates) {
                               setExistingSendDates(refreshResult.scheduled_dates);
                             } else {
                               setExistingSendDates([]);
+                            }
+                            
+                            // Refresh all sent status
+                            const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
+                            if (statusResult.success) {
+                              setAllDataSent(statusResult.all_sent);
+                              setCompletedCount(statusResult.total_completed || 0);
                             }
                           } catch (error) {
                             console.error('Error refreshing send dates:', error);
@@ -2143,14 +2158,14 @@ export default function Dashboard() {
                             const message = result.deleted_count > 0
                               ? `Schedule removed successfully for batch ${selectedBatchFilter}!`
                               : `No active schedule found for batch ${selectedBatchFilter} (already removed or never existed)`;
-                            alert(message);
+                            toast.success(message);
                           } else {
-                            alert(`Error: ${result.message}`);
+                            toast.error(`Error: ${result.message}`);
                           }
                         }
                       } catch (error: any) {
                         console.error('Error removing schedule:', error);
-                        alert(`Failed to remove schedule: ${error.message || 'Please try again.'}`);
+                        toast.error(`Failed to remove schedule: ${error.message || 'Please try again.'}`);
                         
                         // Still try to refresh the list
                         try {
@@ -2433,17 +2448,17 @@ export default function Dashboard() {
                       const batchText = selectedBatchFilter === 'ALL' 
                         ? 'one or more batches' 
                         : `batch ${selectedBatchFilter}`;
-                      alert(`⚠️ Existing Schedule Found!\n\nYou already have a scheduled date for ${batchText}.\n\nPlease remove the existing scheduled date first by clicking the ✕ button above.`);
+                      toast.warning(`⚠️ Existing Schedule Found!\n\nYou already have a scheduled date for ${batchText}.\n\nPlease remove the existing scheduled date first by clicking the ✕ button above.`);
                       return;
                     }
                     
                     if (allDataSent) {
-                      alert('✅ All Completed OJT Data Already Sent!\n\nAll completed students have been sent to admin for approval.\nScheduling is not needed at this time.');
+                      toast.info('✅ All Completed OJT Data Already Sent!\n\nAll completed students have been sent to admin for approval.\nScheduling is not needed at this time.');
                       return;
                     }
                     
                     if (!sendDate) {
-                      alert('Please select a date first');
+                      toast.warning('Please select a date first');
                       return;
                     }
                     
@@ -2457,7 +2472,7 @@ export default function Dashboard() {
                         const yearsToProcess = [...new Set(ojtYears.map(y => y.year))];
                         
                         if (yearsToProcess.length === 0) {
-                          alert('No OJT batches found to schedule');
+                          toast.warning('No OJT batches found to schedule');
                           return;
                         }
                         
@@ -2497,10 +2512,26 @@ export default function Dashboard() {
                             }
                           }
                           message += '\n\n📅 On this date, ALL completed OJT students from scheduled batches will be automatically sent to admin!';
-                          alert(message);
+                          toast.success(message);
                           setShowDateModal(false);
                           setSendDateState('');
-                          setExistingSendDates([]);
+                          
+                          // Refresh scheduled dates in real-time
+                          try {
+                            const refreshResult = await getSendDates(coordinatorUsername);
+                            if (refreshResult.success && refreshResult.scheduled_dates) {
+                              setExistingSendDates(refreshResult.scheduled_dates);
+                            }
+                            
+                            // Refresh all sent status
+                            const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
+                            if (statusResult.success) {
+                              setAllDataSent(statusResult.all_sent);
+                              setCompletedCount(statusResult.total_completed || 0);
+                            }
+                          } catch (refreshError) {
+                            console.error('Error refreshing data:', refreshError);
+                          }
                         } else {
                           let errorMessage = '❌ Failed to schedule any batches.\n\n';
                           const processedBatchErrors = failedBatches.filter(fb => fb.includes('already been processed'));
@@ -2513,13 +2544,13 @@ export default function Dashboard() {
                           if (otherErrors.length > 0) {
                             errorMessage += `Other Errors:\n${otherErrors.join('\n')}`;
                           }
-                          alert(errorMessage);
+                          toast.error(errorMessage);
                         }
                       } else {
                         // Schedule for specific year
                         const batchYear = parseInt(selectedBatchFilter);
                         if (isNaN(batchYear)) {
-                          alert('Invalid batch year selected');
+                          toast.error('Invalid batch year selected');
                           return;
                         }
                         
@@ -2531,22 +2562,38 @@ export default function Dashboard() {
                         );
                         
                         if (result.success) {
-                          alert(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatch: ${selectedBatchFilter}\n\nOn this date:\n• ALL completed OJT students will be automatically sent to admin\n• ALL ongoing students will be marked as incomplete`);
+                          toast.success(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatch: ${selectedBatchFilter}\n\nOn this date:\n• ALL completed OJT students will be automatically sent to admin\n• ALL ongoing students will be marked as incomplete`);
                           setShowDateModal(false);
                           setSendDateState('');
-                          setExistingSendDates([]);
+                          
+                          // Refresh scheduled dates in real-time
+                          try {
+                            const refreshResult = await getSendDates(coordinatorUsername);
+                            if (refreshResult.success && refreshResult.scheduled_dates) {
+                              setExistingSendDates(refreshResult.scheduled_dates);
+                            }
+                            
+                            // Refresh all sent status
+                            const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
+                            if (statusResult.success) {
+                              setAllDataSent(statusResult.all_sent);
+                              setCompletedCount(statusResult.total_completed || 0);
+                            }
+                          } catch (refreshError) {
+                            console.error('Error refreshing data:', refreshError);
+                          }
                         } else {
                           // Check if it's a processed batch error
                           if (result.message && result.message.includes('already been processed')) {
-                            alert(`🔒 Batch Already Processed\n\n${result.message}\n\n💡 Tip: Processed batches cannot be modified. You can only schedule unprocessed batches.`);
+                            toast.warning(`🔒 Batch Already Processed\n\n${result.message}\n\n💡 Tip: Processed batches cannot be modified. You can only schedule unprocessed batches.`);
                           } else {
-                            alert(`Error: ${result.message}`);
+                            toast.error(`Error: ${result.message}`);
                           }
                         }
                       }
                     } catch (error) {
                       console.error('Error setting send date:', error);
-                      alert('Failed to set schedule. Please try again.');
+                      toast.error('Failed to set schedule. Please try again.');
                     }
                   }}
                 style={{
@@ -3294,7 +3341,7 @@ export default function Dashboard() {
               fontWeight: 800,
               color: '#111827'
             }}>
-              Import One File at a Time
+              Import Restriction
             </h3>
             <p style={{
               fontSize: '15px',
@@ -3302,7 +3349,7 @@ export default function Dashboard() {
               lineHeight: 1.5,
               marginBottom: '24px'
             }}>
-              {fileRestrictionMessage || 'Please upload files from only one template type per batch (all create or all update).'}
+              {fileRestrictionMessage || 'You can only add new student files or update existing student files, not both together.'}
             </p>
             <button
               onClick={() => {

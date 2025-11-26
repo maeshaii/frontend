@@ -102,7 +102,7 @@ const PopupNotifications: React.FC = () => {
         localStorage.setItem('openRewardRequests', 'true');
       }
 
-      navigate('/rewards');
+      window.requestAnimationFrame(() => navigate('/rewards'));
     }
   }, [navigate, removeToast]);
 

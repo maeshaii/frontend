@@ -16,13 +16,24 @@ import {
   deleteForumPost,
   updateDonationRequest,
   editForumPost,
+  searchAlumni,
+  getFollowingForMentions,
+  getPostDetail,
 } from '../services/api';
 import { getProfilePicUrl, handleProfilePicError, getImageUrl } from '../utils/profilePicUtils';
 import RepostButton from './RepostButton';
 import ReplyInput from './ReplyInput';
 import Reply from './Reply';
 import PostStatsRow from './PostStatsRow';
+import RepostsModal from './RepostsModal';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faThumbsUp } from '@fortawesome/free-solid-svg-icons';
+import { faThumbsUp as faThumbsUpReg, faComment as faCommentReg } from '@fortawesome/free-regular-svg-icons';
+import { HiOutlineChevronRight } from 'react-icons/hi2';
+import { IoSend } from 'react-icons/io5';
 import ctulogo from '../images/ctulogo.png';
+import ConfirmModal from './ConfirmModal';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import './postFooterActions.css';
 
 // Minimal, reusable types for the repost card
@@ -44,8 +55,10 @@ export interface PostItemLite {
   // Optional interaction fields for embedded originals
   likes?: Array<any>;
   comments?: Array<any>;
+  reposts?: Array<{ repost_id: number; user?: UserLite }>;
   likes_count?: number;
   comments_count?: number;
+  reposts_count?: number;
 }
 
 interface CommentLite {
@@ -172,8 +185,57 @@ const RepostCard: React.FC<RepostCardProps> = ({
   const [showLikesModal, setShowLikesModal] = useState(false);
   const [likesLoading, setLikesLoading] = useState(false);
   const [fetchedLikes, setFetchedLikes] = useState<any[]>(repost.likes || []);
+  const [showRepostsModal, setShowRepostsModal] = useState(false);
+  const [repostsLoading, setRepostsLoading] = useState(false);
+  const [fetchedReposts, setFetchedReposts] = useState<any[]>(repost.original_post?.reposts || []);
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [commentValue, setCommentValue] = useState('');
+  const commentInputRef = useRef<HTMLInputElement>(null);
+  
+  // @mention functionality for comments
+  const [followingUsers, setFollowingUsers] = useState<any[]>([]);
+  const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+  const [mentionSuggestions, setMentionSuggestions] = useState<any[]>([]);
+  const [mentionStart, setMentionStart] = useState(-1);
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+  
+  // Load following users for @mentions
+  useEffect(() => {
+    const loadFollowing = async () => {
+      try {
+        const response = await getFollowingForMentions();
+        if (response.success) {
+          setFollowingUsers(response.following);
+        }
+      } catch (error) {
+        console.error('Error loading following users:', error);
+      }
+    };
+    loadFollowing();
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (showMentionSuggestions) {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (
+          commentInputRef.current &&
+          !commentInputRef.current.closest('div')?.contains(e.target as Node)
+        ) {
+          // Check if click is outside the comment input area
+          const commentContainer = commentInputRef.current?.closest('div[style*="padding"]');
+          if (commentContainer && !commentContainer.contains(e.target as Node)) {
+            setShowMentionSuggestions(false);
+          }
+        }
+      };
+      
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showMentionSuggestions]);
   
   // Local state for options menu (internal state management)
   const [localShowRepostOptions, setLocalShowRepostOptions] = useState(false);
@@ -182,6 +244,12 @@ const RepostCard: React.FC<RepostCardProps> = ({
   const [localEditingOriginal, setLocalEditingOriginal] = useState(false);
   const [localEditRepostContent, setLocalEditRepostContent] = useState('');
   const [localEditOriginalContent, setLocalEditOriginalContent] = useState('');
+  
+  // Delete confirmation modals
+  const [showDeleteRepostModal, setShowDeleteRepostModal] = useState(false);
+  const [showDeleteOriginalModal, setShowDeleteOriginalModal] = useState(false);
+  const [showDeleteCommentModal, setShowDeleteCommentModal] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState<number | null>(null);
   
   // Comments state
   const [comments, setComments] = useState<CommentLite[]>(repost.comments || []);
@@ -195,6 +263,81 @@ const RepostCard: React.FC<RepostCardProps> = ({
   
   // State to control whether comments section is visible (hidden by default)
   const [showCommentsSection, setShowCommentsSection] = useState<boolean>(false);
+
+  type EmojiPickerLayout = {
+    position: 'above' | 'below';
+    top: number;
+    left: number;
+    width: number;
+  };
+
+  // Emoji picker state for comments
+  const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
+  const [emojiPickerLayout, setEmojiPickerLayout] = useState<EmojiPickerLayout | null>(null);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
+  const commentInputContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const updateEmojiPickerLayout = useCallback(() => {
+    const inputElement = commentInputContainerRef.current;
+    if (!inputElement) {
+      return;
+    }
+    const rect = inputElement.getBoundingClientRect();
+    const pickerHeight = 320;
+    const gap = 8;
+    const pickerWidth = Math.min(320, window.innerWidth - gap * 2);
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const position =
+      spaceAbove > spaceBelow && spaceAbove >= pickerHeight + gap ? 'above' : 'below';
+    const top =
+      position === 'above'
+        ? Math.max(gap, rect.top - pickerHeight - gap)
+        : Math.min(window.innerHeight - pickerHeight - gap, rect.bottom + gap);
+    const left = Math.min(
+      Math.max(rect.right - pickerWidth, gap),
+      window.innerWidth - pickerWidth - gap
+    );
+
+    setEmojiPickerLayout({ position, top, left, width: pickerWidth });
+  }, []);
+
+  // Calculate emoji picker position (above or below) based on available space
+  useEffect(() => {
+    if (showEmojiPicker) {
+      updateEmojiPickerLayout();
+    }
+  }, [showEmojiPicker, updateEmojiPickerLayout]);
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+
+    const handleWindowChange = () => {
+      updateEmojiPickerLayout();
+    };
+
+    window.addEventListener('resize', handleWindowChange);
+    window.addEventListener('scroll', handleWindowChange, true);
+
+    return () => {
+      window.removeEventListener('resize', handleWindowChange);
+      window.removeEventListener('scroll', handleWindowChange, true);
+    };
+  }, [showEmojiPicker, updateEmojiPickerLayout]);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (showEmojiPicker && emojiPickerRef.current && !emojiPickerRef.current.contains(target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
  
    const optionsMenuRef = useRef<HTMLDivElement>(null);
    const commentOptionsRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
@@ -319,11 +462,104 @@ const RepostCard: React.FC<RepostCardProps> = ({
       setCommentValue('');
       setShowCommentInput(false);
       setShowCommentsSection(true);
+      setShowMentionSuggestions(false);
+      setMentionStart(-1);
       await loadComments();
       onRefresh?.();
     } catch (e) {
       console.error('Error submitting comment:', e);
       alert('Failed to submit comment. Please try again.');
+    }
+  };
+
+  // @mention functionality for comments
+  const handleCommentInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setCommentValue(newValue);
+
+    const cursorPosition = e.target.selectionStart || 0;
+    const textBeforeCursor = newValue.substring(0, cursorPosition);
+    
+    // Find the last @ symbol before cursor
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+    
+    if (lastAtIndex !== -1) {
+      const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+      
+      // Check if there's no space after @ (meaning we're typing a mention)
+      if (!textAfterAt.includes(' ')) {
+        setMentionStart(lastAtIndex);
+        setShowMentionSuggestions(true);
+        
+        // Filter suggestions based on what's typed after @
+        const filteredSuggestions = followingUsers.filter(user =>
+          user.name.toLowerCase().includes(textAfterAt.toLowerCase()) ||
+          user.f_name.toLowerCase().includes(textAfterAt.toLowerCase()) ||
+          user.l_name.toLowerCase().includes(textAfterAt.toLowerCase())
+        );
+        setMentionSuggestions(filteredSuggestions);
+        setSelectedMentionIndex(0);
+      } else {
+        setShowMentionSuggestions(false);
+      }
+    } else {
+      setShowMentionSuggestions(false);
+    }
+  };
+
+  const selectMention = (user: any) => {
+    if (mentionStart === -1) return;
+
+    // Get the text after the @ symbol
+    const textAfterAt = commentValue.substring(mentionStart + 1);
+    // Find where the current partial mention ends (at space or end of string)
+    const spaceIndex = textAfterAt.indexOf(' ');
+    const mentionEnd = spaceIndex !== -1 
+      ? mentionStart + 1 + spaceIndex
+      : commentValue.length;
+    
+    const beforeMention = commentValue.substring(0, mentionStart);
+    const afterMention = commentValue.substring(mentionEnd);
+    
+    const newValue = beforeMention + `@${user.name} ` + afterMention;
+    setCommentValue(newValue);
+    
+    setShowMentionSuggestions(false);
+    setMentionStart(-1);
+  };
+
+  const handleCommentKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showMentionSuggestions) {
+      if (e.key === 'Enter' && commentValue.trim()) {
+        e.preventDefault();
+        handleCommentSubmit();
+      }
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedMentionIndex(prev => 
+          prev < mentionSuggestions.length - 1 ? prev + 1 : 0
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedMentionIndex(prev => 
+          prev > 0 ? prev - 1 : mentionSuggestions.length - 1
+        );
+        break;
+      case 'Enter':
+      case 'Tab':
+        e.preventDefault();
+        if (mentionSuggestions[selectedMentionIndex]) {
+          selectMention(mentionSuggestions[selectedMentionIndex]);
+        }
+        break;
+      case 'Escape':
+        setShowMentionSuggestions(false);
+        break;
     }
   };
 
@@ -416,16 +652,25 @@ const RepostCard: React.FC<RepostCardProps> = ({
     setEditCommentContent(prev => ({ ...prev, [commentId]: '' }));
   };
 
-  const handleDeleteComment = async (commentId: number) => {
-    if (!window.confirm('Are you sure you want to delete this comment?')) return;
+  const handleDeleteComment = (commentId: number) => {
+    setCommentToDelete(commentId);
+    setShowDeleteCommentModal(true);
+  };
+
+  const confirmDeleteComment = async () => {
+    if (!commentToDelete) return;
     
     try {
-      await deleteRepostComment(repost.repost_id, commentId);
+      await deleteRepostComment(repost.repost_id, commentToDelete);
       await loadComments();
       onRefresh?.();
+      setShowDeleteCommentModal(false);
+      setCommentToDelete(null);
     } catch (error) {
       console.error('Error deleting comment:', error);
       alert('Failed to delete comment');
+      setShowDeleteCommentModal(false);
+      setCommentToDelete(null);
     }
   };
 
@@ -508,26 +753,370 @@ const RepostCard: React.FC<RepostCardProps> = ({
     }
   };
 
-  const renderTextWithLinks = (text: string) => {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const parts = text.split(urlRegex);
-    
-    return parts.map((part, index) => {
-      if (part.match(urlRegex)) {
-        return (
-          <a
-            key={index}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: '#007bff', textDecoration: 'underline' }}
-          >
-            {part}
-          </a>
-        );
+  const handleUserSearch = async (searchTerm: string) => {
+    try {
+      const response = await searchAlumni(searchTerm);
+      if (response.results && response.results.length > 0) {
+        // Take the first result (most relevant match)
+        const user = response.results[0];
+        const currentPath = window.location.pathname;
+        
+        // Navigate based on user account type - unified profile route
+        if (user.account_type?.peso) {
+          window.location.href = `/peso/profile/${user.id}`;
+        } else if (user.account_type?.admin) {
+          window.location.href = `/ccict/profile/${user.id}`;
+        } else if (currentPath.startsWith('/peso')) {
+          window.location.href = `/peso/profile/${user.id}`;
+        } else if (currentPath.startsWith('/ccict')) {
+          window.location.href = `/ccict/profile/${user.id}`;
+        } else {
+          // Unified profile route for alumni, OJT, and other users
+          window.location.href = `/profile/${user.id}`;
+        }
+      } else {
+        alert(`No user found with name "${searchTerm}"`);
       }
-      return part;
-    });
+    } catch (error) {
+      console.error('Error searching for user:', error);
+      alert(`Error searching for user "${searchTerm}"`);
+    }
+  };
+
+  // Helper function to check if a mention matches a known user
+  const checkMentionMatch = (mentionText: string): { matched: boolean; user?: any } => {
+    const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
+    
+    // Check repost author
+    if (repost.user) {
+      const repostAuthorName = `${repost.user.f_name} ${repost.user.m_name || ''} ${repost.user.l_name}`.trim();
+      const normalizedRepostAuthor = repostAuthorName.toLowerCase().replace(/\s+/g, '');
+      if (normalizedMention === normalizedRepostAuthor) {
+        return { matched: true, user: repost.user };
+      }
+    }
+    
+    // Check original post author
+    if (repost.original_post?.user) {
+      const originalAuthorName = `${repost.original_post.user.f_name} ${repost.original_post.user.m_name || ''} ${repost.original_post.user.l_name}`.trim();
+      const normalizedOriginalAuthor = originalAuthorName.toLowerCase().replace(/\s+/g, '');
+      if (normalizedMention === normalizedOriginalAuthor) {
+        return { matched: true, user: repost.original_post.user };
+      }
+    }
+    
+    // Check following users
+    for (const user of followingUsers) {
+      const userName = `${user.f_name} ${user.m_name || ''} ${user.l_name}`.trim();
+      const normalizedUserName = userName.toLowerCase().replace(/\s+/g, '');
+      if (normalizedMention === normalizedUserName) {
+        return { matched: true, user };
+      }
+    }
+    
+    return { matched: false };
+  };
+
+  // Helper function to process mentions in a text segment with partial match support
+  const processMentionsInText = (textSegment: string, keyPrefix: string): React.ReactNode[] => {
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
+    const result: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    let keyCounter = 0;
+    mentionRegex.lastIndex = 0;
+    
+    while ((match = mentionRegex.exec(textSegment)) !== null) {
+      // Add text before the mention
+      if (match.index > lastIndex) {
+        result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{textSegment.substring(lastIndex, match.index)}</span>);
+      }
+      
+      const mentionText = match[1]; // Don't trim yet, we need the original spacing
+      if (mentionText) {
+        const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
+        const matchResult = checkMentionMatch(mentionText);
+        
+        if (matchResult.matched && matchResult.user) {
+          const matchedUserName = `${matchResult.user.f_name} ${matchResult.user.m_name || ''} ${matchResult.user.l_name}`.trim();
+          const normalizedMatchedName = matchedUserName.toLowerCase().replace(/\s+/g, '');
+          const isExactMatch = normalizedMention === normalizedMatchedName;
+          const startsWithName = normalizedMention.startsWith(normalizedMatchedName);
+          
+          if (isExactMatch) {
+            // Exact match - highlight the entire mention
+            const matchedUser = matchResult.user;
+            result.push(
+              <button
+                key={`${keyPrefix}-mention-${keyCounter++}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const userId = matchedUser.user_id || matchedUser.id;
+                  if (userId) {
+                    const currentPath = window.location.pathname;
+                    if (currentPath.startsWith('/peso')) {
+                      window.location.href = `/peso/profile/${userId}`;
+                    } else if (currentPath.startsWith('/ccict')) {
+                      window.location.href = `/ccict/profile/${userId}`;
+                    } else {
+                      window.location.href = `/profile/${userId}`;
+                    }
+                  } else {
+                    handleUserSearch(mentionText);
+                  }
+                }}
+                style={{ 
+                  color: '#007bff', 
+                  fontWeight: '600',
+                  background: 'none',
+                  border: 'none',
+                  padding: '0',
+                  cursor: 'pointer',
+                  textDecoration: 'none'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                @{mentionText}
+              </button>
+            );
+          } else if (startsWithName) {
+            // Partial match - find where the user's name ends in the mention text
+            const mentionWords = mentionText.split(/\s+/);
+            const nameWords = matchedUserName.split(/\s+/);
+            
+            let matchedWordCount = 0;
+            for (let i = 0; i < Math.min(mentionWords.length, nameWords.length); i++) {
+              if (mentionWords[i].toLowerCase() === nameWords[i].toLowerCase()) {
+                matchedWordCount++;
+              } else {
+                break;
+              }
+            }
+            
+            if (matchedWordCount > 0 && matchedWordCount <= mentionWords.length) {
+              // Build a regex pattern to match the exact name at the start of mentionText
+              // Escape special regex characters in the name
+              const escapedName = matchedUserName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              // Create a pattern that matches the name followed by optional whitespace and more text
+              const namePattern = new RegExp(`^(${escapedName})(\\s+.*)?$`, 'i');
+              const nameMatch = mentionText.match(namePattern);
+              
+              if (nameMatch && nameMatch[1]) {
+                // Found exact match of the name at the start
+                const matchedPart = nameMatch[1];
+                const remainingPart = mentionText.substring(matchedPart.length);
+                const matchedUser = matchResult.user;
+                
+                result.push(
+                  <button
+                    key={`${keyPrefix}-mention-${keyCounter++}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const userId = matchedUser.user_id || matchedUser.id;
+                      if (userId) {
+                        const currentPath = window.location.pathname;
+                        if (currentPath.startsWith('/peso')) {
+                          window.location.href = `/peso/profile/${userId}`;
+                        } else if (currentPath.startsWith('/ccict')) {
+                          window.location.href = `/ccict/profile/${userId}`;
+                        } else {
+                          window.location.href = `/profile/${userId}`;
+                        }
+                      } else {
+                        handleUserSearch(matchedPart.trim());
+                      }
+                    }}
+                    style={{ 
+                      color: '#007bff', 
+                      fontWeight: '600',
+                      background: 'none',
+                      border: 'none',
+                      padding: '0',
+                      cursor: 'pointer',
+                      textDecoration: 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.textDecoration = 'underline';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.textDecoration = 'none';
+                    }}
+                  >
+                    @{matchedPart}
+                  </button>
+                );
+                
+                // Add remaining text as normal text
+                if (remainingPart.trim()) {
+                  result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{remainingPart}</span>);
+                }
+              } else {
+                // Fallback: use word-based matching
+                const matchedWords = mentionWords.slice(0, matchedWordCount);
+                // Find the position where these words end in the original text
+                let searchPos = 0;
+                for (let i = 0; i < matchedWords.length; i++) {
+                  const wordPos = mentionText.indexOf(matchedWords[i], searchPos);
+                  if (wordPos !== -1) {
+                    searchPos = wordPos + matchedWords[i].length;
+                  } else {
+                    break;
+                  }
+                }
+                
+                const matchedPart = mentionText.substring(0, searchPos);
+                const remainingPart = mentionText.substring(searchPos);
+                const matchedUser = matchResult.user;
+                
+                result.push(
+                  <button
+                    key={`${keyPrefix}-mention-${keyCounter++}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const userId = matchedUser.user_id || matchedUser.id;
+                      if (userId) {
+                        const currentPath = window.location.pathname;
+                        if (currentPath.startsWith('/peso')) {
+                          window.location.href = `/peso/profile/${userId}`;
+                        } else if (currentPath.startsWith('/ccict')) {
+                          window.location.href = `/ccict/profile/${userId}`;
+                        } else {
+                          window.location.href = `/profile/${userId}`;
+                        }
+                      } else {
+                        handleUserSearch(matchedPart.trim());
+                      }
+                    }}
+                    style={{ 
+                      color: '#007bff', 
+                      fontWeight: '600',
+                      background: 'none',
+                      border: 'none',
+                      padding: '0',
+                      cursor: 'pointer',
+                      textDecoration: 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.textDecoration = 'underline';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.textDecoration = 'none';
+                    }}
+                  >
+                    @{matchedPart}
+                  </button>
+                );
+                
+                if (remainingPart.trim()) {
+                  result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{remainingPart}</span>);
+                }
+              }
+            } else {
+              // No match found - render as normal text
+              result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>@{mentionText}</span>);
+            }
+          } else {
+            // No match found - render as normal text
+            result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>@{mentionText}</span>);
+          }
+        } else {
+          // No match found - render as normal text
+          result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>@{mentionText}</span>);
+        }
+      }
+      
+      lastIndex = mentionRegex.lastIndex;
+    }
+    
+    // Add remaining text after the last mention
+    if (lastIndex < textSegment.length) {
+      result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{textSegment.substring(lastIndex)}</span>);
+    }
+    
+    return result;
+  };
+
+  const renderTextWithLinks = (text: string | undefined | null) => {
+    if (!text) return null;
+    
+    // Enhanced URL regex that matches:
+    // - http:// or https:// URLs
+    // - www. URLs
+    // - plain domains (like fb.com, example.com, etc.)
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,})([^\s]*)?)/gi;
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
+    // Note: We intentionally do NOT auto-detect regular names anymore to avoid
+    // over-highlighting common words. Only URLs and @mentions are interactive.
+    
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+    
+    // Reset regex for global search
+    urlRegex.lastIndex = 0;
+    
+    // First, find all URLs
+    while ((match = urlRegex.exec(text)) !== null) {
+      // Add text before the URL
+      if (match.index > lastIndex) {
+        const textBefore = text.substring(lastIndex, match.index);
+        // Process mentions in the text before URL
+        const mentionParts = processMentionsInText(textBefore, `before-url-${key}`);
+        parts.push(...mentionParts);
+      }
+      
+      // Create clickable link
+      let url = match[0];
+      
+      // Add protocol if missing
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      
+      parts.push(
+        <a
+          key={`link-${key++}`}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: '#174f84',
+            textDecoration: 'underline',
+            cursor: 'pointer',
+            wordBreak: 'break-all'
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            window.open(url, '_blank', 'noopener,noreferrer');
+          }}
+        >
+          {match[0]}
+        </a>
+      );
+      
+      lastIndex = urlRegex.lastIndex;
+    }
+    
+    // Add remaining text after the last URL
+    if (lastIndex < text.length) {
+      const remainingText = text.substring(lastIndex);
+      // Process mentions in remaining text
+      const mentionParts = processMentionsInText(remainingText, `remaining-${key}`);
+      parts.push(...mentionParts);
+    }
+    
+    // If no URLs or mentions found, return the original text
+    if (parts.length === 0) {
+      return text;
+    }
+    
+    return parts;
   };
 
   const handleEditRepost = () => {
@@ -540,23 +1129,26 @@ const RepostCard: React.FC<RepostCardProps> = ({
     setLocalShowRepostOptions(false);
   };
 
-  const handleDeleteRepost = async () => {
+  const handleDeleteRepost = () => {
     if (!isOwn) {
       alert('You can only delete your own reposts');
       return;
     }
-    
-    if (window.confirm('Are you sure you want to delete this repost?')) {
-      try {
-        await deleteRepost(repost.repost_id);
-        onRefresh?.();
-        alert('Repost deleted successfully');
-      } catch (error) {
-        console.error('Error deleting repost:', error);
-        alert('Failed to delete repost');
-      }
-    }
     setLocalShowRepostOptions(false);
+    setShowDeleteRepostModal(true);
+  };
+
+  const confirmDeleteRepost = async () => {
+    try {
+      await deleteRepost(repost.repost_id);
+      onRefresh?.();
+      alert('Repost deleted successfully');
+      setShowDeleteRepostModal(false);
+    } catch (error) {
+      console.error('Error deleting repost:', error);
+      alert('Failed to delete repost');
+      setShowDeleteRepostModal(false);
+    }
   };
 
   const handleSaveEditRepost = async () => {
@@ -612,12 +1204,17 @@ const RepostCard: React.FC<RepostCardProps> = ({
     }
   };
 
-  const handleDeleteOriginalPost = async () => {
+  const handleDeleteOriginalPost = () => {
     if (original.user?.user_id !== currentUserId) {
       alert('You can only delete your own posts');
       return;
     }
+    setLocalShowOriginalOptions(false);
+    setShowOptions?.(prev => ({ ...prev, [`original_${original.post_id}`]: false }));
+    setShowDeleteOriginalModal(true);
+  };
 
+  const confirmDeleteOriginalPost = async () => {
     const donationId =
       original.donation_id ??
       (original as any)?.donation_id ??
@@ -630,20 +1227,12 @@ const RepostCard: React.FC<RepostCardProps> = ({
       null;
     const contextType: RepostContext = context || (donationId ? 'donation' : 'post');
 
-    const confirmMessage =
-      contextType === 'donation'
-        ? 'Are you sure you want to delete this donation request?'
-        : 'Are you sure you want to delete this original post?';
-
     try {
-      if (!window.confirm(confirmMessage)) {
-        return;
-      }
-
       if (contextType === 'donation') {
         const targetDonationId = donationId ?? postId;
         if (!targetDonationId) {
           alert('Missing donation identifier. Please refresh and try again.');
+          setShowDeleteOriginalModal(false);
           return;
         }
         await deleteDonationRequest(targetDonationId);
@@ -651,6 +1240,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
       } else if (contextType === 'forum') {
         if (!postId) {
           alert('Missing forum post identifier. Please refresh and try again.');
+          setShowDeleteOriginalModal(false);
           return;
         }
         await deleteForumPost(postId);
@@ -658,6 +1248,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
       } else {
         if (!postId) {
           alert('Missing post identifier. Please refresh and try again.');
+          setShowDeleteOriginalModal(false);
           return;
         }
         await deletePost(postId);
@@ -665,12 +1256,11 @@ const RepostCard: React.FC<RepostCardProps> = ({
       }
 
       onRefresh?.();
+      setShowDeleteOriginalModal(false);
     } catch (error) {
       console.error('Error deleting original post:', error);
       alert('Failed to delete original content');
-    } finally {
-      setLocalShowOriginalOptions(false);
-      setShowOptions?.(prev => ({ ...prev, [`original_${original.post_id}`]: false }));
+      setShowDeleteOriginalModal(false);
     }
   };
 
@@ -815,6 +1405,39 @@ const RepostCard: React.FC<RepostCardProps> = ({
     };
   }, [showLikesModal, repost.repost_id]);
 
+  // Fetch reposts for the original post when modal opens
+  useEffect(() => {
+    if (!showRepostsModal) return;
+    const originalPost = repost.original_post;
+    if (!originalPost?.post_id) return;
+    
+    let mounted = true;
+    const postId = originalPost.post_id;
+    (async () => {
+      setRepostsLoading(true);
+      try {
+        const postData = await getPostDetail(postId);
+        if (mounted && postData && postData.reposts) {
+          setFetchedReposts(postData.reposts || []);
+        } else if (mounted && originalPost.reposts) {
+          setFetchedReposts(originalPost.reposts);
+        }
+      } catch (error) {
+        console.error('Error fetching reposts:', error);
+        if (mounted && originalPost.reposts) {
+          setFetchedReposts(originalPost.reposts);
+        } else if (mounted) {
+          setFetchedReposts([]);
+        }
+      } finally {
+        if (mounted) setRepostsLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [showRepostsModal, repost.original_post?.post_id, repost.original_post?.reposts]);
+
   const goToOriginal = () => {
     const id = original.post_id;
     if (!id) return;
@@ -836,7 +1459,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
       borderRadius: 16,
       padding: 16,
       boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
-      overflow: 'hidden'
+      overflow: showMentionSuggestions ? 'visible' : 'hidden'
     }}>
       {/* Repost header */}
       <div className="post-header">
@@ -1024,7 +1647,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
       {/* Repost caption (if not editing) */}
       {!localEditingRepost && repost.repost_caption && repost.repost_caption.trim() && (
         <div style={{ fontSize: 14, color: '#333', lineHeight: 1.5, marginBottom: 12 }}>
-          {repost.repost_caption}
+          {renderTextWithLinks(repost.repost_caption)}
         </div>
       )}
 
@@ -1255,7 +1878,13 @@ const RepostCard: React.FC<RepostCardProps> = ({
               </div>
             ) : (
               original.post_content && (
-                <div style={{ fontSize: 13, color: '#333', lineHeight: 1.5, marginBottom: 8 }}>{original.post_content}</div>
+                <div 
+                  style={{ fontSize: 13, color: '#333', lineHeight: 1.5, marginBottom: 8 }}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  {renderTextWithLinks(original.post_content)}
+                </div>
               )
             )}
             {(() => {
@@ -1387,11 +2016,14 @@ const RepostCard: React.FC<RepostCardProps> = ({
       <PostStatsRow
         likes={fetchedLikes}
         comments={comments}
+        reposts={repost.original_post?.reposts}
+        repostCount={repost.original_post?.reposts_count}
         onLikesClick={() => setShowLikesModal(true)}
         onCommentsClick={() => {
           // Toggle comments section visibility
           setShowCommentsSection(prev => !prev);
         }}
+        onRepostsClick={() => setShowRepostsModal(true)}
         animate={true}
       />
 
@@ -1403,7 +2035,13 @@ const RepostCard: React.FC<RepostCardProps> = ({
             className={`post-footer-action${liked ? ' active' : ''}`}
             aria-pressed={!!liked}
           >
-            <span className="post-footer-icon">👍</span>
+            <span className="post-footer-icon">
+              <FontAwesomeIcon 
+                icon={liked ? faThumbsUp : faThumbsUpReg} 
+                size="lg" 
+                style={{ color: liked ? '#1e3a8a' : '#555', fontSize: '18px' }} 
+              />
+            </span>
             <span className="post-footer-label">Like</span>
           </button>
           <button
@@ -1412,13 +2050,19 @@ const RepostCard: React.FC<RepostCardProps> = ({
             className={`post-footer-action${showCommentInput ? ' active' : ''}`}
             aria-expanded={!!showCommentInput}
           >
-            <span className="post-footer-icon">💬</span>
+            <span className="post-footer-icon">
+              <FontAwesomeIcon icon={faCommentReg} size="lg" style={{ fontSize: '20px', color: '#555' }} />
+            </span>
             <span className="post-footer-label">Comment</span>
           </button>
           <RepostButton
             originalPost={{
-              post_id: original.post_id || 0,
-              post_content: original.post_content || '',
+              post_id: context === 'donation' 
+                ? (original.donation_id || 0)
+                : context === 'forum'
+                ? ((original as any).forum_id || original.post_id || 0)
+                : (original.post_id || 0),
+              post_content: original.post_content || (original as any).description || (original as any).content || '',
               post_image: undefined,
               post_images: getImagesFromPost(original).map((url, index) => ({
                 image_id: index + 1,
@@ -1444,57 +2088,226 @@ const RepostCard: React.FC<RepostCardProps> = ({
 
       {/* Comment input */}
       {showCommentInput && (
-          <div style={{ padding: '12px 16px', borderTop: '1px solid #f0f0f0' }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <img 
-                src={currentUserAvatar || getProfilePicUrl(null)} 
-                alt="Profile" 
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  border: '2px solid #e0e0e0',
-                  objectFit: 'cover',
-                  flexShrink: 0
-                }}
-              />
+          <div className="comment-input-container" style={{ 
+            position: 'relative', 
+            display: 'flex', 
+            gap: '8px', 
+            alignItems: 'center',
+            padding: '12px 16px',
+            borderTop: '1px solid #f0f0f0'
+          }}>
+            <img 
+              src={currentUserAvatar || getProfilePicUrl(null)} 
+              alt="Profile" 
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                border: '2px solid #e0e0e0',
+                objectFit: 'cover',
+                flexShrink: 0
+              }}
+              onError={handleProfilePicError}
+            />
+            <div 
+              ref={commentInputContainerRef}
+              style={{ flex: 1, position: 'relative' }}
+            >
               <input
+                ref={commentInputRef}
                 type="text"
+                placeholder="Type your comment..."
                 value={commentValue}
-                onChange={(e) => setCommentValue(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && commentValue.trim()) {
-                    handleCommentSubmit();
-                  }
+                onChange={handleCommentInputChange}
+                onKeyDown={handleCommentKeyDown}
+                style={{
+                  width: '100%',
+                  border: '1px solid #ddd',
+                  borderRadius: '20px',
+                  padding: '10px 0px 10px 5px',
+                  fontSize: '14px'
                 }}
-                placeholder="Write a comment..."
-                style={{ flex: 1, padding: '10px 16px', border: '1px solid #ddd', borderRadius: 20, fontSize: 14 }}
                 autoFocus
               />
-              <button 
-                onClick={handleCommentSubmit} 
-                disabled={!commentValue.trim()} 
-                style={{ 
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
+              {/* Emoji Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowEmojiPicker(!showEmojiPicker);
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
                   border: 'none',
-                  color: '#fff',
-                  background: commentValue.trim() ? '#007bff' : '#ccc',
-                  cursor: commentValue.trim() ? 'pointer' : 'not-allowed',
+                  cursor: 'pointer',
+                  padding: '4px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  flexShrink: 0,
-                  transition: 'background 0.2s',
-                  padding: 0
+                  color: '#65676b',
+                  borderRadius: '50%',
+                  width: '28px',
+                  height: '28px',
+                  transition: 'background-color 0.2s'
                 }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                  e.currentTarget.style.color = '#333';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#65676b';
+                }}
+                title="Add emoji"
               >
-                <span style={{ fontSize: '18px', lineHeight: 1 }}>➡️</span>
+                <svg 
+                  width="18" 
+                  height="18" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  xmlns="http://www.w3.org/2000/svg"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
+                  <circle cx="15.5" cy="9.5" r="1.5" fill="currentColor" />
+                  <path d="M8 14c1.5 2.5 4.5 2.5 6 0" />
+                </svg>
               </button>
+              {/* Emoji Picker */}
+              {showEmojiPicker && emojiPickerLayout &&
+                ReactDOM.createPortal(
+                  <div
+                    ref={(el) => {
+                      emojiPickerRef.current = el;
+                    }}
+                    style={{
+                      position: 'fixed',
+                      top: emojiPickerLayout.top,
+                      left: emojiPickerLayout.left,
+                      width: emojiPickerLayout.width,
+                      zIndex: 4000,
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      background: '#fff',
+                      border: '1px solid #e0e0e0',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <EmojiPicker
+                      onEmojiClick={(emojiData: EmojiClickData) => {
+                        setCommentValue(prev => prev + emojiData.emoji);
+                      }}
+                      width={emojiPickerLayout.width}
+                      height={320}
+                      previewConfig={{ showPreview: false }}
+                      skinTonesDisabled
+                    />
+                  </div>,
+                  document.body
+                )
+              }
             </div>
+            <button 
+              onClick={handleCommentSubmit}
+              style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                background: '#007bff',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                transition: 'background 0.2s',
+                padding: 0
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#0056b3'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#007bff'; }}
+            >
+              <IoSend size={18} color="#fff" />
+            </button>
+            
+            {/* @mention suggestions dropdown */}
+            {showMentionSuggestions && mentionSuggestions.length > 0 && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: '44px',
+                right: '48px',
+                backgroundColor: 'white',
+                border: '1px solid #e4e6ea',
+                borderRadius: '8px',
+                boxShadow: '0 2px 12px rgba(0, 0, 0, 0.15)',
+                zIndex: 1000,
+                maxHeight: '200px',
+                overflowY: 'auto',
+                marginTop: '4px'
+              }}>
+                <div style={{
+                  padding: '8px 12px',
+                  borderBottom: '1px solid #e4e6ea',
+                  backgroundColor: '#f8f9fa',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  color: '#65676b'
+                }}>
+                  Mention someone
+                </div>
+                {mentionSuggestions.map((user, index) => (
+                  <div
+                    key={user.user_id}
+                    onClick={() => selectMention(user)}
+                    style={{
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      backgroundColor: index === selectedMentionIndex ? '#e3f2fd' : 'transparent',
+                      borderBottom: index < mentionSuggestions.length - 1 ? '1px solid #f0f0f0' : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      transition: 'background-color 0.1s ease'
+                    }}
+                    onMouseEnter={() => setSelectedMentionIndex(index)}
+                  >
+                    <img
+                      src={getProfilePicUrl(user.profile_pic)}
+                      alt={user.name}
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: '1px solid #e4e6ea'
+                      }}
+                      onError={handleProfilePicError}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ 
+                        fontSize: '14px', 
+                        fontWeight: '600',
+                        color: '#1c1e21',
+                        marginBottom: '2px'
+                      }}>
+                        {user.f_name} {user.m_name || ''} {user.l_name}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
       )}
+
 
       {/* Comments section */}
       {((comments && comments.length > 0) || (repost.comments_count && repost.comments_count > 0)) && showCommentsSection ? (
@@ -2056,6 +2869,58 @@ const RepostCard: React.FC<RepostCardProps> = ({
         </div>,
         document.body
       )}
+
+      {/* Reposts Modal */}
+      {showRepostsModal && ReactDOM.createPortal(
+        <RepostsModal
+          isOpen={showRepostsModal}
+          onClose={() => setShowRepostsModal(false)}
+          reposts={fetchedReposts}
+          isLoading={repostsLoading}
+          title="People who reposted this"
+        />,
+        document.body
+      )}
+
+      {/* Delete Repost Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteRepostModal}
+        title="Delete Repost"
+        message="Are you sure you want to delete this repost?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteRepost}
+        onCancel={() => setShowDeleteRepostModal(false)}
+      />
+
+      {/* Delete Original Post Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteOriginalModal}
+        title="Delete Post"
+        message={
+          (context === 'donation' || (original.donation_id ?? (original as any)?.donation_id ?? (original as any)?.donation?.donation_id))
+            ? 'Are you sure you want to delete this donation request?'
+            : 'Are you sure you want to delete this original post?'
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteOriginalPost}
+        onCancel={() => setShowDeleteOriginalModal(false)}
+      />
+
+      {/* Delete Comment Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteCommentModal}
+        title="Delete Comment"
+        message="Are you sure you want to delete this comment?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteComment}
+        onCancel={() => {
+          setShowDeleteCommentModal(false);
+          setCommentToDelete(null);
+        }}
+      />
     </div>
   );
 };

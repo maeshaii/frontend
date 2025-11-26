@@ -3,6 +3,7 @@ import Sidebar from '../global/sidebar';
 import { fetchOJTByYear, approveCoordinatorRequest, fetchCoordinatorRequestsCount } from '../../../services/api';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { broadcastCoordinatorRequestCount } from '../utils/requestBadge';
+import { toast } from '../../../utils/toast';
 
 const RequestDetailsPage: React.FC = () => {
   const { year } = useParams<{ year: string }>();
@@ -12,6 +13,8 @@ const RequestDetailsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [approving, setApproving] = useState(false);
   
   // Get course filter from URL parameters
   const urlParams = new URLSearchParams(location.search);
@@ -60,7 +63,21 @@ const RequestDetailsPage: React.FC = () => {
       }
     };
 
+    // Initial load
     loadOJTData();
+
+    // Set up real-time polling to refresh data every 10 seconds
+    // This ensures admin sees new data sent from coordinators immediately
+    const pollInterval = setInterval(() => {
+      if (year) {
+        loadOJTData();
+      }
+    }, 10000); // Poll every 10 seconds
+
+    // Cleanup interval on unmount or when dependencies change
+    return () => {
+      clearInterval(pollInterval);
+    };
   }, [year]);
 
   const downloadPasswords = (passwords: any[]) => {
@@ -84,22 +101,22 @@ const RequestDetailsPage: React.FC = () => {
 
   const handleApprove = async () => {
     if (!year) return;
+    setShowApproveModal(true);
+  };
+
+  const confirmApprove = async () => {
+    if (!year) return;
     
-    const confirmed = window.confirm(
-      `Are you sure you want to approve all completed OJT students for Class of ${year}? This will convert them to alumni and generate new passwords.`
-    );
-    
-    if (!confirmed) return;
-    
+    setApproving(true);
     try {
       const res = await approveCoordinatorRequest(parseInt(year));
       if (res?.success) {
-        alert(`Successfully approved ${res.approved} students from Class of ${year}!`);
+        toast.success(`Successfully approved ${res.approved} students from Class of ${year}!`);
         
         // Download passwords file if available
         if (res.passwords && res.passwords.length > 0) {
           downloadPasswords(res.passwords);
-          alert(`Password file downloaded successfully! ${res.passwords.length} alumni accounts created.`);
+          toast.success(`Password file downloaded successfully! ${res.passwords.length} alumni accounts created.`);
         }
         
         try {
@@ -111,15 +128,20 @@ const RequestDetailsPage: React.FC = () => {
           broadcastCoordinatorRequestCount(0);
         }
 
+        setShowApproveModal(false);
         // Navigate back to requests list - the card should now be gone since status changed to "Approved"
         // Force a page reload to ensure fresh data
         window.location.href = '/requests';
       } else {
-        alert('Approval failed. Please try again.');
+        toast.error('Approval failed. Please try again.');
+        setShowApproveModal(false);
       }
     } catch (error) {
       console.error('Approval error:', error);
-      alert('Approval failed. Please try again.');
+      toast.error('Approval failed. Please try again.');
+      setShowApproveModal(false);
+    } finally {
+      setApproving(false);
     }
   };
 
@@ -435,6 +457,115 @@ const RequestDetailsPage: React.FC = () => {
             Approve ({completedRows.length})
           </button>
         </div>
+
+        {/* Approval Confirmation Modal */}
+        {showApproveModal && (
+          <div 
+            style={{ 
+              position: 'fixed', 
+              inset: 0, 
+              background: 'rgba(0,0,0,0.5)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              zIndex: 1000,
+              padding: '20px'
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !approving) {
+                setShowApproveModal(false);
+              }
+            }}
+          >
+            <div 
+              style={{ 
+                background: 'white', 
+                width: '500px', 
+                maxWidth: '95%', 
+                borderRadius: '12px', 
+                padding: '28px', 
+                boxShadow: '0 20px 60px rgba(0,0,0,0.15)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '20px', fontWeight: 700, margin: 0, color: '#1f2937', marginBottom: '12px' }}>
+                  Confirm Approval
+                </h3>
+                <div style={{ height: 1, background: '#e5e7eb', marginBottom: '16px' }}></div>
+                <p style={{ fontSize: '15px', lineHeight: 1.6, color: '#4b5563', margin: 0 }}>
+                  Are you sure you want to approve all completed OJT students for <strong>Class of {year}</strong>?
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button
+                  onClick={() => {
+                    if (!approving) {
+                      setShowApproveModal(false);
+                    }
+                  }}
+                  disabled={approving}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '8px',
+                    border: '1px solid #d1d5db',
+                    background: '#f9fafb',
+                    color: '#374151',
+                    cursor: approving ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    transition: 'all 0.2s',
+                    opacity: approving ? 0.6 : 1
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!approving) {
+                      e.currentTarget.style.background = '#f3f4f6';
+                      e.currentTarget.style.borderColor = '#9ca3af';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!approving) {
+                      e.currentTarget.style.background = '#f9fafb';
+                      e.currentTarget.style.borderColor = '#d1d5db';
+                    }
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmApprove}
+                  disabled={approving}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: approving ? '#9ca3af' : '#5A6DFE',
+                    color: 'white',
+                    cursor: approving ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    transition: 'all 0.2s',
+                    boxShadow: approving ? 'none' : '0 2px 4px rgba(90, 109, 254, 0.2)'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!approving) {
+                      e.currentTarget.style.background = '#4f63e2';
+                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(90, 109, 254, 0.3)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!approving) {
+                      e.currentTarget.style.background = '#5A6DFE';
+                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(90, 109, 254, 0.2)';
+                    }
+                  }}
+                >
+                  {approving ? 'Approving...' : 'Confirm & Approve'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Student Details Modal */}
         {selectedStudent && (

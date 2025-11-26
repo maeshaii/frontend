@@ -3,19 +3,35 @@ import React, { useState, useEffect } from 'react';
 interface PostStatsRowProps {
   likes?: Array<{ user?: { f_name?: string; m_name?: string; l_name?: string }; f_name?: string; m_name?: string; l_name?: string }>;
   comments?: Array<any>;
+  reposts?: Array<{ user?: { f_name?: string; m_name?: string; l_name?: string } }>;
+  repostCount?: number;
   onLikesClick: () => void;
   onCommentsClick: () => void;
+  onRepostsClick?: () => void;
   animate?: boolean; // if false, update immediately without transition
 }
 
-const PostStatsRow: React.FC<PostStatsRowProps> = ({ likes, comments, onLikesClick, onCommentsClick }) => {
-  const hasLikes = likes && likes.length > 0;
-  const hasComments = comments && comments.length > 0;
+const PostStatsRow: React.FC<PostStatsRowProps> = ({
+  likes,
+  comments,
+  reposts,
+  repostCount,
+  onLikesClick,
+  onCommentsClick,
+  onRepostsClick,
+}) => {
+  const hasLikes = (likes && likes.length > 0) || false;
+  const commentsTotal = comments?.length || 0;
+  const hasComments = commentsTotal > 0;
+  const computedRepostCount = typeof repostCount === 'number'
+    ? repostCount
+    : (reposts?.length || 0);
+  const hasReposts = computedRepostCount > 0;
   const [likesDisplay, setLikesDisplay] = useState('');
 
   // Update likes display immediately (no animation to avoid glitches)
   useEffect(() => {
-    if (!hasLikes) {
+    if (!likes || likes.length === 0) {
       setLikesDisplay('');
       return;
     }
@@ -29,7 +45,7 @@ const PostStatsRow: React.FC<PostStatsRowProps> = ({ likes, comments, onLikesCli
     setLikesDisplay(displayText);
   }, [likes, hasLikes]);
 
-  if (!hasLikes && !hasComments) return null;
+  if (!hasLikes && !hasComments && !hasReposts) return null;
 
   return (
     <div style={{ 
@@ -44,37 +60,15 @@ const PostStatsRow: React.FC<PostStatsRowProps> = ({ likes, comments, onLikesCli
           <span
             onClick={onLikesClick}
             style={{ 
+              flex: 1,
               fontSize: '12px',
               fontWeight: '500',
               padding: '4px 8px',
               borderRadius: '4px',
               color: '#6b7280',
               cursor: 'pointer',
-              transition: 'background-color 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#f8f9fa';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >👍 {likesDisplay}
-          </span>
-        ) : (
-          <div></div> // Empty spacer to push comments to the right
-        )}
-          
-        {/* Right side - Comments count */}
-        {hasComments && (
-          <span
-            onClick={onCommentsClick}
-            style={{ 
-              cursor: 'pointer', 
-              fontSize: '12px',
-              color: '#6c757d',
-              padding: '4px 8px',
-              borderRadius: '4px',
-              transition: 'background-color 0.2s ease'
+              transition: 'background-color 0.2s ease',
+              textAlign: 'left',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = '#f8f9fa';
@@ -83,8 +77,68 @@ const PostStatsRow: React.FC<PostStatsRowProps> = ({ likes, comments, onLikesCli
               e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
-            {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
+            👍 {likesDisplay}
           </span>
+        ) : (
+          <div style={{ flex: 1 }}></div> // Empty spacer to keep layout balanced
+        )}
+          
+        {/* Center - Comments count */}
+        {hasComments ? (
+          <span
+            onClick={onCommentsClick}
+            style={{ 
+              flex: 1,
+              cursor: 'pointer', 
+              fontSize: '12px',
+              color: '#6c757d',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              transition: 'background-color 0.2s ease',
+              textAlign: 'center',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f8f9fa';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            {commentsTotal} {commentsTotal === 1 ? 'comment' : 'comments'}
+          </span>
+        ) : (
+          <div style={{ flex: 1 }}></div>
+        )}
+
+        {/* Right side - Repost count */}
+        {hasReposts ? (
+          <span
+            onClick={() => onRepostsClick?.()}
+            style={{
+              flex: 1,
+              cursor: onRepostsClick ? 'pointer' : 'default',
+              fontSize: '12px',
+              color: '#6c757d',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              transition: onRepostsClick ? 'background-color 0.2s ease' : 'none',
+              textAlign: 'right',
+            }}
+            onMouseEnter={(e) => {
+              if (onRepostsClick) {
+                e.currentTarget.style.backgroundColor = '#f8f9fa';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (onRepostsClick) {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }
+            }}
+          >
+            {computedRepostCount} {computedRepostCount === 1 ? 'repost' : 'reposts'}
+          </span>
+        ) : (
+          <div style={{ flex: 1 }}></div>
         )}
       </div>
     </div>

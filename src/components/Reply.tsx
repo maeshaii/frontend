@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { editReply, deleteReply, createReply, searchAlumni, getUserPoints } from '../services/api';
+import { editReply, deleteReply, createReply, searchAlumni, getUserPoints, getFollowingForMentions } from '../services/api';
 import ctulogo from '../images/ctulogo.png';
 import { getProfilePicUrl, handleProfilePicError } from '../utils/profilePicUtils';
+import ConfirmModal from './ConfirmModal';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 
 interface ReplyProps {
   reply: {
@@ -45,8 +47,27 @@ const Reply: React.FC<ReplyProps> = ({
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyContent, setReplyContent] = useState('');
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+  const [followingUsers, setFollowingUsers] = useState<any[]>([]);
+  const [showDeleteReplyModal, setShowDeleteReplyModal] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
   const optionsRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Load following users for @mentions
+  useEffect(() => {
+    const loadFollowing = async () => {
+      try {
+        const response = await getFollowingForMentions();
+        if (response.success) {
+          setFollowingUsers(response.following);
+        }
+      } catch (error) {
+        console.error('Error loading following users:', error);
+      }
+    };
+    loadFollowing();
+  }, []);
 
   useEffect(() => {
     if (!registerHighlightRef) return;
@@ -109,6 +130,20 @@ const Reply: React.FC<ReplyProps> = ({
     };
   }, []);
 
+  // Close emoji picker on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (showEmojiPicker && emojiPickerRef.current && !emojiPickerRef.current.contains(target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
+
   const handleEdit = async () => {
     if (editContent.trim() === '') return;
 
@@ -121,14 +156,19 @@ const Reply: React.FC<ReplyProps> = ({
     }
   };
 
-  const handleDelete = async () => {
-    if (window.confirm('Are you sure you want to delete this reply?')) {
-      try {
-        await deleteReply(commentId, reply.reply_id);
-        onReplyUpdate();
-      } catch (error) {
-        console.error('Error deleting reply:', error);
-      }
+  const handleDelete = () => {
+    setShowOptions(false);
+    setShowDeleteReplyModal(true);
+  };
+
+  const confirmDeleteReply = async () => {
+    try {
+      await deleteReply(commentId, reply.reply_id);
+      onReplyUpdate();
+      setShowDeleteReplyModal(false);
+    } catch (error) {
+      console.error('Error deleting reply:', error);
+      setShowDeleteReplyModal(false);
     }
   };
 
@@ -186,56 +226,303 @@ const Reply: React.FC<ReplyProps> = ({
         );
       }
       
-      // Handle mentions (@username)
-      const mentionParts = part.split(mentionRegex);
-      const processedMentionParts = mentionParts.map((mentionPart, mentionIndex) => {
-        const isMentionSegment = mentionIndex % 2 === 1;
-        if (isMentionSegment) {
-          const mentionText = mentionPart.trim();
-          if (!mentionText) return null;
-
-          const replyAuthorName = `${reply.user.f_name} ${reply.user.m_name || ''} ${reply.user.l_name}`.trim();
-          const normalizedReplyAuthor = replyAuthorName.toLowerCase().replace(/\s+/g, '');
-          const isReplyAuthor = mentionText.toLowerCase().replace(/\s+/g, '') === normalizedReplyAuthor;
-
-          const display = `@${mentionText}`;
-          
-          return (
-            <button
-              key={`${index}-${mentionIndex}`}
-              onClick={() => {
-                if (isReplyAuthor) {
-                  window.location.href = getProfilePath(reply.user.user_id);
-                } else {
-                  handleUserSearch(mentionText);
-                }
-              }}
-              style={{ 
-                color: '#007bff', 
-                fontWeight: '600',
-                background: 'none',
-                border: 'none',
-                padding: '0',
-                cursor: 'pointer',
-                textDecoration: 'none'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.textDecoration = 'underline';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.textDecoration = 'none';
-              }}
-            >
-              {display}
-            </button>
-          );
+      // Handle mentions (@username) with support for partial matches
+      // Helper function to check if a mention matches a known user
+      const checkMentionMatch = (mentionText: string): { matched: boolean; user?: any; matchedName?: string } => {
+        const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
+        
+        // Check reply author
+        const replyAuthorName = `${reply.user.f_name} ${reply.user.m_name || ''} ${reply.user.l_name}`.trim();
+        const normalizedReplyAuthor = replyAuthorName.toLowerCase().replace(/\s+/g, '');
+        if (normalizedMention === normalizedReplyAuthor) {
+          return { matched: true, user: reply.user, matchedName: replyAuthorName };
         }
-
-        // Non-mention text returned as-is (no name-based highlighting)
-        return mentionPart;
-      });
+        
+        // Check if mention starts with reply author name (partial match)
+        if (normalizedMention.startsWith(normalizedReplyAuthor)) {
+          return { matched: true, user: reply.user, matchedName: replyAuthorName };
+        }
+        
+        // Check following users
+        for (const user of followingUsers) {
+          const userName = `${user.f_name} ${user.m_name || ''} ${user.l_name}`.trim();
+          const normalizedUserName = userName.toLowerCase().replace(/\s+/g, '');
+          if (normalizedMention === normalizedUserName) {
+            return { matched: true, user, matchedName: userName };
+          }
+          // Check partial match
+          if (normalizedMention.startsWith(normalizedUserName)) {
+            return { matched: true, user, matchedName: userName };
+          }
+        }
+        
+        return { matched: false };
+      };
       
-      return processedMentionParts;
+      const result: React.ReactNode[] = [];
+      let lastIndex = 0;
+      let match;
+      mentionRegex.lastIndex = 0;
+      
+      while ((match = mentionRegex.exec(part)) !== null) {
+        // Add text before the mention
+        if (match.index > lastIndex) {
+          result.push(part.substring(lastIndex, match.index));
+        }
+        
+        const mentionText = match[1]; // Don't trim yet, we need the original spacing
+        if (mentionText) {
+          const matchResult = checkMentionMatch(mentionText);
+          
+          if (matchResult.matched && matchResult.user && matchResult.matchedName) {
+            const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
+            const normalizedMatchedName = matchResult.matchedName.toLowerCase().replace(/\s+/g, '');
+            const isExactMatch = normalizedMention === normalizedMatchedName;
+            const startsWithName = normalizedMention.startsWith(normalizedMatchedName);
+            
+            if (isExactMatch) {
+              // Exact match - highlight the entire mention
+              const matchedUser = matchResult.user;
+              result.push(
+                <button
+                  key={`${index}-mention-${match.index}`}
+                  onClick={() => {
+                    const userId = matchedUser.user_id || matchedUser.id;
+                    if (userId) {
+                      window.location.href = getProfilePath(userId);
+                    } else {
+                      handleUserSearch(mentionText);
+                    }
+                  }}
+                  style={{ 
+                    color: '#007bff', 
+                    fontWeight: '600',
+                    background: 'none',
+                    border: 'none',
+                    padding: '0',
+                    cursor: 'pointer',
+                    textDecoration: 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.textDecoration = 'underline';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.textDecoration = 'none';
+                  }}
+                >
+                  @{mentionText}
+                </button>
+              );
+            } else if (startsWithName) {
+              // Partial match - find where the user's name ends in the mention text
+              const mentionWords = mentionText.split(/\s+/);
+              const nameWords = matchResult.matchedName.split(/\s+/);
+              
+              let matchedWordCount = 0;
+              for (let i = 0; i < Math.min(mentionWords.length, nameWords.length); i++) {
+                if (mentionWords[i].toLowerCase() === nameWords[i].toLowerCase()) {
+                  matchedWordCount++;
+                } else {
+                  break;
+                }
+              }
+              
+              if (matchedWordCount > 0 && matchedWordCount <= mentionWords.length) {
+                // Build a regex pattern to match the exact name at the start of mentionText
+                // Escape special regex characters in the name
+                const escapedName = matchResult.matchedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                // Create a pattern that matches the name followed by optional whitespace and more text
+                const namePattern = new RegExp(`^(${escapedName})(\\s+.*)?$`, 'i');
+                const nameMatch = mentionText.match(namePattern);
+                
+                if (nameMatch && nameMatch[1]) {
+                  // Found exact match of the name at the start
+                  const matchedPart = nameMatch[1];
+                  const remainingPart = mentionText.substring(matchedPart.length);
+                  const matchedUser = matchResult.user;
+                  
+                  result.push(
+                    <button
+                      key={`${index}-mention-${match.index}`}
+                      onClick={() => {
+                        const userId = matchedUser.user_id || matchedUser.id;
+                        if (userId) {
+                          window.location.href = getProfilePath(userId);
+                        } else {
+                          handleUserSearch(matchedPart.trim());
+                        }
+                      }}
+                      style={{ 
+                        color: '#007bff', 
+                        fontWeight: '600',
+                        background: 'none',
+                        border: 'none',
+                        padding: '0',
+                        cursor: 'pointer',
+                        textDecoration: 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.textDecoration = 'underline';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.textDecoration = 'none';
+                      }}
+                    >
+                      @{matchedPart}
+                    </button>
+                  );
+                  
+                  // Add remaining text as normal text
+                  if (remainingPart.trim()) {
+                    result.push(remainingPart);
+                  }
+                } else {
+                  // Fallback: use word-based matching
+                  const matchedWords = mentionWords.slice(0, matchedWordCount);
+                  // Find the position where these words end in the original text
+                  let searchPos = 0;
+                  for (let i = 0; i < matchedWords.length; i++) {
+                    const wordPos = mentionText.indexOf(matchedWords[i], searchPos);
+                    if (wordPos !== -1) {
+                      searchPos = wordPos + matchedWords[i].length;
+                    } else {
+                      break;
+                    }
+                  }
+                  
+                  const matchedPart = mentionText.substring(0, searchPos);
+                  const remainingPart = mentionText.substring(searchPos);
+                  const matchedUser = matchResult.user;
+                  
+                  result.push(
+                    <button
+                      key={`${index}-mention-${match.index}`}
+                      onClick={() => {
+                        const userId = matchedUser.user_id || matchedUser.id;
+                        if (userId) {
+                          window.location.href = getProfilePath(userId);
+                        } else {
+                          handleUserSearch(matchedPart.trim());
+                        }
+                      }}
+                      style={{ 
+                        color: '#007bff', 
+                        fontWeight: '600',
+                        background: 'none',
+                        border: 'none',
+                        padding: '0',
+                        cursor: 'pointer',
+                        textDecoration: 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.textDecoration = 'underline';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.textDecoration = 'none';
+                      }}
+                    >
+                      @{matchedPart}
+                    </button>
+                  );
+                  
+                  if (remainingPart.trim()) {
+                    result.push(remainingPart);
+                  }
+                }
+              } else {
+                // No match found - but still highlight in blue and make clickable
+                result.push(
+                  <button
+                    key={`${index}-mention-${match.index}`}
+                    onClick={() => handleUserSearch(mentionText)}
+                    style={{ 
+                      color: '#007bff', 
+                      fontWeight: '600',
+                      background: 'none',
+                      border: 'none',
+                      padding: '0',
+                      cursor: 'pointer',
+                      textDecoration: 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.textDecoration = 'underline';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.textDecoration = 'none';
+                    }}
+                  >
+                    @{mentionText}
+                  </button>
+                );
+              }
+            } else {
+              // No match found - but still highlight in blue and make clickable
+              result.push(
+                <button
+                  key={`${index}-mention-${match.index}`}
+                  onClick={() => handleUserSearch(mentionText)}
+                  style={{ 
+                    color: '#007bff', 
+                    fontWeight: '600',
+                    background: 'none',
+                    border: 'none',
+                    padding: '0',
+                    cursor: 'pointer',
+                    textDecoration: 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.textDecoration = 'underline';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.textDecoration = 'none';
+                  }}
+                >
+                  @{mentionText}
+                </button>
+              );
+            }
+          } else {
+            // No match found - but still highlight in blue and make clickable
+            result.push(
+              <button
+                key={`${index}-mention-${match.index}`}
+                onClick={() => handleUserSearch(mentionText)}
+                style={{ 
+                  color: '#007bff', 
+                  fontWeight: '600',
+                  background: 'none',
+                  border: 'none',
+                  padding: '0',
+                  cursor: 'pointer',
+                  textDecoration: 'none'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                @{mentionText}
+              </button>
+            );
+          }
+        }
+        
+        lastIndex = mentionRegex.lastIndex;
+      }
+      
+      // Add remaining text after the last mention
+      if (lastIndex < part.length) {
+        result.push(part.substring(lastIndex));
+      }
+      
+      // If no mentions found, return the original part
+      if (result.length === 0) {
+        return part;
+      }
+      
+      return result;
     });
   };
 
@@ -269,7 +556,11 @@ const Reply: React.FC<ReplyProps> = ({
         {/* Reply Content Container */}
         <div style={{
           backgroundColor: isHighlighted ? (highlightColor || '#fff2e6') : '#f0f2f5',
-          boxShadow: isHighlighted ? '0 0 0 2px rgba(255,137,33,0.25)' : 'none',
+          boxShadow: isHighlighted && highlightColor === '#fff3e0' 
+            ? '0 0 0 2px rgba(255,137,33,0.25)' 
+            : isHighlighted && highlightColor === '#fff8e1'
+              ? '0 0 0 1px #ffb74d'
+              : 'none',
           transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
           borderRadius: '18px',
           padding: '6px 10px',
@@ -455,7 +746,12 @@ const Reply: React.FC<ReplyProps> = ({
               onClick={() => {
                 setShowReplyInput(!showReplyInput);
                 if (!showReplyInput) {
-                  setReplyContent(`@${userName} `);
+                  // Only add mention if not replying to your own reply
+                  if (!isOwnReply) {
+                    setReplyContent(`@${userName} `);
+                  } else {
+                    setReplyContent('');
+                  }
                 }
               }}
               style={{
@@ -545,7 +841,7 @@ const Reply: React.FC<ReplyProps> = ({
                   flexShrink: 0
                 }}
               />
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, position: 'relative' }}>
                 <textarea
                   value={replyContent}
                   onChange={(e) => setReplyContent(e.target.value)}
@@ -554,7 +850,7 @@ const Reply: React.FC<ReplyProps> = ({
                     width: '100%',
                     minHeight: '32px',
                     maxHeight: '120px',
-                    padding: '8px 12px',
+                    padding: '10px 0px 10px 5px',
                     border: '1px solid #ccd0d5',
                     borderRadius: '18px',
                     fontSize: '13px',
@@ -573,6 +869,88 @@ const Reply: React.FC<ReplyProps> = ({
                     }
                   }}
                 />
+                {/* Emoji Button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowEmojiPicker(!showEmojiPicker);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '50%',
+                    width: '20px',
+                    height: '20px',
+                    transition: 'background-color 0.2s ease, color 0.2s ease',
+                    color: '#65676b',
+                    zIndex: 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                    e.currentTarget.style.color = '#333';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = '#65676b';
+                  }}
+                  title="Add emoji"
+                >
+                  <svg 
+                    width="16" 
+                    height="16" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    xmlns="http://www.w3.org/2000/svg"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
+                    <circle cx="15.5" cy="9.5" r="1.5" fill="currentColor" />
+                    <path d="M8 14c1.5 2.5 4.5 2.5 6 0" />
+                  </svg>
+                </button>
+                {/* Emoji Picker */}
+                {showEmojiPicker && (
+                  <div
+                    ref={emojiPickerRef}
+                    style={{
+                      position: 'absolute',
+                      bottom: 'calc(100% + 8px)',
+                      right: 0,
+                      zIndex: 1000,
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      background: '#fff',
+                      border: '1px solid #e0e0e0',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <EmojiPicker
+                      onEmojiClick={(emojiData: EmojiClickData) => {
+                        setReplyContent(prev => prev + emojiData.emoji);
+                      }}
+                      width={280}
+                      height={320}
+                      previewConfig={{ showPreview: false }}
+                      skinTonesDisabled
+                    />
+                  </div>
+                )}
                 <div style={{ 
                   display: 'flex', 
                   gap: '8px', 
@@ -631,6 +1009,17 @@ const Reply: React.FC<ReplyProps> = ({
           </div>
         )}
       </div>
+
+      {/* Delete Reply Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteReplyModal}
+        title="Delete Reply"
+        message="Are you sure you want to delete this reply?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteReply}
+        onCancel={() => setShowDeleteReplyModal(false)}
+      />
     </div>
   );
 };

@@ -3,7 +3,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
 import wherenayouLogo from '../../images/logo.png';
-import { api, getAdminPesoUsers, getUserInfo, fetchNotificationCount, saveRecentSearch, getRecentSearches, deleteRecentSearch } from '../../services/api';
+import { api, getAdminPesoUsers, getUserInfo, saveRecentSearch, getRecentSearches, deleteRecentSearch } from '../../services/api';
 import { RecentSearchWebSocket } from '../../services/recentSearchWebSocket';
 import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
 import { useRealTimeMessages } from '../../hooks/useRealTimeMessages';
@@ -319,20 +319,6 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showProfile, setShowProfile]);
-
-  // Listen for user data updates from Settings
-  React.useEffect(() => {
-    const handleUserDataUpdate = (event: CustomEvent) => {
-      console.log('User data updated event received in AlumniTopBar:', event.detail);
-      // No specific action needed here as AlumniTopBar doesn't display user profile data
-    };
-
-    window.addEventListener('userDataUpdated', handleUserDataUpdate as EventListener);
-    
-    return () => {
-      window.removeEventListener('userDataUpdated', handleUserDataUpdate as EventListener);
-    };
-  }, []);
 
   React.useEffect(() => {
     const handleRecentSearchUpdate = (event: Event) => {
@@ -1114,18 +1100,6 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
             {notificationCount}
           </span>
         )}
-        {/* WebSocket connection indicator */}
-        {/* <span style={{
-            position: 'absolute',
-            top: -2,
-            right: -2,
-            width: 8,
-            height: 8,
-            backgroundColor: '#4CAF50',
-            borderRadius: '50%',
-            border: '2px solid white',
-            pointerEvents: 'none'
-          }} title="Real-time notifications connected" /> */}
         <span style={{ 
           color: 'white', 
           fontSize: isCompactTopBar ? 11 : 12, 

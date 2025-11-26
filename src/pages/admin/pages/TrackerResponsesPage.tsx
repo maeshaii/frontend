@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
-import { fetchTrackerResponses, fetchAlumniDetails, getInventoryItems, giveReward, getUserPoints, getRewardHistory, getEngagementPointsSettings } from '../../../services/api';
+import { fetchTrackerResponses, fetchEmploymentHistoryRespondents, fetchAlumniDetails, getInventoryItems, giveReward, getUserPoints, getRewardHistory, getEngagementPointsSettings } from '../../../services/api';
 import { HiOutlineGift, HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList } from 'react-icons/hi2';
 
 interface TrackerResponse {
@@ -62,12 +62,12 @@ const TrackerResponsesPage: React.FC = () => {
   const [pointsSettings, setPointsSettings] = useState({
     enabled: true,
     like: 1,
-    comment: 3,
-    share: 5,
-    reply: 2,
-    post: 0,
-    post_with_photo: 15,
-    tracker_form: 0
+    comment: 2, 
+    share: 3,
+    reply: 3,
+    post: 5,
+    post_with_photo: 10,
+    tracker_form: 10
   });
 
   useEffect(() => {
@@ -95,43 +95,17 @@ const TrackerResponsesPage: React.FC = () => {
   const fetchTrackerResponsesWithDetails = async () => {
     setLoading(true);
     try {
-      const response = await fetchTrackerResponses();
+      // Fetch users who have filled out their employment history
+      const response = await fetchEmploymentHistoryRespondents();
       if (response && response.success && response.responses) {
-        const currentYear = new Date().getFullYear();
-        
-        // Filter responses to only include those submitted in the current year
-        const currentYearResponses = response.responses.filter((resp: any) => {
-          if (!resp.submitted_at) return false;
-          const submittedDate = new Date(resp.submitted_at);
-          return submittedDate.getFullYear() === currentYear;
-        });
-        
-        // Fetch user details to get graduation year
-        const responsesWithDetails = await Promise.all(
-          currentYearResponses.map(async (resp: any) => {
-            try {
-              const userDetails = await fetchAlumniDetails(resp.user_id);
-              return {
-                ...resp,
-                year_graduated: userDetails?.alumni?.year_graduated || userDetails?.alumni?.batch || null,
-                program: userDetails?.alumni?.program || null
-              };
-            } catch (error) {
-              console.error(`Error fetching details for user ${resp.user_id}:`, error);
-              return {
-                ...resp,
-                year_graduated: null,
-                program: null
-              };
-            }
-          })
-        );
-        setTrackerResponses(responsesWithDetails);
+        // The response already includes program and year_graduated, so we can use it directly
+        // No need to filter by year or fetch additional details
+        setTrackerResponses(response.responses);
       } else {
         setTrackerResponses([]);
       }
     } catch (error) {
-      console.error('Error fetching tracker responses:', error);
+      console.error('Error fetching employment history respondents:', error);
       setTrackerResponses([]);
     } finally {
       setLoading(false);
@@ -249,6 +223,10 @@ const TrackerResponsesPage: React.FC = () => {
     return Number(b) - Number(a);
   });
 
+  const totalResponses = trackerResponses.length;
+  const totalRewardsGiven = trackerRewardHistory.length;
+  const uniquePrograms = new Set(trackerResponses.filter(r => r.program).map(r => r.program)).size;
+
   const styles = {
     container: {
       display: 'flex',
@@ -264,9 +242,15 @@ const TrackerResponsesPage: React.FC = () => {
       backgroundColor: '#f0f4f8'
     },
     pageHeader: {
-      backgroundColor: '#b8daf0',
+      backgroundColor: '#ffffff',
       padding: '32px 40px',
-      marginBottom: '32px'
+      marginBottom: '32px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: '20px',
+      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+      borderBottom: '1px solid #e5e7eb'
     },
     headerTitle: {
       fontSize: '32px',
@@ -278,7 +262,7 @@ const TrackerResponsesPage: React.FC = () => {
     },
     headerSubtitle: {
       fontSize: '14px',
-      color: '#4a5568',
+      color: '#6b7280',
       marginTop: '8px',
       fontWeight: '400'
     },
@@ -369,39 +353,36 @@ const TrackerResponsesPage: React.FC = () => {
       <div style={styles.mainContent}>
         {/* Page Header */}
         <div style={styles.pageHeader}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <h1 style={styles.headerTitle}>TRACKER RESPONDENTS</h1>
-              <p style={styles.headerSubtitle}>Reward users who answered the tracker form</p>
-            </div>
-            <button
-              onClick={() => navigate('/rewards')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                background: 'white',
-                border: '2px solid #1e3a5f',
-                color: '#1e3a5f',
-                fontSize: '15px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                padding: '12px 24px',
-                borderRadius: '10px',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#1e3a5f';
-                e.currentTarget.style.color = 'white';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'white';
-                e.currentTarget.style.color = '#1e3a5f';
-              }}
-            >
-              <span style={{ fontSize: '18px' }}>←</span>
-              <span>Back to Rewards</span>
-            </button>
+          <button
+            onClick={() => navigate('/rewards')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '44px',
+              height: '44px',
+              background: '#1e3a5f',
+              border: 'none',
+              borderRadius: '10px',
+              color: 'white',
+              fontSize: '22px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              marginRight: '5px',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#16345c';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#1e3a5f';
+            }}
+          >
+            <span style={{ lineHeight: 1 }}>←</span>
+          </button>
+          <div style={{ flex: 1 }}>
+            <h1 style={styles.headerTitle}>TRACKER RESPONDENTS</h1>
+            <p style={styles.headerSubtitle}>Reward users who answered the tracker form</p>
           </div>
         </div>
 
@@ -495,7 +476,7 @@ const TrackerResponsesPage: React.FC = () => {
                 ) : trackerResponses.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
                     <div style={{ fontSize: '48px', marginBottom: '8px' }}>📋</div>
-                    <div>No tracker form responses found</div>
+                    <div>No employment history responses found</div>
                   </div>
                 ) : (
                   <div style={{

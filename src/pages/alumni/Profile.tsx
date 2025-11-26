@@ -8,8 +8,11 @@ import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, de
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
-import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye, HiOutlineXMark, HiOutlineInformationCircle, HiOutlineTicket, HiOutlineMagnifyingGlass } from 'react-icons/hi2';
+import { HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList, HiOutlineGift, HiOutlineCheckCircle, HiOutlineEye, HiOutlineXMark, HiOutlineInformationCircle, HiOutlineTicket, HiOutlineMagnifyingGlass, HiOutlineGlobeAlt, HiOutlineEnvelope, HiOutlineCheck } from 'react-icons/hi2';
+import { getImageUrl } from '../../utils/profilePicUtils';
 import EarnPointsModal from '../../components/EarnPointsModal';
+import PhotoGalleryModal from '../../components/PhotoGalleryModal';
+import { toast } from '../../utils/toast';
 
 function getCurrentUserId(user: AlumniUser | null): number | null {
   if (!user) return null;
@@ -162,6 +165,16 @@ interface PostItem {
   liked_by_user?: boolean;
 }
 
+type RewardDialogState = {
+  mode: 'confirm' | 'status';
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm?: () => void;
+  variant?: 'success' | 'error' | 'info';
+};
+
 const AlumniProfile: React.FC = () => {
   const [user, setUser] = useState<AlumniUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -169,6 +182,8 @@ const AlumniProfile: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id?: string }>();
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [chooseProfilePicModalOpen, setChooseProfilePicModalOpen] = useState(false);
+  const [updateProfilePicModalOpen, setUpdateProfilePicModalOpen] = useState(false);
   const [editProfilePic, setEditProfilePic] = useState<string | undefined>(user?.profile_pic);
   const [editBio, setEditBio] = useState<string>(user?.profile_bio || '');
   const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
@@ -190,6 +205,8 @@ const AlumniProfile: React.FC = () => {
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [following, setFollowing] = useState<any[]>([]);
   const [allMembers, setAllMembers] = useState<any[]>([]);
+  const [showAllPhotosModal, setShowAllPhotosModal] = useState(false);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [showOptions, setShowOptions] = useState<{ [key: string | number]: boolean }>({});
   const [editingPost, setEditingPost] = useState<{ [key: number]: boolean }>({});
   const [editingComment, setEditingComment] = useState<{ [key: number]: boolean }>({});
@@ -219,6 +236,8 @@ const AlumniProfile: React.FC = () => {
   const [rewardsLoading, setRewardsLoading] = useState(false);
   const [claimingReward, setClaimingReward] = useState<number | null>(null);
   const [cancellingReward, setCancellingReward] = useState<number | null>(null);
+  const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
+  const [requestToCancel, setRequestToCancel] = useState<number | null>(null);
   const [recentlyClaimedRewardIds, setRecentlyClaimedRewardIds] = useState<number[]>([]);
   const [userRewardRequests, setUserRewardRequests] = useState<any[]>([]);
   const [showApprovedRewardsModal, setShowApprovedRewardsModal] = useState(false);
@@ -228,6 +247,7 @@ const AlumniProfile: React.FC = () => {
   const [showMonthlyLimitModal, setShowMonthlyLimitModal] = useState(false);
   const [showConfirmRequestModal, setShowConfirmRequestModal] = useState(false);
   const [pendingRewardRequest, setPendingRewardRequest] = useState<{id: number; name: string; value: string; type?: string} | null>(null);
+  const [rewardDialog, setRewardDialog] = useState<RewardDialogState | null>(null);
   const [employmentData, setEmploymentData] = useState<any>(null);
   const [employmentLoading, setEmploymentLoading] = useState(false);
   const [showEarnPointsModal, setShowEarnPointsModal] = useState(false);
@@ -1130,82 +1150,112 @@ getPosts()
     const request = userRewardRequests.find(req => req.request_id === requestId);
     if (!request) return;
 
-    const confirm = window.confirm(`Claim "${request.reward_name}"?\n\nPoints will be deducted: ${request.points_cost}`);
-    if (!confirm) return;
+    const executeClaim = async () => {
+      try {
+        setClaimingReward(requestId);
+        const response = await claimRewardRequest(requestId);
+        
+        if (response.success) {
+          setRewardDialog({
+            mode: 'status',
+            title: 'Reward Claimed',
+            message: response.message || `Reward "${request.reward_name}" claimed successfully!`,
+            confirmLabel: 'Great!',
+            variant: 'success'
+          });
+          setRecentlyClaimedRewardIds((prev) => prev.includes(requestId) ? prev : [...prev, requestId]);
 
-    try {
-      setClaimingReward(requestId);
-      const response = await claimRewardRequest(requestId);
-      
-      if (response.success) {
-        alert(response.message || 'Reward claimed successfully!');
-        setRecentlyClaimedRewardIds((prev) => prev.includes(requestId) ? prev : [...prev, requestId]);
-
-        const updatedRequestData = response.request || response.reward_request || null;
-        setUserRewardRequests((prev) =>
-          prev.map((req) => {
-            if (req.request_id !== requestId) return req;
+          const updatedRequestData = response.request || response.reward_request || null;
+          setUserRewardRequests((prev) =>
+            prev.map((req) => {
+              if (req.request_id !== requestId) return req;
+              const merged = {
+                ...req,
+                ...updatedRequestData,
+                status: updatedRequestData?.status || 'claimed',
+                claimed_at: updatedRequestData?.claimed_at || new Date().toISOString()
+              };
+              return merged;
+            })
+          );
+          setSelectedRewardDetail((prev: any | null) => {
+            if (!prev || prev.request_id !== requestId) return prev;
             const merged = {
-              ...req,
+              ...prev,
               ...updatedRequestData,
               status: updatedRequestData?.status || 'claimed',
               claimed_at: updatedRequestData?.claimed_at || new Date().toISOString()
             };
             return merged;
-          })
-        );
-        setSelectedRewardDetail((prev: any | null) => {
-          if (!prev || prev.request_id !== requestId) return prev;
-          const merged = {
-            ...prev,
-            ...updatedRequestData,
-            status: updatedRequestData?.status || 'claimed',
-            claimed_at: updatedRequestData?.claimed_at || new Date().toISOString()
-          };
-          return merged;
-        });
-        
-        // Refresh points
-        if (currentId) {
-          try {
-            const pointsData = await getUserPoints(Number(currentId));
-            setUserPoints(pointsData);
-          } catch (err) {
-            console.error('Error refreshing points:', err);
+          });
+          
+          if (currentId) {
+            try {
+              const pointsData = await getUserPoints(Number(currentId));
+              setUserPoints(pointsData);
+            } catch (err) {
+              console.error('Error refreshing points:', err);
+            }
           }
+          
+          await fetchUserRewardRequests();
+          await fetchInventoryItems();
+        } else {
+          setRewardDialog({
+            mode: 'status',
+            title: 'Unable to Claim Reward',
+            message: response.message || 'Failed to claim reward',
+            confirmLabel: 'OK',
+            variant: 'error'
+          });
         }
-        
-        // Refresh requests
-        await fetchUserRewardRequests();
-        
-        // Refresh inventory
-        await fetchInventoryItems();
-      } else {
-        alert(response.message || 'Failed to claim reward');
+      } catch (error: any) {
+        console.error('Error claiming reward:', error);
+        setRewardDialog({
+          mode: 'status',
+          title: 'Unable to Claim Reward',
+          message: error.response?.data?.message || 'Failed to claim reward',
+          confirmLabel: 'OK',
+          variant: 'error'
+        });
+      } finally {
+        setClaimingReward(null);
       }
-    } catch (error: any) {
-      console.error('Error claiming reward:', error);
-      alert(error.response?.data?.message || 'Failed to claim reward');
-    } finally {
-      setClaimingReward(null);
-    }
+    };
+
+    setRewardDialog({
+      mode: 'confirm',
+      title: 'Claim Reward',
+      message: `Claim "${request.reward_name}"?\n\nPoints will be deducted: ${request.points_cost}`,
+      confirmLabel: 'Claim Reward',
+      cancelLabel: 'Not now',
+      onConfirm: () => {
+        setRewardDialog(null);
+        void executeClaim();
+      }
+    });
   };
 
-  const handleCancelReward = async (requestId: number) => {
+  const handleCancelReward = (requestId: number) => {
     if (cancellingReward === requestId) return;
     const request = userRewardRequests.find((req) => req.request_id === requestId);
     if (!request) return;
     if (!['pending', 'approved', 'ready_for_pickup'].includes(request.status)) {
-      alert('This request can no longer be cancelled.');
+      toast.warning('This request can no longer be cancelled.');
       return;
     }
-    const confirm = window.confirm(`Cancel your request for "${request.reward_name}"?`);
-    if (!confirm) return;
+    setRequestToCancel(requestId);
+    setShowCancelConfirmModal(true);
+  };
+
+  const confirmCancelReward = async () => {
+    if (!requestToCancel) return;
+    const requestId = requestToCancel;
     try {
       setCancellingReward(requestId);
+      setShowCancelConfirmModal(false);
       const response = await cancelRewardRequest(requestId);
       if (response.success) {
-        alert(response.message || 'Reward request cancelled.');
         await fetchUserRewardRequests();
         await fetchInventoryItems();
         if (selectedRewardDetail?.request_id === requestId) {
@@ -1213,14 +1263,17 @@ getPosts()
             prev ? { ...prev, status: 'cancelled', notes: response.request?.notes || prev.notes } : prev
           );
         }
+        // Show success notification
+        toast.success(response.message || 'Reward request cancelled successfully');
       } else {
-        alert(response.message || 'Unable to cancel request.');
+        toast.error(response.message || 'Unable to cancel request.');
       }
     } catch (error: any) {
       console.error('Error cancelling reward request:', error);
-      alert(error.response?.data?.message || 'Failed to cancel request.');
+      toast.error(error.response?.data?.message || 'Failed to cancel request.');
     } finally {
       setCancellingReward(null);
+      setRequestToCancel(null);
     }
   };
 
@@ -1267,6 +1320,92 @@ getPosts()
     setEditProfilePic(user?.profile_pic || undefined);
     setEditBio(user?.profile_bio || '');
     setEditModalOpen(true);
+  };
+
+  const handleEditProfilePicture = () => {
+    // Open the first modal: Choose Profile Picture
+    setChooseProfilePicModalOpen(true);
+  };
+
+  const handleChooseFromGallery = () => {
+    // Trigger file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.onchange = (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const file = target.files?.[0];
+      if (file) {
+        setProfilePicFile(file);
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setEditProfilePic(ev.target?.result as string);
+          // Close first modal and open second modal
+          setChooseProfilePicModalOpen(false);
+          setUpdateProfilePicModalOpen(true);
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    fileInput.click();
+  };
+
+  const handleChooseDifferentPhoto = () => {
+    // Close update modal and open choose modal again
+    setUpdateProfilePicModalOpen(false);
+    setChooseProfilePicModalOpen(true);
+  };
+
+  const handleSaveProfilePicture = async () => {
+    if (!profilePicFile) {
+      alert('Please choose a photo to upload');
+      return;
+    }
+
+    const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+    const userId = userObj.user_id || userObj.id;
+    if (!userId) {
+      alert('User ID not found. Please log in again.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('profile_pic', profilePicFile);
+    formData.append('bio', editBio);
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(
+        `http://127.0.0.1:8000/api/alumni/profile/update/?user_id=${userId}`,
+        {
+          method: 'PUT',
+          body: formData,
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const updatedUser = {
+          ...userObj,
+          ...data.user,
+          profile_pic: data.user.profile_pic + '?t=' + new Date().getTime(), // force reload
+        };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+        // Dispatch custom event to notify other components (like messaging) of profile update
+        window.dispatchEvent(new CustomEvent('profileUpdated'));
+        setUpdateProfilePicModalOpen(false);
+        setProfilePicFile(null);
+        setEditProfilePic(undefined);
+        alert('Profile picture updated successfully.');
+      } else {
+        const err = await response.json();
+        alert('Failed to update profile: ' + (err.message || 'Unknown error'));
+      }
+    } catch (error) {
+      alert('Network error: ' + error);
+    }
   };
 
   const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1718,6 +1857,32 @@ getPosts()
   const isAdmin = currentUser?.account_type?.admin || currentUser?.account_type?.ccict;
   const isPeso = currentUser?.account_type?.peso;
 
+  // Extract all images from user's posts
+  const getAllPostImages = (): string[] => {
+    const allImages: string[] = [];
+    
+    posts.forEach((post) => {
+      // Handle multiple images
+      if (post.post_images && post.post_images.length > 0) {
+        const sortedImages = [...post.post_images].sort((a, b) => a.order - b.order);
+        sortedImages.forEach(img => {
+          if (img.image_url && !allImages.includes(img.image_url)) {
+            allImages.push(img.image_url);
+          }
+        });
+      }
+      // Handle single image (backward compatibility)
+      else if (post.post_image && !allImages.includes(post.post_image)) {
+        allImages.push(post.post_image);
+      }
+    });
+    
+    return allImages;
+  };
+
+  const allPostImages = getAllPostImages();
+  const displayPhotos = allPostImages.slice(0, 9); // Show first 9 photos
+
   return (
     <div className="profile-container">
       <AlumniTopBar
@@ -1771,7 +1936,6 @@ getPosts()
               <div className="profile-contact-info">
                 {/* Social Media */}
                 <div className="profile-contact-item">
-                  <span className="profile-contact-label">Social Media:</span>
                   {user.social_media && user.social_media.trim() ? (
                     <div className="profile-contact-display">
                       <a 
@@ -1779,7 +1943,9 @@ getPosts()
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="profile-contact-link"
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                       >
+                        <HiOutlineGlobeAlt size={16} />
                         {formatSocialMediaLink(user.social_media).platform}
                       </a>
                       {isOwnProfile && (
@@ -1801,23 +1967,29 @@ getPosts()
                         setSocialMediaInput('');
                         setSocialMediaModalOpen(true);
                       }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                     >
+                      <HiOutlineGlobeAlt size={16} />
                       Add social media acc
                     </button>
                   ) : (
-                    <span className="profile-contact-empty">No social media added</span>
+                    <span className="profile-contact-empty" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <HiOutlineGlobeAlt size={16} />
+                      No social media added
+                    </span>
                   )}
                 </div>
 
                 {/* Email */}
                 <div className="profile-contact-item">
-                  <span className="profile-contact-label">Email:</span>
                   {user.email && user.email.trim() ? (
                     <div className="profile-contact-display">
                       <a 
                         href={`mailto:${user.email}`}
                         className="profile-contact-link"
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                       >
+                        <HiOutlineEnvelope size={16} />
                         {user.email}
                       </a>
                       {isOwnProfile && (
@@ -1839,11 +2011,16 @@ getPosts()
                         setEmailInput('');
                         setEmailModalOpen(true);
                       }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                     >
+                      <HiOutlineEnvelope size={16} />
                       Add Email
                     </button>
                   ) : (
-                    <span className="profile-contact-empty">No email added</span>
+                    <span className="profile-contact-empty" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <HiOutlineEnvelope size={16} />
+                      No email added
+                    </span>
                   )}
                 </div>
               </div>
@@ -2236,6 +2413,111 @@ getPosts()
             </div>
           </div>
           )}
+
+          {/* Photos Section */}
+          {allPostImages.length > 0 && (
+            <div style={{ 
+              marginBottom: '24px',
+              background: 'white',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              padding: '16px',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+            }}>
+              <div className="profile-followers-header" style={{ marginBottom: '12px' }}>
+                <div className="profile-followers-title">Photos ({allPostImages.length})</div>
+                {allPostImages.length > 9 && (
+                  <div
+                    className="profile-followers-seeall"
+                    onClick={() => {
+                      setCurrentPhotoIndex(0);
+                      setShowAllPhotosModal(true);
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    See all
+                  </div>
+                )}
+              </div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '4px',
+                borderRadius: '8px',
+                overflow: 'hidden'
+              }}>
+                {displayPhotos.map((imageUrl, index) => {
+                  const isLastPhoto = index === displayPhotos.length - 1;
+                  const hasMorePhotos = allPostImages.length > 9;
+                  const remainingPhotos = allPostImages.length - 9;
+                  
+                  return (
+                    <div
+                      key={index}
+                      style={{
+                        aspectRatio: '1',
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        backgroundColor: '#e0e0e0'
+                      }}
+                      onClick={() => {
+                        const clickedIndex = allPostImages.indexOf(imageUrl);
+                        setCurrentPhotoIndex(clickedIndex);
+                        setShowAllPhotosModal(true);
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.opacity = '0.9';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.opacity = '1';
+                      }}
+                    >
+                      <img
+                        src={getImageUrl(imageUrl)}
+                        alt={`Photo ${index + 1}`}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          display: 'block'
+                        }}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                        }}
+                      />
+                      {isLastPhoto && hasMorePhotos && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '16px',
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => {
+                            setCurrentPhotoIndex(0);
+                            setShowAllPhotosModal(true);
+                          }}
+                        >
+                          +{remainingPhotos} photos
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Center Content */}
@@ -2255,7 +2537,7 @@ getPosts()
                 {isOwnProfile && (
                   <button
                     className="profile-edit-pic-button"
-                    onClick={handleEditProfile}
+                    onClick={handleEditProfilePicture}
                     aria-label="Edit profile picture"
                     title="Edit profile picture"
                   >
@@ -2366,6 +2648,7 @@ getPosts()
                     user: { 
                       user_id: repostItem.user?.user_id || 0, 
                       f_name: repostItem.user?.f_name, 
+                      m_name: repostItem.user?.m_name,
                       l_name: repostItem.user?.l_name, 
                       profile_pic: repostItem.user?.profile_pic 
                     },
@@ -2955,13 +3238,6 @@ getPosts()
             >
               ×
             </button>
-            <h2 style={{
-              fontSize: '18px',
-              fontWeight: '600',
-              color: '#2c2c2c',
-              marginBottom: '16px',
-              textAlign: 'center'
-            }}>Edit Profile</h2>
             
             {/* Profile Pic Section */}
             <div style={{ 
@@ -3141,6 +3417,305 @@ getPosts()
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Choose Profile Picture Modal */}
+      {chooseProfilePicModalOpen && (
+        <div 
+          className="profile-edit-modal-overlay" 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setChooseProfilePicModalOpen(false);
+            }
+          }}
+        >
+          <div style={{
+            background: '#fff',
+            borderRadius: '16px',
+            padding: '24px',
+            maxWidth: '360px',
+            width: '90%',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)',
+            position: 'relative'
+          }}>
+            <h2 style={{
+              margin: '0 0 24px 0',
+              fontSize: '20px',
+              fontWeight: '600',
+              textAlign: 'center',
+              color: '#333'
+            }}>
+              Choose Profile Picture
+            </h2>
+            
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <button
+                onClick={handleChooseFromGallery}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '14px 16px',
+                  backgroundColor: '#fff',
+                  color: '#174f84',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                  e.currentTarget.style.borderColor = '#174f84';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fff';
+                  e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                }}
+              >
+                <HiOutlineCamera size={20} color="#174f84" />
+                <span>Choose from Gallery</span>
+              </button>
+
+              <button
+                onClick={() => setChooseProfilePicModalOpen(false)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '14px 16px',
+                  backgroundColor: '#fff',
+                  color: '#333',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fff';
+                }}
+              >
+                <HiOutlineXMark size={20} color="#333" />
+                <span>Cancel</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update Profile Picture Modal */}
+      {updateProfilePicModalOpen && (
+        <div 
+          className="profile-edit-modal-overlay" 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setUpdateProfilePicModalOpen(false);
+              setProfilePicFile(null);
+              setEditProfilePic(undefined);
+            }
+          }}
+        >
+          <div style={{
+            background: '#fff',
+            borderRadius: '16px',
+            padding: '24px',
+            maxWidth: '360px',
+            width: '90%',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)',
+            position: 'relative'
+          }}>
+            <h2 style={{
+              margin: '0 0 20px 0',
+              fontSize: '20px',
+              fontWeight: '600',
+              textAlign: 'center',
+              color: '#333'
+            }}>
+              Update Profile Picture
+            </h2>
+            
+            {/* Preview */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              marginBottom: '20px'
+            }}>
+              <div style={{
+                width: '120px',
+                height: '120px',
+                borderRadius: '50%',
+                overflow: 'hidden',
+                border: '2px solid rgba(0, 0, 0, 0.1)',
+                marginBottom: '12px'
+              }}>
+                <img
+                  src={editProfilePic || (user?.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo)}
+                  alt="Profile Preview"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover'
+                  }}
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null;
+                    target.src = ctulogo as unknown as string;
+                  }}
+                />
+              </div>
+              <p style={{
+                margin: 0,
+                fontSize: '13px',
+                color: '#666',
+                textAlign: 'center'
+              }}>
+                Preview of your new profile picture
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <button
+                onClick={handleChooseDifferentPhoto}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '14px 16px',
+                  backgroundColor: '#fff',
+                  color: '#174f84',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                  e.currentTarget.style.borderColor = '#174f84';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fff';
+                  e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                }}
+              >
+                <HiOutlineCamera size={20} color="#174f84" />
+                <span>Choose Different Photo</span>
+              </button>
+
+              <button
+                onClick={handleSaveProfilePicture}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '14px 16px',
+                  backgroundColor: '#174f84',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'center',
+                  boxShadow: '0 2px 8px rgba(23, 79, 132, 0.25)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#0f3d6b';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(23, 79, 132, 0.35)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#174f84';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(23, 79, 132, 0.25)';
+                }}
+              >
+                <HiOutlineCheck size={20} color="#fff" />
+                <span>Save Profile Picture</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setUpdateProfilePicModalOpen(false);
+                  setProfilePicFile(null);
+                  setEditProfilePic(undefined);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '14px 16px',
+                  backgroundColor: '#fff',
+                  color: '#333',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fff';
+                }}
+              >
+                <HiOutlineXMark size={20} color="#333" />
+                <span>Cancel</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -4863,7 +5438,8 @@ getPosts()
                                                  req.reward_type?.toLowerCase().includes('item');
                             // Only vouchers can be claimed by user, merchandise must be released by admin
                             const canClaim = isApproved && !isClaimed && !isMerchandise;
-                            const canCancel = isPending || (isApproved && !isClaimed);
+                            // Only pending requests can be cancelled (backend restriction)
+                            const canCancel = isPending;
 
                   return (
                               <tr 
@@ -5637,11 +6213,457 @@ getPosts()
         </div>
       )}
 
+      {rewardDialog && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '20px',
+            backdropFilter: 'blur(2px)'
+          }}
+          onClick={() => {
+            if (rewardDialog.mode === 'status') {
+              setRewardDialog(null);
+            }
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '18px',
+              padding: '28px',
+              width: '100%',
+              maxWidth: '420px',
+              boxShadow: '0 25px 60px rgba(15, 23, 42, 0.25)',
+              borderTop: `4px solid ${
+                rewardDialog.variant === 'error'
+                  ? '#b91c1c'
+                  : rewardDialog.variant === 'success'
+                    ? '#15803d'
+                    : '#1e3a5f'
+              }`
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p
+              style={{
+                color: '#0f172a',
+                marginBottom: '24px',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-line',
+                marginTop: '8px'
+              }}
+            >
+              {rewardDialog.message}
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              {rewardDialog.mode === 'confirm' && (
+                <button
+                  onClick={() => setRewardDialog(null)}
+                  style={{
+                    padding: '12px 20px',
+                    borderRadius: '10px',
+                    border: '1px solid #e2e8f0',
+                    background: '#fff',
+                    color: '#475569',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    minWidth: '120px'
+                  }}
+                >
+                  {rewardDialog.cancelLabel || 'Cancel'}
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (rewardDialog.mode === 'confirm') {
+                    rewardDialog.onConfirm?.();
+                  } else {
+                    setRewardDialog(null);
+                  }
+                }}
+                style={{
+                  padding: '12px 20px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background:
+                    rewardDialog.variant === 'error'
+                      ? '#b91c1c'
+                      : rewardDialog.variant === 'success'
+                        ? '#15803d'
+                        : '#1e3a5f',
+                  color: '#fff',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  minWidth: '140px',
+                  boxShadow: '0 10px 20px rgba(15, 23, 42, 0.2)'
+                }}
+              >
+                {rewardDialog.confirmLabel ||
+                  (rewardDialog.mode === 'confirm' ? 'Continue' : 'OK')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Reward Request Confirmation Modal */}
+      {showCancelConfirmModal && requestToCancel && (() => {
+        const request = userRewardRequests.find((req) => req.request_id === requestToCancel);
+        if (!request) return null;
+        
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.6)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '20px',
+              animation: 'fadeIn 0.2s ease-out'
+            }}
+            onClick={() => {
+              if (!cancellingReward) {
+                setShowCancelConfirmModal(false);
+                setRequestToCancel(null);
+              }
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '20px',
+                width: '100%',
+                maxWidth: '500px',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+                border: '1px solid #e5e7eb',
+                overflow: 'hidden',
+                animation: 'slideInModal 0.3s ease-out'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div style={{
+                background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+                padding: '24px 32px',
+                borderBottom: '2px solid #fecaca',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '12px',
+                    backgroundColor: '#dc2626',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '24px',
+                    fontWeight: 'bold',
+                    boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)'
+                  }}>
+                    ⚠
+                  </div>
+                  <div>
+                    <h2 style={{
+                      margin: 0,
+                      fontSize: '24px',
+                      fontWeight: '700',
+                      color: '#991b1b',
+                      letterSpacing: '-0.3px'
+                    }}>
+                      Cancel Reward Request
+                    </h2>
+                    <div style={{ fontSize: '14px', color: '#b91c1c', marginTop: '4px', fontWeight: '500' }}>
+                      Are you sure you want to cancel?
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!cancellingReward) {
+                      setShowCancelConfirmModal(false);
+                      setRequestToCancel(null);
+                    }
+                  }}
+                  disabled={!!cancellingReward}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.8)',
+                    border: 'none',
+                    fontSize: '28px',
+                    cursor: cancellingReward ? 'not-allowed' : 'pointer',
+                    color: '#6b7280',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    transition: 'all 0.2s',
+                    lineHeight: 1,
+                    width: '40px',
+                    height: '40px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: cancellingReward ? 0.5 : 1
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!cancellingReward) {
+                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.color = '#dc2626';
+                      e.currentTarget.style.transform = 'rotate(90deg)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!cancellingReward) {
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+                      e.currentTarget.style.color = '#6b7280';
+                      e.currentTarget.style.transform = 'rotate(0deg)';
+                    }
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div style={{
+                padding: '32px',
+                backgroundColor: '#f9fafb'
+              }}>
+                <div style={{
+                  padding: '20px',
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  border: '1px solid #e5e7eb',
+                  marginBottom: '24px'
+                }}>
+                  <div style={{
+                    fontSize: '16px',
+                    color: '#374151',
+                    marginBottom: '12px',
+                    fontWeight: '600'
+                  }}>
+                    Reward Details:
+                  </div>
+                  <div style={{
+                    fontSize: '18px',
+                    fontWeight: '700',
+                    color: '#1e3a5f',
+                    marginBottom: '8px'
+                  }}>
+                    {request.reward_name}
+                  </div>
+                  <div style={{
+                    fontSize: '14px',
+                    color: '#6b7280',
+                    marginBottom: '4px'
+                  }}>
+                    Type: <span style={{ textTransform: 'capitalize', fontWeight: '600' }}>{request.reward_type || 'N/A'}</span>
+                  </div>
+                  <div style={{
+                    fontSize: '14px',
+                    color: '#6b7280',
+                    marginBottom: '4px'
+                  }}>
+                    Value: <span style={{ fontWeight: '600' }}>{request.reward_value || 'N/A'}</span>
+                  </div>
+                  <div style={{
+                    fontSize: '14px',
+                    color: '#6b7280'
+                  }}>
+                    Points Cost: <span style={{ fontWeight: '600', color: '#dc2626' }}>{request.points_cost || 0} pts</span>
+                  </div>
+                </div>
+                <div style={{
+                  padding: '16px',
+                  backgroundColor: '#fffbeb',
+                  borderRadius: '10px',
+                  border: '1px solid #fde68a',
+                  marginBottom: '24px'
+                }}>
+                  <div style={{
+                    fontSize: '14px',
+                    color: '#92400e',
+                    lineHeight: '1.6'
+                  }}>
+                    <strong>Note:</strong> Cancelling this request will restore your points. This action cannot be undone.
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div style={{
+                padding: '24px 32px',
+                borderTop: '2px solid #f3f4f6',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '12px',
+                backgroundColor: 'white'
+              }}>
+                <button
+                  onClick={() => {
+                    if (!cancellingReward) {
+                      setShowCancelConfirmModal(false);
+                      setRequestToCancel(null);
+                    }
+                  }}
+                  disabled={!!cancellingReward}
+                  style={{
+                    backgroundColor: '#6b7280',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px 28px',
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: cancellingReward ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 8px rgba(107, 114, 128, 0.2)',
+                    letterSpacing: '0.3px',
+                    opacity: cancellingReward ? 0.6 : 1
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!cancellingReward) {
+                      e.currentTarget.style.backgroundColor = '#4b5563';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(107, 114, 128, 0.3)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!cancellingReward) {
+                      e.currentTarget.style.backgroundColor = '#6b7280';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(107, 114, 128, 0.2)';
+                    }
+                  }}
+                >
+                  Keep Request
+                </button>
+                <button
+                  onClick={confirmCancelReward}
+                  disabled={!!cancellingReward}
+                  style={{
+                    backgroundColor: cancellingReward ? '#9ca3af' : '#dc2626',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px 28px',
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: cancellingReward ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: cancellingReward ? 'none' : '0 2px 8px rgba(220, 38, 38, 0.3)',
+                    letterSpacing: '0.3px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!cancellingReward) {
+                      e.currentTarget.style.backgroundColor = '#b91c1c';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.4)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!cancellingReward) {
+                      e.currentTarget.style.backgroundColor = '#dc2626';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 38, 38, 0.3)';
+                    }
+                  }}
+                >
+                  {cancellingReward ? (
+                    <>
+                      <span style={{
+                        display: 'inline-block',
+                        width: '14px',
+                        height: '14px',
+                        border: '2px solid rgba(255, 255, 255, 0.3)',
+                        borderTopColor: 'white',
+                        borderRadius: '50%',
+                        animation: 'spin 0.6s linear infinite'
+                      }}></span>
+                      Cancelling...
+                    </>
+                  ) : (
+                    <>
+                      <span>✓</span>
+                      Yes, Cancel Request
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <style>{`
+                @keyframes fadeIn {
+                  from {
+                    opacity: 0;
+                  }
+                  to {
+                    opacity: 1;
+                  }
+                }
+                @keyframes slideInModal {
+                  from {
+                    transform: scale(0.9) translateY(-20px);
+                    opacity: 0;
+                  }
+                  to {
+                    transform: scale(1) translateY(0);
+                    opacity: 1;
+                  }
+                }
+                @keyframes spin {
+                  to {
+                    transform: rotate(360deg);
+                  }
+                }
+              `}</style>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Earn More Points Modal */}
       <EarnPointsModal
         isOpen={showEarnPointsModal}
         onClose={() => setShowEarnPointsModal(false)}
       />
+
+      {/* All Photos Gallery Modal */}
+      {showAllPhotosModal && allPostImages.length > 0 && (
+        <PhotoGalleryModal
+          isOpen={showAllPhotosModal}
+          onClose={() => setShowAllPhotosModal(false)}
+          images={allPostImages.map(url => getImageUrl(url))}
+          currentIndex={currentPhotoIndex}
+          onPrevious={() => {
+            setCurrentPhotoIndex(prev => (prev > 0 ? prev - 1 : allPostImages.length - 1));
+          }}
+          onNext={() => {
+            setCurrentPhotoIndex(prev => (prev < allPostImages.length - 1 ? prev + 1 : 0));
+          }}
+          onImageClick={(index) => setCurrentPhotoIndex(index)}
+        />
+      )}
     </div>
   );
 };

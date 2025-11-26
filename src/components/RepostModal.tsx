@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import ctulogo from '../images/ctulogo.png';
 import { getProfilePicUrl } from '../utils/profilePicUtils';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 interface RepostModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -26,6 +27,8 @@ interface RepostModalProps {
   formatTime: (iso?: string | null) => string;
 }
 
+const MAX_CAPTION_LENGTH = 1000;
+
 const RepostModal: React.FC<RepostModalProps> = ({
   isOpen,
   onClose,
@@ -35,6 +38,8 @@ const RepostModal: React.FC<RepostModalProps> = ({
   formatTime
 }) => {
   const [caption, setCaption] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
 
   // Resolve the actual logged-in user from localStorage to ensure correctness
   const effectiveCurrentUser = React.useMemo(() => {
@@ -93,8 +98,8 @@ const RepostModal: React.FC<RepostModalProps> = ({
   }, [isOpen]);
 
   const handleSubmit = () => {
-    // Caption is optional, so we can proceed with or without it
-    onRepost(caption || ''); // Pass empty string if no caption
+    const trimmed = caption.trim();
+    onRepost(trimmed || '');
     setCaption('');
     onClose();
   };
@@ -103,6 +108,29 @@ const RepostModal: React.FC<RepostModalProps> = ({
     setCaption('');
     onClose();
   };
+
+  const handleEmojiSelect = (emojiData: EmojiClickData) => {
+    setCaption((prev) => {
+      const next = (prev + emojiData.emoji).slice(0, MAX_CAPTION_LENGTH);
+      return next;
+    });
+  };
+
+  const handleCaptionChange = (value: string) => {
+    setCaption(value.slice(0, MAX_CAPTION_LENGTH));
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showEmojiPicker && emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
 
   if (!isOpen) return null;
 
@@ -114,193 +142,235 @@ const RepostModal: React.FC<RepostModalProps> = ({
         left: 0,
         width: '100vw',
         height: '100vh',
-        backgroundColor: 'rgba(0,0,0,0.7)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
+        backgroundColor: 'rgba(0,0,0,0.45)',
         display: 'flex',
-        alignItems: 'center',
         justifyContent: 'center',
+        alignItems: 'center',
+        padding: '24px 16px',
         zIndex: 9999,
-        animation: 'fadeIn 0.2s ease-out',
-        margin: 0,
-        padding: 0,
-        overflow: 'auto'
+        overflowY: 'auto',
       }}
       onClick={onClose}
     >
       <div
         style={{
-          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-          borderRadius: 14,
-          boxShadow: '0 20px 40px rgba(0,0,0,0.15), 0 8px 16px rgba(0,0,0,0.1)',
-          maxWidth: 360,
-          width: '90%',
-          padding: 20,
-          position: 'relative',
-          border: '1px solid rgba(255,255,255,0.2)',
-          animation: 'slideUp 0.3s ease-out',
+          width: '100%',
+          maxWidth: 430,
+          background: '#fff',
+          borderRadius: 12,
+          boxShadow: '0 15px 40px rgba(15, 23, 42, 0.2)',
+          overflow: 'hidden',
+          animation: 'slideUp 0.25s ease-out',
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close button */}
-        <button
-          onClick={onClose}
+        {/* Header */}
+        <div
           style={{
-            position: 'absolute',
-            top: 12,
-            right: 12,
-            background: 'rgba(0,0,0,0.05)',
-            border: 'none',
-            borderRadius: '50%',
-            width: 28,
-            height: 28,
-            fontSize: 14,
-            cursor: 'pointer',
-            color: '#666',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(0,0,0,0.1)';
-            e.currentTarget.style.color = '#333';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'rgba(0,0,0,0.05)';
-            e.currentTarget.style.color = '#666';
+            justifyContent: 'space-between',
+            padding: '16px 20px',
+            borderBottom: '1px solid #f1f5f9',
           }}
         >
-          ×
-        </button>
-
-        <h2 style={{ 
-          margin: '0 0 16px 0', 
-          fontSize: 18, 
-          fontWeight: '700',
-          background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text',
-          textAlign: 'center',
-        }}>
-          🔄 Repost
-        </h2>
-
-        {/* Current user info - the person who is reposting */}
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          marginBottom: 12,
-          padding: '10px',
-          backgroundColor: 'rgba(59, 130, 246, 0.05)',
-          borderRadius: '8px',
-          border: '1px solid rgba(59, 130, 246, 0.1)',
-        }}>
-          <img
-            src={effectiveCurrentUser.profile_pic || ctulogo}
-            alt="Profile"
+          <button
+            onClick={handleCancel}
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              objectFit: 'cover',
-              marginRight: 10,
-              border: '2px solid rgba(59, 130, 246, 0.2)',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+              background: 'transparent',
+              border: 'none',
+              fontSize: 22,
+              cursor: 'pointer',
+              color: '#111827',
+              padding: 4,
             }}
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.onerror = null;
-              target.src = ctulogo as unknown as string;
+            aria-label="Close repost modal"
+          >
+            ×
+          </button>
+          <div style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Repost</div>
+          <button
+            onClick={handleSubmit}
+            style={{
+              background: 'none',
+              color: '#2563eb',
+              border: 'none',
+              fontSize: 16,
+              fontWeight: 600,
+              cursor: 'pointer',
+              padding: 4,
             }}
-          />
-          <div>
-            <div style={{ fontWeight: '600', fontSize: 15, color: '#1e40af', marginBottom: 1 }}>
-              {effectiveCurrentUser.name}
-            </div>
-            <div style={{ fontSize: 11, color: '#64748b' }}>
-              is reposting
-            </div>
+          >
+            Repost
+          </button>
+        </div>
+
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Current user */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <img
+              src={effectiveCurrentUser.profile_pic || ctulogo}
+              alt="Profile"
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '1px solid #e5e7eb',
+              }}
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.onerror = null;
+                target.src = ctulogo as unknown as string;
+              }}
+            />
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>{effectiveCurrentUser.name}</div>
           </div>
-        </div>
 
-        {/* Caption input */}
-        <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <textarea
-            placeholder="Add a caption (optional)..."
-            value={caption}
-            onChange={(e) => {
-              setCaption(e.target.value);
-              // Auto-resize textarea
-              e.target.style.height = 'auto';
-              e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
-            }}
-            style={{
-              width: '90%',
-              minHeight: 50,
-              maxHeight: 100,
-              padding: 10,
-              border: '2px solid #e5e7eb',
-              borderRadius: 8,
-              fontSize: 13,
-              resize: 'none',
-              fontFamily: 'inherit',
-              backgroundColor: '#ffffff',
-              transition: 'all 0.2s ease',
-              outline: 'none',
-              overflow: 'hidden',
-              textAlign: 'center',
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = '#3b82f6';
-              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = '#e5e7eb';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-          />
-        </div>
+          {/* Caption input */}
+          <div style={{ display: 'flex', gap: 16, width: '100%', alignItems: 'flex-start' }}>
+            <div style={{ position: 'relative', width: '100%' }}>
+              <textarea
+              placeholder="Add an optional caption..."
+              value={caption}
+              onChange={(e) => handleCaptionChange(e.target.value)}
+              style={{
+                width: '100%',
+                minHeight: 90,
+                borderRadius: 12,
+                border: '1px solid #e5e7eb',
+                padding: '14px 16px 32px 16px',
+                fontSize: 14,
+                resize: 'none',
+                fontFamily: 'inherit',
+                outline: 'none',
+                backgroundColor: '#fff',
+                boxSizing: 'border-box',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = '#2563eb';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = '#e5e7eb';
+              }}
+              className="repost-caption-input"
+              maxLength={MAX_CAPTION_LENGTH}
+              />
+              {/* Emoji + count */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 8,
+                  right: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowEmojiPicker((prev) => !prev);
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 4,
+                    borderRadius: '50%',
+                    width: 28,
+                    height: 28,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#666',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.05)';
+                    e.currentTarget.style.color = '#333';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = '#666';
+                  }}
+                  title="Add emoji"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
+                    <circle cx="15.5" cy="9.5" r="1.5" fill="currentColor" />
+                    <path d="M8 14c1.5 2.5 4.5 2.5 6 0" />
+                  </svg>
+                </button>
+                <div style={{ fontSize: 12, color: '#888' }}>
+                  {caption.length}/{MAX_CAPTION_LENGTH}
+                </div>
+              </div>
+            </div>
 
-        {/* Original post preview */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ 
-            display: 'block', 
-            fontSize: 12, 
-            fontWeight: '600', 
-            color: '#374151', 
-            marginBottom: 6,
-            textAlign: 'left'
-          }}>
-            Original Post
-          </label>
+            {showEmojiPicker && (
+              <div
+                ref={emojiPickerRef}
+                style={{
+                  flexShrink: 0,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  background: '#fff',
+                  border: '1px solid #e0e0e0',
+                  alignSelf: 'flex-start',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <EmojiPicker
+                  onEmojiClick={handleEmojiSelect}
+                  width={320}
+                  height={360}
+                  previewConfig={{ showPreview: false }}
+                  skinTonesDisabled
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Original post preview */}
           <div
             style={{
-              border: '2px solid #f1f5f9',
-              borderRadius: 10,
-              padding: 12,
-              backgroundColor: '#ffffff',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
-              borderLeft: '3px solid #3b82f6',
-              maxHeight: '200px',
-              overflowY: 'auto',
-              scrollbarWidth: 'none',
-              msOverflowStyle: 'none',
+              borderRadius: 12,
+              border: '1px solid #e5e7eb',
+              background: '#fff',
+              padding: 16,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+              boxShadow: '0 4px 14px rgba(15,23,42,0.08)',
             }}
-            className="repost-original-content"
           >
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+            <div style={{ fontSize: 12, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+              Original post
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <img
                 src={originalPost.user?.profile_pic ? (String(originalPost.user.profile_pic).startsWith('http') ? originalPost.user.profile_pic : `http://127.0.0.1:8000${originalPost.user.profile_pic}`) : ctulogo}
-                alt="Profile"
+                alt="Original author"
                 style={{
-                  width: 28,
-                  height: 28,
+                  width: 36,
+                  height: 36,
                   borderRadius: '50%',
                   objectFit: 'cover',
-                  marginRight: 8,
-                  border: '2px solid #e5e7eb',
+                  border: '1px solid #e5e7eb',
                 }}
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
@@ -309,98 +379,50 @@ const RepostModal: React.FC<RepostModalProps> = ({
                 }}
               />
               <div>
-                <div style={{ fontWeight: '600', fontSize: 13, color: '#1f2937', marginBottom: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>
                   {originalPost.user?.f_name && originalPost.user?.l_name
                     ? `${originalPost.user.f_name} ${originalPost.user.m_name || ''} ${originalPost.user.l_name}`.trim()
                     : originalPost.user?.f_name || 'User'}
                 </div>
-                <div style={{ fontSize: 10, color: '#6b7280' }}>
-                  {formatTime(originalPost.created_at)}
-                </div>
+                <div style={{ fontSize: 12, color: '#9ca3af' }}>{formatTime(originalPost.created_at)}</div>
               </div>
             </div>
-            <div 
-              className="repost-original-content"
-              style={{ 
-                fontSize: 13, 
-                color: '#374151', 
-                lineHeight: 1.4, 
-                marginBottom: 6,
-                wordWrap: 'break-word',
-                overflowWrap: 'break-word',
-              }}>
+
+            <div
+              style={{
+                fontSize: 14,
+                color: '#1f2937',
+                lineHeight: 1.5,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
               {originalPost.post_content}
             </div>
-          {originalPost.post_image && (
-            <img
-              src={typeof originalPost.post_image === 'string' && originalPost.post_image.startsWith('/media/')
-                ? `http://127.0.0.1:8000${originalPost.post_image}`
-                : typeof originalPost.post_image === 'string' && !originalPost.post_image.startsWith('http')
-                ? `http://127.0.0.1:8000${originalPost.post_image}`
-                : (originalPost.post_image as string)}
-              alt="post"
-              style={{ maxWidth: '100%', borderRadius: 8, maxHeight: 200, objectFit: 'cover' }}
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-              }}
-            />
-          )}
-          </div>
-        </div>
 
-        {/* Action buttons */}
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-          <button
-            onClick={handleCancel}
-            style={{
-              background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: 8,
-              padding: '8px 16px',
-              cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: '600',
-              transition: 'all 0.2s ease',
-              boxShadow: '0 2px 6px rgba(107, 114, 128, 0.3)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-1px)';
-              e.currentTarget.style.boxShadow = '0 3px 8px rgba(107, 114, 128, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 2px 6px rgba(107, 114, 128, 0.3)';
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            style={{
-              background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: 8,
-              padding: '8px 16px',
-              cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: '600',
-              transition: 'all 0.2s ease',
-              boxShadow: '0 2px 6px rgba(59, 130, 246, 0.3)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-1px)';
-              e.currentTarget.style.boxShadow = '0 3px 8px rgba(59, 130, 246, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 2px 6px rgba(59, 130, 246, 0.3)';
-            }}
-          >
-            🔄 Repost
-          </button>
+            {originalPost.post_image && (
+              <img
+                src={
+                  typeof originalPost.post_image === 'string' && originalPost.post_image.startsWith('/media/')
+                    ? `http://127.0.0.1:8000${originalPost.post_image}`
+                    : typeof originalPost.post_image === 'string' && !originalPost.post_image.startsWith('http')
+                    ? `http://127.0.0.1:8000${originalPost.post_image}`
+                    : (originalPost.post_image as string)
+                }
+                alt="Post"
+                style={{
+                  width: '100%',
+                  borderRadius: 18,
+                  objectFit: 'cover',
+                  maxHeight: 260,
+                }}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                }}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

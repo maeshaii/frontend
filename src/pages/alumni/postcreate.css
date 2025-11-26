@@ -138,6 +138,11 @@
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
+.post-content-textarea::placeholder {
+  color: #D9D9D9;
+  opacity: 1;
+}
+
 
 .image-preview {
   margin-bottom: 16px;

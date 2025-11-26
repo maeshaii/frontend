@@ -40,7 +40,21 @@ export default function DetailsTable({ onBack, selectedYear, searchQuery }: Deta
       }
     };
 
+    // Initial load
     loadOJTData();
+
+    // Set up real-time polling to refresh data every 10 seconds
+    // This ensures admin sees new data sent from coordinators immediately
+    const pollInterval = setInterval(() => {
+      if (selectedYear) {
+        loadOJTData();
+      }
+    }, 10000); // Poll every 10 seconds
+
+    // Cleanup interval on unmount or when dependencies change
+    return () => {
+      clearInterval(pollInterval);
+    };
   }, [selectedYear, coordinatorUsername]);
 
   // Inline styles

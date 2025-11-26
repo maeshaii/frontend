@@ -106,6 +106,10 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
     tableBodyContainer: {
       maxHeight: '450px',
       overflowY: 'auto' as const,
+      overflowX: 'auto' as const,
+      // Custom scrollbar styling
+      scrollbarWidth: 'thin' as const,
+      scrollbarColor: '#cbd5e1 #f1f5f9',
     },
     tableBodyTable: {
       width: '100%',
@@ -393,14 +397,51 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
 
   if (loading) {
     return (
-      <div style={styles.detailsTable}>
-        <div style={{ textAlign: 'center', padding: '40px' }}>Loading OJT data...</div>
-      </div>
+      <>
+        <style>{`
+          .ojt-table-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+          }
+          .ojt-table-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+          }
+          .ojt-table-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+          }
+          .ojt-table-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+          }
+        `}</style>
+        <div style={styles.detailsTable}>
+          <div style={{ textAlign: 'center', padding: '40px' }}>Loading OJT data...</div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div style={styles.detailsTable}>
+    <>
+      <style>{`
+        .ojt-table-scrollbar::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        .ojt-table-scrollbar::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 4px;
+        }
+        .ojt-table-scrollbar::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 4px;
+        }
+        .ojt-table-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+      `}</style>
+      <div style={styles.detailsTable}>
       {/* Header Bar with Class, Section, Search and Filter */}
       <div style={{
         backgroundColor: 'white',
@@ -497,7 +538,7 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
       </div>
       
       {/* Single Table with Fixed Layout */}
-      <div style={styles.tableBodyContainer}>
+      <div style={styles.tableBodyContainer} className="ojt-table-scrollbar">
         <table style={styles.table}>
           <thead>
             <tr>
@@ -606,55 +647,67 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
           Back
         </button>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <button
-            style={{
-              padding: '10px 20px',
-              background: '#10b981',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: '500',
-              fontSize: '14px'
-            }}
-            onClick={async () => {
-              setCompletingAll(true);
-              try {
-                // Get only the students who can be updated (not alumni, not completed, not incomplete)
-                const currentSectionStudents = ojtData.filter(student => 
-                  !student.is_alumni && 
-                  student.ojt_status !== 'Completed' &&
-                  student.ojt_status !== 'Incomplete' // Don't update incomplete students
-                );
-                
-                // Update only the current section students to Completed status
-                for (const student of currentSectionStudents) {
+          {(() => {
+            // Get only the students who can be updated (not alumni, not completed, not incomplete)
+            const currentSectionStudents = ojtData.filter(student => 
+              !student.is_alumni && 
+              student.ojt_status !== 'Completed' &&
+              student.ojt_status !== 'Incomplete' // Don't update incomplete students
+            );
+            
+            // Check if all students are NOT STARTED (no start date)
+            const allNotStarted = currentSectionStudents.length > 0 && 
+              currentSectionStudents.every(student => !student.ojt_start_date);
+            
+            return (
+              <button
+                style={{
+                  padding: '10px 20px',
+                  background: allNotStarted ? '#9ca3af' : '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: allNotStarted ? 'not-allowed' : 'pointer',
+                  fontWeight: '500',
+                  fontSize: '14px',
+                  opacity: allNotStarted ? 0.6 : 1
+                }}
+                onClick={async () => {
+                  if (allNotStarted) return; // Don't do anything if all are NOT STARTED
+                  
+                  setCompletingAll(true);
                   try {
-                    await updateOJTStatus(student.id, 'Completed');
+                    // Update only the current section students to Completed status
+                    for (const student of currentSectionStudents) {
+                      try {
+                        await updateOJTStatus(student.id, 'Completed');
+                      } catch (err) {
+                        console.error(`Failed to update ${student.first_name}:`, err);
+                      }
+                    }
+                    
+                    // Update local state
+                    setOjtData(prev => prev.map(student => 
+                      currentSectionStudents.some(s => s.id === student.id) 
+                        ? { ...student, ojt_status: 'Completed' }
+                        : student
+                    ));
+                    
+                    alert(`Updated ${currentSectionStudents.length} students to Completed status`);
                   } catch (err) {
-                    console.error(`Failed to update ${student.first_name}:`, err);
+                    console.error('Complete all failed:', err);
+                    alert('Failed to complete all students');
+                  } finally {
+                    setCompletingAll(false);
                   }
-                }
-                
-                // Update local state
-                setOjtData(prev => prev.map(student => 
-                  currentSectionStudents.some(s => s.id === student.id) 
-                    ? { ...student, ojt_status: 'Completed' }
-                    : student
-                ));
-                
-                alert(`Updated ${currentSectionStudents.length} students to Completed status`);
-              } catch (err) {
-                console.error('Complete all failed:', err);
-                alert('Failed to complete all students');
-              } finally {
-                setCompletingAll(false);
-              }
-            }}
-            disabled={completingAll}
-          >
-            {completingAll ? 'Completing...' : 'Complete All'}
-          </button>
+                }}
+                disabled={completingAll || allNotStarted}
+                title={allNotStarted ? 'Cannot complete students with NOT STARTED status. Students need a start date first.' : ''}
+              >
+                {completingAll ? 'Completing...' : 'Complete All'}
+              </button>
+            );
+          })()}
         </div>
       </div>
 
@@ -816,5 +869,6 @@ export default function DetailsTable({ onBack, selectedYear, selectedSection, se
       )}
 
     </div>
+    </>
   );
 }
