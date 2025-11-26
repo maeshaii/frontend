@@ -994,25 +994,6 @@ const InventoryPage: React.FC = () => {
                         >
                           Edit
                         </button>
-                        <button
-                          style={{
-                            ...styles.actionButton,
-                            color: '#ef4444',
-                            fontSize: '14px',
-                            fontWeight: '500',
-                            marginLeft: '8px'
-                          }}
-                          title="Remove"
-                          onClick={() => handleDeleteItem(item.id)}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.textDecoration = 'underline';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.textDecoration = 'none';
-                          }}
-                        >
-                          Remove
-                        </button>
                       </td>
                     </tr>
                   ))

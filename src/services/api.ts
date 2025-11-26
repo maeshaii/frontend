@@ -322,6 +322,8 @@ export const loginUser = async (acc_username: string, acc_password: string) => {
       return { success: false, message: 'Invalid credentials or request format' };
     } else if (error.response?.status === 401) {
       return { success: false, message: 'Invalid username or password' };
+    } else if (error.response?.status === 403) {
+      return { success: false, message: 'This account is deactivated. Please contact the admin.' };
     } else if (error.response?.status === 500) {
       return { success: false, message: 'Server error - please try again later' };
     }
