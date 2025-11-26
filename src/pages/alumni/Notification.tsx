@@ -6,6 +6,7 @@ import { getProfilePicUrl } from '../../utils/profilePicUtils';
 import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
 import ConfirmModal from '../../components/ConfirmModal';
 import ctulogo from '../../images/ctulogo.png';
+import logo from '../../images/logo.png';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faComment, 
@@ -17,7 +18,7 @@ import {
   faBriefcase, 
   faRetweet, 
   faDollarSign, 
-  faTag,
+  faAt,
   faGift 
 } from '@fortawesome/free-solid-svg-icons';
 
@@ -123,11 +124,18 @@ function getNotificationIcon(notif: any): { icon: any } | null {
 
   // Format mention notifications
   if (type === 'mention' || message.toLowerCase().includes('mentioned')) {
-    return { icon: faTag };
+    return { icon: faAt };
   }
 
   // Format reward notifications
-  if (type === 'reward' || message.toLowerCase().includes('reward')) {
+  // Check for "Reward Request" type (with space) or "Reward" type, or if message contains reward-related keywords
+  if (type === 'reward' || 
+      type === 'reward request' || 
+      type.includes('reward') ||
+      message.toLowerCase().includes('reward') ||
+      message.toLowerCase().includes('voucher') ||
+      message.toLowerCase().includes('request for') ||
+      subject.toLowerCase().includes('reward')) {
     return { icon: faGift };
   }
 
@@ -184,6 +192,20 @@ const NotificationPage: React.FC = () => {
       localStorage.setItem('pendingRepostReplyId', replyId);
     } else {
       localStorage.removeItem('pendingRepostReplyId');
+    }
+  };
+
+  const storePostHighlightIds = (commentId?: string | null, replyId?: string | null) => {
+    if (commentId) {
+      localStorage.setItem('pendingPostCommentId', commentId);
+    } else {
+      localStorage.removeItem('pendingPostCommentId');
+    }
+
+    if (replyId) {
+      localStorage.setItem('pendingPostReplyId', replyId);
+    } else {
+      localStorage.removeItem('pendingPostReplyId');
     }
   };
 
@@ -417,12 +439,25 @@ const NotificationPage: React.FC = () => {
 
   const handleReplyNotificationClick = async (notif: any) => {
     try {
-      // Extract comment ID from notification content
+      // Extract comment ID and reply ID from notification content
       const commentIdMatch = notif.content.match(/<!--COMMENT_ID:(\d+)-->/);
+      const replyIdMatch = notif.content.match(/<!--REPLY_ID:(\d+)-->/);
+      const commentId = commentIdMatch?.[1];
+      const replyId = replyIdMatch?.[1];
+      
       if (commentIdMatch) {
-        const commentId = parseInt(commentIdMatch[1]);
-        const response = await getPostFromComment(commentId);
+        const commentIdNum = parseInt(commentIdMatch[1]);
+        const response = await getPostFromComment(commentIdNum);
         if (response.success) {
+          // Store post ID and highlight IDs for regular posts
+          if (response.post_type === 'post') {
+            localStorage.setItem('pendingPostView', response.post_id.toString());
+            storePostHighlightIds(commentId, replyId);
+          } else if (response.post_type === 'repost') {
+            localStorage.setItem('pendingRepostView', response.post_id.toString());
+            storeRepostHighlightIds(commentId, replyId);
+          }
+          
           // Redirect to the post page
           const currentPath = window.location.pathname;
           if (currentPath.startsWith('/peso')) {
@@ -702,7 +737,7 @@ const NotificationPage: React.FC = () => {
               } else {
                 // Regular post mention
                 localStorage.setItem('pendingPostView', originalPostId);
-                storeRepostHighlightIds(null, null);
+                storePostHighlightIds(commentId, replyId);
               
                 // Redirect to dashboard
                 const currentPath = window.location.pathname;
@@ -820,6 +855,7 @@ const NotificationPage: React.FC = () => {
                   } else {
                     // Regular post
                     localStorage.setItem('pendingPostView', resolvedPostId);
+                    storePostHighlightIds(commentId, replyId);
                     
                     // Redirect to dashboard with resolved post ID
                     const currentPath = window.location.pathname;
@@ -933,7 +969,7 @@ const NotificationPage: React.FC = () => {
             } else {
               // Otherwise open the original post modal
               localStorage.setItem('pendingPostView', postId);
-              storeRepostHighlightIds(null, null);
+              storePostHighlightIds(commentId, replyId);
             }
             
             // Store profile picture information from notification for peso posts
@@ -1805,35 +1841,12 @@ const NotificationPage: React.FC = () => {
                       const authorPicMatch = notif.content.match(/<!--AUTHOR_PIC:([^>]+)-->/);
                       const directPicUrl = authorPicMatch ? authorPicMatch[1] : undefined;
 
-                      // For tracker and reward notifications, use admin profile
-                      if ((isTrackerNotification || isRewardNotification) && adminProfilePic) {
+                      // For tracker and reward notifications, use logo.png
+                      if (isTrackerNotification || isRewardNotification) {
                         return (
                           <img
-                            src={adminProfilePic}
-                            alt="Admin"
-                            style={{
-                              width: '48px',
-                              height: '48px',
-                              borderRadius: '50%',
-                              objectFit: 'cover',
-                              border: '2px solid #e9ecef'
-                            }}
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = ctulogo;
-                            }}
-                          />
-                        );
-                      }
-                      
-                      // For reward notifications, use admin profile from notification content
-                      if (isRewardNotification && directPicUrl) {
-                        const profilePicUrl = directPicUrl.startsWith('http') 
-                          ? directPicUrl 
-                          : `http://127.0.0.1:8000${directPicUrl}`;
-                        return (
-                          <img
-                            src={profilePicUrl}
-                            alt="Admin"
+                            src={logo}
+                            alt="Logo"
                             style={{
                               width: '48px',
                               height: '48px',
@@ -2695,7 +2708,7 @@ const NotificationPage: React.FC = () => {
                                 storeRepostHighlightIds(commentId, replyId);
                               } else if (postId) {
                                 localStorage.setItem('pendingPostView', postId);
-                                storeRepostHighlightIds(null, null);
+                                storePostHighlightIds(commentId, replyId);
                               }
                               navigate(dashboardPath);
                             }

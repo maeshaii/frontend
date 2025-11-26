@@ -244,6 +244,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [showPostModal, setShowPostModal] = useState(false);
   const [modalPost, setModalPost] = useState<any | null>(null);
   const [postLoading, setPostLoading] = useState(false);
+  const [postHighlightCommentId, setPostHighlightCommentId] = useState<string | undefined>(undefined);
+  const [postHighlightReplyId, setPostHighlightReplyId] = useState<string | undefined>(undefined);
   const [showAllUsersModal, setShowAllUsersModal] = useState(false);
   const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
   const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
@@ -906,9 +908,23 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
 
     // Then handle original post modal if any
     const pendingPostId = localStorage.getItem('pendingPostView');
+    const pendingPostCommentId = localStorage.getItem('pendingPostCommentId');
+    const pendingPostReplyId = localStorage.getItem('pendingPostReplyId');
     if (pendingPostId && !pendingRepostId) {
       console.log('Found pending post view:', pendingPostId);
       localStorage.removeItem('pendingPostView');
+      
+      // Store highlight IDs if present
+      if (pendingPostCommentId) {
+        console.log('Found pending post comment ID:', pendingPostCommentId);
+        localStorage.removeItem('pendingPostCommentId');
+        setPostHighlightCommentId(pendingPostCommentId);
+      }
+      if (pendingPostReplyId) {
+        console.log('Found pending post reply ID:', pendingPostReplyId);
+        localStorage.removeItem('pendingPostReplyId');
+        setPostHighlightReplyId(pendingPostReplyId);
+      }
       
       // Check if this is a comment or reply ID that needs to be resolved
       if (pendingPostId.startsWith('comment:') || pendingPostId.startsWith('reply:')) {
@@ -981,7 +997,12 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
     }
   };
 
-  const handleViewPost = async (postId: string) => {
+  const handleViewPost = async (postId: string, clearHighlights: boolean = false) => {
+    // Clear highlight IDs if explicitly requested or if opening a different post
+    if (clearHighlights || !postId) {
+      setPostHighlightCommentId(undefined);
+      setPostHighlightReplyId(undefined);
+    }
     // Suppress tracker reminder when post modal opens
     if (trackerReminderTimeoutRef.current) {
       clearTimeout(trackerReminderTimeoutRef.current);
@@ -2392,6 +2413,8 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                 displayAvatar={getProfilePicUrl(modalPost.user?.profile_pic) || '/default-avatar.png'}
                 formatTime={formatHybrid}
                 onViewOriginalPost={handleViewOriginalPost}
+                highlightCommentId={postHighlightCommentId}
+                highlightReplyId={postHighlightReplyId}
                 onPostUpdate={() => {
                   // Refresh the post data in modal and update the main posts list
                   const postId = modalPost.post_id;
