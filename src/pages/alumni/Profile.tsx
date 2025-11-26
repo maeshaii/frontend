@@ -242,7 +242,7 @@ const AlumniProfile: React.FC = () => {
   const [userRewardRequests, setUserRewardRequests] = useState<any[]>([]);
   const [showApprovedRewardsModal, setShowApprovedRewardsModal] = useState(false);
   const [selectedRewardDetail, setSelectedRewardDetail] = useState<any | null>(null);
-  const [rewardStatusFilter, setRewardStatusFilter] = useState<'all' | 'pending' | 'approved' | 'claimed' | 'did_not_push_through'>('all');
+  const [rewardStatusFilter, setRewardStatusFilter] = useState<'all' | 'pending' | 'approved' | 'claimed' | 'did_not_push_through' | 'cancelled'>('all');
   const [showRewardFilterDropdown, setShowRewardFilterDropdown] = useState(false);
   const [showMonthlyLimitModal, setShowMonthlyLimitModal] = useState(false);
   const [showConfirmRequestModal, setShowConfirmRequestModal] = useState(false);
@@ -5297,6 +5297,7 @@ getPosts()
                              rewardStatusFilter === 'pending' ? 'Pending' : 
                              rewardStatusFilter === 'approved' ? 'Ready' : 
                              rewardStatusFilter === 'claimed' ? 'Claimed' : 
+                             rewardStatusFilter === 'cancelled' ? 'Cancelled' :
                              'Failed'}
                           </span>
                           <span style={{ 
@@ -5326,7 +5327,7 @@ getPosts()
                               e.stopPropagation();
                             }}
                           >
-                            {(['all', 'pending', 'approved', 'claimed', 'did_not_push_through'] as const).map((filter) => (
+                            {(['all', 'pending', 'approved', 'claimed', 'cancelled', 'did_not_push_through'] as const).map((filter) => (
                               <div
                                 key={filter}
                                 onClick={(e) => {
@@ -5377,6 +5378,7 @@ getPosts()
                     if (rewardStatusFilter === 'pending') return req.status === 'pending' && !recentlyClaimed;
                     if (rewardStatusFilter === 'approved') return (req.status === 'approved' || req.status === 'ready_for_pickup') && !recentlyClaimed;
                     if (rewardStatusFilter === 'claimed') return req.status === 'claimed' || recentlyClaimed;
+                    if (rewardStatusFilter === 'cancelled') return req.status === 'cancelled';
                     if (rewardStatusFilter === 'did_not_push_through') {
                       // Reward that was approved but expired before being claimed
                       const isApproved = req.status === 'approved' || req.status === 'ready_for_pickup';
