@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
 import GenerateStatsModal from '../../../components/GenerateStatsModal';
-import { fetchAlumniStatistics } from '../../../services/api';
-import { FaChartBar, FaUpload, FaGraduationCap, FaUsers, FaCalendarAlt, FaFilter, FaCog, FaArrowLeft } from 'react-icons/fa';
+import { fetchAlumniStatistics, importAlumni } from '../../../services/api';
+import { FaChartBar, FaUpload, FaGraduationCap, FaUsers, FaCalendarAlt, FaFilter, FaCog, FaArrowLeft, FaDownload } from 'react-icons/fa';
+import ExcelJS from 'exceljs';
 
 const ViewStats: React.FC = () => {
   const navigate = useNavigate();
@@ -125,18 +126,262 @@ const ViewStats: React.FC = () => {
     setIsDragging(false);
   };
 
+  // Generate Excel template with all required and optional columns (including tracker questions)
+  // Based on backend import_alumni_view function analysis
   const handleTemplateDownload = async () => {
-    try {
-      const resp = await fetch('http://localhost:8000/api/import-alumni/template/');
-      if (!resp.ok) throw new Error('Failed');
-      const blob = await resp.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'alumni_import_template.xlsx';
-      document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
-    } catch {
-      alert('Template download is not configured on the server.');
-    }
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Alumni Import Template');
+
+    // REQUIRED COLUMNS (based on backend lines 1075-1076)
+    // Optional columns: Password is NOT included - passwords are auto-generated after import
+    
+    // BASIC INFORMATION (Required)
+    const basicHeaders = [
+      { header: 'CTU_ID', key: 'ctu_id', width: 15 },
+      { header: 'First_Name', key: 'first_name', width: 20 },
+      { header: 'Last_Name', key: 'last_name', width: 20 },
+      { header: 'Gender', key: 'gender', width: 10 },
+      { header: 'Year_Graduated', key: 'year_graduated', width: 18 },
+      { header: 'Program', key: 'program', width: 15 },
+    ];
+
+    // BASIC INFORMATION (Optional)
+    const optionalBasicHeaders = [
+      { header: 'Middle_Name', key: 'middle_name', width: 20 },
+      { header: 'Birthdate', key: 'birthdate', width: 15 },
+      { header: 'Phone_Number', key: 'phone_number', width: 18 },
+      { header: 'Address', key: 'address', width: 30 },
+      { header: 'Civil Status', key: 'civil_status', width: 15 },
+      { header: 'Social Media', key: 'social_media', width: 25 },
+      { header: 'Section', key: 'section', width: 15 },
+    ];
+
+    // TRACKER QUESTION COLUMNS (for alumni who already answered tracker questions)
+    // Based on backend lines 1246, 1262, 1274, 1280, 1286, 1299
+    const trackerHeaders = [
+      { header: 'Are you PRESENTLY employed?', key: 'are_you_presently_employed', width: 30 },
+      { header: 'Current Company Name', key: 'current_company_name', width: 30 },
+      { header: 'Current Position', key: 'current_position', width: 30 },
+      { header: 'Current Sector of your Job', key: 'current_sector_of_your_job', width: 30 },
+      { header: 'Current Salary Range', key: 'current_salary_range', width: 25 },
+      { header: 'Please specify post graduate/degree.', key: 'please_specify_post_graduate_degree', width: 35 },
+    ];
+
+    // Combine all headers
+    const headers = [...basicHeaders, ...optionalBasicHeaders, ...trackerHeaders];
+    worksheet.columns = headers;
+
+    // Style header row
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1C4E80' }
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    headerRow.height = 25;
+
+    // Sample data rows - Example 1: Basic info only (no tracker data)
+    const sampleDataBasic = {
+      ctu_id: '1337580',
+      first_name: 'John',
+      last_name: 'Doe',
+      middle_name: 'Michael',
+      gender: 'M',
+      year_graduated: '2024',
+      program: 'BSIT',
+      birthdate: '2003-04-12',
+      phone_number: '09123456789',
+      address: '123 Main Street, Cebu City, Cebu',
+      civil_status: 'Single',
+      social_media: '@johndoe',
+      section: '',
+      are_you_presently_employed: '',
+      current_company_name: '',
+      current_position: '',
+      current_sector_of_your_job: '',
+      current_salary_range: '',
+      please_specify_post_graduate_degree: '',
+    };
+
+    // Example 2: With tracker data (employed)
+    const sampleDataWithTracker = {
+      ctu_id: '1337581',
+      first_name: 'Jane',
+      last_name: 'Smith',
+      middle_name: 'Marie',
+      gender: 'F',
+      year_graduated: '2024',
+      program: 'BSIS',
+      birthdate: '2002-05-15',
+      phone_number: '09187654321',
+      address: '456 Oak Avenue, Mandaue City, Cebu',
+      civil_status: 'Single',
+      social_media: '@janesmith',
+      section: '',
+      are_you_presently_employed: 'Yes',
+      current_company_name: 'ABC Technology Solutions Inc.',
+      current_position: 'Software Developer',
+      current_sector_of_your_job: 'Private',
+      current_salary_range: '20,000 - 30,000',
+      please_specify_post_graduate_degree: '',
+    };
+
+    // Example 3: With tracker data (unemployed, pursuing further study)
+    const sampleDataUnemployed = {
+      ctu_id: '1337582',
+      first_name: 'Mark',
+      last_name: 'Johnson',
+      middle_name: 'Paul',
+      gender: 'M',
+      year_graduated: '2024',
+      program: 'BIT-CT',
+      birthdate: '2003-08-20',
+      phone_number: '09234567890',
+      address: '789 Pine Road, Lapu-Lapu City, Cebu',
+      civil_status: 'Married',
+      social_media: '@markjohnson',
+      section: '',
+      are_you_presently_employed: 'No',
+      current_company_name: '',
+      current_position: '',
+      current_sector_of_your_job: '',
+      current_salary_range: '',
+      please_specify_post_graduate_degree: 'Master of Science in Information Technology',
+    };
+
+    // Add sample data rows
+    worksheet.addRow(sampleDataBasic);
+    worksheet.addRow(sampleDataWithTracker);
+    worksheet.addRow(sampleDataUnemployed);
+
+    // Add instructions sheet
+    const instructionsSheet = workbook.addWorksheet('Instructions');
+    instructionsSheet.columns = [{ header: 'Instructions', key: 'instructions', width: 100 }];
+    
+    const instructionData = [
+      { instructions: 'ALUMNI IMPORT TEMPLATE - INSTRUCTIONS' },
+      { instructions: '' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: 'REQUIRED COLUMNS (Must be filled for all alumni):' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: '  • CTU_ID: Unique identifier for the alumni (e.g., 1337580)' },
+      { instructions: '  • First_Name: First name of the alumni' },
+      { instructions: '  • Last_Name: Last name of the alumni' },
+      { instructions: '  • Gender: Must be exactly "M" for Male or "F" for Female (case-sensitive)' },
+      { instructions: '  • Year_Graduated: Graduation year (e.g., 2024)' },
+      { instructions: '  • Program: Must be exactly one of: BSIT, BSIS, or BIT-CT' },
+      { instructions: '' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: 'OPTIONAL BASIC COLUMNS (Can be left empty):' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: '  • Middle_Name: Middle name of the alumni' },
+      { instructions: '  • Birthdate: Date of birth (Format: YYYY-MM-DD or MM/DD/YYYY)' },
+      { instructions: '    Examples: 2003-04-12 or 04/12/2003' },
+      { instructions: '  • Phone_Number: Contact number (e.g., 09123456789)' },
+      { instructions: '  • Address: Complete address' },
+      { instructions: '  • Civil Status: Marital status (e.g., Single, Married, etc.)' },
+      { instructions: '  • Social Media: Social media handle (e.g., @username)' },
+      { instructions: '  • Section: Class section (if applicable)' },
+      { instructions: '' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: 'TRACKER QUESTION COLUMNS (For alumni who answered tracker questions):' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: '  These columns are for importing alumni who have already answered tracker questions.' },
+      { instructions: '  Leave these empty if the alumni has not answered the tracker yet.' },
+      { instructions: '' },
+      { instructions: '  • Are you PRESENTLY employed?: Must be "Yes" or "No" (or "Y"/"N")' },
+      { instructions: '  • Current Company Name: Name of current employer' },
+      { instructions: '  • Current Position: Job title/position (e.g., Software Developer)' },
+      { instructions: '  • Current Sector of your Job: Must be "Private", "Government", or "Public"' },
+      { instructions: '  • Current Salary Range: Salary range (e.g., 20,000 - 30,000)' },
+      { instructions: '  • Please specify post graduate/degree.: Post-graduate degree if pursuing further study' },
+      { instructions: '' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: 'IMPORTANT NOTES:' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: '  ⚠️  Password column is NOT included - passwords are AUTO-GENERATED' },
+      { instructions: '      After import, you will receive a separate Excel file with auto-generated passwords' },
+      { instructions: '' },
+      { instructions: '  • Gender must be exactly "M" or "F" (case-sensitive, uppercase)' },
+      { instructions: '  • Program must be exactly: BSIT, BSIS, or BIT-CT' },
+      { instructions: '  • CTU_ID must be unique - duplicates will be skipped during import' },
+      { instructions: '  • Date format: Use YYYY-MM-DD (e.g., 2003-04-12) or MM/DD/YYYY (e.g., 04/12/2003)' },
+      { instructions: '  • Tracker columns use exact question text as column headers (case-sensitive)' },
+      { instructions: '  • You can provide Year_Graduated and Program via form fields during import' },
+      { instructions: '    instead of including them in each row of the Excel file' },
+      { instructions: '' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: 'EXAMPLE SCENARIOS:' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: '  1. Basic Import (No tracker data):' },
+      { instructions: '     - Fill required columns: CTU_ID, First_Name, Last_Name, Gender, Year_Graduated, Program' },
+      { instructions: '     - Leave tracker columns empty' },
+      { instructions: '' },
+      { instructions: '  2. Import with Tracker Data (Alumni already answered tracker):' },
+      { instructions: '     - Fill all required columns' },
+      { instructions: '     - Fill tracker columns if alumni answered them' },
+      { instructions: '     - "Are you PRESENTLY employed?" must be "Yes" or "No"' },
+      { instructions: '     - If "Yes", fill employment-related tracker columns' },
+      { instructions: '     - If "No" and pursuing further study, fill post-graduate degree column' },
+    ];
+
+    instructionData.forEach((row, index) => {
+      const instructionRow = instructionsSheet.addRow(row);
+      const text = row.instructions;
+      if (text.includes('══════') || text.startsWith('ALUMNI IMPORT') || 
+          text.includes('REQUIRED COLUMNS') || text.includes('OPTIONAL') || 
+          text.includes('TRACKER QUESTION') || text.includes('IMPORTANT NOTES') ||
+          text.includes('EXAMPLE SCENARIOS') || text.startsWith('  ⚠️')) {
+        instructionRow.font = { bold: true };
+        instructionRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF0F0F0' }
+        };
+      }
+    });
+
+    // Style data rows
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        row.alignment = { vertical: 'middle', horizontal: 'left' };
+        row.height = 20;
+        // Alternate row colors for better readability
+        if (rowNumber % 2 === 0) {
+          row.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF9F9F9' }
+          };
+        }
+      }
+    });
+
+    // Add borders to all cells
+    worksheet.eachRow((row) => {
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+    });
+
+    // Generate Excel file and download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'alumni_import_template.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -234,6 +479,44 @@ const ViewStats: React.FC = () => {
               </div>
 
               <div style={styles.modalBody}>
+                {/* Download Template Section */}
+                <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                  <h3 style={{ marginTop: 0, marginBottom: '8px', fontSize: '16px', fontWeight: '600', color: '#111827' }}>
+                    📥 Download Template
+                  </h3>
+                  <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#6b7280' }}>
+                    Download an Excel template with all required columns and sample data to help you format your import file correctly.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleTemplateDownload}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: '#10b981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 'bold',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#059669';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#10b981';
+                    }}
+                  >
+                    <FaDownload style={{ fontSize: '14px' }} />
+                    Download Excel Template
+                  </button>
+                </div>
+
+                <div style={{ height: '1px', background: '#e5e7eb', margin: '20px 0' }} />
+
                 {/* Upload */}
                 <div
                   style={{

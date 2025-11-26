@@ -7,6 +7,7 @@ import {
   sendMessage, 
   markConversationRead,
   getUserInfo,
+  getOnlineUsers,
   uploadAttachment,
   deleteMessageApi,
   updateMessageApi,
@@ -43,6 +44,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
   const [inputValue, setInputValue] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
   const [typingUsers, setTypingUsers] = useState<Set<number>>(new Set());
+  const [isParticipantOnline, setIsParticipantOnline] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMarkedAsRead, setHasMarkedAsRead] = useState(false);
@@ -184,6 +186,55 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         document.removeEventListener('mousedown', handleClickOutside);
       };
   }, [showEmojiPicker, contextMenuMessageId, reactionPickerMessageId]);
+
+  // Track whether the other participant is currently online via the shared API
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let isMounted = true;
+    const participantId = conversation?.other_participant?.user_id;
+
+    const updateParticipantStatus = async () => {
+      if (!participantId) {
+        setIsParticipantOnline(false);
+        return;
+      }
+
+      try {
+        const response = await getOnlineUsers();
+        if (!isMounted) return;
+        if (!response?.success) {
+          setIsParticipantOnline(false);
+          return;
+        }
+
+        const onlineIds = new Set<number>(
+          (Array.isArray(response.online_users) ? response.online_users : []).map((user: any) =>
+            Number(user.user_id)
+          )
+        );
+        setIsParticipantOnline(onlineIds.has(Number(participantId)));
+      } catch (error) {
+        console.error('Failed to determine participant online status:', error);
+        if (isMounted) {
+          setIsParticipantOnline(false);
+        }
+      }
+    };
+
+    if (participantId) {
+      updateParticipantStatus();
+      intervalId = setInterval(updateParticipantStatus, 30000);
+    } else {
+      setIsParticipantOnline(false);
+    }
+
+    return () => {
+      isMounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [conversation?.other_participant?.user_id]);
 
   // Fetch profile picture from API (similar to notifications) - MUST BE DEFINED BEFORE loadMessages
   const fetchUserProfilePic = useCallback(async (userId: number | string): Promise<string | null> => {
@@ -1053,8 +1104,15 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
               <h2 className="chat-header-name">
                 {conversation.other_participant?.name || 'Unknown User'}
               </h2>
-              <p className="chat-header-status">
-                {connectionStatus === 'connected' ? 'Online' : 'Offline'}
+              <p className={`chat-header-status ${isParticipantOnline ? 'status-online' : 'status-offline'}`}>
+                {isParticipantOnline ? 'Online' : 'Offline'}
+                <span className="chat-header-connection-status">
+                  {connectionStatus === 'connected'
+                    ? 'Connected'
+                    : connectionStatus === 'connecting'
+                      ? 'Connecting…'
+                      : 'Disconnected'}
+                </span>
               </p>
             </div>
           </div>

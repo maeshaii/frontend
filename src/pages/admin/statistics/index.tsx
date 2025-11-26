@@ -316,9 +316,9 @@ export default function Statistics() {
     <div style={{ display: 'flex', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <Sidebar />
 
-      <div className="admin-content-page" style={{ padding: '8px 48px 32px 48px', fontFamily: 'Arial, sans-serif', flex: 1, position: 'relative', overflow: 'hidden', marginLeft: 'var(--sidebar-width, 220px)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div className="admin-content-page" style={{ padding: '20px 48px 32px 48px', fontFamily: 'Arial, sans-serif', flex: 1, position: 'relative', overflowY: 'auto', overflowX: 'hidden', marginLeft: 'var(--sidebar-width, 220px)', display: 'flex', flexDirection: 'column', gap: '12px', height: '100vh' }}>
         <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <h2 style={{ fontSize: '22px', margin: 0, fontWeight: 'bold', color: '#2c5282' }}>Statistics</h2>
+          <h2 style={{ fontSize: '22px', margin: 0, marginTop: 0, paddingTop: 0, fontWeight: 'bold', color: '#2c5282' }}>Statistics</h2>
 
           {/* Filters */}
         <div className="filter-container">

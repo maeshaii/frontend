@@ -448,9 +448,22 @@
 
 .chat-header-status {
   font-size: 13px;
-  color: #42b883;
   font-weight: 500;
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-secondary);
+}
+.chat-header-status.status-online {
+  color: #42b883;
+}
+.chat-header-status.status-offline {
+  color: #6f7b8c;
+}
+.chat-header-connection-status {
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .chat-header-actions {
