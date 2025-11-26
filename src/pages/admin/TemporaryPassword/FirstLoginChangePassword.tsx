@@ -70,9 +70,10 @@ const FirstLoginChangePassword: React.FC = () => {
       const resp = await changePassword(oldPassword, newPassword);
       if (resp.success) {
         setSuccess('Password changed. Please login again.');
-        // Clear tokens to force fresh login
+        // Clear tokens AND user data to force fresh login
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user'); // ✅ FIX: Also remove user data
         setTimeout(() => {
           setIsLoading(false);
           navigate('/login');

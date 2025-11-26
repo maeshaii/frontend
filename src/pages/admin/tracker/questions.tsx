@@ -80,6 +80,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved' | null>(null);
   const [draftCheckComplete, setDraftCheckComplete] = useState(false); // Whether we checked for draft
   const [hasDraftData, setHasDraftData] = useState(false); // Whether draft had data
+  const [formAlreadySubmitted, setFormAlreadySubmitted] = useState(false); // Whether form was already submitted
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -148,6 +149,21 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
     if (previewMode && userId && !draftCheckComplete && categories.length > 0) {
       const loadDraft = async () => {
         try {
+          // 🔧 FIX: First check if form was already submitted
+          console.log('🔍 Web: Checking if form already submitted...');
+          try {
+            const statusResponse = await trackerApi.checkSubmissionStatus(userId);
+            if (statusResponse.has_submitted) {
+              console.log('ℹ️ Web: Form already submitted - disabling auto-save');
+              setFormAlreadySubmitted(true);
+              setDraftCheckComplete(true);
+              return; // Don't try to load draft if already submitted
+            }
+          } catch (statusError) {
+            console.warn('⚠️ Could not check submission status:', statusError);
+            // Continue anyway - better to allow editing than block user
+          }
+          
           console.log('🔄 Checking for saved draft for user:', userId);
           const response = await trackerApi.loadDraft(userId);
           
@@ -203,6 +219,12 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
   useEffect(() => {
     if (!previewMode || !userId || !draftCheckComplete) {
       return; // Don't auto-save in edit mode or before draft check is complete
+    }
+
+    // 🔧 FIX: Don't auto-save if form has already been submitted
+    if (formAlreadySubmitted) {
+      console.log('ℹ️ Web: Skipping auto-save - form already submitted');
+      return;
     }
 
     // Clear existing timer
@@ -273,9 +295,18 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         setTimeout(() => {
           setSaveStatus(null);
         }, 2000);
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Web: Auto-save failed:', error);
-        setSaveStatus('unsaved');
+        
+        // 🔧 FIX: If error is "form already submitted", mark it and stop auto-save
+        const errorMessage = error?.response?.data?.message || error?.message || '';
+        if (errorMessage.includes('already submitted') || errorMessage.includes('Cannot save draft')) {
+          console.log('ℹ️ Web: Form already submitted - disabling auto-save');
+          setFormAlreadySubmitted(true);
+          setSaveStatus(null); // Clear status since we can't save anyway
+        } else {
+          setSaveStatus('unsaved');
+        }
       }
     }, 3000); // 3 second debounce
 
@@ -285,7 +316,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [formResponses, previewMode, userId, draftCheckComplete]);
+  }, [formResponses, previewMode, userId, draftCheckComplete, formAlreadySubmitted]);
 
   // Load existing user data into formResponses when userId is available
   // BUT: Don't overwrite if draft data was found!
@@ -1108,7 +1139,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
       const processedAnswers: Record<string, any> = {};
 
       for (const [questionId, answer] of Object.entries(formResponses)) {
-        // Check if this is question 31 (award supporting docs) with multiple files
+        // Check if this is question 31/32 (award supporting docs) with multiple files
         const question = categories
           .flatMap(cat => cat.questions)
           .find(q => q.id.toString() === questionId.toString());
@@ -1117,8 +1148,15 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
         const isAwardSupportingDocs = (lowerText.includes('supporting documents') || lowerText.includes('supporting document')) && 
                                        (lowerText.includes('awards') || lowerText.includes('award') || lowerText.includes('recognition'));
         
-        if (isAwardSupportingDocs && Array.isArray(answer)) {
-          // Handle multiple award documents (question 31)
+        // 🔧 FIX: Check for both array answers AND file markers with multiple: true
+        const isMultipleFileUpload = isAwardSupportingDocs && (
+          Array.isArray(answer) || 
+          (answer && typeof answer === 'object' && !Array.isArray(answer) && 
+           'multiple' in answer && (answer as any).multiple === true)
+        );
+        
+        if (isMultipleFileUpload) {
+          // Handle multiple award documents (question 31/32)
           const files = awardDocuments[parseInt(questionId)] || [];
           const validFiles = files.filter(file => file !== null && file !== undefined);
           
@@ -1129,6 +1167,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
             formData.append(`file_${questionId}_${index}`, file);
             console.log(`🔍 Form Submit Debug - Award document ${index + 1} for question ${questionId}:`, file.name);
           });
+          console.log(`📤 Web: Uploading ${validFiles.length} file(s) for question ${questionId} (${question?.text})`);
         } else if (answer instanceof File) {
           // This is a single file upload
           processedAnswers[questionId] = { type: 'file' };

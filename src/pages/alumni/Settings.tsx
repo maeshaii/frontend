@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
-import { Box, Paper, Typography, TextField, Button, Select, MenuItem, FormControl, InputLabel, Alert, InputAdornment, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Checkbox, FormControlLabel, FormGroup } from '@mui/material';
+import { Box, Paper, Typography, TextField, Button, Select, MenuItem, FormControl, InputLabel, Alert, InputAdornment, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Checkbox, FormControlLabel, FormGroup, Divider, Table, TableBody, TableCell, TableHead, TableRow, TableContainer } from '@mui/material';
 import PasswordVisibilityIcon from '../../components/PasswordVisibilityIcon';
 import { trackerApi } from '../../services/trackerApi';
 
@@ -171,6 +171,69 @@ const Settings: React.FC = () => {
     units_obtained: ''
   });
 
+  const employmentSummaryRows = [
+    {
+      label: 'Employment Type',
+      value: employmentData.employment_type || 'N/A'
+    },
+    {
+      label: 'Current Employment Status',
+      value: employmentData.current_employment_status || 'N/A'
+    },
+    {
+      label: 'Company Name',
+      value: employmentData.current_company_name || 'N/A'
+    },
+    {
+      label: 'Current Position',
+      value: employmentData.current_position || 'N/A'
+    },
+    {
+      label: 'Sector',
+      value: employmentData.current_sector || 'N/A'
+    },
+    {
+      label: 'Scope',
+      value: employmentData.current_scope || 'N/A'
+    },
+    {
+      label: 'Employment Duration',
+      value: formatEmploymentDuration(employmentData.employment_duration)
+    },
+    {
+      label: 'Salary Range',
+      value: formatSalaryRange(employmentData.salary_range)
+    },
+    {
+      label: 'Received Awards',
+      value: employmentData.received_awards || 'N/A'
+    }
+  ];
+
+  const employmentHistoryRow = {
+    company: employmentData.current_company_name || 'N/A',
+    position: employmentData.current_position || 'N/A',
+    sector: employmentData.current_sector || 'N/A',
+    scope: employmentData.current_scope || 'N/A',
+    duration: formatEmploymentDuration(employmentData.employment_duration),
+    salary: formatSalaryRange(employmentData.salary_range)
+  };
+
+  const trackerDocuments = [
+    employmentData.employment_supporting_doc
+      ? {
+          label: 'Employment Supporting Document',
+          url: `http://127.0.0.1:8000${employmentData.employment_supporting_doc}`
+        }
+      : null,
+    employmentData.awards_supporting_doc
+      ? {
+          label: 'Awards Supporting Document',
+          url: `http://127.0.0.1:8000${employmentData.awards_supporting_doc}`
+        }
+      : null
+  ].filter(Boolean) as Array<{ label: string; url: string }>;
+
   // Employment flow state
   const [accountType, setAccountType] = useState<string>(''); // 'alumni' or 'ojt'
   const [hasJobInDB, setHasJobInDB] = useState<boolean | null>(null); // Check if user has job in database (for alumni: tracker data, for ojt: employment data)
@@ -292,6 +355,8 @@ const Settings: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         
+        console.log('📊 RAW EMPLOYMENT API RESPONSE:', JSON.stringify(data, null, 2));
+        
         // Normalize dropdown values to match options
         const normalizedEmploymentStatus = normalizeDropdownValue(
           data.current_employment_status || data.employment_status || '', 
@@ -379,14 +444,24 @@ const Settings: React.FC = () => {
           console.log('OJT - hasEmploymentData:', hasEmploymentData);
         } else {
           // For Alumni accounts: check if they have Part III tracker data
-          const hasTrackerData = data.has_tracker_data || false;
-          const hasPartIIIData = data.has_part_iii_data || false;
+          // Use strict boolean checking to ensure we only show data when explicitly true
+          const hasTrackerData = data.has_tracker_data === true;
+          const hasPartIIIData = data.has_part_iii_data === true;
           
-          // For alumni: if they have Part III data, show it
+          console.log('🔍 Alumni Employment Check:');
+          console.log('  - has_tracker_data from API:', data.has_tracker_data);
+          console.log('  - has_part_iii_data from API:', data.has_part_iii_data);
+          console.log('  - hasTrackerData (computed):', hasTrackerData);
+          console.log('  - hasPartIIIData (computed):', hasPartIIIData);
+          console.log('  - employment_type:', data.employment_type);
+          console.log('  - current_company_name:', data.current_company_name);
+          
+          // CRITICAL: Only show Part III data if has_part_iii_data is explicitly true
+          // If it's false, null, undefined, show the "Please answer tracker" prompt
           setHasJobInDB(hasPartIIIData);
           
           // If user has Part III data in DB, enable viewing mode automatically
-          if (hasPartIIIData) {
+          if (hasPartIIIData === true) {
             setIsEditingEmployment(true);
           }
           
@@ -397,21 +472,22 @@ const Settings: React.FC = () => {
             setPursueFurtherStudy(false);
           }
           
-          console.log('Alumni - hasTrackerData:', hasTrackerData);
-          console.log('Alumni - hasPartIIIData:', hasPartIIIData);
-          console.log('Alumni - hasJobInDB:', hasPartIIIData);
-          console.log('Alumni - Debug info:', data.debug || 'No debug info');
-          console.log('Alumni - Full employment data:', data);
+          console.log('  - Final hasJobInDB value:', hasPartIIIData === true);
+          console.log('  - Debug info:', data.debug || 'No debug info');
         }
         
         console.log('Employment data loaded:', data);
       } else {
-        console.error('Failed to fetch employment data');
-        setHasJobInDB(null);
+        console.error('Failed to fetch employment data - invalid response');
+        // Set to false to show "Please answer tracker" prompt instead of loading forever
+        setHasJobInDB(false);
+        setAccountType('alumni'); // Default to alumni
       }
     } catch (error) {
       console.error('Error fetching employment data:', error);
-      setHasJobInDB(null);
+      // Set to false to show "Please answer tracker" prompt instead of loading forever
+      setHasJobInDB(false);
+      setAccountType('alumni'); // Default to alumni
     }
   };
 
@@ -1133,139 +1209,131 @@ const Settings: React.FC = () => {
                     {accountType === 'alumni' && (hasJobInDB === true || hasJobInDB === false) && (
                       <>
                         {hasJobInDB ? (
-                          // Display Part III tracker data
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: '#174f84' }}>
-                              PART III - Employment Status
-                            </Typography>
-                            
-                            <TextField
-                              label="Employment Type"
-                              value={employmentData.employment_type || 'N/A'}
-                              variant="outlined"
-                              fullWidth
-                              disabled={true}
-                              sx={{ mb: 2 }}
-                            />
-                            
-                            <TextField
-                              label="Current Employment Status"
-                              value={employmentData.current_employment_status || 'N/A'}
-                              variant="outlined"
-                              fullWidth
-                              disabled={true}
-                              sx={{ mb: 2 }}
-                            />
-                            
-                            <TextField
-                              label="Company Name"
-                              value={employmentData.current_company_name || 'N/A'}
-                              variant="outlined"
-                              fullWidth
-                              disabled={true}
-                              sx={{ mb: 2 }}
-                            />
-                            
-                            <TextField
-                              label="Current Position"
-                              value={employmentData.current_position || 'N/A'}
-                              variant="outlined"
-                              fullWidth
-                              disabled={true}
-                              sx={{ mb: 2 }}
-                            />
-                            
-                            <TextField
-                              label="Sector"
-                              value={employmentData.current_sector || 'N/A'}
-                              variant="outlined"
-                              fullWidth
-                              disabled={true}
-                              sx={{ mb: 2 }}
-                            />
-                            
-                            <TextField
-                              label="Scope"
-                              value={employmentData.current_scope || 'N/A'}
-                              variant="outlined"
-                              fullWidth
-                              disabled={true}
-                              sx={{ mb: 2 }}
-                            />
-                            
-                            <TextField
-                              label="Employment Duration"
-                              value={formatEmploymentDuration(employmentData.employment_duration)}
-                              variant="outlined"
-                              fullWidth
-                              disabled={true}
-                              sx={{ mb: 2 }}
-                            />
-                            
-                            <TextField
-                              label="Salary Range"
-                              value={formatSalaryRange(employmentData.salary_range)}
-                              variant="outlined"
-                              fullWidth
-                              disabled={true}
-                              sx={{ mb: 2 }}
-                            />
-                            
-                            <TextField
-                              label="Received Awards"
-                              value={employmentData.received_awards || 'N/A'}
-                              variant="outlined"
-                              fullWidth
-                              disabled={true}
-                              sx={{ mb: 2 }}
-                            />
-                            
-                            {employmentData.awards_supporting_doc && (
-                              <Box sx={{ mb: 2 }}>
-                                <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                                  Awards Supporting Document:
-                                </Typography>
-                                <a 
-                                  href={`http://127.0.0.1:8000${employmentData.awards_supporting_doc}`} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  style={{ color: '#174f84', textDecoration: 'underline' }}
-                                >
-                                  View Document
-                                </a>
+                            <Paper
+                              elevation={0}
+                              sx={{
+                                borderRadius: 3,
+                                p: { xs: 3, md: 5 },
+                                background: '#f5f7fb',
+                                border: '1px solid #e3ebf6'
+                              }}
+                            >
+                              <Typography variant="h5" sx={{ fontWeight: 600, color: '#174f84', mb: 0.5 }}>
+                                Part III – Employment Status
+                              </Typography>
+                              <Typography variant="body2" sx={{ color: '#94a3b8', mb: 3 }}>
+                                Data is pulled from your latest tracker submission.
+                              </Typography>
+                              <Divider sx={{ mb: 3, borderColor: '#d7e3f4' }} />
+                              <Box
+                                sx={{
+                                  display: 'grid',
+                                  gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
+                                  gap: { xs: 2.5, md: 3 },
+                                  color: '#1e293b'
+                                }}
+                              >
+                                {employmentSummaryRows.map((item) => (
+                                  <Box
+                                    key={item.label}
+                                    sx={{
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: 0.5
+                                    }}
+                                  >
+                                    <Typography
+                                      variant="caption"
+                                      sx={{ color: '#8c9db8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6 }}
+                                    >
+                                      {item.label}
+                                    </Typography>
+                                    <Typography
+                                      variant="subtitle1"
+                                      sx={{ fontWeight: 600, color: '#0f172a' }}
+                                    >
+                                      {item.value || 'N/A'}
+                                    </Typography>
+                                  </Box>
+                                ))}
                               </Box>
-                            )}
-                            
-                            {employmentData.employment_supporting_doc && (
-                              <Box sx={{ mb: 2 }}>
-                                <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                                  Employment Supporting Document:
-                                </Typography>
-                                <a 
-                                  href={`http://127.0.0.1:8000${employmentData.employment_supporting_doc}`} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  style={{ color: '#174f84', textDecoration: 'underline' }}
-                                >
-                                  View Document
-                                </a>
-                              </Box>
-                            )}
+                            </Paper>
+
+                            <Paper
+                              elevation={0}
+                              sx={{
+                                borderRadius: 3,
+                                p: { xs: 3, md: 4 },
+                                border: '1px solid #e3ebf6',
+                                backgroundColor: '#fff'
+                              }}
+                            >
+                              <Typography variant="h6" sx={{ fontWeight: 600, color: '#174f84' }}>
+                                Employment History
+                              </Typography>
+                              <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
+                                Displaying the employment details you provided in the tracker.
+                              </Typography>
+                              <Divider sx={{ mb: 3 }} />
+                              <TableContainer sx={{ borderRadius: 2, border: '1px solid #e8eff9' }}>
+                                <Table size="small">
+                                  <TableHead>
+                                    <TableRow>
+                                      {['Company Name', 'Position', 'Sector', 'Scope', 'Duration', 'Salary Range'].map((header) => (
+                                        <TableCell
+                                          key={header}
+                                          sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: 12, color: '#94a3b8', backgroundColor: '#f5f7fb' }}
+                                        >
+                                          {header}
+                                        </TableCell>
+                                      ))}
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    <TableRow sx={{ '& td': { fontWeight: 600, color: '#0f172a' } }}>
+                                      <TableCell>{employmentHistoryRow.company}</TableCell>
+                                      <TableCell>{employmentHistoryRow.position}</TableCell>
+                                      <TableCell>{employmentHistoryRow.sector}</TableCell>
+                                      <TableCell>{employmentHistoryRow.scope}</TableCell>
+                                      <TableCell>{employmentHistoryRow.duration}</TableCell>
+                                      <TableCell>{employmentHistoryRow.salary}</TableCell>
+                                    </TableRow>
+                                  </TableBody>
+                                </Table>
+                              </TableContainer>
+
+                              {trackerDocuments.length > 0 && (
+                                <Box sx={{ mt: 3, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
+                                  {trackerDocuments.map((doc) => (
+                                    <Button
+                                      key={doc.label}
+                                      component="a"
+                                      href={doc.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      variant="outlined"
+                                      sx={{
+                                        flex: 1,
+                                        borderColor: '#174f84',
+                                        color: '#174f84',
+                                        fontWeight: 600,
+                                        textTransform: 'none'
+                                      }}
+                                    >
+                                      {doc.label}
+                                    </Button>
+                                  ))}
+                                </Box>
+                              )}
+                            </Paper>
                           </Box>
                         ) : (
-                          // Prompt to answer tracker
-                          <Box sx={{ 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            alignItems: 'center', 
-                            justifyContent: 'center', 
-                            py: 6,
-                            gap: 3
-                          }}>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#64748b', textAlign: 'center' }}>
+                          <Box sx={{ textAlign: 'center', py: 4 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 600, color: '#475569', mb: 1 }}>
                               Please answer the tracker form to view your employment details
                             </Typography>
-                            <Typography variant="body2" sx={{ color: '#94a3b8', textAlign: 'center', maxWidth: 500 }}>
+                            <Typography variant="body1" sx={{ color: '#94a3b8', maxWidth: 600, mx: 'auto', mb: 4 }}>
                               Your employment details (Part III - Employment Status) will be displayed here once you complete the tracker form.
                             </Typography>
                             <Button
@@ -1274,9 +1342,11 @@ const Settings: React.FC = () => {
                               sx={{
                                 backgroundColor: '#174f84',
                                 '&:hover': { backgroundColor: '#0d3a5f' },
-                                px: 4,
+                                px: 5,
                                 py: 1.5,
-                                mt: 2
+                                fontWeight: 600,
+                                borderRadius: 2,
+                                textTransform: 'uppercase'
                               }}
                             >
                               Go to Tracker Form
