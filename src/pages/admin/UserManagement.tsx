@@ -526,6 +526,31 @@ const UserManagement: React.FC = () => {
         setError('Program is required for coordinators');
         return;
       }
+      
+      // CRITICAL: Check for duplicate coordinators for the same program
+      const programNormalized = formData.course.trim().toUpperCase();
+      const existingCoordinator = users.find(user => {
+        if (!user.account_type?.coordinator || user.user_status !== 'active') {
+          return false;
+        }
+        
+        // Check User.f_name field (where program is stored for coordinators)
+        const userProgram = (user.f_name || '').trim().toUpperCase().replace(' N/A', '').replace(' COORDINATOR', '');
+        
+        // Also check course field if available
+        const courseProgram = (user.course || '').trim().toUpperCase().replace(' N/A', '').replace(' COORDINATOR', '');
+        
+        // Compare normalized program names
+        return (userProgram === programNormalized && userProgram !== '') || 
+               (courseProgram === programNormalized && courseProgram !== '');
+      });
+      
+      if (existingCoordinator) {
+        const existingProgram = existingCoordinator.f_name || existingCoordinator.course || 'Unknown';
+        setError(`A coordinator is already assigned to ${existingProgram}. Only one coordinator per program is allowed.`);
+        toast.error(`A coordinator already exists for ${existingProgram}`);
+        return;
+      }
     }
     
     if (passwordRequired) {
@@ -582,9 +607,11 @@ const UserManagement: React.FC = () => {
 
       // For coordinators, send username, account_type, password, and program
       if (formData.account_type === 'coordinator') {
-        if (formData.course) submitData.course = formData.course;
-        const programLabel = formData.course || 'Coordinator';
-        submitData.f_name = programLabel;
+        // Clean up course value - remove N/A if present
+        const cleanedCourse = (formData.course || '').trim().replace(/\s*N\/A\s*/gi, '').trim();
+        if (cleanedCourse) submitData.course = cleanedCourse;
+        const programLabel = cleanedCourse || 'Coordinator';
+        submitData.f_name = programLabel.toUpperCase();
         submitData.l_name = 'Coordinator';
       } else if (formData.account_type === 'peso') {
         // Backend requires f_name and l_name for all account types
@@ -709,7 +736,9 @@ const UserManagement: React.FC = () => {
             acc_password_confirm: ''
           };
           if (value === 'coordinator') {
-            const programLabel = (prev.course || 'Coordinator').toUpperCase();
+            // Clean up course value - remove N/A if present
+            const cleanedCourse = (prev.course || '').trim().replace(/\s*N\/A\s*/gi, '').trim();
+            const programLabel = (cleanedCourse || 'Coordinator').toUpperCase();
             return { ...base, f_name: programLabel, l_name: 'Coordinator' };
           }
           if (value === 'peso') {
@@ -727,10 +756,12 @@ const UserManagement: React.FC = () => {
         }));
       }
     } else if (name === 'course' && formData.account_type === 'coordinator') {
-      const programLabel = value || 'Coordinator';
+      // Clean up the course value - remove N/A if present
+      const cleanedCourse = (value || '').trim().replace(/\s*N\/A\s*/gi, '').trim();
+      const programLabel = cleanedCourse || 'Coordinator';
       setFormData(prev => ({
         ...prev,
-        course: value,
+        course: cleanedCourse,
         f_name: programLabel.toUpperCase(),
         l_name: 'Coordinator'
       }));
@@ -1090,12 +1121,23 @@ const UserManagement: React.FC = () => {
                         {(() => {
                           // Try full_name first (from backend)
                           if (user.full_name?.trim()) {
-                            return user.full_name.trim();
+                            let cleanedName = user.full_name.trim();
+                            // Remove "N/A" from coordinator names
+                            if (user.account_type?.coordinator) {
+                              cleanedName = cleanedName.replace(/\s+N\/A\s*/gi, ' ').trim();
+                            }
+                            return cleanedName;
                           }
                           
                           // Try first_name and last_name
-                          const firstName = user.first_name?.trim() || user.f_name?.trim() || '';
+                          let firstName = user.first_name?.trim() || user.f_name?.trim() || '';
                           const lastName = user.last_name?.trim() || user.l_name?.trim() || '';
+                          
+                          // Remove "N/A" from coordinator first names
+                          if (user.account_type?.coordinator) {
+                            firstName = firstName.replace(/\s+N\/A\s*/gi, ' ').trim();
+                          }
+                          
                           const fullName = `${firstName} ${lastName}`.trim();
                           
                           if (fullName) {

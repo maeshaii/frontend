@@ -76,6 +76,9 @@ const InventoryPage: React.FC = () => {
   const [showLowStockModal, setShowLowStockModal] = useState(false);
   const [editingQuantities, setEditingQuantities] = useState<{ [key: number]: string }>({});
   const [updatingItems, setUpdatingItems] = useState<Set<number>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
+  const [deletingItemId, setDeletingItemId] = useState<number | null>(null);
 
   // Show notification helper
   const showNotification = (type: 'success' | 'error', message: string) => {
@@ -229,22 +232,40 @@ const InventoryPage: React.FC = () => {
     }
   };
 
-  const handleDeleteItem = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this item?')) {
-      try {
-        const response = await deleteInventoryItem(id);
-        
-        if (response.success) {
-          setInventoryItems(inventoryItems.filter(item => item.id !== id));
-          showNotification('success', 'Item deleted successfully!');
-        } else {
-          showNotification('error', response.message || 'Failed to delete item');
-        }
-      } catch (err: any) {
-        console.error('Error deleting item:', err);
-        showNotification('error', err.response?.data?.message || 'Failed to delete item');
+  const handleDeleteClick = (item: InventoryItem) => {
+    setItemToDelete(item);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
+
+    try {
+      setDeletingItemId(itemToDelete.id);
+      const response = await deleteInventoryItem(itemToDelete.id);
+      
+      if (response.success) {
+        setInventoryItems(inventoryItems.filter(item => item.id !== itemToDelete.id));
+        showNotification('success', `"${itemToDelete.name}" deleted successfully!`);
+        setShowDeleteConfirm(false);
+        setItemToDelete(null);
+        // Refresh analytics after deletion
+        fetchInventoryAnalytics();
+      } else {
+        showNotification('error', response.message || 'Failed to delete item');
       }
+    } catch (err: any) {
+      console.error('Error deleting item:', err);
+      showNotification('error', err.response?.data?.message || 'Failed to delete item');
+    } finally {
+      setDeletingItemId(null);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setItemToDelete(null);
+    setDeletingItemId(null);
   };
 
   const handleEditItem = (item: InventoryItem) => {
@@ -976,24 +997,58 @@ const InventoryPage: React.FC = () => {
                         </span>
                       </td>
                       <td style={{ ...styles.tableCell, textAlign: 'center' }}>
-                        <button
-                          style={{
-                            ...styles.actionButton,
-                            color: '#3b82f6',
-                            fontSize: '14px',
-                            fontWeight: '500'
-                          }}
-                          title="Edit"
-                          onClick={() => handleEditItem(item)}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.textDecoration = 'underline';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.textDecoration = 'none';
-                          }}
-                        >
-                          Edit
-                        </button>
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', alignItems: 'center' }}>
+                          <button
+                            style={{
+                              ...styles.actionButton,
+                              color: '#3b82f6',
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              padding: '6px 12px'
+                            }}
+                            title="Edit"
+                            onClick={() => handleEditItem(item)}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.textDecoration = 'underline';
+                              e.currentTarget.style.backgroundColor = '#eff6ff';
+                              e.currentTarget.style.borderRadius = '6px';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.textDecoration = 'none';
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                            disabled={deletingItemId === item.id}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            style={{
+                              ...styles.actionButton,
+                              color: deletingItemId === item.id ? '#9ca3af' : '#ef4444',
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              padding: '6px 12px',
+                              opacity: deletingItemId === item.id ? 0.6 : 1,
+                              cursor: deletingItemId === item.id ? 'not-allowed' : 'pointer'
+                            }}
+                            title="Remove"
+                            onClick={() => handleDeleteClick(item)}
+                            onMouseEnter={(e) => {
+                              if (deletingItemId !== item.id) {
+                                e.currentTarget.style.textDecoration = 'underline';
+                                e.currentTarget.style.backgroundColor = '#fef2f2';
+                                e.currentTarget.style.borderRadius = '6px';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.textDecoration = 'none';
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                            disabled={deletingItemId === item.id}
+                          >
+                            {deletingItemId === item.id ? 'Removing...' : 'Remove'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -2003,6 +2058,194 @@ const InventoryPage: React.FC = () => {
                 }
               }
             `}</style>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && itemToDelete && (
+          <div 
+            style={{
+              ...styles.modalOverlay,
+              animation: 'fadeIn 0.2s ease-out',
+              padding: '20px'
+            }} 
+            onClick={handleDeleteCancel}
+          >
+            <div 
+              style={{
+                ...styles.modalContent,
+                animation: 'slideInModal 0.3s ease-out',
+                maxWidth: '500px'
+              }} 
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div style={{
+                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                padding: '24px 32px',
+                borderRadius: '16px 16px 0 0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div>
+                  <h2 style={{
+                    margin: 0,
+                    fontSize: '24px',
+                    fontWeight: '700',
+                    color: 'white',
+                    letterSpacing: '0.5px'
+                  }}>
+                    ⚠️ Delete Item
+                  </h2>
+                  <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.9)', marginTop: '4px', fontWeight: '500' }}>
+                    This action cannot be undone
+                  </div>
+                </div>
+                <button
+                  onClick={handleDeleteCancel}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    border: 'none',
+                    fontSize: '28px',
+                    cursor: 'pointer',
+                    color: 'white',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    transition: 'all 0.2s',
+                    lineHeight: 1,
+                    width: '40px',
+                    height: '40px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div style={{ padding: '32px' }}>
+                <div style={{ marginBottom: '24px' }}>
+                  <p style={{
+                    fontSize: '16px',
+                    color: '#374151',
+                    margin: '0 0 16px 0',
+                    lineHeight: '1.6'
+                  }}>
+                    Are you sure you want to delete <strong style={{ color: '#1f2937' }}>"{itemToDelete.name}"</strong>?
+                  </p>
+                  <div style={{
+                    backgroundColor: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    marginTop: '16px'
+                  }}>
+                    <div style={{ fontSize: '14px', color: '#991b1b', fontWeight: '500', marginBottom: '4px' }}>
+                      ⚠️ Warning
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#7f1d1d' }}>
+                      This will permanently remove the item from inventory. Any pending rewards using this item may be affected.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{
+                  display: 'flex',
+                  gap: '12px',
+                  justifyContent: 'flex-end'
+                }}>
+                  <button
+                    onClick={handleDeleteCancel}
+                    disabled={deletingItemId === itemToDelete.id}
+                    style={{
+                      padding: '12px 24px',
+                      backgroundColor: '#f3f4f6',
+                      color: '#374151',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: deletingItemId === itemToDelete.id ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      opacity: deletingItemId === itemToDelete.id ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (deletingItemId !== itemToDelete.id) {
+                        e.currentTarget.style.backgroundColor = '#e5e7eb';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f3f4f6';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteConfirm}
+                    disabled={deletingItemId === itemToDelete.id}
+                    style={{
+                      padding: '12px 24px',
+                      backgroundColor: deletingItemId === itemToDelete.id ? '#9ca3af' : '#ef4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: deletingItemId === itemToDelete.id ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: deletingItemId === itemToDelete.id ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.3)'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (deletingItemId !== itemToDelete.id) {
+                        e.currentTarget.style.backgroundColor = '#dc2626';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.4)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (deletingItemId !== itemToDelete.id) {
+                        e.currentTarget.style.backgroundColor = '#ef4444';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.3)';
+                      }
+                    }}
+                  >
+                    {deletingItemId === itemToDelete.id ? (
+                      <>
+                        <span style={{ 
+                          display: 'inline-block',
+                          width: '14px',
+                          height: '14px',
+                          border: '2px solid rgba(255, 255, 255, 0.3)',
+                          borderTopColor: 'white',
+                          borderRadius: '50%',
+                          animation: 'spin 0.6s linear infinite'
+                        }}></span>
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        🗑️ Delete Item
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
         </div>
