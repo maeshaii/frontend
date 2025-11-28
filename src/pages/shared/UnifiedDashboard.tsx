@@ -5,6 +5,7 @@ import PostCreate from '../alumni/PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
 import TrackerReminderModal from '../../components/TrackerReminderModal';
+import EmploymentUpdateReminderModal from '../../components/EmploymentUpdateReminderModal';
 import ctulogo from '../../images/ctulogo.png';
 import '../alumni/dashboard.css';
 import '../alumni/profile.css';
@@ -250,6 +251,7 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
   const [showOriginalPostModal, setShowOriginalPostModal] = useState(false);
   const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
   const [showTrackerModal, setShowTrackerModal] = useState(false);
+  const [showEmploymentUpdateModal, setShowEmploymentUpdateModal] = useState(false);
   const [trackerReminderSuppressed, setTrackerReminderSuppressed] = useState<boolean>(() => {
     try {
       return localStorage.getItem('suppressTrackerModal') === 'true';
@@ -372,6 +374,41 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         .catch((error) => {
           console.error('Error checking tracker status:', error);
         });
+      
+      // Check employment update reminder (for alumni who have submitted tracker)
+      // FOR TESTING: Shows after 2 minutes. FOR PRODUCTION: Change to 6 months (180 days)
+      if (currentUserId && (userObj.account_type?.user || userObj.account_type?.alumni)) {
+        const accessToken = localStorage.getItem('accessToken');
+        fetch(`http://127.0.0.1:8000/api/alumni/employment-reminder/${currentUserId}/`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        })
+          .then(response => response.json())
+          .then(data => {
+            console.log('🔍 Employment update reminder check:', data);
+            if (data.should_show_reminder) {
+              // Check if user dismissed this reminder
+              const dismissedUntil = localStorage.getItem('employmentUpdateReminderDismissedUntil');
+              if (dismissedUntil) {
+                const dismissedDate = new Date(dismissedUntil);
+                if (dismissedDate > new Date()) {
+                  console.log('🔍 Employment reminder dismissed until:', dismissedDate);
+                  return; // Still dismissed
+                }
+              }
+              
+              // Show modal after a short delay (don't conflict with tracker modal)
+              setTimeout(() => {
+                setShowEmploymentUpdateModal(true);
+              }, 3000);
+            }
+          })
+          .catch((error) => {
+            console.error('Error checking employment update reminder:', error);
+          });
+      }
     }
 
     // Fetch following list for current user
@@ -2775,6 +2812,33 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         isOpen={showTrackerModal}
         onClose={() => setShowTrackerModal(false)}
         userId={user?.user_id || user?.id || 0}
+      />
+
+      <EmploymentUpdateReminderModal
+        open={showEmploymentUpdateModal}
+        onClose={() => {
+          setShowEmploymentUpdateModal(false);
+        }}
+        onUpdateNow={() => {
+          setShowEmploymentUpdateModal(false);
+          const userId = user?.user_id || user?.id;
+          if (userId) {
+            navigate(`/settings`);
+            // Small delay to ensure navigation happens, then switch to employment tab
+            setTimeout(() => {
+              localStorage.setItem('settingsActiveSection', 'employment');
+              window.location.reload(); // Force reload to show employment section
+            }, 100);
+          }
+        }}
+        onMaybeLater={() => {
+          setShowEmploymentUpdateModal(false);
+          // Dismiss for 7 days (for testing, you can change this)
+          const dismissedUntil = new Date();
+          dismissedUntil.setDate(dismissedUntil.getDate() + 7);
+          localStorage.setItem('employmentUpdateReminderDismissedUntil', dismissedUntil.toISOString());
+          console.log('🔍 Employment reminder dismissed until:', dismissedUntil);
+        }}
       />
       
       {/* Repost Notification Modal */}

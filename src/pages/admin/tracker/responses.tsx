@@ -27,7 +27,7 @@ const getFileUrl = (fileUrl: string | null | undefined): string => {
   return `${baseUrl}${fileUrl}`;
 };
 
-const IMAGE_FILE_REGEX = /\.(png|jpe?g|gif|bmp|webp|svg)$/i;
+const IMAGE_FILE_REGEX = /\.(png|jpe?g|gif|bmp|webp|svg|tiff?)$/i;
 const isImageFile = (filename?: string | null) => !!filename && IMAGE_FILE_REGEX.test(filename);
 
 const getFileTypeLabel = (filename?: string | null) => {
@@ -38,6 +38,16 @@ const getFileTypeLabel = (filename?: string | null) => {
 const getImageFormat = (filename?: string | null): 'JPEG' | 'PNG' => {
   if (!filename) return 'JPEG';
   return filename.toLowerCase().endsWith('.png') ? 'PNG' : 'JPEG';
+};
+
+// Helper to check if a question is image-only (questions 20, 31, 32)
+const isImageOnlyQuestion = (questionText: string): boolean => {
+  const lowerText = questionText.toLowerCase();
+  const isFirstEmploymentDoc = lowerText.includes('first employment supporting document');
+  const isAwardSupportingDocs = (lowerText.includes('supporting documents') || lowerText.includes('supporting document')) && 
+                                 (lowerText.includes('awards') || lowerText.includes('award') || lowerText.includes('recognition'));
+  const isCurrentEmploymentDoc = lowerText.includes('employment supporting document') && lowerText.includes('current');
+  return isFirstEmploymentDoc || isAwardSupportingDocs || isCurrentEmploymentDoc;
 };
 
 const Responses: React.FC = () => {
@@ -697,22 +707,39 @@ const Responses: React.FC = () => {
                   gap: '12px',
                 }}
               >
-                {fileStats.map((stat, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      padding: '8px',
-                      backgroundColor: 'white',
-                      borderRadius: '4px',
-                      border: '1px solid #dee2e6',
-                    }}
-                  >
-                    <strong>{stat.question_text}</strong>
-                    <div>Files: {stat.total_files}</div>
-                    <div>Size: {stat.total_size_mb} MB</div>
-                    <div>Users: {stat.unique_users}</div>
-                  </div>
-                ))}
+                {fileStats.map((stat, index) => {
+                  const isImageOnly = isImageOnlyQuestion(stat.question_text);
+                  const nonImageFiles = stat.files.filter((f: any) => !isImageFile(f.filename));
+                  const hasNonImageFiles = nonImageFiles.length > 0;
+                  
+                  return (
+                    <div
+                      key={index}
+                      style={{
+                        padding: '8px',
+                        backgroundColor: 'white',
+                        borderRadius: '4px',
+                        border: '1px solid #dee2e6',
+                        position: 'relative',
+                      }}
+                    >
+                      <strong>{stat.question_text}</strong>
+                      {isImageOnly && (
+                        <div style={{ fontSize: '11px', color: '#28a745', marginTop: '2px', fontStyle: 'italic' }}>
+                          📷 Image files only
+                        </div>
+                      )}
+                      {isImageOnly && hasNonImageFiles && (
+                        <div style={{ fontSize: '11px', color: '#dc3545', marginTop: '2px', fontWeight: 'bold' }}>
+                          ⚠️ {nonImageFiles.length} non-image file(s) from previous uploads
+                        </div>
+                      )}
+                      <div>Files: {stat.total_files}</div>
+                      <div>Size: {stat.total_size_mb} MB</div>
+                      <div>Users: {stat.unique_users}</div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -743,7 +770,26 @@ const Responses: React.FC = () => {
                         }}
                       >
                         {stat.question_text}
+                        {isImageOnlyQuestion(stat.question_text) && (
+                          <span style={{ fontSize: '14px', color: '#28a745', marginLeft: '8px', fontWeight: 'normal' }}>
+                            📷 (Image files only)
+                          </span>
+                        )}
                       </h5>
+                      {isImageOnlyQuestion(stat.question_text) && stat.files.some((f: any) => !isImageFile(f.filename)) && (
+                        <div style={{
+                          padding: '8px 12px',
+                          backgroundColor: '#fff3cd',
+                          border: '1px solid #ffc107',
+                          borderRadius: '4px',
+                          marginBottom: '12px',
+                          fontSize: '13px',
+                          color: '#856404'
+                        }}>
+                          ⚠️ <strong>Note:</strong> This question now only accepts image files (JPEG, PNG, SVG, GIF, WEBP, BMP, TIFF). 
+                          The non-image files shown below are from previous uploads and will remain in the system.
+                        </div>
+                      )}
 
                       {/* Print Button for this category */}
                       <button
@@ -906,8 +952,34 @@ const Responses: React.FC = () => {
                                 alignItems: 'center',
                               }}
                             >
-                              <div>
-                                <strong>{file.filename}</strong>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <strong>{file.filename}</strong>
+                                  {isImageOnlyQuestion(stat.question_text) && !isImageFile(file.filename) && (
+                                    <span style={{
+                                      fontSize: '11px',
+                                      padding: '2px 6px',
+                                      backgroundColor: '#ffc107',
+                                      color: '#856404',
+                                      borderRadius: '3px',
+                                      fontWeight: 'bold'
+                                    }}>
+                                      ⚠️ Non-Image
+                                    </span>
+                                  )}
+                                  {isImageOnlyQuestion(stat.question_text) && isImageFile(file.filename) && (
+                                    <span style={{
+                                      fontSize: '11px',
+                                      padding: '2px 6px',
+                                      backgroundColor: '#28a745',
+                                      color: 'white',
+                                      borderRadius: '3px',
+                                      fontWeight: 'bold'
+                                    }}>
+                                      ✓ Image
+                                    </span>
+                                  )}
+                                </div>
                                 <div style={{ fontSize: '14px', color: '#666', marginTop: '4px' }}>
                                   Uploaded by: {file.user} | Size: {file.file_size_mb} MB | Date:{' '}
                                   {file.uploaded_at}

@@ -14,7 +14,7 @@ import {
   FaSignOutAlt
 } from 'react-icons/fa';
 import { MdSettingsSuggest } from 'react-icons/md';
-import logoLogin from '../../../images/logo.png';
+import whereNaYouLogo from '../../../images/final_logos-removebg-preview.png';
 import ConfirmModal from '../../../components/ConfirmModal';
 import './sidebar.css';
 import { getRewardRequests } from '../../../services/api';
@@ -256,7 +256,7 @@ const Sidebar = () => {
       }
 
       // Update CSS var for content margin
-      const sidebarWidthVar = small ? '0px' : (desktop ? '220px' : '70px');
+      const sidebarWidthVar = small ? '0px' : (desktop ? '240px' : '70px');
       document.documentElement.style.setProperty('--sidebar-width', sidebarWidthVar);
     };
 
@@ -292,7 +292,7 @@ const Sidebar = () => {
     }
   };
 
-  const sidebarWidth = isMobileSmall ? (mobileOpen ? '70px' : '0px') : (isCollapsed ? '70px' : '220px');
+  const sidebarWidth = isMobileSmall ? (mobileOpen ? '70px' : '0px') : (isCollapsed ? '70px' : '240px');
   const isHidden = isMobileSmall && !mobileOpen;
 
   const styles = {
@@ -345,34 +345,56 @@ const Sidebar = () => {
     },
     logoContainer: {
       width: '100%',
-      maxWidth: isCollapsed ? '60px' : '180px',
-      height: isCollapsed ? 54 : 60,
-      background: '#ffffff',
+      maxWidth: isCollapsed ? '60px' : '220px',
       margin: '0 auto',
-      borderRadius: '8px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-      overflow: 'hidden',
-      padding: '4px 8px',
+      gap: isCollapsed ? '0' : '6px',
+      overflow: 'visible' as const,
+      padding: isCollapsed ? '6px' : '12px 8px',
       transition: 'all 0.3s ease',
+      flexWrap: 'nowrap' as const,
+    },
+    logoIcon: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+      width: isCollapsed ? '32px' : '40px',
+      height: isCollapsed ? '32px' : '40px',
+      minWidth: isCollapsed ? '32px' : '40px',
+      minHeight: isCollapsed ? '32px' : '40px',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      position: 'relative' as const,
+    },
+    logoIconImage: {
+      width: '100%',
+      height: '100%',
+      objectFit: 'contain' as const,
+      transition: 'opacity 0.3s ease, transform 0.3s ease',
+      userSelect: 'none' as const,
+      pointerEvents: 'none' as const,
+      display: 'block',
     },
     logoImage: {
-      height: '100%',
-      width: 'auto',
-      objectFit: 'contain' as const,
+      display: 'none', // Hidden - replaced with text logo
     },
     logoText: {
-      fontSize: '14px',
-      marginTop: '8px',
-      textAlign: 'center' as const,
-      fontWeight: 'bold' as const,
+      fontSize: isCollapsed ? '18px' : '24px',
+      textAlign: 'left' as const,
+      fontWeight: '700' as const,
       color: '#ffffff',
-      // Always show brand text; it will wrap within 70px on small
-      width: '100%',
-      overflow: 'hidden',
-      transition: 'width 0.3s ease',
+      fontFamily: '"Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      letterSpacing: isCollapsed ? '0.5px' : '0.8px',
+      textShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+      overflow: 'visible' as const,
+      transition: 'all 0.3s ease',
+      whiteSpace: 'nowrap' as const,
+      opacity: isCollapsed ? 0 : 1,
+      width: isCollapsed ? '0' : 'auto',
+      flexShrink: 0,
+      lineHeight: '1.2',
     },
     navList: {
       listStyleType: 'none' as const,
@@ -600,7 +622,22 @@ const Sidebar = () => {
         <div style={styles.topSection}>
           <div style={styles.logo}>
             <div style={styles.logoContainer}>
-              <img src={logoLogin} alt="WhereNaYou Logo" style={styles.logoImage} />
+              <div style={styles.logoIcon}>
+                <img 
+                  src={whereNaYouLogo} 
+                  alt="WhereNaYou Logo" 
+                  style={styles.logoIconImage}
+                  onError={(e) => {
+                    // Graceful fallback: hide image if it fails to load
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    console.warn('WhereNaYou logo failed to load');
+                  }}
+                  loading="eager"
+                  decoding="async"
+                />
+              </div>
+              <h1 style={styles.logoText}>{isCollapsed ? 'WNY' : 'WhereNaYou'}</h1>
             </div>
           </div>
 

@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
-import wherenayouLogo from '../../images/logo.png';
+import whereNaYouLogo from '../../images/final_logos-removebg-preview.png';
 import { api, getAdminPesoUsers, getUserInfo, saveRecentSearch, getRecentSearches, deleteRecentSearch } from '../../services/api';
 import { RecentSearchWebSocket } from '../../services/recentSearchWebSocket';
 import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
@@ -624,26 +624,62 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div
             style={{
-              height: 44,
-              background: 'white',
-              borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-              overflow: 'hidden',
-              padding: '4px 8px',
+              gap: '10px',
+              padding: '0 8px',
             }}
           >
-            <img 
-              src={wherenayouLogo} 
-              alt="WhereNaYou Logo" 
+            <div
               style={{
-                height: '100%',
-                width: 'auto',
-                objectFit: 'contain',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                width: '36px',
+                height: '36px',
+                minWidth: '36px',
+                minHeight: '36px',
+                position: 'relative',
               }}
-            />
+            >
+              <img 
+                src={whereNaYouLogo} 
+                alt="WhereNaYou Logo" 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  transition: 'opacity 0.3s ease, transform 0.3s ease',
+                  userSelect: 'none',
+                  pointerEvents: 'none',
+                  display: 'block',
+                }}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  console.warn('WhereNaYou logo failed to load');
+                }}
+                loading="eager"
+                decoding="async"
+              />
+            </div>
+            <h1 
+              style={{
+                fontSize: '24px',
+                fontWeight: '700',
+                color: '#ffffff',
+                fontFamily: '"Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                letterSpacing: '1px',
+                textShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+                margin: 0,
+                padding: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              WhereNaYou
+            </h1>
           </div>
         </div>
         <div
@@ -1187,7 +1223,7 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
               fontSize: isCompactTopBar ? 11 : 12, 
               fontWeight: '500',
               letterSpacing: '0.2px',
-            }}>Menu ▼</span>
+            }}>Menu</span>
           </div>
           {showProfile && (
             <div

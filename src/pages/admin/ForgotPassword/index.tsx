@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '../../../services/api';
+import { IoArrowBack } from 'react-icons/io5';
 import './ForgotPassword.css';
 import '../authAnimations.css';
 
 const background = require('../../../images/ctu.jpg');
 const ccictLogo = require('../../../images/ccict.png');
 const alumniLogo = require('../../../images/ctu alumni logo.jpg');
+const whereNaYouLogo = require('../../../images/final_logos-removebg-preview.png');
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
@@ -58,7 +60,7 @@ const ForgotPassword = () => {
               style={styles.backButton}
               className="forgot-password-back-button"
             >
-              ←
+              <IoArrowBack />
             </button>
             <h1 style={styles.title}>Forgot Password</h1>
           </div>
@@ -124,7 +126,7 @@ const ForgotPassword = () => {
                 style={styles.backToLoginButton}
                 className="forgot-password-back-to-login"
               >
-                ← Back to Login
+                <IoArrowBack style={{ marginRight: '6px', display: 'inline-block' }} /> Back to Login
               </button>
             </div>
           </form>
@@ -135,13 +137,29 @@ const ForgotPassword = () => {
         <img src={background} alt="CTU Administration Building" style={styles.backgroundImage} className="forgot-password-background-image" />
         <div style={styles.leftContent}>
           <div style={{ marginTop: '-10rem' }}>
-            <h2 style={styles.brandTitle} className="forgot-password-brand-title">WHERENAYOU : Connecting OJT's & Alumni Journeys</h2>
-            <p style={styles.brandSubtitle}>Excellence in Technology Education</p>
+            <div style={styles.brandContainer}>
+              <img 
+                src={whereNaYouLogo} 
+                alt="WhereNaYou Logo" 
+                style={styles.brandLogo}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                }}
+              />
+              <div style={styles.brandTextContainer}>
+                <h2 style={styles.brandTitle} className="forgot-password-brand-title">WHERENAYOU</h2>
+                <p style={styles.brandTagline} className="forgot-password-brand-tagline">Connecting OJTs & Alumni Journeys</p>
+                <p style={styles.brandSubtitle}>Excellence in Technology Education</p>
+              </div>
+            </div>
           </div>
           <div style={styles.collaborationContainer} className="forgot-password-collaboration-container">
-            <h3 style={styles.collaborationTitle} className="forgot-password-collaboration-title">IN COLLABORATION WITH</h3>
+            <div style={styles.collaborationTitleWrapper}>
+              <h3 style={styles.collaborationTitle} className="forgot-password-collaboration-title">IN COLLABORATION WITH</h3>
+            </div>
             <div style={styles.partnersContainer} className="forgot-password-partners-container">
-              <div style={styles.partnerItem}>
+              <div style={{...styles.partnerItem, ...styles.partnerItemLeft}}>
                 <div style={styles.partnerLogo} className="forgot-password-partner-logo">
                   <img src={ccictLogo} alt="CCICT Logo" style={styles.partnerLogoImage} className="forgot-password-partner-logo-image" />
                 </div>
@@ -201,30 +219,64 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '2rem',
     paddingTop: '3rem',
   },
-  // No standalone logo for this hero; using same heading layout as Login
+  brandContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '1.5rem',
+    marginBottom: '0.5rem',
+  },
+  brandLogo: {
+    width: '90px',
+    height: '90px',
+    objectFit: 'contain',
+    filter: 'brightness(0) saturate(100%) invert(100%)',
+  },
+  brandTextContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '0.5rem',
+    position: 'relative',
+  },
   brandTitle: {
-    fontSize: '2.5rem',
+    fontSize: '3.5rem',
     fontWeight: '700',
-    margin: '0 0 0.5rem 0',
+    margin: 0,
+    padding: 0,
     textShadow: '0 4px 8px rgba(0, 0, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.6)',
-    letterSpacing: '-0.02em',
+    letterSpacing: '0',
     color: '#ffffff',
-    background: 'rgba(0, 0, 0, 0.3)',
-    padding: '0.5rem 1rem',
-    borderRadius: '8px',
-    backdropFilter: 'blur(10px)',
-    opacity: 0.7,
+    lineHeight: '1.2',
+    textAlign: 'left',
+    width: '100%',
+  },
+  brandTagline: {
+    fontSize: '1.5rem',
+    fontWeight: '400',
+    margin: 0,
+    padding: 0,
+    textShadow: '0 2px 4px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(0, 0, 0, 0.6)',
+    letterSpacing: '0',
+    color: '#ffffff',
+    lineHeight: '1.3',
+    textAlign: 'left',
+    width: '100%',
   },
   brandSubtitle: {
     fontSize: '1.1rem',
     fontWeight: '400',
-    margin: 0,
+    margin: '0.5rem 0 0 0',
+    padding: 0,
     opacity: 0.9,
     textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+    textAlign: 'left',
+    alignSelf: 'center',
+    width: '100%',
   },
   collaborationContainer: {
     position: 'absolute',
-    bottom: '-130px',
+    bottom: '-180px',
     left: '50%',
     transform: 'translateX(-50%)',
     padding: '0.3rem 1rem 0.5rem 1rem',
@@ -234,22 +286,41 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     boxShadow: 'none',
     width: '90%',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  collaborationTitleWrapper: {
+    width: '100%',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: '0.6rem',
+    position: 'relative',
   },
   collaborationTitle: {
-    fontSize: '0.65rem',
+    fontSize: '0.9rem',
     fontWeight: '500',
-    margin: '0 0 0.6rem 0',
+    margin: '0 auto',
+    padding: 0,
     color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'center',
     textShadow: '0 1px 3px rgba(0, 0, 0, 0.8)',
     letterSpacing: '0.5px',
     textTransform: 'uppercase',
+    display: 'block',
+    width: 'auto',
   },
   partnersContainer: {
     display: 'flex',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    gap: '1.5rem',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    gap: '2rem',
+    width: '100%',
+    maxWidth: '100%',
+    margin: '0 auto',
+    position: 'relative',
   },
   partnerItem: {
     display: 'flex',
@@ -257,9 +328,12 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '0.4rem',
   },
+  partnerItemLeft: {
+    marginLeft: '-5.5rem',
+  },
   partnerLogo: {
-    width: '35px',
-    height: '35px',
+    width: '60px',
+    height: '60px',
     borderRadius: '50%',
     background: 'transparent',
     backdropFilter: 'none',
@@ -270,20 +344,20 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: 'none',
   },
   partnerLogoImage: {
-    width: '24px',
-    height: '24px',
+    width: '50px',
+    height: '50px',
     objectFit: 'contain',
     opacity: 0.9,
     filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
   },
   partnerName: {
-    fontSize: '0.6rem',
+    fontSize: '0.85rem',
     fontWeight: '400',
     margin: 0,
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)',
-    lineHeight: '1.1',
+    lineHeight: '1.2',
   },
   rightSection: {
     width: '50%',
@@ -312,16 +386,16 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '1rem',
   },
   backButton: {
-    background: 'rgba(255, 255, 255, 0.1)',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
+    background: 'none',
+    border: 'none',
     color: 'white',
     fontSize: '1.5rem',
     cursor: 'pointer',
-    marginRight: '1rem',
-    padding: '0.5rem',
-    borderRadius: '8px',
-    transition: 'all 0.3s ease',
-    backdropFilter: 'blur(10px)',
+    marginRight: '12px',
+    padding: '5px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: '2rem',

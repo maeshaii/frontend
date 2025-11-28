@@ -303,13 +303,14 @@ const AlumniProfile: React.FC = () => {
       const userObj = JSON.parse(userStr);
       const currentUserId = userObj.user_id || userObj.id;
       
-      if (!userId) {
-        // No ID in URL, so this is the current user's profile
+      // Check if userId is invalid (undefined, "undefined", or not a valid number)
+      if (!userId || userId === 'undefined' || isNaN(Number(userId))) {
+        // No valid ID in URL, so this is the current user's profile
         userId = currentUserId;
         setIsOwnProfile(true);
         console.log('Profile: Loading own profile, userId:', userId);
       } else {
-        // There's an ID in URL, check if it's the current user's profile
+        // There's a valid ID in URL, check if it's the current user's profile
         const viewingOwn = Number(userId) === Number(currentUserId);
         setIsOwnProfile(viewingOwn);
         console.log('Profile: Loading profile for userId:', userId, 'isOwnProfile:', viewingOwn, 'currentUserId:', currentUserId);

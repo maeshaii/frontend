@@ -162,9 +162,14 @@ export const PublicRoute: React.FC<PublicRouteProps> = ({
     );
   }
 
+  // ✅ FIX: Don't redirect if password change was just completed
+  // Check for a flag that indicates password change just succeeded
+  const passwordChangeJustCompleted = localStorage.getItem('password_change_completed') === 'true';
+  
   // If authenticated and this route doesn't allow authenticated users,
   // redirect to their appropriate dashboard
-  if (isAuthenticated && !allowAuthenticated) {
+  // BUT: Don't redirect if password change just completed (user needs to see success message)
+  if (isAuthenticated && !allowAuthenticated && !passwordChangeJustCompleted) {
     const dashboardRoute = getUserDashboardRoute();
     console.log('PublicRoute: User is authenticated, redirecting to:', dashboardRoute);
     return <Navigate to={dashboardRoute} replace />;

@@ -86,6 +86,15 @@ export const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, roles }) =
         // Future: Trigger automatic token refresh here
       }
 
+      // ✅ SECURITY: Check if user must change password (first-time login)
+      const mustChangePassword = localStorage.getItem('must_change_password') === 'true';
+      if (mustChangePassword) {
+        console.warn('[Security] User must change password before accessing protected routes');
+        setAuthError('Password change required');
+        setAuthorized(false);
+        return;
+      }
+
       // Step 5: Role-based authorization
       if (roles && roles.length > 0) {
         try {
@@ -225,10 +234,27 @@ export const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, roles }) =
   if (!authorized) {
     console.error(`[Security] Access denied to ${location.pathname} - Reason: ${authError}`);
     
-    // Clean up all auth data
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
+    // ✅ SECURITY: If password change required, redirect to password change page
+    const mustChangePassword = localStorage.getItem('must_change_password') === 'true';
+    if (mustChangePassword && authError === 'Password change required') {
+      return (
+        <Navigate 
+          to="/first-login-change-password" 
+          replace 
+          state={{ 
+            from: location.pathname,
+            error: authError 
+          }} 
+        />
+      );
+    }
+    
+    // Clean up all auth data (only if not password change required)
+    if (!mustChangePassword) {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+    }
     
     // Redirect to login with return path
     return (

@@ -38,11 +38,29 @@ const ModernMessagingPage: React.FC = () => {
     try {
       setIsLoading(true);
       const data = await listConversations();
-      setConversations(data || []);
       
-      // Auto-select first conversation on desktop
-      if (!isMobile && data && data.length > 0 && !selectedConversation) {
-        setSelectedConversation(data[0]);
+      // CRITICAL: Filter out conversations with invalid data
+      const validConversations = (data || []).filter(conv => {
+        // Must have valid conversation_id
+        if (!conv.conversation_id || conv.conversation_id <= 0) {
+          console.warn('Filtering out conversation with invalid conversation_id:', conv);
+          return false;
+        }
+        
+        // Must have valid other_participant with valid user_id
+        if (!conv.other_participant || !conv.other_participant.user_id || conv.other_participant.user_id <= 0) {
+          console.warn('Filtering out conversation with invalid other_participant:', conv);
+          return false;
+        }
+        
+        return true;
+      });
+      
+      setConversations(validConversations);
+      
+      // Auto-select first conversation on desktop (only if valid)
+      if (!isMobile && validConversations && validConversations.length > 0 && !selectedConversation) {
+        setSelectedConversation(validConversations[0]);
       }
     } catch (error) {
       logger.error('Failed to load conversations:', error);
@@ -93,11 +111,44 @@ const ModernMessagingPage: React.FC = () => {
     };
   }, [logger]);
 
-  const handleConversationSelect = useCallback((conversation: ConversationSummary) => {
+  // Listen for conversation deletion event
+  useEffect(() => {
+    const handleConversationDeleted = async () => {
+      // Clear selection and reload conversations
+      setSelectedConversation(null);
+      
+      // Reload conversations directly
+      try {
+        setIsLoading(true);
+        const data = await listConversations();
+        
+        // Filter out conversations with invalid data
+        const validConversations = (data || []).filter(conv => {
+          if (!conv.conversation_id || conv.conversation_id <= 0) return false;
+          if (!conv.other_participant || !conv.other_participant.user_id || conv.other_participant.user_id <= 0) return false;
+          return true;
+        });
+        
+        setConversations(validConversations);
+      } catch (error) {
+        logger.error('Failed to reload conversations after deletion:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    window.addEventListener('conversationDeleted', handleConversationDeleted);
+    
+    return () => {
+      window.removeEventListener('conversationDeleted', handleConversationDeleted);
+    };
+  }, [logger]);
+
+  const handleConversationSelect = useCallback((conversation: ConversationSummary | null) => {
     setSelectedConversation(conversation);
     
-    // On mobile, hide sidebar when conversation is selected
-    if (isMobile) {
+    // On mobile, hide sidebar when conversation is selected (only if conversation is valid)
+    if (isMobile && conversation) {
       setShowSidebar(false);
     }
   }, [isMobile]);
@@ -161,6 +212,13 @@ const ModernMessagingPage: React.FC = () => {
             onConversationSelect={handleConversationSelect}
             onSearchChange={handleSearchChange}
             isLoading={isLoading}
+            onConversationDeleted={async () => {
+              // Clear selection first
+              setSelectedConversation(null);
+              
+              // Reload conversations after deletion
+              await loadConversations();
+            }}
           />
         )}
 

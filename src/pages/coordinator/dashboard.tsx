@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate } from 'react-router-dom';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
 import { fetchOJTStatistics, importOJT, setSendDate, getSendDates, checkAllSentStatus, deleteSendDate } from '../../services/api';
 import logoLogin from '../../images/logo.png';
-import { FaUpload, FaChartBar, FaSignOutAlt, FaDownload, FaCalendarAlt, FaUsers } from 'react-icons/fa';
+import { FaUpload, FaChartBar, FaSignOutAlt, FaDownload, FaCalendarAlt, FaUsers, FaBars, FaTimes } from 'react-icons/fa';
 import { toast } from '../../utils/toast';
 
 export default function Dashboard() {
@@ -41,6 +41,33 @@ export default function Dashboard() {
   const [showFileRestrictionModal, setShowFileRestrictionModal] = useState(false);
   const [fileRestrictionMessage, setFileRestrictionMessage] = useState('');
   const excelJSRef = useRef<any>(null);
+  
+  // Responsive sidebar state - matching admin sidebar exactly
+  const initialWidth = window.innerWidth;
+  const initialSmall = initialWidth < 768;
+  const initialDesktop = initialWidth >= 1280;
+  const STORAGE_KEY = 'coordinatorSidebarMobileOpen';
+  const [isCollapsed, setIsCollapsed] = useState(initialSmall ? true : (!initialDesktop ? true : false));
+  const [isMobileSmall, setIsMobileSmall] = useState(initialSmall);
+  const [isDesktopExpanded, setIsDesktopExpanded] = useState(initialDesktop);
+  const [mobileOpen, setMobileOpen] = useState(initialSmall ? false : false);
+  const mobileOpenRef = useRef(false);
+  const prevScreenSizeRef = useRef({ isSmall: initialSmall, isDesktop: initialDesktop });
+  const smallScreenLockRef = useRef(initialSmall);
+  
+  // Sync ref with state
+  useEffect(() => {
+    mobileOpenRef.current = mobileOpen;
+  }, [mobileOpen]);
+
+  // CRITICAL: On small screens, NEVER allow isCollapsed to be false - force it to true always
+  useEffect(() => {
+    smallScreenLockRef.current = isMobileSmall;
+    
+    if (isMobileSmall && !isCollapsed) {
+      setIsCollapsed(true);
+    }
+  }, [isMobileSmall, isCollapsed]);
 
   const describeTemplateType = (type: 'CREATE' | 'UPDATE') =>
     type === 'CREATE' ? 'create accounts' : 'company update';
@@ -653,71 +680,159 @@ export default function Dashboard() {
     setShowLogoutConfirm(true);
   };
 
-  // Inline styles
+  // Responsive sidebar resize handler - matching admin sidebar
+  useEffect(() => {
+    const handleResize = () => {
+      const small = window.innerWidth < 768;
+      const desktop = window.innerWidth >= 1280;
+      const prevSmall = prevScreenSizeRef.current.isSmall;
+      
+      setIsMobileSmall(small);
+      setIsDesktopExpanded(desktop);
+      prevScreenSizeRef.current = { isSmall: small, isDesktop: desktop };
+
+      if (small) {
+        setIsCollapsed(true);
+        setMobileOpen(false);
+        mobileOpenRef.current = false;
+      } else if (!desktop) {
+        setIsCollapsed(true);
+      } else {
+        setIsCollapsed(false);
+      }
+
+      // Update CSS var for content margin
+      const sidebarWidthVar = small ? '0px' : (desktop ? '220px' : '70px');
+      document.documentElement.style.setProperty('--sidebar-width', sidebarWidthVar);
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const toggleMobile = () => {
+    setMobileOpen((v) => {
+      const next = !v;
+      try { localStorage.setItem(STORAGE_KEY, String(next)); } catch {}
+      return next;
+    });
+  };
+
+  const closeSidebarOnMobile = () => {
+    if (isMobileSmall) {
+      setMobileOpen(false);
+      try { localStorage.setItem(STORAGE_KEY, 'false'); } catch {}
+    }
+  };
+
+  const sidebarWidth = isMobileSmall ? (mobileOpen ? '70px' : '0px') : (isCollapsed ? '70px' : '220px');
+  const isHidden = isMobileSmall && !mobileOpen;
+
+  // Inline styles - matching admin sidebar exactly
   const styles = {
     container: {
       display: 'flex',
       height: '100vh',
       fontFamily: 'Arial, sans-serif',
       overflow: 'hidden',
+      position: 'relative' as const,
     },
     sidebar: {
-      width: '240px',
+      width: sidebarWidth,
       height: '100vh',
-      background: 'linear-gradient(180deg, #1C4E80 0%, #1b3f6b 100%)',
+      backgroundColor: '#1C4E80',
       display: 'flex',
       flexDirection: 'column' as const,
       justifyContent: 'space-between',
       color: '#ffffff',
-      padding: '24px 18px',
-      overflow: 'hidden' as const,
-      position: 'relative' as const,
-      boxShadow: '2px 0 10px rgba(15, 35, 60, 0.35)',
-      borderRight: '1px solid rgba(255, 255, 255, 0.08)',
+      padding: '20px 10px',
+      position: 'fixed' as const,
+      top: 0,
+      left: isHidden ? '-220px' : '0',
+      zIndex: 1000,
+      transition: 'all 0.3s ease',
+      borderRight: '1px solid #e5e7eb',
+      boxShadow: isCollapsed && !isMobileSmall ? 'none' : '2px 0 8px rgba(0, 0, 0, 0.1)',
+    },
+    hamburgerButton: {
+      position: 'fixed' as const,
+      top: '20px',
+      left: '20px',
+      zIndex: 3000,
+      backgroundColor: '#1C4E80',
+      border: '1px solid rgba(255,255,255,0.25)',
+      borderRadius: '10px',
+      padding: '10px 12px',
+      cursor: 'pointer',
+      display: isMobileSmall ? 'flex' : 'none',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#ffffff'
     },
     topSection: {
       display: 'flex',
       flexDirection: 'column' as const,
-      flex: '0 1 auto',
-      minHeight: 0,
-      overflow: 'hidden' as const,
-      gap: '28px',
-    },
-    bottomSection: {
-      marginTop: 'auto',
-      paddingTop: '12px',
     },
     logo: {
       display: 'flex',
       flexDirection: 'column' as const,
       alignItems: 'center',
-      marginBottom: '12px',
-      flexShrink: 0,
-      gap: '16px',
+      marginBottom: '60px',
+      opacity: 1,
+      transition: 'opacity 0.3s ease',
+      overflow: 'hidden',
+      whiteSpace: 'nowrap' as const,
+      gap: '10px',
     },
     logoContainer: {
       width: '100%',
-      maxWidth: '180px',
-      height: '64px',
-      background: '#ffffff',
-      borderRadius: '12px',
+      maxWidth: isCollapsed ? '60px' : '180px',
+      margin: '0 auto',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      boxShadow: '0 6px 18px rgba(12, 32, 55, 0.18)',
-      padding: '6px 12px',
+      gap: isCollapsed ? '0' : '6px',
+      overflow: 'hidden',
+      padding: isCollapsed ? '6px' : '12px 0',
+      transition: 'all 0.3s ease',
+      flexWrap: 'nowrap' as const,
     },
-    logoImage: {
+    logoIcon: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+      width: isCollapsed ? '32px' : '40px',
+      height: isCollapsed ? '32px' : '40px',
+      minWidth: isCollapsed ? '32px' : '40px',
+      minHeight: isCollapsed ? '32px' : '40px',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      position: 'relative' as const,
+    },
+    logoIconImage: {
+      width: '100%',
       height: '100%',
-      width: 'auto',
       objectFit: 'contain' as const,
+      filter: 'brightness(0) saturate(100%) invert(100%)',
+      transition: 'filter 0.3s ease',
+      userSelect: 'none' as const,
+      pointerEvents: 'none' as const,
+      display: 'block',
     },
     logoText: {
-      fontSize: '16px',
+      fontSize: isCollapsed ? '18px' : '28px',
       textAlign: 'center' as const,
       fontWeight: '700' as const,
-      letterSpacing: '0.4px',
       color: '#ffffff',
+      fontFamily: '"Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      letterSpacing: isCollapsed ? '0.5px' : '1.2px',
+      textShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+      overflow: 'hidden',
+      transition: 'all 0.3s ease',
+      whiteSpace: 'nowrap' as const,
+      opacity: isCollapsed ? 0 : 1,
+      width: isCollapsed ? '0' : 'auto',
     },
     navList: {
       listStyleType: 'none' as const,
@@ -727,31 +842,36 @@ export default function Dashboard() {
     navItem: {
       display: 'flex',
       alignItems: 'center',
-      padding: '12px 18px',
-      margin: '6px 0',
+      padding: '12px 16px',
+      margin: '8px 0',
       cursor: 'pointer',
-      borderRadius: '10px',
-      transition: 'all 0.25s ease',
+      borderRadius: '8px',
+      transition: 'all 0.3s ease',
       textDecoration: 'none',
-      color: '#f8fbff',
-      fontSize: '14px',
-      fontWeight: 600,
-      backgroundColor: 'transparent',
+      color: '#ffffff',
+      justifyContent: (isMobileSmall || isCollapsed) ? 'center' : 'flex-start',
+      position: 'relative' as const,
     },
     activeNavItem: {
-      backgroundColor: 'rgba(248, 251, 255, 0.18)',
+      backgroundColor: 'rgba(255,255,255,0.18)',
       color: '#ffffff',
-      boxShadow: '0 6px 14px rgba(13, 42, 72, 0.3)',
+    },
+    navItemHover: {
+      backgroundColor: 'rgba(255,255,255,0.10)',
     },
     icon: {
-      marginRight: '12px',
+      marginRight: (isMobileSmall || isCollapsed) ? '0' : '12px',
       fontSize: '18px',
-      display: 'flex',
-      alignItems: 'center',
+      color: 'currentColor',
+      flexShrink: 0,
+      transition: 'margin 0.3s ease',
     },
     navItemText: {
-      letterSpacing: '0.2px',
+      opacity: (isMobileSmall || isCollapsed) ? 0 : 1,
+      width: (isMobileSmall || isCollapsed) ? '0' : 'auto',
+      overflow: 'hidden',
       whiteSpace: 'nowrap' as const,
+      transition: 'opacity 0.3s ease',
     },
     logout: {
       display: 'flex',
@@ -759,17 +879,12 @@ export default function Dashboard() {
       padding: '12px 16px',
       cursor: 'pointer',
       textDecoration: 'none',
-      color: '#f8fbff',
-      width: '100%',
-      borderRadius: '8px',
-      fontSize: '14px',
-      fontWeight: 600,
-      transition: 'all 0.25s ease',
-      background: 'transparent',
-      border: 'none',
-      outline: 'none',
-      justifyContent: 'flex-start',
+      color: '#ffffff',
       marginBottom: '24px',
+      borderRadius: '8px',
+      transition: 'all 0.3s ease',
+      justifyContent: (isCollapsed && !isMobileSmall) ? 'center' : 'flex-start',
+      position: 'relative' as const,
     },
     main: {
       flex: 1,
@@ -777,6 +892,8 @@ export default function Dashboard() {
       background: '#f3f4f6',
       height: '100%',
       boxSizing: 'border-box' as const,
+      marginLeft: isMobileSmall ? '0px' : sidebarWidth,
+      transition: 'margin-left 0.3s ease',
       overflow: 'hidden' as const,
       display: 'flex',
       flexDirection: 'column' as const,
@@ -937,12 +1054,74 @@ export default function Dashboard() {
 
   return (
     <div style={styles.container}>
+      {/* Mobile hamburger */}
+      {isMobileSmall && (
+        <button
+          type="button"
+          aria-label={mobileOpen ? 'Close sidebar' : 'Open sidebar'}
+          style={styles.hamburgerButton}
+          onClick={toggleMobile}
+        >
+          {mobileOpen ? <FaTimes /> : <FaBars />}
+        </button>
+      )}
+
+      {/* Mobile Overlay */}
+      {isMobileSmall && mobileOpen && (
+        <div
+          style={{
+            position: 'fixed' as const,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 999,
+          }}
+          onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+            const target = e.target as HTMLElement;
+            const overlay = e.currentTarget as HTMLElement;
+            
+            if (target === overlay || target.parentElement === overlay) {
+              const sidebarContainer = document.querySelector('[data-sidebar-container]');
+              if (!sidebarContainer || !sidebarContainer.contains(target)) {
+                closeSidebarOnMobile();
+              }
+            }
+          }}
+        />
+      )}
+
       {/* ===================== Sidebar ===================== */}
-      <div style={styles.sidebar}>
+      <div 
+        data-sidebar-container
+        style={{
+          ...styles.sidebar,
+          pointerEvents: 'auto' as const,
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+        }}
+      >
         <div style={styles.topSection}>
           <div style={styles.logo}>
             <div style={styles.logoContainer}>
-              <img src={logoLogin} alt="WhereNa You logo" style={styles.logoImage} />
+              <div style={styles.logoIcon}>
+                <img 
+                  src={logoLogin} 
+                  alt="WhereNaYou Logo" 
+                  style={styles.logoIconImage}
+                  onError={(e) => {
+                    // Fallback: hide image if it fails to load
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                  loading="eager"
+                />
+              </div>
+              <h1 style={styles.logoText}>{isCollapsed ? 'WNY' : 'WhereNaYou'}</h1>
             </div>
           </div>
 
@@ -957,7 +1136,15 @@ export default function Dashboard() {
                       ...styles.navItem,
                       ...(isActive ? styles.activeNavItem : {}),
                     }}
-                    onClick={() => {
+                    title={(isCollapsed || isMobileSmall) ? link.label : undefined}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isMobileSmall || smallScreenLockRef.current) {
+                        setIsCollapsed(true);
+                        mobileOpenRef.current = true;
+                        setMobileOpen(true);
+                        try { localStorage.setItem(STORAGE_KEY, 'true'); } catch {}
+                      }
                       if (link.label === 'Imports') {
                         setActivePage('imports');
                         setSelectedCard(null);
@@ -970,19 +1157,19 @@ export default function Dashboard() {
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {
-                        e.currentTarget.style.backgroundColor = 'rgba(248, 251, 255, 0.12)';
-                        e.currentTarget.style.color = 'white';
+                        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.10)';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isActive) {
                         e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.color = '#f8fbff';
                       }
                     }}
                   >
-                    <span style={styles.icon}>{link.icon}</span>
-                    <span style={styles.navItemText}>{link.label}</span>
+                    {link.icon && React.cloneElement(link.icon as React.ReactElement, { style: styles.icon })}
+                    {!isCollapsed && !isMobileSmall && (
+                      <span style={styles.navItemText}>{link.label}</span>
+                    )}
                   </div>
                 </li>
               );
@@ -990,22 +1177,23 @@ export default function Dashboard() {
           </ul>
         </div>
 
-        <div style={styles.bottomSection}>
-          <button
-            type="button"
-            style={styles.logout}
-            onClick={handleLogout}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.10)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >
-            <span style={styles.icon}><FaSignOutAlt /></span>
+        <button
+          type="button"
+          style={{ ...styles.logout, background: 'transparent', border: 'none', width: '100%', textAlign: 'left' as const }}
+          onClick={handleLogout}
+          title={(isCollapsed || isMobileSmall) ? 'Logout' : undefined}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.10)';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
+          }}
+        >
+          <FaSignOutAlt style={styles.icon} />
+          {!isCollapsed && !isMobileSmall && (
             <span style={styles.navItemText}>Logout</span>
-          </button>
-        </div>
+          )}
+        </button>
       </div>
 
       {/* ===================== Modern Main Content ===================== */}
