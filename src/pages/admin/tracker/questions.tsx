@@ -1479,6 +1479,12 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                           {getQuestionNumber(catIdx, qIdx)}. {q.text}
                           {q.required && <span style={{ color: 'red', marginLeft: 4 }}>*</span>}
                         </label>
+                        {/* Add sub-header for question 32 */}
+                        {q.type === 'file' && q.text && q.text.toLowerCase().includes('employment supporting document') && q.text.toLowerCase().includes('current') && (
+                          <div style={{ marginTop: 4, marginBottom: 8, color: '#666', fontSize: 14, fontStyle: 'italic' }}>
+                            Upload Certificate of Employment or Company ID
+                          </div>
+                        )}
                         <div>
                           {q.type === 'text' &&
                             (() => {
@@ -1561,6 +1567,11 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                             const isAwardSupportingDocs = (lowerText.includes('supporting documents') || lowerText.includes('supporting document')) && 
                                                            (lowerText.includes('awards') || lowerText.includes('award') || lowerText.includes('recognition'));
                             
+                            // Check if this is one of the image-only questions (20, 31, 32)
+                            const isFirstEmploymentDoc = lowerText.includes('first employment supporting document');
+                            const isCurrentEmploymentDoc = lowerText.includes('employment supporting document') && lowerText.includes('current');
+                            const isImageOnlyQuestion = isFirstEmploymentDoc || isAwardSupportingDocs || isCurrentEmploymentDoc;
+                            
                             // Handle multiple award documents (question 31)
                             if (isAwardSupportingDocs) {
                               const currentFiles = awardDocuments[q.id] || [];
@@ -1574,19 +1585,20 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                                   return;
                                 }
 
-                                // Validate file type
-                                const allowedTypes = [
-                                  'application/pdf',
-                                  'application/msword',
-                                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                // Validate file type - IMAGE ONLY for question 31
+                                const allowedImageTypes = [
                                   'image/jpeg',
                                   'image/jpg',
                                   'image/png',
+                                  'image/svg+xml',
                                   'image/gif',
+                                  'image/webp',
+                                  'image/bmp',
+                                  'image/tiff',
                                 ];
 
-                                if (!allowedTypes.includes(file.type)) {
-                                  alert('Please select a valid file type: PDF, DOC, DOCX, JPG, PNG, or GIF');
+                                if (!allowedImageTypes.includes(file.type)) {
+                                  alert('Please select an image file only (JPEG, PNG, SVG, GIF, WEBP, BMP, or TIFF)');
                                   return;
                                 }
 
@@ -1646,7 +1658,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                                       <div className="file-upload-container">
                                         <input
                                           type="file"
-                                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                                          accept="image/*"
                                           onChange={(e) => {
                                             const file = e.target.files && e.target.files[0];
                                             if (file) {
@@ -1699,7 +1711,7 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                               <div className="file-upload-container">
                                 <input
                                   type="file"
-                                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                                  accept={isImageOnlyQuestion ? "image/*" : ".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"}
                                   onChange={(e) => {
                                     const file = e.target.files && e.target.files[0];
                                     if (file) {
@@ -1710,23 +1722,43 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                                         return;
                                       }
 
-                                      // Validate file type
-                                      const allowedTypes = [
-                                        'application/pdf',
-                                        'application/msword',
-                                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                                        'image/jpeg',
-                                        'image/jpg',
-                                        'image/png',
-                                        'image/gif',
-                                      ];
+                                      // Validate file type - IMAGE ONLY for questions 20 and 32
+                                      if (isImageOnlyQuestion) {
+                                        const allowedImageTypes = [
+                                          'image/jpeg',
+                                          'image/jpg',
+                                          'image/png',
+                                          'image/svg+xml',
+                                          'image/gif',
+                                          'image/webp',
+                                          'image/bmp',
+                                          'image/tiff',
+                                        ];
 
-                                      if (!allowedTypes.includes(file.type)) {
-                                        alert(
-                                          'Please select a valid file type: PDF, DOC, DOCX, JPG, PNG, or GIF'
-                                        );
-                                        e.target.value = '';
-                                        return;
+                                        if (!allowedImageTypes.includes(file.type)) {
+                                          alert('Please select an image file only (JPEG, PNG, SVG, GIF, WEBP, BMP, or TIFF)');
+                                          e.target.value = '';
+                                          return;
+                                        }
+                                      } else {
+                                        // For other file questions, allow PDF, DOC, DOCX, and images
+                                        const allowedTypes = [
+                                          'application/pdf',
+                                          'application/msword',
+                                          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                          'image/jpeg',
+                                          'image/jpg',
+                                          'image/png',
+                                          'image/gif',
+                                        ];
+
+                                        if (!allowedTypes.includes(file.type)) {
+                                          alert(
+                                            'Please select a valid file type: PDF, DOC, DOCX, JPG, PNG, or GIF'
+                                          );
+                                          e.target.value = '';
+                                          return;
+                                        }
                                       }
                                     }
                                     

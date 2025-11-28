@@ -173,18 +173,17 @@ export default function Dashboard() {
       marginBottom: '20px',
     },
     logoImage: {
-      width: '80px',
-      height: '80px',
-      borderRadius: '8px',
-      background: 'white',
-      padding: '8px',
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+      display: 'none', // Hidden - replaced with text logo
     },
     logoText: {
-      fontSize: '14px',
-      marginTop: '8px',
+      fontSize: '28px',
       textAlign: 'center' as const,
-      fontWeight: 'bold' as const,
+      fontWeight: '700' as const,
+      color: '#ffffff',
+      fontFamily: '"Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      letterSpacing: '1.2px',
+      textShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+      margin: 0,
     },
     navList: {
       listStyleType: 'none' as const,
@@ -382,8 +381,7 @@ export default function Dashboard() {
       <div style={styles.sidebar}>
         <div style={styles.topSection}>
           <div style={styles.logo}>
-            <img src={logoLogin} alt="Logo" style={styles.logoImage} />
-            <h1 style={styles.logoText}>WhereNa You</h1>
+            <h1 style={styles.logoText}>WhereNaYou</h1>
           </div>
 
           <ul style={styles.navList}>

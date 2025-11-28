@@ -48,24 +48,58 @@ const Messaging: React.FC = () => {
     }
   }, []);
 
-  // Load conversations
-  useEffect(() => {
-    const loadConversations = async () => {
+  // Load conversations function
+  const loadConversations = async () => {
       try {
         setIsLoading(true);
         const data = await listConversations();
-        setConversations(data || []);
+        
+        // CRITICAL: Filter out conversations with invalid data
+        const validConversations = (data || []).filter(conv => {
+          // Must have valid conversation_id
+          if (!conv.conversation_id || conv.conversation_id <= 0) {
+            console.warn('Filtering out conversation with invalid conversation_id:', conv);
+            return false;
+          }
+          
+          // Must have valid other_participant with valid user_id
+          if (!conv.other_participant || !conv.other_participant.user_id || conv.other_participant.user_id <= 0) {
+            console.warn('Filtering out conversation with invalid other_participant:', conv);
+            return false;
+          }
+          
+          return true;
+        });
+        
+        setConversations(validConversations);
         // Emit event to update badge in top bar
-        window.dispatchEvent(new CustomEvent('conversationsUpdated', { detail: data || [] }));
+        window.dispatchEvent(new CustomEvent('conversationsUpdated', { detail: validConversations }));
       } catch (error) {
         console.error('Failed to load conversations:', error);
       } finally {
         setIsLoading(false);
       }
     };
-    
+
+  // Load conversations on mount
+  useEffect(() => {
     loadConversations();
   }, []);
+
+  // Listen for conversation deletion event
+  useEffect(() => {
+    const handleConversationDeleted = async () => {
+      // Clear selection and reload conversations
+      setSelectedConversation(null);
+      await loadConversations();
+    };
+
+    window.addEventListener('conversationDeleted', handleConversationDeleted);
+    
+    return () => {
+      window.removeEventListener('conversationDeleted', handleConversationDeleted);
+    };
+  }, []); // Empty deps - use function closure
 
   // Listen for read events from the chat view to zero-out unread in sidebar instantly
   useEffect(() => {
@@ -124,19 +158,24 @@ const Messaging: React.FC = () => {
     };
   }, []);
 
-  const handleSelectConversation = (conversation: ConversationSummary) => {
+  const handleSelectConversation = (conversation: ConversationSummary | null) => {
     setSelectedConversation(conversation);
-    // Optimistically clear unread count in the sidebar when opening a conversation
-    setConversations(prev => {
-      const updated = prev.map(c => 
-        c.conversation_id === conversation.conversation_id 
-          ? { ...c, unread_count: 0 } 
-          : c
-      );
-      // Emit event to update badge in top bar
-      window.dispatchEvent(new CustomEvent('conversationsUpdated', { detail: updated }));
-      return updated;
-    });
+    
+    // Only update unread count if conversation is valid
+    if (conversation && conversation.conversation_id) {
+      // Optimistically clear unread count in the sidebar when opening a conversation
+      setConversations(prev => {
+        const updated = prev.map(c => 
+          c.conversation_id === conversation.conversation_id 
+            ? { ...c, unread_count: 0 } 
+            : c
+        );
+        // Emit event to update badge in top bar
+        window.dispatchEvent(new CustomEvent('conversationsUpdated', { detail: updated }));
+        return updated;
+      });
+    }
+    
     if (isMobile) {
       // On mobile, we might want to hide the conversation list
       // and show only the chat interface
@@ -211,6 +250,13 @@ const Messaging: React.FC = () => {
             selectedConversationId={selectedConversation?.conversation_id}
             onSearchChange={handleSearchChange}
             isLoading={isLoading}
+            onConversationDeleted={async () => {
+              // Clear selection first
+              setSelectedConversation(null);
+              
+              // Reload conversations after deletion
+              await loadConversations();
+            }}
           />
         )}
         

@@ -24,6 +24,16 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
+  
+  // Event-related state
+  const [isEvent, setIsEvent] = useState(false);
+  const [eventDate, setEventDate] = useState('');
+  const [eventTime, setEventTime] = useState('');
+  
+  // Check if user is Admin (only admins can create events)
+  const raw = localStorage.getItem('user');
+  const storedUser = raw ? JSON.parse(raw) : null;
+  const isAdminUser = !!(storedUser && storedUser.account_type && storedUser.account_type.admin);
 
   // Close emoji picker on outside click
   useEffect(() => {
@@ -163,11 +173,25 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
           postData.post_image = postImage;
         }
         
+        // Add event fields if this is an event post
+        if (isEvent) {
+          postData.is_event = true;
+          if (eventDate) {
+            postData.event_date = eventDate;
+          }
+          if (eventTime) {
+            postData.event_time = eventTime;
+          }
+        }
+        
         console.log('Creating post with data:', {
           post_content: postData.post_content,
           post_images_count: postImages.length,
           post_image_present: !!postImage,
-          type: postData.type
+          type: postData.type,
+          is_event: postData.is_event,
+          event_date: postData.event_date,
+          event_time: postData.event_time
         });
         
         const result = await createPost(postData);
@@ -319,7 +343,7 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
               cursor: isLoading || !postContent.trim() ? 'not-allowed' : 'pointer',
               fontSize: '16px',
               fontWeight: 'bold',
-              color: isLoading || !postContent.trim() ? '#999' : '#222',
+              color: isLoading || !postContent.trim() ? '#999' : '#3b82f6',
               padding: '8px 12px',
               transition: 'color 0.2s ease, opacity 0.2s ease',
               opacity: isLoading || !postContent.trim() ? 0.6 : 1,
@@ -696,6 +720,146 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
                   : 'Add Image(s)'}
               </span>
             </label>
+
+            {/* Event Toggle Section - Only for Admins */}
+            {isAdminUser && (
+              <div style={{
+                marginTop: '12px',
+                paddingTop: '12px',
+                borderTop: '1px solid #eee',
+              }}>
+                <label style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  gap: '12px',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={isEvent}
+                    onChange={(e) => {
+                      setIsEvent(e.target.checked);
+                      if (!e.target.checked) {
+                        setEventDate('');
+                        setEventTime('');
+                      }
+                    }}
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      cursor: 'pointer',
+                      accentColor: '#3b82f6',
+                    }}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '24px' }}>📅</span>
+                    <span style={{
+                      color: '#333',
+                      fontWeight: '600',
+                      fontSize: '15px',
+                    }}>
+                      This is an Event
+                    </span>
+                  </div>
+                </label>
+
+              {/* Event Date & Time Pickers */}
+              {isEvent && (
+                <div style={{
+                  marginTop: '12px',
+                  display: 'flex',
+                  gap: '12px',
+                  flexWrap: 'wrap',
+                  padding: '12px',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                }}>
+                  <div style={{ flex: '1 1 200px', minWidth: '200px' }}>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      color: '#475569',
+                      marginBottom: '6px',
+                    }}>
+                      Event Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={eventDate}
+                      onChange={(e) => setEventDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      required={isEvent}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '2px solid #cbd5e1',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        fontFamily: 'inherit',
+                        backgroundColor: 'white',
+                        cursor: 'pointer',
+                        transition: 'border-color 0.2s ease',
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = '#3b82f6';
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = '#cbd5e1';
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: '1 1 150px', minWidth: '150px' }}>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      color: '#475569',
+                      marginBottom: '6px',
+                    }}>
+                      Time (Optional)
+                    </label>
+                    <input
+                      type="time"
+                      value={eventTime}
+                      onChange={(e) => setEventTime(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '2px solid #cbd5e1',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        fontFamily: 'inherit',
+                        backgroundColor: 'white',
+                        cursor: 'pointer',
+                        transition: 'border-color 0.2s ease',
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = '#3b82f6';
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = '#cbd5e1';
+                      }}
+                    />
+                  </div>
+                  <div style={{
+                    flex: '1 1 100%',
+                    fontSize: '12px',
+                    color: '#64748b',
+                    marginTop: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}>
+                    <span>ℹ️</span>
+                    <span>This post will appear on the dashboard calendar</span>
+                  </div>
+                </div>
+              )}
+              </div>
+            )}
           </div>
         </form>
       </div>

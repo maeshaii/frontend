@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AlumniTopBar from './AlumniTopBar';
 import { Box, Paper, Typography, TextField, Button, Select, MenuItem, FormControl, InputLabel, Alert, InputAdornment, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Checkbox, FormControlLabel, FormGroup, Divider, Table, TableBody, TableCell, TableHead, TableRow, TableContainer } from '@mui/material';
 import PasswordVisibilityIcon from '../../components/PasswordVisibilityIcon';
+import { validatePassword as validatePasswordStrength } from '../../utils/passwordValidator';
 import { trackerApi } from '../../services/trackerApi';
 
 interface UserData {
@@ -122,7 +123,11 @@ const Settings: React.FC = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [employmentData, setEmploymentData] = useState({
+  const passwordValidation = useMemo(() => {
+    return validatePasswordStrength(passwordData.new_password);
+  }, [passwordData.new_password]);
+
+  const [employmentData, setEmploymentData] = useState<any>({
     organization_name: '',
     date_hired: '',
     position: '',
@@ -168,7 +173,10 @@ const Settings: React.FC = () => {
     study_start_date: '',
     post_graduate_degree: '',
     institution_name: '',
-    units_obtained: ''
+    units_obtained: '',
+    // File uploads
+    awards_file: null,
+    employment_file: null
   });
 
   const employmentSummaryRows = [
@@ -427,7 +435,10 @@ const Settings: React.FC = () => {
           // Ensure we're not accidentally getting company name, position, or dates from employment fields
           post_graduate_degree: (data.q_post_graduate_degree || data.post_graduate_degree || '').trim(),
           institution_name: (data.q_institution_name || data.institution_name || '').trim(),
-          units_obtained: (data.q_units_obtained || data.units_obtained || '').trim()
+          units_obtained: (data.q_units_obtained || data.units_obtained || '').trim(),
+          // File uploads - always null on load
+          awards_file: null,
+          employment_file: null
         });
         
         // Set account type
@@ -438,8 +449,9 @@ const Settings: React.FC = () => {
         if (accType === 'ojt') {
           const hasEmploymentData = data.has_employment_data || (data.organization_name && data.organization_name.trim() !== '');
           setHasJobInDB(hasEmploymentData);
+          // OJT accounts are view-only, so always start in non-editing mode
           if (hasEmploymentData) {
-            setIsEditingEmployment(true);
+            setIsEditingEmployment(false);
           }
           console.log('OJT - hasEmploymentData:', hasEmploymentData);
         } else {
@@ -460,9 +472,9 @@ const Settings: React.FC = () => {
           // If it's false, null, undefined, show the "Please answer tracker" prompt
           setHasJobInDB(hasPartIIIData);
           
-          // If user has Part III data in DB, enable viewing mode automatically
+          // If user has Part III data in DB, start in view mode (not editing)
           if (hasPartIIIData === true) {
-            setIsEditingEmployment(true);
+            setIsEditingEmployment(false);
           }
           
           // Set pursueFurtherStudy based on existing data
@@ -492,14 +504,14 @@ const Settings: React.FC = () => {
   };
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
+    setFormData((prev: any) => ({
       ...prev,
       [field]: value
     }));
   };
 
-  const handleEmploymentChange = (field: string, value: string) => {
-    setEmploymentData(prev => ({
+  const handleEmploymentChange = (field: string, value: any) => {
+    setEmploymentData((prev: any) => ({
       ...prev,
       [field]: value
     }));
@@ -638,10 +650,61 @@ const Settings: React.FC = () => {
         return;
       }
       
-      // Send employment data (either updating existing or creating new)
-      const dataToSend = employmentData;
+      // Use FormData if there's a file to upload, otherwise use JSON
+      const hasAwardsFile = employmentData.awards_file instanceof File;
+      const hasEmploymentFile = employmentData.employment_file instanceof File;
+      const hasFile = hasAwardsFile || hasEmploymentFile;
       
-      const response = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${userId}/`, {
+      let response;
+      
+      if (hasFile) {
+        // Use FormData for file upload
+        const formData = new FormData();
+        
+        // Add all employment data fields
+        formData.append('employment_type', employmentData.employment_type || '');
+        formData.append('current_employment_status', employmentData.current_employment_status || '');
+        formData.append('current_company_name', employmentData.current_company_name || '');
+        formData.append('current_position', employmentData.current_position || '');
+        formData.append('current_sector', employmentData.current_sector || '');
+        formData.append('current_scope', employmentData.current_scope || '');
+        formData.append('employment_duration', employmentData.employment_duration || '');
+        formData.append('salary_range', employmentData.salary_range || '');
+        formData.append('received_awards', employmentData.received_awards || '');
+        
+        // Add the award file if present
+        if (employmentData.awards_file) {
+          formData.append('awards_supporting_doc', employmentData.awards_file);
+        }
+        
+        // Add the employment file if present
+        if (employmentData.employment_file) {
+          formData.append('employment_supporting_doc', employmentData.employment_file);
+        }
+        
+        response = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${userId}/`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+            // Don't set Content-Type - browser will set it automatically with boundary for FormData
+          },
+          body: formData
+        });
+      } else {
+        // Use JSON for regular updates without file
+        const dataToSend = {
+          employment_type: employmentData.employment_type,
+          current_employment_status: employmentData.current_employment_status,
+          current_company_name: employmentData.current_company_name,
+          current_position: employmentData.current_position,
+          current_sector: employmentData.current_sector,
+          current_scope: employmentData.current_scope,
+          employment_duration: employmentData.employment_duration,
+          salary_range: employmentData.salary_range,
+          received_awards: employmentData.received_awards
+        };
+        
+        response = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${userId}/`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -649,9 +712,10 @@ const Settings: React.FC = () => {
         },
         body: JSON.stringify(dataToSend)
       });
+      }
 
       if (response.ok) {
-        alert('Employment details updated successfully!');
+        alert('Employment details updated successfully! ✓');
         setIsEditingEmployment(false);
         // Refresh employment data
         await fetchEmploymentData(userId);
@@ -667,55 +731,14 @@ const Settings: React.FC = () => {
     }
   };
 
-  const handleEmploymentCancel = () => {
-    setEmploymentData({
-      organization_name: '',
-      date_hired: '',
-      position: '',
-      employment_status: '',
-      company_address: '',
-      sector: '',
-      employment_duration_current: '',
-      salary_current: '',
-      scope_current: '',
-      company_email: '',
-      company_contact: '',
-      contact_person: '',
-      position_alt: '',
-      ojt_start_date: '',
-      job_alignment_status: '',
-      job_alignment_category: '',
-      job_alignment_title: '',
-      job_alignment_suggested_program: '',
-      job_alignment_original_program: '',
-      self_employed: false,
-      high_position: false,
-      absorbed: false,
-      awards_recognition_current: '',
-      supporting_document_current: '',
-      supporting_document_awards_recognition: '',
-      unemployment_reason: '',
-      created_at: '',
-      updated_at: '',
-      // Part III fields
-      employment_type: '',
-      current_employment_status: '',
-      current_company_name: '',
-      current_position: '',
-      current_sector: '',
-      current_scope: '',
-      employment_duration: '',
-      salary_range: '',
-      received_awards: '',
-      awards_supporting_doc: '',
-      employment_supporting_doc: '',
-      employment_sector: '',
-      // Part IV fields
-      study_start_date: '',
-      post_graduate_degree: '',
-      institution_name: '',
-      units_obtained: ''
-    });
+  const handleEmploymentCancel = async () => {
+    // Reload employment data to reset fields to their original values
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      const userId = user.user_id || user.id;
+      await fetchEmploymentData(userId);
+    }
     setIsEditingEmployment(false);
   };
 
@@ -1129,7 +1152,33 @@ const Settings: React.FC = () => {
                     <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
                       Employment Details
                     </Typography>
+                    {!isEditingEmployment && hasJobInDB && (
+                      <Button
+                        variant="contained"
+                        onClick={() => setIsEditingEmployment(true)}
+                        sx={{
+                          backgroundColor: '#174f84',
+                          '&:hover': { backgroundColor: '#0d3a5f' },
+                          px: 3,
+                          py: 1
+                        }}
+                      >
+                        EDIT
+                      </Button>
+                    )}
                   </Box>
+                  
+                  {/* Info Box - explaining the purpose */}
+                  {hasJobInDB && accountType === 'alumni' && (
+                    <Alert severity="info" sx={{ mb: 3 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                        Update Your Employment Status
+                      </Typography>
+                      <Typography variant="caption">
+                        You can update your employment information here without redoing the entire tracker form. This is useful for periodic re-checks (e.g., after 6 months or 1 year) to update if you've changed companies, positions, or employment status.
+                      </Typography>
+                    </Alert>
+                  )}
                   
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     {/* Flow Logic */}
@@ -1210,123 +1259,357 @@ const Settings: React.FC = () => {
                       <>
                         {hasJobInDB ? (
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                            <Paper
-                              elevation={0}
-                              sx={{
-                                borderRadius: 3,
-                                p: { xs: 3, md: 5 },
-                                background: '#f5f7fb',
-                                border: '1px solid #e3ebf6'
-                              }}
-                            >
-                              <Typography variant="h5" sx={{ fontWeight: 600, color: '#174f84', mb: 0.5 }}>
-                                Part III – Employment Status
-                              </Typography>
-                              <Typography variant="body2" sx={{ color: '#94a3b8', mb: 3 }}>
-                                Data is pulled from your latest tracker submission.
-                              </Typography>
-                              <Divider sx={{ mb: 3, borderColor: '#d7e3f4' }} />
-                              <Box
-                                sx={{
-                                  display: 'grid',
-                                  gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
-                                  gap: { xs: 2.5, md: 3 },
-                                  color: '#1e293b'
-                                }}
+                            {/* Employment Type Dropdown */}
+                            <FormControl variant="outlined" fullWidth>
+                              <InputLabel>Employment Type</InputLabel>
+                              <Select
+                                value={employmentData.employment_type || ''}
+                                onChange={(e) => handleEmploymentChange('employment_type', e.target.value)}
+                                label="Employment Type"
+                                disabled={!isEditingEmployment}
                               >
-                                {employmentSummaryRows.map((item) => (
-                                  <Box
-                                    key={item.label}
-                                    sx={{
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      gap: 0.5
-                                    }}
-                                  >
-                                    <Typography
-                                      variant="caption"
-                                      sx={{ color: '#8c9db8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6 }}
-                                    >
-                                      {item.label}
-                                    </Typography>
-                                    <Typography
-                                      variant="subtitle1"
-                                      sx={{ fontWeight: 600, color: '#0f172a' }}
-                                    >
-                                      {item.value || 'N/A'}
-                                    </Typography>
-                                  </Box>
+                                {employmentTypeOptions.map((type) => (
+                                  <MenuItem key={type} value={type}>
+                                    {type}
+                                  </MenuItem>
                                 ))}
-                              </Box>
-                            </Paper>
+                              </Select>
+                            </FormControl>
 
-                            <Paper
-                              elevation={0}
+                            {/* Current Employment Status Dropdown */}
+                            <FormControl variant="outlined" fullWidth>
+                              <InputLabel>Current Employment Status</InputLabel>
+                              <Select
+                                value={employmentData.current_employment_status || ''}
+                                onChange={(e) => handleEmploymentChange('current_employment_status', e.target.value)}
+                                label="Current Employment Status"
+                                disabled={!isEditingEmployment}
+                              >
+                                {currentEmploymentStatusOptions.map((status) => (
+                                  <MenuItem key={status} value={status}>
+                                    {status}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+
+                            {/* Company Name and Position in one row */}
+                            <Box sx={{ display: 'flex', gap: 2 }}>
+                              <TextField
+                                label="Company Name"
+                                value={employmentData.current_company_name || ''}
+                                onChange={(e) => handleEmploymentChange('current_company_name', e.target.value)}
+                                sx={{ flex: 1 }}
+                                variant="outlined"
+                                disabled={!isEditingEmployment}
+                              />
+                              <TextField
+                                label="Current Position"
+                                value={employmentData.current_position || ''}
+                                onChange={(e) => handleEmploymentChange('current_position', e.target.value)}
+                                sx={{ flex: 1 }}
+                                variant="outlined"
+                                disabled={!isEditingEmployment}
+                              />
+                            </Box>
+
+                            {/* Sector and Scope in one row */}
+                            <Box sx={{ display: 'flex', gap: 2 }}>
+                              <FormControl variant="outlined" sx={{ flex: 1 }}>
+                                <InputLabel>Sector</InputLabel>
+                                <Select
+                                  value={employmentData.current_sector || ''}
+                                  onChange={(e) => handleEmploymentChange('current_sector', e.target.value)}
+                                  label="Sector"
+                                  disabled={!isEditingEmployment}
+                                >
+                                  {sectorRadioOptions.map((sector) => (
+                                    <MenuItem key={sector} value={sector}>
+                                      {sector}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+
+                              <FormControl variant="outlined" sx={{ flex: 1 }}>
+                                <InputLabel>Scope</InputLabel>
+                                <Select
+                                  value={employmentData.current_scope || ''}
+                                  onChange={(e) => handleEmploymentChange('current_scope', e.target.value)}
+                                  label="Scope"
+                                  disabled={!isEditingEmployment}
+                                >
+                                  {scopeOptions.map((scope) => (
+                                    <MenuItem key={scope} value={scope}>
+                                      {scope}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            </Box>
+
+                            {/* Employment Duration Dropdown */}
+                            <FormControl variant="outlined" fullWidth>
+                              <InputLabel>Employment Duration</InputLabel>
+                              <Select
+                                value={employmentData.employment_duration || ''}
+                                onChange={(e) => handleEmploymentChange('employment_duration', e.target.value)}
+                                label="Employment Duration"
+                                disabled={!isEditingEmployment}
+                              >
+                                <MenuItem value="less_than_6_months">Less than 6 months</MenuItem>
+                                <MenuItem value="6_months_1_year">6 months – 1 year</MenuItem>
+                                <MenuItem value="1_2_years">1-2 years</MenuItem>
+                                <MenuItem value="3_5_years">3-5 years</MenuItem>
+                                <MenuItem value="more_than_5_years">More than 5 years</MenuItem>
+                              </Select>
+                            </FormControl>
+
+                            {/* Salary Range Dropdown */}
+                            <FormControl variant="outlined" fullWidth>
+                              <InputLabel>Salary Range</InputLabel>
+                              <Select
+                                value={employmentData.salary_range || ''}
+                                onChange={(e) => handleEmploymentChange('salary_range', e.target.value)}
+                                label="Salary Range"
+                                disabled={!isEditingEmployment}
+                              >
+                                <MenuItem value="below_5000">5,000 below</MenuItem>
+                                <MenuItem value="5001_10000">5,001 - 10,000</MenuItem>
+                                <MenuItem value="10001_20000">10,001 - 20,000</MenuItem>
+                                <MenuItem value="20001_30000">20,001 - 30,000</MenuItem>
+                                <MenuItem value="above_30000">30,000 above</MenuItem>
+                              </Select>
+                            </FormControl>
+
+                            {/* Received Awards Dropdown */}
+                            <FormControl variant="outlined" fullWidth>
+                              <InputLabel>Received Awards</InputLabel>
+                              <Select
+                                value={employmentData.received_awards || ''}
+                                onChange={(e) => handleEmploymentChange('received_awards', e.target.value)}
+                                label="Received Awards"
+                                disabled={!isEditingEmployment}
+                              >
+                                {awardsOptions.map((award) => (
+                                  <MenuItem key={award} value={award}>
+                                    {award}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+
+                            {/* Supporting Documents for Awards/Recognition - Only show if "Yes" */}
+                            {employmentData.received_awards === 'Yes' && (
+                              <Box sx={{ 
+                                border: '2px dashed #174f84', 
+                                borderRadius: 2, 
+                                p: 3,
+                                backgroundColor: '#f8fafc'
+                              }}>
+                                <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#174f84' }}>
+                                  Supporting Documents for Awards/Recognition
+                                </Typography>
+                                
+                                {/* Show existing document if available */}
+                                {employmentData.awards_supporting_doc && (
+                                  <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2, p: 2, backgroundColor: '#fff', borderRadius: 1, border: '1px solid #e2e8f0' }}>
+                                    <Box
+                                      component="img"
+                                      src={`http://127.0.0.1:8000${employmentData.awards_supporting_doc}`}
+                                      alt="Award Document"
                               sx={{
-                                borderRadius: 3,
-                                p: { xs: 3, md: 4 },
-                                border: '1px solid #e3ebf6',
-                                backgroundColor: '#fff'
-                              }}
-                            >
-                              <Typography variant="h6" sx={{ fontWeight: 600, color: '#174f84' }}>
-                                Employment History
+                                        width: 80,
+                                        height: 80,
+                                        objectFit: 'cover',
+                                        borderRadius: 1,
+                                        border: '1px solid #cbd5e1'
+                                      }}
+                                    />
+                                    <Box sx={{ flex: 1 }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#0f172a' }}>
+                                        Current Award Document
                               </Typography>
-                              <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
-                                Displaying the employment details you provided in the tracker.
+                                      <Typography variant="caption" sx={{ color: '#64748b' }}>
+                                        Image uploaded
                               </Typography>
-                              <Divider sx={{ mb: 3 }} />
-                              <TableContainer sx={{ borderRadius: 2, border: '1px solid #e8eff9' }}>
-                                <Table size="small">
-                                  <TableHead>
-                                    <TableRow>
-                                      {['Company Name', 'Position', 'Sector', 'Scope', 'Duration', 'Salary Range'].map((header) => (
-                                        <TableCell
-                                          key={header}
-                                          sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: 12, color: '#94a3b8', backgroundColor: '#f5f7fb' }}
-                                        >
-                                          {header}
-                                        </TableCell>
-                                      ))}
-                                    </TableRow>
-                                  </TableHead>
-                                  <TableBody>
-                                    <TableRow sx={{ '& td': { fontWeight: 600, color: '#0f172a' } }}>
-                                      <TableCell>{employmentHistoryRow.company}</TableCell>
-                                      <TableCell>{employmentHistoryRow.position}</TableCell>
-                                      <TableCell>{employmentHistoryRow.sector}</TableCell>
-                                      <TableCell>{employmentHistoryRow.scope}</TableCell>
-                                      <TableCell>{employmentHistoryRow.duration}</TableCell>
-                                      <TableCell>{employmentHistoryRow.salary}</TableCell>
-                                    </TableRow>
-                                  </TableBody>
-                                </Table>
-                              </TableContainer>
-
-                              {trackerDocuments.length > 0 && (
-                                <Box sx={{ mt: 3, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
-                                  {trackerDocuments.map((doc) => (
+                                    </Box>
                                     <Button
-                                      key={doc.label}
                                       component="a"
-                                      href={doc.url}
+                                      href={`http://127.0.0.1:8000${employmentData.awards_supporting_doc}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       variant="outlined"
-                                      sx={{
-                                        flex: 1,
+                                      size="small"
+                                sx={{
                                         borderColor: '#174f84',
                                         color: '#174f84',
-                                        fontWeight: 600,
-                                        textTransform: 'none'
+                                        '&:hover': { backgroundColor: '#f1f5f9' }
                                       }}
                                     >
-                                      {doc.label}
+                                      View Full
                                     </Button>
-                                  ))}
+                                  </Box>
+                                )}
+
+                                {/* File upload input - only when editing */}
+                                {isEditingEmployment && (
+                                  <Box>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      id="awards-document-upload"
+                                      style={{ display: 'none' }}
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          // Store the file for later upload
+                                          handleEmploymentChange('awards_file', file);
+                                        }
+                                      }}
+                                    />
+                                    <label htmlFor="awards-document-upload">
+                                      <Button
+                                        variant="contained"
+                                        component="span"
+                                    sx={{
+                                          backgroundColor: '#174f84',
+                                          '&:hover': { backgroundColor: '#0d3a5f' },
+                                          textTransform: 'none',
+                                          fontWeight: 600
+                                        }}
+                                      >
+                                        {employmentData.awards_supporting_doc ? 'Replace Award Document' : 'Upload Award Document'}
+                                      </Button>
+                                    </label>
+                                    
+                                    {/* Show selected file name */}
+                                    {employmentData.awards_file && (
+                                      <Box sx={{ mt: 1, p: 1.5, backgroundColor: '#ecfdf5', border: '1px solid #86efac', borderRadius: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Typography variant="body2" sx={{ color: '#166534', fontWeight: 600 }}>
+                                          ✓ New file selected: {employmentData.awards_file.name}
+                                    </Typography>
+                                      </Box>
+                                    )}
+                                    
+                                    <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#64748b' }}>
+                                      Upload an image of your award or recognition certificate (PNG, JPG, JPEG)
+                                    </Typography>
+                                  </Box>
+                                )}
+
+                                {!isEditingEmployment && !employmentData.awards_supporting_doc && (
+                                  <Typography variant="body2" sx={{ color: '#64748b', fontStyle: 'italic' }}>
+                                    No award document uploaded yet
+                                  </Typography>
+                                )}
+                              </Box>
+                            )}
+
+                            {/* Employment Supporting Documents Section */}
+                            <Box sx={{ 
+                              border: '2px dashed #475569', 
+                              borderRadius: 2, 
+                              p: 3,
+                              backgroundColor: '#f8fafc'
+                            }}>
+                              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#475569' }}>
+                                Employment Supporting Document (Current)
+                              </Typography>
+                              
+                              {/* Show existing document if available */}
+                              {employmentData.employment_supporting_doc && (
+                                <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2, p: 2, backgroundColor: '#fff', borderRadius: 1, border: '1px solid #e2e8f0' }}>
+                                  <Box
+                                    component="img"
+                                    src={`http://127.0.0.1:8000${employmentData.employment_supporting_doc}`}
+                                    alt="Employment Document"
+                              sx={{
+                                      width: 80,
+                                      height: 80,
+                                      objectFit: 'cover',
+                                      borderRadius: 1,
+                                      border: '1px solid #cbd5e1'
+                                    }}
+                                  />
+                                  <Box sx={{ flex: 1 }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#0f172a' }}>
+                                      Current Employment Document
+                              </Typography>
+                                    <Typography variant="caption" sx={{ color: '#64748b' }}>
+                                      Certificate of Employment or Company ID
+                              </Typography>
+                                  </Box>
+                                    <Button
+                                      component="a"
+                                    href={`http://127.0.0.1:8000${employmentData.employment_supporting_doc}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      variant="outlined"
+                                    size="small"
+                                      sx={{
+                                      borderColor: '#475569',
+                                      color: '#475569',
+                                      '&:hover': { backgroundColor: '#f1f5f9' }
+                                    }}
+                                  >
+                                    View Full
+                                    </Button>
                                 </Box>
                               )}
-                            </Paper>
+
+                              {/* File upload input - only when editing */}
+                              {isEditingEmployment && (
+                                <Box>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    id="employment-document-upload"
+                                    style={{ display: 'none' }}
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        // Store the file for later upload
+                                        handleEmploymentChange('employment_file', file);
+                                      }
+                                    }}
+                                  />
+                                  <label htmlFor="employment-document-upload">
+                                    <Button
+                                      variant="contained"
+                                      component="span"
+                                      sx={{
+                                        backgroundColor: '#475569',
+                                        '&:hover': { backgroundColor: '#334155' },
+                                        textTransform: 'none',
+                                        fontWeight: 600
+                                      }}
+                                    >
+                                      {employmentData.employment_supporting_doc ? 'Replace Employment Document' : 'Upload Employment Document'}
+                                    </Button>
+                                  </label>
+                                  
+                                  {/* Show selected file name */}
+                                  {employmentData.employment_file && (
+                                    <Box sx={{ mt: 1, p: 1.5, backgroundColor: '#ecfdf5', border: '1px solid #86efac', borderRadius: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <Typography variant="body2" sx={{ color: '#166534', fontWeight: 600 }}>
+                                        ✓ New file selected: {employmentData.employment_file.name}
+                                      </Typography>
+                                    </Box>
+                                  )}
+                                  
+                                  <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#64748b' }}>
+                                    Upload Certificate of Employment or Company ID (PNG, JPG, JPEG)
+                                  </Typography>
+                                </Box>
+                              )}
+
+                              {!isEditingEmployment && !employmentData.employment_supporting_doc && (
+                                <Typography variant="body2" sx={{ color: '#64748b', fontStyle: 'italic' }}>
+                                  No employment document uploaded yet
+                                </Typography>
+                              )}
+                            </Box>
                           </Box>
                         ) : (
                           <Box sx={{ textAlign: 'center', py: 4 }}>
@@ -1358,13 +1641,13 @@ const Settings: React.FC = () => {
 
                   </Box>
                   
-                  {/* Save/Cancel buttons - Only show for alumni accounts (OJT is view-only) */}
-                  {accountType === 'alumni' && false && isEditingEmployment && (
+                  {/* Save/Cancel buttons - Only show for alumni accounts when editing */}
+                  {accountType === 'alumni' && isEditingEmployment && hasJobInDB && (
                     <Box sx={{ display: 'flex', gap: 2, mt: 4, justifyContent: 'center' }}>
                       <Button
                         variant="contained"
-                        onClick={() => {
-                          handleEmploymentSave();
+                        onClick={async () => {
+                          await handleEmploymentSave();
                           setIsEditingEmployment(false);
                         }}
                         disabled={saving}
@@ -1380,21 +1663,14 @@ const Settings: React.FC = () => {
                       <Button
                         variant="outlined"
                         onClick={async () => {
-                          // Reset to initial state - reload employment data to show "Are you employed?" question
+                          // Reload employment data to reset fields
                           const userStr = localStorage.getItem('user');
                           if (userStr) {
                             const user = JSON.parse(userStr);
                             const userId = user.user_id || user.id;
-                            
-                            // Reset all state
-                            setIsEditingEmployment(false);
-                            setIsEmployed(null);
-                            setUnemploymentQuestions([]);
-                            setUnemploymentResponses({});
-                            
-                            // Reload employment data to reset to initial state
                             await fetchEmploymentData(userId);
                           }
+                          setIsEditingEmployment(false);
                         }}
                         sx={{
                           borderColor: '#174f84',
@@ -1458,7 +1734,6 @@ const Settings: React.FC = () => {
                       onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
                       variant="outlined"
                       fullWidth
-                      helperText="Password must be at least 16 characters long and contain uppercase, lowercase, number, and special character"
                       InputProps={{
                         endAdornment: (
                           <InputAdornment position="end">
@@ -1473,6 +1748,51 @@ const Settings: React.FC = () => {
                         )
                       }}
                     />
+                    <Box sx={{
+                      background: 'rgba(25, 118, 210, 0.08)',
+                      border: '2px solid rgba(25, 118, 210, 0.2)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      marginTop: '8px',
+                      marginBottom: '8px',
+                    }}>
+                      <Typography sx={{ fontSize: '13px', fontWeight: '700', color: '#1976d2', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        📋 Password Requirements:
+                      </Typography>
+                      <Typography sx={{ fontSize: '13px', fontWeight: '500', color: '#333', lineHeight: '1.4' }}>
+                        Must be 16+ chars with upper, lower, number, and symbol.
+                      </Typography>
+                    </Box>
+                    <Box sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      marginBottom: '8px',
+                      border: '2px solid',
+                      fontWeight: '600',
+                      ...(passwordValidation.message === 'Weak' ? {
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        borderColor: 'rgba(239, 68, 68, 0.4)',
+                        color: '#d32f2f',
+                      } : passwordValidation.message === 'Medium' ? {
+                        background: 'rgba(234, 179, 8, 0.1)',
+                        borderColor: 'rgba(234, 179, 8, 0.4)',
+                        color: '#ed6c02',
+                      } : {
+                        background: 'rgba(34, 197, 94, 0.1)',
+                        borderColor: 'rgba(34, 197, 94, 0.4)',
+                        color: '#2e7d32',
+                      })
+                    }}>
+                      <Typography sx={{ fontSize: '13px', fontWeight: '600' }}>
+                        Strength:
+                      </Typography>
+                      <Typography sx={{ fontSize: '14px', fontWeight: '700', textTransform: 'uppercase' }}>
+                        {passwordValidation.message}
+                      </Typography>
+                    </Box>
                     
                     <TextField
                       label="Confirm New Password"

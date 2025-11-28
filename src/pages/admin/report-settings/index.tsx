@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
 import { api } from '../../../services/api';
+import headerThreeColumnPreview from '../../../images/header-preview.png';
+import headerTwoColumnPreview from '../../../images/two-column-preview.png';
+import headerSingleColumnPreview from '../../../images/single-column-preview.png';
 
 const ReportSettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -9,6 +12,27 @@ const ReportSettingsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  // Helper function to ensure image URLs are absolute
+  const getImageUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null;
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    // If it's a relative URL, prepend the API base URL
+    const apiBase = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+    const baseUrl = apiBase.replace(/\/$/, '').replace(/\/api$/, '');
+    return url.startsWith('/') ? `${baseUrl}${url}` : `${baseUrl}/${url}`;
+  };
+  
+  // Preset management
+  const [presets, setPresets] = useState<any[]>([]);
+  const [showPresetPreview, setShowPresetPreview] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState<any>(null);
+  const [showSavePresetModal, setShowSavePresetModal] = useState(false);
+  const [showSaveSettingsModal, setShowSaveSettingsModal] = useState(false);
+  const [presetName, setPresetName] = useState('');
 
   // Header settings
   const [headerEnabled, setHeaderEnabled] = useState(true);
@@ -20,17 +44,32 @@ const ReportSettingsPage: React.FC = () => {
   const [leftLogoPreview, setLeftLogoPreview] = useState<string>('');
   const [rightLogoPreview, setRightLogoPreview] = useState<string>('');
 
-  // Header text
-  const [headerLine1, setHeaderLine1] = useState('Republic of the Philippines');
-  const [headerLine2, setHeaderLine2] = useState('CEBU TECHNOLOGICAL UNIVERSITY');
-  const [headerLine2Color, setHeaderLine2Color] = useState('#DC143C');
-  const [headerLine2Bold, setHeaderLine2Bold] = useState(true);
-  const [headerLine3, setHeaderLine3] = useState('M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines');
-  const [headerLine4, setHeaderLine4] = useState('Website: http://www.ctu.edu.ph');
-  const [headerLine5, setHeaderLine5] = useState('Phone: +6332 402 4060 loc. 1146');
-  const [headerLine6, setHeaderLine6] = useState('UNIVERSITY ALUMNI AFFAIRS OFFICE');
-  const [headerLine6Color, setHeaderLine6Color] = useState('#DC143C');
-  const [headerLine6Bold, setHeaderLine6Bold] = useState(true);
+  // Header text - Dynamic array structure
+  interface HeaderLine {
+    id: string;
+    text: string;
+    color: string;
+    bold: boolean;
+  }
+
+  const defaultHeaderLines: HeaderLine[] = [
+    { id: '1', text: 'Republic of the Philippines', color: '#000000', bold: false },
+    { id: '2', text: 'CEBU TECHNOLOGICAL UNIVERSITY', color: '#DC143C', bold: true },
+    { id: '3', text: 'M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines', color: '#000000', bold: false },
+    { id: '4', text: 'Website: http://www.ctu.edu.ph', color: '#000000', bold: false },
+    { id: '5', text: 'Phone: +6332 402 4060 loc. 1146', color: '#000000', bold: false },
+    { id: '6', text: 'UNIVERSITY ALUMNI AFFAIRS OFFICE', color: '#DC143C', bold: true },
+  ];
+
+  const [headerLines, setHeaderLines] = useState<HeaderLine[]>(defaultHeaderLines);
+
+  // Header Title - Dynamic array structure (for report title like "PERCENTAGE OF GRADUATE TRACING BATCH 2023")
+  const defaultTitleLines: HeaderLine[] = [
+    { id: 'title1', text: 'PERCENTAGE OF GRADUATE TRACING BATCH 2023', color: '#000000', bold: true },
+    { id: 'title2', text: 'REPORT FOR THE 3RD QUARTER QPRO 2025', color: '#000000', bold: true },
+  ];
+
+  const [titleLines, setTitleLines] = useState<HeaderLine[]>(defaultTitleLines);
 
   // Footer settings
   const [footerEnabled, setFooterEnabled] = useState(true);
@@ -47,8 +86,27 @@ const ReportSettingsPage: React.FC = () => {
   const [approvedByName, setApprovedByName] = useState('ROMEO P. MONTECILLO, Ph.D.');
   const [approvedByTitle, setApprovedByTitle] = useState('Vice President for Student Affairs');
 
+  const headerLayoutOptions: { value: string; label: string; description: string }[] = [
+    {
+      value: 'three_column',
+      label: 'Three Column (Logo, Text, Logo)',
+      description: 'Balanced layout with logos on both sides and the official text centered.',
+    },
+    {
+      value: 'two_column',
+      label: 'Two Column (Logo, Text)',
+      description: 'Left-aligned logo with stacked text on the right for narrower layouts.',
+    },
+    {
+      value: 'single_column',
+      label: 'Single Column (Text only)',
+      description: 'Full-width text block without any logos for minimalist documents.',
+    },
+  ];
+
   useEffect(() => {
     loadSettings();
+    loadPresets();
   }, []);
 
   const loadSettings = async () => {
@@ -65,16 +123,39 @@ const ReportSettingsPage: React.FC = () => {
         setLeftLogoPreview(s.left_logo_url || '');
         setRightLogoPreview(s.right_logo_url || '');
 
-        setHeaderLine1(s.header_line1 || '');
-        setHeaderLine2(s.header_line2 || '');
-        setHeaderLine2Color(s.header_line2_color || '#DC143C');
-        setHeaderLine2Bold(s.header_line2_bold ?? true);
-        setHeaderLine3(s.header_line3 || '');
-        setHeaderLine4(s.header_line4 || '');
-        setHeaderLine5(s.header_line5 || '');
-        setHeaderLine6(s.header_line6 || '');
-        setHeaderLine6Color(s.header_line6_color || '#DC143C');
-        setHeaderLine6Bold(s.header_line6_bold ?? true);
+        // Load header lines - check for new format first, fallback to old format
+        if (s.custom_settings?.header_lines && Array.isArray(s.custom_settings.header_lines)) {
+          // New format: array of header lines
+          setHeaderLines(s.custom_settings.header_lines.map((line: any, index: number) => ({
+            id: line.id || String(index + 1),
+            text: line.text || '',
+            color: line.color || '#000000',
+            bold: line.bold ?? false,
+          })));
+        } else {
+          // Old format: convert fixed fields to array
+          const convertedLines: HeaderLine[] = [];
+          if (s.header_line1) convertedLines.push({ id: '1', text: s.header_line1, color: '#000000', bold: false });
+          if (s.header_line2) convertedLines.push({ id: '2', text: s.header_line2, color: s.header_line2_color || '#DC143C', bold: s.header_line2_bold ?? true });
+          if (s.header_line3) convertedLines.push({ id: '3', text: s.header_line3, color: '#000000', bold: false });
+          if (s.header_line4) convertedLines.push({ id: '4', text: s.header_line4, color: '#000000', bold: false });
+          if (s.header_line5) convertedLines.push({ id: '5', text: s.header_line5, color: '#000000', bold: false });
+          if (s.header_line6) convertedLines.push({ id: '6', text: s.header_line6, color: s.header_line6_color || '#DC143C', bold: s.header_line6_bold ?? true });
+          setHeaderLines(convertedLines.length > 0 ? convertedLines : defaultHeaderLines);
+        }
+
+        // Load title lines
+        if (s.custom_settings?.title_lines && Array.isArray(s.custom_settings.title_lines)) {
+          setTitleLines(s.custom_settings.title_lines.map((line: any, index: number) => ({
+            id: line.id || `title_${index + 1}`,
+            text: line.text || '',
+            color: line.color || '#000000',
+            bold: line.bold ?? true,
+          })));
+        } else {
+          // Use defaults if no title lines saved
+          setTitleLines(defaultTitleLines);
+        }
 
         setFooterEnabled(s.footer_enabled ?? true);
         setFooterImageEnabled(s.footer_image_enabled ?? true);
@@ -97,6 +178,134 @@ const ReportSettingsPage: React.FC = () => {
     }
   };
 
+  const loadPresets = async () => {
+    try {
+      const response = await api.get('shared/report-settings/presets/');
+      if (response.data.success) {
+        setPresets(response.data.presets || []);
+      }
+    } catch (error) {
+      console.error('Error loading presets:', error);
+    }
+  };
+
+  const savePreset = async () => {
+    if (!presetName.trim()) {
+      setErrorMessage('Please enter a preset name');
+      setTimeout(() => setErrorMessage(''), 3000);
+      return;
+    }
+
+    try {
+      const response = await api.post('shared/report-settings/presets/save/', {
+        name: presetName.trim(),
+      });
+
+      if (response.data.success) {
+        setShowSavePresetModal(false);
+        setPresetName('');
+        await loadPresets();
+        setSuccessMessage('Preset saved successfully!');
+        setShowSuccessModal(true);
+        setTimeout(() => {
+          setShowSuccessModal(false);
+          setSuccessMessage('');
+        }, 3000);
+      }
+    } catch (error: any) {
+      console.error('Error saving preset:', error);
+      setErrorMessage(error.response?.data?.error || 'Failed to save preset');
+      setTimeout(() => setErrorMessage(''), 5000);
+    }
+  };
+
+  const applyPreset = async (presetId: string) => {
+    try {
+      const response = await api.post('shared/report-settings/presets/apply/', {
+        preset_id: presetId,
+      });
+
+      if (response.data.success) {
+        const settings = response.data.settings;
+        
+        // Update all state with preset data
+        setHeaderEnabled(settings.header_enabled ?? true);
+        setHeaderLayoutType(settings.header_layout_type || 'three_column');
+        setLeftLogoEnabled(settings.left_logo_enabled ?? true);
+        setRightLogoEnabled(settings.right_logo_enabled ?? true);
+        setLeftLogoPreview(settings.left_logo_url || '');
+        setRightLogoPreview(settings.right_logo_url || '');
+        
+        if (settings.header_lines && Array.isArray(settings.header_lines)) {
+          setHeaderLines(settings.header_lines);
+        }
+        
+        if (settings.title_lines && Array.isArray(settings.title_lines)) {
+          setTitleLines(settings.title_lines);
+        } else {
+          setTitleLines(defaultTitleLines);
+        }
+        
+        setFooterEnabled(settings.footer_enabled ?? true);
+        setFooterImageEnabled(settings.footer_image_enabled ?? true);
+        setFooterImagePreview(settings.footer_image_url || '');
+        setFooterText1(settings.footer_text1 || '');
+        setFooterText2(settings.footer_text2 || '');
+        
+        setSignatureEnabled(settings.signature_enabled ?? true);
+        setPreparedByName(settings.prepared_by_name || '');
+        setPreparedByTitle(settings.prepared_by_title || '');
+        setApprovedByName(settings.approved_by_name || '');
+        setApprovedByTitle(settings.approved_by_title || '');
+        
+        setShowPresetPreview(false);
+        setSelectedPreset(null);
+        setSuccessMessage('Preset applied successfully!');
+        setShowSuccessModal(true);
+        setTimeout(() => {
+          setShowSuccessModal(false);
+          setSuccessMessage('');
+        }, 3000);
+      }
+    } catch (error: any) {
+      console.error('Error applying preset:', error);
+      setErrorMessage(error.response?.data?.error || 'Failed to apply preset');
+      setTimeout(() => setErrorMessage(''), 5000);
+    }
+  };
+
+  const deletePreset = async (presetId: string) => {
+    if (!window.confirm('Are you sure you want to delete this preset?')) {
+      return;
+    }
+
+    try {
+      const response = await api.delete(`shared/report-settings/presets/${presetId}/delete/`);
+
+      if (response.data.success) {
+        await loadPresets();
+        setSuccessMessage('Preset deleted successfully!');
+        setShowSuccessModal(true);
+        setTimeout(() => {
+          setShowSuccessModal(false);
+          setSuccessMessage('');
+        }, 3000);
+      }
+    } catch (error: any) {
+      console.error('Error deleting preset:', error);
+      setErrorMessage(error.response?.data?.error || 'Failed to delete preset');
+      setTimeout(() => setErrorMessage(''), 5000);
+    }
+  };
+
+  const openPresetPreview = (preset: any) => {
+    // Close any open modals first
+    setShowSuccessModal(false);
+    setSuccessMessage('');
+    setSelectedPreset(preset);
+    setShowPresetPreview(true);
+  };
+
   const handleLogoUpload = (file: File | null, type: 'left' | 'right' | 'footer') => {
     if (!file) return;
 
@@ -117,7 +326,48 @@ const ReportSettingsPage: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = async () => {
+  const addHeaderLine = () => {
+    const newId = String(Date.now());
+    setHeaderLines([...headerLines, { id: newId, text: '', color: '#000000', bold: false }]);
+  };
+
+  const removeHeaderLine = (id: string) => {
+    setHeaderLines(headerLines.filter(line => line.id !== id));
+  };
+
+  const updateHeaderLine = (id: string, field: 'text' | 'color' | 'bold', value: string | boolean) => {
+    setHeaderLines(headerLines.map(line => 
+      line.id === id ? { ...line, [field]: value } : line
+    ));
+  };
+
+  const addTitleLine = () => {
+    const newId = `title_${Date.now()}`;
+    setTitleLines([...titleLines, { id: newId, text: '', color: '#000000', bold: true }]);
+  };
+
+  const removeTitleLine = (id: string) => {
+    setTitleLines(titleLines.filter(line => line.id !== id));
+  };
+
+  const updateTitleLine = (id: string, field: 'text' | 'color' | 'bold', value: string | boolean) => {
+    setTitleLines(titleLines.map(line => 
+      line.id === id ? { ...line, [field]: value } : line
+    ));
+  };
+
+  const handleSave = () => {
+    // Show modal to get preset name first
+    setShowSaveSettingsModal(true);
+  };
+
+  const handleSaveSettingsAndPreset = async () => {
+    if (!presetName.trim()) {
+      setErrorMessage('Please enter a preset name');
+      setTimeout(() => setErrorMessage(''), 3000);
+      return;
+    }
+
     try {
       setSaving(true);
       setSuccessMessage('');
@@ -125,21 +375,47 @@ const ReportSettingsPage: React.FC = () => {
 
       const formData = new FormData();
 
+      // Automatically set logo enabled flags based on layout type
+      let finalLeftLogoEnabled = false;
+      let finalRightLogoEnabled = false;
+      
+      if (headerLayoutType === 'three_column') {
+        finalLeftLogoEnabled = true;
+        finalRightLogoEnabled = true;
+      } else if (headerLayoutType === 'two_column') {
+        finalLeftLogoEnabled = true;
+        finalRightLogoEnabled = false;
+      } else if (headerLayoutType === 'single_column') {
+        finalLeftLogoEnabled = false;
+        finalRightLogoEnabled = false;
+      }
+
       formData.append('header_enabled', String(headerEnabled));
       formData.append('header_layout_type', headerLayoutType);
-      formData.append('left_logo_enabled', String(leftLogoEnabled));
-      formData.append('right_logo_enabled', String(rightLogoEnabled));
+      formData.append('left_logo_enabled', String(finalLeftLogoEnabled));
+      formData.append('right_logo_enabled', String(finalRightLogoEnabled));
       
-      formData.append('header_line1', headerLine1);
-      formData.append('header_line2', headerLine2);
-      formData.append('header_line2_color', headerLine2Color);
-      formData.append('header_line2_bold', String(headerLine2Bold));
-      formData.append('header_line3', headerLine3);
-      formData.append('header_line4', headerLine4);
-      formData.append('header_line5', headerLine5);
-      formData.append('header_line6', headerLine6);
-      formData.append('header_line6_color', headerLine6Color);
-      formData.append('header_line6_bold', String(headerLine6Bold));
+      // Save header lines in new format (custom_settings)
+      formData.append('header_lines', JSON.stringify(headerLines));
+      
+      // Save title lines in new format (custom_settings)
+      formData.append('title_lines', JSON.stringify(titleLines));
+      
+      // Also save to fixed fields for backward compatibility (first 6 lines)
+      if (headerLines.length > 0) formData.append('header_line1', headerLines[0]?.text || '');
+      if (headerLines.length > 1) {
+        formData.append('header_line2', headerLines[1]?.text || '');
+        formData.append('header_line2_color', headerLines[1]?.color || '#DC143C');
+        formData.append('header_line2_bold', String(headerLines[1]?.bold ?? false));
+      }
+      if (headerLines.length > 2) formData.append('header_line3', headerLines[2]?.text || '');
+      if (headerLines.length > 3) formData.append('header_line4', headerLines[3]?.text || '');
+      if (headerLines.length > 4) formData.append('header_line5', headerLines[4]?.text || '');
+      if (headerLines.length > 5) {
+        formData.append('header_line6', headerLines[5]?.text || '');
+        formData.append('header_line6_color', headerLines[5]?.color || '#DC143C');
+        formData.append('header_line6_bold', String(headerLines[5]?.bold ?? false));
+      }
       
       formData.append('footer_enabled', String(footerEnabled));
       formData.append('footer_image_enabled', String(footerImageEnabled));
@@ -173,8 +449,48 @@ const ReportSettingsPage: React.FC = () => {
       );
 
       if (response.data.success) {
-        setSuccessMessage('Header/Footer Settings saved successfully!');
-        setTimeout(() => setSuccessMessage(''), 3000);
+        // Now save as preset - pass information about which images were uploaded
+        try {
+          const presetResponse = await api.post('shared/report-settings/presets/save/', {
+            name: presetName.trim(),
+            images_uploaded: {
+              left_logo: !!leftLogoFile,
+              right_logo: !!rightLogoFile,
+              footer_image: !!footerImageFile,
+            }
+          });
+
+          if (presetResponse.data.success) {
+            // Clear file states after successful save
+            setLeftLogoFile(null);
+            setRightLogoFile(null);
+            setFooterImageFile(null);
+            
+            // Reload settings to get updated preview URLs
+            await loadSettings();
+            await loadPresets();
+            setShowSaveSettingsModal(false);
+            setPresetName('');
+            setSuccessMessage(`Settings saved successfully as "${presetName.trim()}"!`);
+            setShowSuccessModal(true);
+            // Auto-close modal after 3 seconds
+            setTimeout(() => {
+              setShowSuccessModal(false);
+              setSuccessMessage('');
+            }, 3000);
+          }
+        } catch (presetError: any) {
+          console.error('Error saving preset:', presetError);
+          // Settings were saved, but preset failed - still show success
+          setShowSaveSettingsModal(false);
+          setPresetName('');
+          setSuccessMessage('Settings saved successfully, but failed to save as preset.');
+          setShowSuccessModal(true);
+          setTimeout(() => {
+            setShowSuccessModal(false);
+            setSuccessMessage('');
+          }, 3000);
+        }
       }
     } catch (error: any) {
       console.error('Error saving settings:', error);
@@ -256,6 +572,31 @@ const ReportSettingsPage: React.FC = () => {
     transition: 'background-color 0.2s',
   };
 
+  const modalOverlayStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    animation: 'fadeIn 0.2s ease-in',
+  };
+
+  const modalContentStyle: React.CSSProperties = {
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    padding: '32px',
+    maxWidth: '500px',
+    width: '90%',
+    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)',
+    textAlign: 'center',
+    animation: 'slideUp 0.3s ease-out',
+  };
+
   const logoPreviewStyle: React.CSSProperties = {
     width: '150px',
     height: '150px',
@@ -264,6 +605,150 @@ const ReportSettingsPage: React.FC = () => {
     borderRadius: '8px',
     padding: '8px',
     marginBottom: '8px',
+  };
+
+  const logoUploadCardStyle: React.CSSProperties = {
+    border: '1px solid #e5e7eb',
+    borderRadius: '10px',
+    padding: '16px',
+    backgroundColor: '#f9fafb',
+  };
+
+  const layoutPreviewPanelStyle: React.CSSProperties = {
+    width: '100%',
+    maxWidth: '800px',
+    border: '1px solid #e5e7eb',
+    borderRadius: '12px',
+    padding: '20px',
+    backgroundColor: '#ffffff',
+    margin: '0 auto 24px auto',
+  };
+
+  const logoUploadsContainerStyle: React.CSSProperties = {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '24px',
+    flexWrap: 'wrap',
+    marginBottom: '24px',
+  };
+
+  const layoutPreviewCanvasStyle: React.CSSProperties = {
+    border: '1px dashed #cbd5f5',
+    borderRadius: '10px',
+    padding: '16px',
+    backgroundColor: '#f8fbff',
+  };
+
+  const layoutPreviewImageStyle: React.CSSProperties = {
+    width: '100%',
+    maxWidth: '520px',
+    borderRadius: '12px',
+    border: '1px solid #d1d5db',
+    boxShadow: '0 4px 20px rgba(28, 78, 128, 0.15)',
+    backgroundColor: '#ffffff',
+    display: 'block',
+    margin: '0 auto',
+  };
+
+  const previewLogoStyle: React.CSSProperties = {
+    width: '48px',
+    height: '48px',
+    borderRadius: '12px',
+    background: 'linear-gradient(135deg, #1c4e80, #3b82f6)',
+    color: '#ffffff',
+    fontSize: '10px',
+    fontWeight: 700,
+    letterSpacing: '0.04em',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+
+  const previewTextLineStyle = (width: string, centered = false): React.CSSProperties => ({
+    width,
+    height: '8px',
+    borderRadius: '4px',
+    backgroundColor: '#c7d7f7',
+    marginBottom: '6px',
+    ...(centered ? { marginLeft: 'auto', marginRight: 'auto' } : {}),
+  });
+
+  const renderLayoutStructure = (layoutType: string) => {
+    const renderCentralText = (centered = false) => (
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: centered ? 'center' : 'flex-start',
+        }}
+      >
+        <div style={previewTextLineStyle('90%', centered)} />
+        <div style={previewTextLineStyle('65%', centered)} />
+        <div style={previewTextLineStyle('50%', centered)} />
+      </div>
+    );
+
+    if (layoutType === 'two_column') {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={previewLogoStyle}>LOGO</div>
+          {renderCentralText(false)}
+        </div>
+      );
+    }
+
+    if (layoutType === 'single_column') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+          <div style={previewTextLineStyle('80%', true)} />
+          <div style={previewTextLineStyle('60%', true)} />
+          <div style={previewTextLineStyle('50%', true)} />
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={previewLogoStyle}>LEFT</div>
+        {renderCentralText(false)}
+        <div style={previewLogoStyle}>RIGHT</div>
+      </div>
+    );
+  };
+
+  const layoutPreviewImages: Record<string, string> = {
+    three_column: headerThreeColumnPreview,
+    two_column: headerTwoColumnPreview,
+    single_column: headerSingleColumnPreview,
+  };
+
+  const LayoutPreview: React.FC<{ layoutType: string; title: string }> = ({ layoutType, title }) => {
+    const activeLayout = headerLayoutOptions.find((option) => option.value === layoutType);
+    const previewImage = layoutPreviewImages[layoutType];
+
+    return (
+      <div style={layoutPreviewPanelStyle}>
+        <div style={{ marginBottom: '12px' }}>
+          <div style={{ fontSize: '12px', color: '#6b7280', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            {title}
+          </div>
+          <div style={{ fontSize: '16px', fontWeight: 600, color: '#111827' }}>{activeLayout?.label || 'Layout Preview'}</div>
+        </div>
+        {previewImage ? (
+          <img
+            src={previewImage}
+            alt={`${activeLayout?.label || 'layout'} preview`}
+            style={layoutPreviewImageStyle}
+          />
+        ) : (
+          <div style={layoutPreviewCanvasStyle}>{renderLayoutStructure(layoutType)}</div>
+        )}
+        {activeLayout?.description && (
+          <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '12px' }}>{activeLayout.description}</p>
+        )}
+      </div>
+    );
   };
 
   if (loading) {
@@ -278,9 +763,26 @@ const ReportSettingsPage: React.FC = () => {
   }
 
   return (
-    <div style={containerStyle}>
-      <Sidebar />
-      <div style={contentStyle}>
+    <>
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideUp {
+          from { 
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to { 
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+      <div style={containerStyle}>
+        <Sidebar />
+        <div style={contentStyle}>
         <div style={{ marginBottom: '32px' }}>
           <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1c4e80', margin: 0 }}>Header/Footer Settings</h1>
           <p style={{ fontSize: '14px', color: '#6b7280', marginTop: '8px' }}>
@@ -297,6 +799,775 @@ const ReportSettingsPage: React.FC = () => {
         {errorMessage && (
           <div style={{...cardStyle, backgroundColor: '#fee2e2', border: '1px solid #ef4444', color: '#991b1b', padding: '12px 16px', marginBottom: '16px'}}>
             {errorMessage}
+          </div>
+        )}
+
+        {/* Preset Cards Section */}
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div>
+              <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1c4e80', margin: 0, marginBottom: '4px' }}>
+                Saved Presets
+              </h2>
+              <p style={{ fontSize: '14px', color: '#6b7280', margin: 0 }}>
+                Click on a preset to preview or apply it instantly
+              </p>
+            </div>
+            <button
+              onClick={() => setShowSavePresetModal(true)}
+              style={{
+                backgroundColor: '#1c4e80',
+                color: 'white',
+                padding: '10px 20px',
+                borderRadius: '8px',
+                border: 'none',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <span>+</span> Save Current as Preset
+            </button>
+          </div>
+
+          {presets.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+              <p style={{ fontSize: '16px', marginBottom: '8px' }}>No presets saved yet</p>
+              <p style={{ fontSize: '14px' }}>Save your current settings as a preset to reuse them later</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+              {presets.map((preset) => (
+                <div
+                  key={preset.id}
+                  onClick={() => openPresetPreview(preset)}
+                  style={{
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    backgroundColor: '#ffffff',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    position: 'relative',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#1c4e80';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(28, 78, 128, 0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#e5e7eb';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', margin: 0 }}>
+                      {preset.name}
+                    </h3>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deletePreset(preset.id);
+                      }}
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        fontSize: '18px',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#fee2e2';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>
+                    Layout: {preset.header_layout_type === 'three_column' ? 'Three Column' : 
+                             preset.header_layout_type === 'two_column' ? 'Two Column' : 'Single Column'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>
+                    Header Lines: {preset.header_lines?.length || 0}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px' }}>
+                    Created: {preset.created_at}
+                  </div>
+                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb' }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        applyPreset(preset.id);
+                      }}
+                      style={{
+                        width: '100%',
+                        backgroundColor: '#10b981',
+                        color: 'white',
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Apply Preset
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Success Modal */}
+        {showSuccessModal && !showPresetPreview && (
+          <div style={modalOverlayStyle} onClick={() => {
+            setShowSuccessModal(false);
+            setSuccessMessage('');
+          }}>
+            <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+              <div style={{ 
+                width: '80px', 
+                height: '80px', 
+                borderRadius: '50%', 
+                backgroundColor: '#d1fae5', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                margin: '0 auto 24px auto',
+                fontSize: '48px',
+                color: '#10b981',
+                fontWeight: 'bold'
+              }}>
+                ✓
+              </div>
+              <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1c4e80', marginBottom: '12px', textAlign: 'center' }}>
+                {successMessage || 'Settings Saved Successfully!'}
+              </h2>
+              <p style={{ fontSize: '16px', color: '#6b7280', marginBottom: '24px', lineHeight: '1.5', textAlign: 'center' }}>
+                {successMessage && successMessage.includes('deleted')
+                  ? 'The preset has been removed from your saved presets.'
+                  : successMessage && successMessage.includes('applied')
+                  ? 'The preset has been applied to your current settings.'
+                  : successMessage && successMessage.includes('saved as')
+                  ? 'Your settings have been saved and added as a new preset.'
+                  : 'Your header and footer settings have been updated successfully.'}
+              </p>
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setSuccessMessage('');
+                }}
+                style={{
+                  ...buttonStyle,
+                  backgroundColor: '#10b981',
+                  padding: '10px 24px',
+                  minWidth: '120px',
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Preset Preview Modal */}
+        {showPresetPreview && selectedPreset && (
+          <div style={{...modalOverlayStyle, zIndex: 1001}} onClick={() => {
+            setShowPresetPreview(false);
+            setSelectedPreset(null);
+          }}>
+            <div style={{...modalContentStyle, maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto'}} onClick={(e) => e.stopPropagation()}>
+              <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1c4e80', marginBottom: '24px', textAlign: 'center' }}>
+                {selectedPreset.name}
+              </h2>
+              
+              {/* Document Preview */}
+              <div style={{ 
+                backgroundColor: '#ffffff', 
+                padding: '40px', 
+                borderRadius: '8px', 
+                border: '1px solid #e5e7eb',
+                minHeight: '400px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+              }}>
+                {/* Header Section */}
+                {selectedPreset.header_enabled && (
+                  <div style={{ marginBottom: '32px' }}>
+                    {/* Three Column Layout */}
+                    {selectedPreset.header_layout_type === 'three_column' && (
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '20px', width: '100%' }}>
+                        {/* Left Logo */}
+                        {selectedPreset.left_logo_enabled && selectedPreset.left_logo_url ? (
+                          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', width: '130px', justifyContent: 'flex-start' }}>
+                            <img 
+                              src={getImageUrl(selectedPreset.left_logo_url) || ''} 
+                              alt="Left logo" 
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                              }}
+                              style={{
+                                maxWidth: '130px',
+                                maxHeight: '130px',
+                                width: 'auto',
+                                height: 'auto',
+                                objectFit: 'contain'
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <div style={{ flexShrink: 0, width: '130px' }}></div>
+                        )}
+                        
+                        {/* Header Lines - Center column, centered */}
+                        <div style={{ 
+                          flex: 1, 
+                          padding: '0 16px', 
+                          minWidth: 0, 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          {selectedPreset.header_lines && Array.isArray(selectedPreset.header_lines) && selectedPreset.header_lines.length > 0 ? (
+                            selectedPreset.header_lines.map((line: any, index: number) => (
+                              <div 
+                                key={index} 
+                                style={{ 
+                                  marginBottom: line?.text ? '4px' : '0',
+                                  fontSize: '14px',
+                                  color: line?.color || '#000000', 
+                                  fontWeight: line?.bold ? 'bold' : 'normal',
+                                  lineHeight: '1.6',
+                                  textAlign: 'center',
+                                  width: '100%'
+                                }}
+                              >
+                                {line?.text || ''}
+                              </div>
+                            ))
+                          ) : (
+                            <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '14px', textAlign: 'center' }}>No header lines</div>
+                          )}
+                        </div>
+                        
+                        {/* Right Logo */}
+                        {selectedPreset.right_logo_enabled && selectedPreset.right_logo_url ? (
+                          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', width: '130px' }}>
+                            <img 
+                              src={getImageUrl(selectedPreset.right_logo_url) || ''} 
+                              alt="Right logo" 
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                              }}
+                              style={{
+                                maxWidth: '130px',
+                                maxHeight: '130px',
+                                width: 'auto',
+                                height: 'auto',
+                                objectFit: 'contain'
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <div style={{ flexShrink: 0, width: '130px' }}></div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Two Column Layout */}
+                    {selectedPreset.header_layout_type === 'two_column' && (
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', width: '100%' }}>
+                        {/* Left Logo */}
+                        {selectedPreset.left_logo_enabled && selectedPreset.left_logo_url ? (
+                          <div style={{ flexShrink: 0 }}>
+                            <img 
+                              src={getImageUrl(selectedPreset.left_logo_url) || ''} 
+                              alt="Left logo" 
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                              }}
+                              style={{
+                                maxWidth: '120px',
+                                maxHeight: '120px',
+                                width: 'auto',
+                                height: 'auto',
+                                objectFit: 'contain'
+                              }}
+                            />
+                          </div>
+                        ) : null}
+                        
+                        {/* Header Lines - Centered */}
+                        <div style={{ 
+                          flex: 1, 
+                          minWidth: 0, 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          {selectedPreset.header_lines && Array.isArray(selectedPreset.header_lines) && selectedPreset.header_lines.length > 0 ? (
+                            selectedPreset.header_lines.map((line: any, index: number) => (
+                              <div 
+                                key={index} 
+                                style={{ 
+                                  marginBottom: line?.text ? '4px' : '0',
+                                  fontSize: '14px',
+                                  color: line?.color || '#000000', 
+                                  fontWeight: line?.bold ? 'bold' : 'normal',
+                                  lineHeight: '1.6',
+                                  textAlign: 'center',
+                                  width: '100%'
+                                }}
+                              >
+                                {line?.text || ''}
+                              </div>
+                            ))
+                          ) : (
+                            <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '14px', textAlign: 'center' }}>No header lines</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Single Column Layout */}
+                    {selectedPreset.header_layout_type === 'single_column' && (
+                      <div style={{ textAlign: 'center', width: '100%' }}>
+                        {selectedPreset.header_lines && Array.isArray(selectedPreset.header_lines) && selectedPreset.header_lines.length > 0 ? (
+                          selectedPreset.header_lines.map((line: any, index: number) => (
+                            <div 
+                              key={index} 
+                              style={{ 
+                                marginBottom: line?.text ? '4px' : '0',
+                                fontSize: '14px',
+                                color: line?.color || '#000000', 
+                                fontWeight: line?.bold ? 'bold' : 'normal',
+                                lineHeight: '1.5'
+                              }}
+                            >
+                              {line?.text || ''}
+                            </div>
+                          ))
+                        ) : (
+                          <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '14px' }}>No header lines</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Title Lines Section */}
+                {selectedPreset.title_lines && selectedPreset.title_lines.length > 0 && (
+                  <div style={{ marginTop: '32px', marginBottom: '32px', textAlign: 'center' }}>
+                    {selectedPreset.title_lines.map((line: any, index: number) => (
+                      <div 
+                        key={index} 
+                        style={{ 
+                          marginBottom: line.text ? '8px' : '0',
+                          fontSize: '16px',
+                          color: line.color || '#000000', 
+                          fontWeight: line.bold ? 'bold' : 'normal',
+                          lineHeight: '1.5'
+                        }}
+                      >
+                        {line.text || ''}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Signature Section - appears before footer */}
+                {selectedPreset.signature_enabled && (
+                  <div style={{ marginTop: '48px', paddingTop: '24px', borderTop: '1px solid #e5e7eb' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '48px' }}>
+                      {selectedPreset.prepared_by_name && (
+                        <div style={{ flex: 1, textAlign: 'left' }}>
+                          <div style={{ 
+                            fontSize: '13px',
+                            color: '#374151',
+                            marginBottom: '12px',
+                            fontWeight: '500',
+                            textAlign: 'left'
+                          }}>
+                            Prepared by:
+                          </div>
+                          <div style={{ 
+                            fontSize: '14px', 
+                            fontWeight: 'bold', 
+                            marginBottom: '2px',
+                            textTransform: 'uppercase',
+                            color: '#111827',
+                            textAlign: 'left'
+                          }}>
+                            {selectedPreset.prepared_by_name}
+                          </div>
+                          <div style={{ 
+                            marginBottom: '8px',
+                            height: '1px',
+                            width: '220px',
+                            borderBottom: '1px solid #000000',
+                            maxWidth: '100%'
+                          }}></div>
+                          {selectedPreset.prepared_by_title && (
+                            <div style={{ 
+                              fontSize: '12px', 
+                              color: '#374151',
+                              marginTop: '4px',
+                              textAlign: 'left'
+                            }}>
+                              {selectedPreset.prepared_by_title}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {selectedPreset.approved_by_name && (
+                        <div style={{ flex: 1, textAlign: 'right' }}>
+                          <div style={{ 
+                            fontSize: '13px',
+                            color: '#374151',
+                            marginBottom: '12px',
+                            fontWeight: '500'
+                          }}>
+                            Approved by:
+                          </div>
+                          <div style={{ 
+                            fontSize: '14px', 
+                            fontWeight: 'bold', 
+                            marginBottom: '2px',
+                            textTransform: 'uppercase',
+                            color: '#111827'
+                          }}>
+                            {selectedPreset.approved_by_name}
+                          </div>
+                          <div style={{ 
+                            marginBottom: '8px',
+                            height: '1px',
+                            width: '220px',
+                            borderBottom: '1px solid #000000',
+                            marginLeft: 'auto',
+                            maxWidth: '100%'
+                          }}></div>
+                          {selectedPreset.approved_by_title && (
+                            <div style={{ 
+                              fontSize: '12px', 
+                              color: '#374151',
+                              marginTop: '4px'
+                            }}>
+                              {selectedPreset.approved_by_title}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer Section - appears after signature */}
+                {selectedPreset.footer_enabled && (
+                  <div style={{ marginTop: '40px', paddingTop: '24px', borderTop: '1px solid #e5e7eb' }}>
+                    {/* Footer Image */}
+                    {selectedPreset.footer_image_enabled && selectedPreset.footer_image_url && (
+                      <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                        <img 
+                          src={getImageUrl(selectedPreset.footer_image_url) || ''} 
+                          alt="Footer image" 
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                          }}
+                          style={{
+                            maxWidth: '100%',
+                            maxHeight: '80px',
+                            width: 'auto',
+                            height: 'auto',
+                            objectFit: 'contain'
+                          }}
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Footer Text below image */}
+                    {(selectedPreset.footer_text1 || selectedPreset.footer_text2) && (
+                      <div style={{ marginTop: '12px', textAlign: 'center' }}>
+                        {selectedPreset.footer_text1 && (
+                          <div style={{ 
+                            marginBottom: '4px', 
+                            fontSize: '12px',
+                            color: '#374151',
+                            textAlign: 'center',
+                            lineHeight: '1.5'
+                          }}>
+                            {selectedPreset.footer_text1}
+                          </div>
+                        )}
+                        {selectedPreset.footer_text2 && (
+                          <div style={{ 
+                            marginBottom: '4px', 
+                            fontSize: '12px',
+                            color: '#374151',
+                            textAlign: 'center',
+                            lineHeight: '1.5'
+                          }}>
+                            {selectedPreset.footer_text2}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Signature Section (if footer is disabled but signature is enabled) */}
+                {!selectedPreset.footer_enabled && selectedPreset.signature_enabled && (
+                  <div style={{ marginTop: '48px', paddingTop: '24px', borderTop: '1px solid #e5e7eb' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '48px' }}>
+                      {selectedPreset.prepared_by_name && (
+                        <div style={{ flex: 1, textAlign: 'left' }}>
+                          <div style={{ 
+                            fontSize: '13px',
+                            color: '#374151',
+                            marginBottom: '12px',
+                            fontWeight: '500',
+                            textAlign: 'left'
+                          }}>
+                            Prepared by:
+                          </div>
+                          <div style={{ 
+                            fontSize: '14px', 
+                            fontWeight: 'bold', 
+                            marginBottom: '2px',
+                            textTransform: 'uppercase',
+                            color: '#111827',
+                            textAlign: 'left'
+                          }}>
+                            {selectedPreset.prepared_by_name}
+                          </div>
+                          <div style={{ 
+                            marginBottom: '8px',
+                            height: '1px',
+                            width: '220px',
+                            borderBottom: '1px solid #000000',
+                            maxWidth: '100%'
+                          }}></div>
+                          {selectedPreset.prepared_by_title && (
+                            <div style={{ 
+                              fontSize: '12px', 
+                              color: '#374151',
+                              marginTop: '4px',
+                              textAlign: 'left'
+                            }}>
+                              {selectedPreset.prepared_by_title}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {selectedPreset.approved_by_name && (
+                        <div style={{ flex: 1, textAlign: 'right' }}>
+                          <div style={{ 
+                            fontSize: '13px',
+                            color: '#374151',
+                            marginBottom: '12px',
+                            fontWeight: '500'
+                          }}>
+                            Approved by:
+                          </div>
+                          <div style={{ 
+                            fontSize: '14px', 
+                            fontWeight: 'bold', 
+                            marginBottom: '2px',
+                            textTransform: 'uppercase',
+                            color: '#111827'
+                          }}>
+                            {selectedPreset.approved_by_name}
+                          </div>
+                          <div style={{ 
+                            marginBottom: '8px',
+                            height: '1px',
+                            width: '220px',
+                            borderBottom: '1px solid #000000',
+                            marginLeft: 'auto',
+                            maxWidth: '100%'
+                          }}></div>
+                          {selectedPreset.approved_by_title && (
+                            <div style={{ 
+                              fontSize: '12px', 
+                              color: '#374151',
+                              marginTop: '4px'
+                            }}>
+                              {selectedPreset.approved_by_title}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => {
+                    setShowPresetPreview(false);
+                    setSelectedPreset(null);
+                  }}
+                  style={{
+                    ...buttonStyle,
+                    backgroundColor: '#6b7280',
+                    padding: '10px 24px',
+                  }}
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    applyPreset(selectedPreset.id);
+                  }}
+                  style={{
+                    ...buttonStyle,
+                    backgroundColor: '#10b981',
+                    padding: '10px 24px',
+                  }}
+                >
+                  Apply Preset
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Save Settings Modal - appears when clicking Save Settings button */}
+        {showSaveSettingsModal && (
+          <div style={modalOverlayStyle} onClick={() => {
+            if (!saving) {
+              setShowSaveSettingsModal(false);
+              setPresetName('');
+            }
+          }}>
+            <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+              <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1c4e80', marginBottom: '12px' }}>
+                Save Settings
+              </h2>
+              <p style={{ fontSize: '16px', color: '#6b7280', marginBottom: '24px' }}>
+                Enter a name for this configuration. It will be saved as a preset that you can use later.
+              </p>
+              <div style={{ marginBottom: '24px' }}>
+                <label style={labelStyle}>Preset Name</label>
+                <input
+                  type="text"
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !saving && presetName.trim()) {
+                      handleSaveSettingsAndPreset();
+                    }
+                  }}
+                  style={inputStyle}
+                  placeholder="e.g., Default Header, Quarterly Report, etc."
+                  autoFocus
+                  disabled={saving}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => {
+                    if (!saving) {
+                      setShowSaveSettingsModal(false);
+                      setPresetName('');
+                    }
+                  }}
+                  disabled={saving}
+                  style={{
+                    ...buttonStyle,
+                    backgroundColor: saving ? '#9ca3af' : '#6b7280',
+                    padding: '10px 24px',
+                    cursor: saving ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveSettingsAndPreset}
+                  disabled={saving || !presetName.trim()}
+                  style={{
+                    ...buttonStyle,
+                    backgroundColor: (saving || !presetName.trim()) ? '#9ca3af' : '#1c4e80',
+                    padding: '10px 24px',
+                    cursor: (saving || !presetName.trim()) ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {saving ? 'Saving...' : 'Save Settings'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Save Preset Modal */}
+        {showSavePresetModal && (
+          <div style={modalOverlayStyle} onClick={() => {
+            setShowSavePresetModal(false);
+            setPresetName('');
+          }}>
+            <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+              <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1c4e80', marginBottom: '12px' }}>
+                Save Current Settings as Preset
+              </h2>
+              <p style={{ fontSize: '16px', color: '#6b7280', marginBottom: '24px' }}>
+                Enter a name for this preset to save your current header and footer settings.
+              </p>
+              <div style={{ marginBottom: '24px' }}>
+                <label style={labelStyle}>Preset Name</label>
+                <input
+                  type="text"
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      savePreset();
+                    }
+                  }}
+                  style={inputStyle}
+                  placeholder="e.g., Default Header, Quarterly Report, etc."
+                  autoFocus
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => {
+                    setShowSavePresetModal(false);
+                    setPresetName('');
+                  }}
+                  style={{
+                    ...buttonStyle,
+                    backgroundColor: '#6b7280',
+                    padding: '10px 24px',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={savePreset}
+                  style={{
+                    ...buttonStyle,
+                    backgroundColor: '#1c4e80',
+                    padding: '10px 24px',
+                  }}
+                >
+                  Save Preset
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -325,164 +1596,217 @@ const ReportSettingsPage: React.FC = () => {
                   onChange={(e) => setHeaderLayoutType(e.target.value)}
                   style={inputStyle}
                 >
-                  <option value="three_column">Three Column (Logo, Text, Logo)</option>
-                  <option value="two_column">Two Column (Logo, Text)</option>
-                  <option value="single_column">Single Column (Text only)</option>
+                  {headerLayoutOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* Logo Upload Section */}
-              <div style={{ display: 'flex', gap: '32px', marginBottom: '24px' }}>
-                {/* Left Logo */}
-                <div style={{ flex: 1 }}>
-                  <label style={checkboxLabelStyle}>
+              <LayoutPreview layoutType={headerLayoutType} title="Header Layout Preview" />
+
+              {/* Conditionally render logo uploads based on layout type */}
+              {(headerLayoutType === 'three_column' || headerLayoutType === 'two_column') && (
+                <div style={logoUploadsContainerStyle}>
+                  {/* Left Logo - shown for three_column and two_column */}
+                  <div style={logoUploadCardStyle}>
+                    <label style={labelStyle}>Left Logo</label>
+                    {leftLogoPreview && (
+                      <img src={leftLogoPreview} alt="Left logo preview" style={logoPreviewStyle} />
+                    )}
                     <input
-                      type="checkbox"
-                      checked={leftLogoEnabled}
-                      onChange={(e) => setLeftLogoEnabled(e.target.checked)}
-                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleLogoUpload(file, 'left');
+                      }}
+                      style={{ marginTop: '8px' }}
                     />
-                    <span>Left Logo</span>
-                  </label>
-                  {leftLogoPreview && (
-                    <img src={leftLogoPreview} alt="Left logo preview" style={logoPreviewStyle} />
+                  </div>
+
+                  {/* Right Logo - only shown for three_column */}
+                  {headerLayoutType === 'three_column' && (
+                    <div style={logoUploadCardStyle}>
+                      <label style={labelStyle}>Right Logo</label>
+                      {rightLogoPreview && (
+                        <img src={rightLogoPreview} alt="Right logo preview" style={logoPreviewStyle} />
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleLogoUpload(file, 'right');
+                        }}
+                        style={{ marginTop: '8px' }}
+                      />
+                    </div>
                   )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleLogoUpload(file, 'left');
+                </div>
+              )}
+
+              {/* Dynamic Header Lines */}
+              <div style={{ marginTop: '24px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', margin: 0 }}>Header Lines</h3>
+                  <button
+                    type="button"
+                    onClick={addHeaderLine}
+                    style={{
+                      backgroundColor: '#1c4e80',
+                      color: 'white',
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
                     }}
-                    style={{ marginTop: '8px' }}
-                  />
+                  >
+                    <span>+</span> Add Header Line
+                  </button>
                 </div>
 
-                {/* Right Logo */}
-                <div style={{ flex: 1 }}>
-                  <label style={checkboxLabelStyle}>
-                    <input
-                      type="checkbox"
-                      checked={rightLogoEnabled}
-                      onChange={(e) => setRightLogoEnabled(e.target.checked)}
-                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                    />
-                    <span>Right Logo</span>
-                  </label>
-                  {rightLogoPreview && (
-                    <img src={rightLogoPreview} alt="Right logo preview" style={logoPreviewStyle} />
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleLogoUpload(file, 'right');
+                {headerLines.map((line, index) => (
+                  <div key={line.id} style={{ ...inputGroupStyle, marginBottom: '16px', padding: '16px', border: '1px solid #e5e7eb', borderRadius: '8px', backgroundColor: '#f9fafb' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label style={{ ...labelStyle, marginBottom: 0 }}>Header Line {index + 1}</label>
+                      <button
+                        type="button"
+                        onClick={() => removeHeaderLine(line.id)}
+                        style={{
+                          backgroundColor: '#ef4444',
+                          color: 'white',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input
+                        type="text"
+                        value={line.text}
+                        onChange={(e) => updateHeaderLine(line.id, 'text', e.target.value)}
+                        style={{ ...inputStyle, flex: 1, minWidth: '200px' }}
+                        placeholder={`Enter header line ${index + 1} text`}
+                      />
+                      <input
+                        type="color"
+                        value={line.color}
+                        onChange={(e) => updateHeaderLine(line.id, 'color', e.target.value)}
+                        style={{ width: '60px', height: '40px', border: '1px solid #d1d5db', borderRadius: '8px', cursor: 'pointer' }}
+                        title="Text Color"
+                      />
+                      <label style={checkboxLabelStyle}>
+                        <input
+                          type="checkbox"
+                          checked={line.bold}
+                          onChange={(e) => updateHeaderLine(line.id, 'bold', e.target.checked)}
+                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                        />
+                        <span>Bold</span>
+                      </label>
+                    </div>
+                  </div>
+                ))}
+
+                {headerLines.length === 0 && (
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: '8px' }}>
+                    No header lines. Click "Add Header Line" to get started.
+                  </div>
+                )}
+              </div>
+
+              {/* Dynamic Title Lines */}
+              <div style={{ marginTop: '24px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', margin: 0 }}>Report Title</h3>
+                  <button
+                    type="button"
+                    onClick={addTitleLine}
+                    style={{
+                      backgroundColor: '#1c4e80',
+                      color: 'white',
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
                     }}
-                    style={{ marginTop: '8px' }}
-                  />
+                  >
+                    <span>+</span> Add Title Line
+                  </button>
                 </div>
-              </div>
 
-              {/* Header Text Fields */}
-              <div style={inputGroupStyle}>
-                <label style={labelStyle}>Header Line 1</label>
-                <input
-                  type="text"
-                  value={headerLine1}
-                  onChange={(e) => setHeaderLine1(e.target.value)}
-                  style={inputStyle}
-                  placeholder="Republic of the Philippines"
-                />
-              </div>
+                {titleLines.map((line, index) => (
+                  <div key={line.id} style={{ ...inputGroupStyle, marginBottom: '16px', padding: '16px', border: '1px solid #e5e7eb', borderRadius: '8px', backgroundColor: '#f9fafb' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label style={{ ...labelStyle, marginBottom: 0 }}>Title Line {index + 1}</label>
+                      <button
+                        type="button"
+                        onClick={() => removeTitleLine(line.id)}
+                        style={{
+                          backgroundColor: '#ef4444',
+                          color: 'white',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input
+                        type="text"
+                        value={line.text}
+                        onChange={(e) => updateTitleLine(line.id, 'text', e.target.value)}
+                        style={{ ...inputStyle, flex: 1, minWidth: '200px' }}
+                        placeholder={`Enter title line ${index + 1} text`}
+                      />
+                      <input
+                        type="color"
+                        value={line.color}
+                        onChange={(e) => updateTitleLine(line.id, 'color', e.target.value)}
+                        style={{ width: '60px', height: '40px', border: '1px solid #d1d5db', borderRadius: '8px', cursor: 'pointer' }}
+                        title="Text Color"
+                      />
+                      <label style={checkboxLabelStyle}>
+                        <input
+                          type="checkbox"
+                          checked={line.bold}
+                          onChange={(e) => updateTitleLine(line.id, 'bold', e.target.checked)}
+                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                        />
+                        <span>Bold</span>
+                      </label>
+                    </div>
+                  </div>
+                ))}
 
-              <div style={inputGroupStyle}>
-                <label style={labelStyle}>Header Line 2</label>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    value={headerLine2}
-                    onChange={(e) => setHeaderLine2(e.target.value)}
-                    style={{...inputStyle, flex: 1}}
-                    placeholder="CEBU TECHNOLOGICAL UNIVERSITY"
-                  />
-                  <input
-                    type="color"
-                    value={headerLine2Color}
-                    onChange={(e) => setHeaderLine2Color(e.target.value)}
-                    style={{ width: '60px', height: '40px', border: '1px solid #d1d5db', borderRadius: '8px', cursor: 'pointer' }}
-                  />
-                  <label style={checkboxLabelStyle}>
-                    <input
-                      type="checkbox"
-                      checked={headerLine2Bold}
-                      onChange={(e) => setHeaderLine2Bold(e.target.checked)}
-                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                    />
-                    <span>Bold</span>
-                  </label>
-                </div>
-              </div>
-
-              <div style={inputGroupStyle}>
-                <label style={labelStyle}>Header Line 3</label>
-                <input
-                  type="text"
-                  value={headerLine3}
-                  onChange={(e) => setHeaderLine3(e.target.value)}
-                  style={inputStyle}
-                  placeholder="M. J. Cuenco Avenue Cor. R. Palma Street, Cebu City, Philippines"
-                />
-              </div>
-
-              <div style={inputGroupStyle}>
-                <label style={labelStyle}>Header Line 4</label>
-                <input
-                  type="text"
-                  value={headerLine4}
-                  onChange={(e) => setHeaderLine4(e.target.value)}
-                  style={inputStyle}
-                  placeholder="Website: http://www.ctu.edu.ph"
-                />
-              </div>
-
-              <div style={inputGroupStyle}>
-                <label style={labelStyle}>Header Line 5</label>
-                <input
-                  type="text"
-                  value={headerLine5}
-                  onChange={(e) => setHeaderLine5(e.target.value)}
-                  style={inputStyle}
-                  placeholder="Phone: +6332 402 4060 loc. 1146"
-                />
-              </div>
-
-              <div style={inputGroupStyle}>
-                <label style={labelStyle}>Header Line 6</label>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    value={headerLine6}
-                    onChange={(e) => setHeaderLine6(e.target.value)}
-                    style={{...inputStyle, flex: 1}}
-                    placeholder="UNIVERSITY ALUMNI AFFAIRS OFFICE"
-                  />
-                  <input
-                    type="color"
-                    value={headerLine6Color}
-                    onChange={(e) => setHeaderLine6Color(e.target.value)}
-                    style={{ width: '60px', height: '40px', border: '1px solid #d1d5db', borderRadius: '8px', cursor: 'pointer' }}
-                  />
-                  <label style={checkboxLabelStyle}>
-                    <input
-                      type="checkbox"
-                      checked={headerLine6Bold}
-                      onChange={(e) => setHeaderLine6Bold(e.target.checked)}
-                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                    />
-                    <span>Bold</span>
-                  </label>
-                </div>
+                {titleLines.length === 0 && (
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: '8px' }}>
+                    No title lines. Click "Add Title Line" to get started.
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -646,6 +1970,7 @@ const ReportSettingsPage: React.FC = () => {
         </div>
       </div>
     </div>
+    </>
   );
 };
 

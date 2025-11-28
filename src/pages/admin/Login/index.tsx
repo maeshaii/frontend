@@ -7,6 +7,7 @@ import '../authAnimations.css';
 const background = require('../../../images/ctu.jpg');
 const alumniLogo = require('../../../images/ctu alumni logo.jpg');
 const ccictLogo = require('../../../images/ccict.png');
+const whereNaYouLogo = require('../../../images/final_logos-removebg-preview.png');
 
 const Login = () => {
   const navigate = useNavigate();
@@ -67,18 +68,36 @@ const Login = () => {
       console.log(`Login completed in ${loginTime}ms`);
       
       if (data.success) {
+        // ✅ FIX: User data is already saved in loginUser function (api.ts line 278)
+        // But we set it again here to ensure it's immediately available
         localStorage.setItem('user', JSON.stringify(data.user));
+        
+        console.log('✅ Login successful - Tokens and user data saved');
+        console.log('User data:', data.user);
+        console.log('Access token present:', !!localStorage.getItem('accessToken'));
+        console.log('Refresh token present:', !!localStorage.getItem('refreshToken'));
+        
         // Coordinator and Peso accounts are exempt from first-time login password change
         const isCoordinator = data.user?.account_type?.coordinator;
         const isPeso = data.user?.account_type?.peso;
         
         if (data.must_change_password && !isCoordinator && !isPeso) {
+          // ✅ SECURITY: Store must_change_password flag to prevent bypass
+          localStorage.setItem('must_change_password', 'true');
           // Redirect to change password screen for first-time login (only for non-coordinator/peso accounts)
+          console.log('🔐 First-time login detected - redirecting to password change');
           navigate('/first-login-change-password', { state: { acc_username, animate: 'right', animateHero: 'right' } });
           return;
+        } else {
+          // ✅ SECURITY: Clear flag if user doesn't need to change password
+          localStorage.removeItem('must_change_password');
         }
+        
+        // Navigate to appropriate dashboard based on account type
         if (data.user && data.user.account_type) {
           const userId = data.user.user_id || data.user.id;
+          console.log('🚀 Navigating to dashboard for user:', userId);
+          
           if (data.user.account_type.admin) {
             navigate('/dashboard');
           } else if (data.user.account_type.peso) {
@@ -118,13 +137,29 @@ const Login = () => {
         <img src={background} alt="CTU Administration Building" style={styles.backgroundImage} className="login-background-image" />
         <div style={styles.leftContent}>
           <div style={{ marginTop: '-10rem' }}>
-            <h2 style={styles.brandTitle} className="login-brand-title">WHERENAYOU : Connecting OJT's & Alumni Journeys</h2>
-            <p style={styles.brandSubtitle}>Excellence in Technology Education</p>
+            <div style={styles.brandContainer}>
+              <img 
+                src={whereNaYouLogo} 
+                alt="WhereNaYou Logo" 
+                style={styles.brandLogo}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                }}
+              />
+              <div style={styles.brandTextContainer}>
+                <h2 style={styles.brandTitle} className="login-brand-title">WHERENAYOU</h2>
+                <p style={styles.brandTagline} className="login-brand-tagline">Connecting OJTs & Alumni Journeys</p>
+                <p style={styles.brandSubtitle}>Excellence in Technology Education</p>
+              </div>
+            </div>
           </div>
           <div style={styles.collaborationContainer} className="login-collaboration-container">
-            <h3 style={styles.collaborationTitle} className="login-collaboration-title">IN COLLABORATION WITH</h3>
+            <div style={styles.collaborationTitleWrapper}>
+              <h3 style={styles.collaborationTitle} className="login-collaboration-title">IN COLLABORATION WITH</h3>
+            </div>
             <div style={styles.partnersContainer} className="login-partners-container">
-              <div style={styles.partnerItem}>
+              <div style={{...styles.partnerItem, ...styles.partnerItemLeft}}>
                 <div style={styles.partnerLogo} className="login-partner-logo">
                   <img src={ccictLogo} alt="CCICT Logo" style={styles.partnerLogoImage} className="login-partner-logo-image" />
                 </div>
@@ -274,29 +309,64 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '2rem',
     paddingTop: '3rem',
   },
+  brandContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '1.5rem',
+    marginBottom: '0.5rem',
+  },
+  brandLogo: {
+    width: '90px',
+    height: '90px',
+    objectFit: 'contain',
+    filter: 'brightness(0) saturate(100%) invert(100%)',
+  },
+  brandTextContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '0.5rem',
+    position: 'relative',
+  },
   brandTitle: {
-    fontSize: '2.5rem',
+    fontSize: '3.5rem',
     fontWeight: '700',
-    margin: '0 0 0.5rem 0',
+    margin: 0,
+    padding: 0,
     textShadow: '0 4px 8px rgba(0, 0, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.6)',
-    letterSpacing: '-0.02em',
+    letterSpacing: '0',
     color: '#ffffff',
-    background: 'rgba(0, 0, 0, 0.3)',
-    padding: '0.5rem 1rem',
-    borderRadius: '8px',
-    backdropFilter: 'blur(10px)',
-    opacity: 0.7,
+    lineHeight: '1.2',
+    textAlign: 'left',
+    width: '100%',
+  },
+  brandTagline: {
+    fontSize: '1.5rem',
+    fontWeight: '400',
+    margin: 0,
+    padding: 0,
+    textShadow: '0 2px 4px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(0, 0, 0, 0.6)',
+    letterSpacing: '0',
+    color: '#ffffff',
+    lineHeight: '1.3',
+    textAlign: 'left',
+    width: '100%',
   },
   brandSubtitle: {
     fontSize: '1.1rem',
     fontWeight: '400',
-    margin: 0,
+    margin: '0.5rem 0 0 0',
+    padding: 0,
     opacity: 0.9,
     textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+    textAlign: 'left',
+    alignSelf: 'center',
+    width: '100%',
   },
   collaborationContainer: {
     position: 'absolute',
-    bottom: '-130px',
+    bottom: '-180px',
     left: '50%',
     transform: 'translateX(-50%)',
     padding: '0.3rem 1rem 0.5rem 1rem',
@@ -306,22 +376,41 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     boxShadow: 'none',
     width: '90%',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  collaborationTitleWrapper: {
+    width: '100%',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: '0.6rem',
+    position: 'relative',
   },
   collaborationTitle: {
-    fontSize: '0.65rem',
+    fontSize: '0.9rem',
     fontWeight: '500',
-    margin: '0 0 0.6rem 0',
+    margin: '0 auto',
+    padding: 0,
     color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'center',
     textShadow: '0 1px 3px rgba(0, 0, 0, 0.8)',
     letterSpacing: '0.5px',
     textTransform: 'uppercase',
+    display: 'block',
+    width: 'auto',
   },
   partnersContainer: {
     display: 'flex',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    gap: '1.5rem',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    gap: '2rem',
+    width: '100%',
+    maxWidth: '100%',
+    margin: '0 auto',
+    position: 'relative',
   },
   partnerItem: {
     display: 'flex',
@@ -329,9 +418,12 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '0.4rem',
   },
+  partnerItemLeft: {
+    marginLeft: '-5.5rem',
+  },
   partnerLogo: {
-    width: '35px',
-    height: '35px',
+    width: '60px',
+    height: '60px',
     borderRadius: '50%',
     background: 'transparent',
     backdropFilter: 'none',
@@ -342,20 +434,20 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: 'none',
   },
   partnerLogoImage: {
-    width: '24px',
-    height: '24px',
+    width: '50px',
+    height: '50px',
     objectFit: 'contain',
     opacity: 0.9,
     filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
   },
   partnerName: {
-    fontSize: '0.6rem',
+    fontSize: '0.85rem',
     fontWeight: '400',
     margin: 0,
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)',
-    lineHeight: '1.1',
+    lineHeight: '1.2',
   },
   rightSection: {
     width: '50%',

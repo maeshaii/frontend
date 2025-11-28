@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ConversationSummary, getOnlineUsers, createConversation, api } from '../../services/api';
+import { ConversationSummary, getOnlineUsers, createConversation, deleteConversation, api } from '../../services/api';
 import { getProfilePicUrl } from '../../utils/profilePicUtils';
 import './Messaging.css';
 
 interface ConversationListProps {
   conversations: ConversationSummary[];
   selectedConversationId?: number;
-  onConversationSelect: (conversation: ConversationSummary) => void;
+  onConversationSelect: (conversation: ConversationSummary | null) => void;
   onSearchChange: (query: string) => void;
   isLoading?: boolean;
+  onConversationDeleted?: () => void;
 }
 
 interface ConversationItemProps {
@@ -17,6 +18,7 @@ interface ConversationItemProps {
   onClick: () => void;
   isOnline?: boolean;
   showMinimal?: boolean; // If true, only show avatar and name (for Online tab)
+  onDelete?: (conversationId: number) => void;
 }
 
 const ConversationItem: React.FC<ConversationItemProps> = ({ 
@@ -24,11 +26,15 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   isSelected, 
   onClick,
   isOnline = false,
-  showMinimal = false
+  showMinimal = false,
+  onDelete
 }) => {
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
   const [isLoadingPic, setIsLoadingPic] = useState(false);
   const hasFetched = useRef(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -57,7 +63,12 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   useEffect(() => {
     const fetchProfilePic = async () => {
       const otherUserId = conversation.other_participant?.user_id;
-      if (!otherUserId) return;
+      
+      // Safety check: ensure valid user_id
+      if (!otherUserId || otherUserId <= 0) {
+        console.warn('🔍 ConversationList: Invalid user_id, skipping profile fetch:', otherUserId);
+        return;
+      }
 
       // Check if we have avatar_url from conversation
       const avatarUrl = (conversation.other_participant as any)?.avatar_url;
@@ -90,8 +101,12 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
 
     // Reset hasFetched when conversation changes
     hasFetched.current = false;
-    fetchProfilePic();
-  }, [conversation.other_participant?.user_id, conversation.other_participant?.avatar_url]);
+    
+    // Only fetch if we have a valid conversation
+    if (conversation && conversation.other_participant?.user_id) {
+      fetchProfilePic();
+    }
+  }, [conversation.other_participant?.user_id, conversation.other_participant?.avatar_url, conversation]);
 
   const firstName = conversation.other_participant?.name?.split(' ')[0] || 'U';
   const initial = firstName.charAt(0).toUpperCase();
@@ -99,12 +114,49 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
 
   const defaultCTULogo = '/ctu_logo-removebg-preview.png';
 
+  const handleDeleteClick = async () => {
+    if (!conversation.conversation_id || conversation.conversation_id < 0) return;
+    
+    setIsDeleting(true);
+    try {
+      await deleteConversation(conversation.conversation_id);
+      setShowDeleteConfirm(false);
+      setShowMenu(false);
+      if (onDelete) {
+        onDelete(conversation.conversation_id);
+      }
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+      alert('Failed to delete conversation. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (showMenu && !target.closest('.conversation-menu-btn') && !target.closest('.conversation-menu-dropdown')) {
+        setShowMenu(false);
+      }
+    };
+
+    if (showMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showMenu]);
+
   return (
     <div 
       className={`conversation-item ${isSelected ? 'active' : ''}`}
-      onClick={onClick}
+      style={{ position: 'relative' }}
     >
-      <div className="conversation-avatar">
+      <div className="conversation-avatar" onClick={onClick}>
         <img 
           src={profilePicUrl || defaultCTULogo} 
           alt={conversation.other_participant?.name || 'User'}
@@ -127,7 +179,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
         {isOnline && <div className="online-indicator"></div>}
       </div>
       
-      <div className="conversation-content">
+      <div className="conversation-content" onClick={onClick}>
         <div className="conversation-header">
           <div className="conversation-name-container">
             <h3 className="conversation-name">
@@ -159,6 +211,156 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
           </div>
         )}
       </div>
+
+      {/* 3-Dot Menu Button */}
+      {!showMinimal && conversation.conversation_id > 0 && (
+        <div style={{ position: 'relative', marginLeft: 'auto', paddingLeft: '8px' }}>
+          <button
+            className="conversation-menu-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMenu(!showMenu);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '20px',
+              cursor: 'pointer',
+              padding: '8px',
+              color: '#666',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            ⋮
+          </button>
+
+          {/* Dropdown Menu */}
+          {showMenu && (
+            <div
+              className="conversation-menu-dropdown"
+              style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                backgroundColor: '#fff',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                borderRadius: '8px',
+                minWidth: '180px',
+                zIndex: 1000,
+                marginTop: '4px'
+              }}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(false);
+                  setShowDeleteConfirm(true);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  border: 'none',
+                  background: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  color: '#dc3545',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                🗑️ Delete Conversation
+              </button>
+            </div>
+          )}
+
+          {/* Delete Confirmation Dialog */}
+          {showDeleteConfirm && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDeleteConfirm(false);
+              }}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1001
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: '#fff',
+                  borderRadius: 12,
+                  padding: '24px',
+                  maxWidth: '400px',
+                  width: '90%',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
+                }}
+              >
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: 600, color: '#333' }}>
+                  Delete Conversation?
+                </h3>
+                <p style={{ margin: '0 0 24px 0', color: '#666', fontSize: '14px', lineHeight: '1.5' }}>
+                  Are you sure you want to delete this conversation with <strong>{conversation.other_participant?.name || 'this user'}</strong>?
+                  <br /><br />
+                  This action cannot be undone.
+                </p>
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowDeleteConfirm(false);
+                    }}
+                    disabled={isDeleting}
+                    style={{
+                      padding: '10px 20px',
+                      border: '1px solid #ddd',
+                      borderRadius: 8,
+                      background: '#fff',
+                      color: '#333',
+                      cursor: isDeleting ? 'not-allowed' : 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      opacity: isDeleting ? 0.6 : 1
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteClick();
+                    }}
+                    disabled={isDeleting}
+                    style={{
+                      padding: '10px 20px',
+                      border: 'none',
+                      borderRadius: 8,
+                      background: '#dc3545',
+                      color: 'white',
+                      cursor: isDeleting ? 'not-allowed' : 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      opacity: isDeleting ? 0.6 : 1
+                    }}
+                  >
+                    {isDeleting ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -168,7 +370,8 @@ const ConversationList: React.FC<ConversationListProps> = ({
   selectedConversationId,
   onConversationSelect,
   onSearchChange,
-  isLoading = false
+  isLoading = false,
+  onConversationDeleted
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'request' | 'online'>('all');
@@ -176,6 +379,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
   const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set());
   const [onlineUsersData, setOnlineUsersData] = useState<any[]>([]);
   const [isLoadingOnlineUsers, setIsLoadingOnlineUsers] = useState(true);
+  const [localConversations, setLocalConversations] = useState<ConversationSummary[]>(conversations);
 
   // Calculate message request count
   // Only count message requests that still have unread messages so badges stay in sync
@@ -225,16 +429,44 @@ const ConversationList: React.FC<ConversationListProps> = ({
     return () => clearInterval(interval);
   }, []);
 
+  // Update local conversations when prop changes
+  useEffect(() => {
+    setLocalConversations(conversations);
+  }, [conversations]);
+
   // Update filtered conversations when conversations prop changes
   useEffect(() => {
-    setFilteredConversations(conversations);
-  }, [conversations]);
+    setFilteredConversations(localConversations);
+  }, [localConversations]);
+
+  const handleConversationDeleted = useCallback((conversationId: number) => {
+    // Remove from local state immediately
+    setLocalConversations(prev => prev.filter(c => c.conversation_id !== conversationId));
+    
+    // Clear any selected conversation that was deleted
+    if (conversationId === selectedConversationId) {
+      // Clear selection by passing null
+      onConversationSelect(null);
+    }
+    
+    // Notify parent component to reload
+    if (onConversationDeleted) {
+      onConversationDeleted();
+    }
+    
+    // Force a refresh after a short delay to ensure backend is updated
+    setTimeout(() => {
+      if (onConversationDeleted) {
+        onConversationDeleted();
+      }
+    }, 500);
+  }, [onConversationDeleted, selectedConversationId, onConversationSelect]);
 
   // Filter conversations based on search query and active filter
   useEffect(() => {
     // Default: All Messages should EXCLUDE message requests AND empty conversations (no messages sent)
     let filtered = activeFilter === 'all'
-      ? conversations.filter(conv => {
+      ? localConversations.filter(conv => {
           // CRITICAL: Exclude message requests - they should NEVER appear in All Messages
           // Double-check to ensure is_message_request is properly set
           if (conv.is_message_request === true) {
@@ -250,7 +482,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
           if (!conv.last_message || !conv.last_message.content) return false;
           return true;
         })
-      : conversations;
+      : localConversations;
     
     // Apply search filter
     if (searchQuery.trim()) {
@@ -281,7 +513,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
 
         // 1) Existing conversations whose other participant is online
         // IMPORTANT: Check ALL conversations (not filtered), and ensure user_id matches
-        const existingOnline = conversations.filter(conv => {
+        const existingOnline = localConversations.filter(conv => {
           const otherUserId = conv.other_participant?.user_id;
           if (!otherUserId) {
             return false;
@@ -305,7 +537,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
 
         // 2) Virtual items for online mutuals without an existing conversation
         const existingOtherIds = new Set<number>(
-          conversations
+          localConversations
             .map(c => {
               const userId = c.other_participant?.user_id;
               return userId ? Number(userId) : null;
@@ -347,7 +579,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
     }
     
     setFilteredConversations(filtered);
-  }, [conversations, searchQuery, activeFilter, onlineUsers, onlineUsersData, isLoadingOnlineUsers]);
+  }, [localConversations, searchQuery, activeFilter, onlineUsers, onlineUsersData, isLoadingOnlineUsers]);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
@@ -455,6 +687,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   onClick={() => handleConversationClick(conversation)}
                   isOnline={isOnline}
                   showMinimal={activeFilter === 'online'}
+                  onDelete={handleConversationDeleted}
                 />
               );
             })

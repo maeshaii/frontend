@@ -11,6 +11,7 @@ import {
   uploadAttachment,
   deleteMessageApi,
   updateMessageApi,
+  deleteConversation,
   api
 } from '../../services/api';
 import { ConversationWebSocket, WsEvent } from '../../services/websocketHelper';
@@ -67,9 +68,13 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   const [replyingToMessageId, setReplyingToMessageId] = useState<string | null>(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
+  const [reactionPickerPosition, setReactionPickerPosition] = useState<{x: number, y: number, isOwn: boolean} | null>(null);
   const [messageReactions, setMessageReactions] = useState<{[key: string]: Array<{emoji: string, userId: number, userName?: string}>}>({});
   const [contextMenuMessageId, setContextMenuMessageId] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState<{x: number, y: number} | null>(null);
+  const [showConversationMenu, setShowConversationMenu] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [isDeletingConversation, setIsDeletingConversation] = useState(false);
   
   // Profile picture state management (similar to notifications)
   const [userProfilePics, setUserProfilePics] = useState<{[key: string]: string}>(() => {
@@ -177,6 +182,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         const target = event.target as HTMLElement;
         if (!target.closest('.reaction-picker')) {
           setReactionPickerMessageId(null);
+          setReactionPickerPosition(null);
         }
       }
     };
@@ -236,8 +242,33 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
     };
   }, [conversation?.other_participant?.user_id]);
 
+  // Handle click outside to close dropdown menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showConversationMenu && !target.closest('.conversation-menu-btn') && !target.closest('.conversation-dropdown-menu')) {
+        setShowConversationMenu(false);
+      }
+    };
+
+    if (showConversationMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showConversationMenu]);
+
   // Fetch profile picture from API (similar to notifications) - MUST BE DEFINED BEFORE loadMessages
   const fetchUserProfilePic = useCallback(async (userId: number | string): Promise<string | null> => {
+    // CRITICAL: Validate user_id before ANY operations
+    const userIdNum = typeof userId === 'string' ? parseInt(userId) : userId;
+    if (!userId || isNaN(userIdNum) || userIdNum <= 0) {
+      console.warn('🔍 Invalid user_id provided to fetchUserProfilePic:', userId);
+      return null;
+    }
+    
     const userIdStr = String(userId);
     
     // Check cache first
@@ -370,7 +401,10 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
       // Fetch profile pictures for all unique senders in loaded messages
       const uniqueSenders = new Set<number>();
       mapped.forEach((msg) => {
-        if (!uniqueSenders.has(msg.sender_id) && !loadedProfilePics.current.has(String(msg.sender_id))) {
+        // Validate sender_id before fetching
+        if (msg.sender_id && msg.sender_id > 0 && 
+            !uniqueSenders.has(msg.sender_id) && 
+            !loadedProfilePics.current.has(String(msg.sender_id))) {
           uniqueSenders.add(msg.sender_id);
           fetchUserProfilePic(msg.sender_id);
         }
@@ -879,6 +913,38 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
     }
   };
 
+  const handleDeleteConversation = async () => {
+    if (!conversation) return;
+    
+    setIsDeletingConversation(true);
+    try {
+      await deleteConversation(conversation.conversation_id);
+      logger.info('Conversation deleted successfully');
+      
+      // Clear conversation and close modals
+      setShowDeleteConfirmation(false);
+      setShowConversationMenu(false);
+      
+      // Navigate back without page reload to avoid white screen
+      if (onBack) {
+        onBack();
+      } else {
+        // Navigate to correct route (/messages not /messaging)
+        navigate('/messages', { replace: true });
+      }
+      
+      // Trigger conversation list refresh via custom event instead of reload
+      window.dispatchEvent(new CustomEvent('conversationDeleted', { 
+        detail: { conversation_id: conversation.conversation_id } 
+      }));
+    } catch (error) {
+      logger.error('Failed to delete conversation:', error);
+      alert('Failed to delete conversation. Please try again.');
+    } finally {
+      setIsDeletingConversation(false);
+    }
+  };
+
   const getAvatarDisplay = useCallback((message: UiMessage) => {
     const firstName = message.sender_name?.split(' ')[0] || 'U';
     const initial = firstName.charAt(0).toUpperCase();
@@ -907,8 +973,8 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
       }
     }
     
-    // Fetch profile picture if we don't have it yet
-    if (!avatarUrl && !loadedProfilePics.current.has(senderIdStr)) {
+    // Fetch profile picture if we don't have it yet (with validation)
+    if (!avatarUrl && message.sender_id && message.sender_id > 0 && !loadedProfilePics.current.has(senderIdStr)) {
       fetchUserProfilePic(message.sender_id);
     }
     
@@ -994,7 +1060,14 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
     return Array.from(typingUsers);
   }, [typingUsers]);
 
-  if (!conversation) {
+  // Validate conversation before rendering
+  if (!conversation || !conversation.conversation_id || conversation.conversation_id <= 0) {
+    return null;
+  }
+
+  // Validate other_participant to prevent 404 errors
+  if (!conversation.other_participant || !conversation.other_participant.user_id || conversation.other_participant.user_id <= 0) {
+    console.warn('ModernChatInterface: Invalid conversation participant data', conversation);
     return null;
   }
 
@@ -1025,6 +1098,61 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
             >
               {conversation.other_participant?.name || 'Unknown User'}
             </h2>
+            <div style={{ position: 'relative', marginLeft: 'auto' }}>
+              <button 
+                onClick={() => setShowConversationMenu(!showConversationMenu)}
+                className="conversation-menu-btn"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  padding: '8px',
+                  color: '#fff'
+                }}
+              >
+                ⋮
+              </button>
+              {showConversationMenu && (
+                <div 
+                  className="conversation-dropdown-menu"
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    backgroundColor: '#fff',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    borderRadius: '8px',
+                    minWidth: '200px',
+                    zIndex: 1000,
+                    marginTop: '8px'
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      setShowConversationMenu(false);
+                      setShowDeleteConfirmation(true);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: 'none',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      color: '#dc3545',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    🗑️ Delete Conversation
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1059,8 +1187,8 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                   avatarUrl = getProfilePicUrl((otherParticipant as any).avatar_url);
                 }
                 
-                // Fetch profile picture if we don't have it yet
-                if (!avatarUrl && otherUserIdStr && otherUserId && !loadedProfilePics.current.has(otherUserIdStr)) {
+                // Fetch profile picture if we don't have it yet (with validation)
+                if (!avatarUrl && otherUserIdStr && otherUserId && otherUserId > 0 && !loadedProfilePics.current.has(otherUserIdStr)) {
                   fetchUserProfilePic(otherUserId);
                 }
                 
@@ -1114,6 +1242,61 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                       : 'Disconnected'}
                 </span>
               </p>
+            </div>
+            <div style={{ position: 'relative', marginLeft: 'auto' }}>
+              <button 
+                onClick={() => setShowConversationMenu(!showConversationMenu)}
+                className="conversation-menu-btn"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  padding: '8px',
+                  color: '#666'
+                }}
+              >
+                ⋮
+              </button>
+              {showConversationMenu && (
+                <div 
+                  className="conversation-dropdown-menu"
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    backgroundColor: '#fff',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    borderRadius: '8px',
+                    minWidth: '200px',
+                    zIndex: 1000,
+                    marginTop: '8px'
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      setShowConversationMenu(false);
+                      setShowDeleteConfirmation(true);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: 'none',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      color: '#dc3545',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    🗑️ Delete Conversation
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1401,22 +1584,22 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                     </div>
                                   )}
                                   
-                                  {/* Reaction Picker */}
-                                  {reactionPickerMessageId === message.id && (
+                                  {/* Reaction Picker - Positioned dynamically to prevent clipping */}
+                                  {reactionPickerMessageId === message.id && reactionPickerPosition && (
                                     <div 
                                       className="reaction-picker"
                                       style={{
-                                      position: 'absolute', 
-                                        left: isOwn ? 'auto' : '-60px',
-                                        right: isOwn ? '-60px' : 'auto',
-                                        top: '0',
-                                        zIndex: 1000,
+                                        position: 'fixed', 
+                                        left: `${reactionPickerPosition.x}px`,
+                                        top: `${reactionPickerPosition.y}px`,
+                                        zIndex: 10000,
                                         background: 'white',
                                         borderRadius: '8px',
                                         boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                                         padding: '8px',
                                         display: 'flex',
-                                        gap: '4px'
+                                        gap: '4px',
+                                        whiteSpace: 'nowrap'
                                       }}
                                       onClick={(e) => e.stopPropagation()}
                                     >
@@ -1425,48 +1608,54 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                           key={emoji}
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            const userId = currentUser?.user_id ?? (currentUser as any)?.id;
+                                            const currentUserId = currentUser?.user_id ?? (currentUser as any)?.id ?? 0;
                                             const messageId = message.id;
                                             const existing = messageReactions[messageId] || [];
-                                            const existingReaction = existing.find(r => r.userId === userId && r.emoji === emoji);
-                                            const action = existingReaction ? 'remove' : 'add';
-                                            
-                                            // Send via WebSocket for real-time sync
-                                            if (wsRef.current) {
-                                              wsRef.current.send({
-                                                type: 'reaction',
-                                                message_id: parseInt(messageId),
-                                                emoji: emoji,
-                                                action: action
-                                              });
-                                              console.log(`[Reaction] Sent via WebSocket: ${action} ${emoji} on message ${messageId}`);
-                                            }
-                                            
-                                            // Optimistic UI update
-                                            setMessageReactions(prev => {
-                                              const existing = prev[messageId] || [];
-                                              const existingReactionIndex = existing.findIndex(r => r.userId === userId && r.emoji === emoji);
-                                              
-                                              if (existingReactionIndex >= 0) {
-                                                // Remove reaction
-                                                const updated = [...existing];
-                                                updated.splice(existingReactionIndex, 1);
-                                                if (updated.length === 0) {
-                                                  const newReactions = { ...prev };
-                                                  delete newReactions[messageId];
-                                                  console.log('[Reaction] Removed locally, state:', newReactions);
-                                                  return newReactions;
-                                                }
-                                                console.log('[Reaction] Removed locally (still others), state:', { ...prev, [messageId]: updated });
-                                                return { ...prev, [messageId]: updated };
-                                              } else {
-                                                // Add reaction
-                                                const newState = { ...prev, [messageId]: [...existing, { emoji, userId: userId || 0 }] };
-                                                console.log('[Reaction] Added locally, messageId:', messageId, 'emoji:', emoji, 'state:', newState);
-                                                return newState;
+                                            const sameReaction = existing.find(r => r.userId === currentUserId && r.emoji === emoji);
+                                            const previousReaction = existing.find(r => r.userId === currentUserId && r.emoji !== emoji);
+
+                                            const sendReactionUpdate = (action: 'add' | 'remove', emojiValue: string) => {
+                                              if (wsRef.current) {
+                                                wsRef.current.send({
+                                                  type: 'reaction',
+                                                  message_id: parseInt(messageId),
+                                                  emoji: emojiValue,
+                                                  action
+                                                });
+                                                console.log(`[Reaction] Sent via WebSocket: ${action} ${emojiValue} on message ${messageId}`);
                                               }
-                                            });
+                                            };
+
+                                            if (sameReaction) {
+                                              // Remove existing reaction (toggle off)
+                                              sendReactionUpdate('remove', emoji);
+                                              setMessageReactions(prev => {
+                                                const existingReactions = prev[messageId] || [];
+                                                const updated = existingReactions.filter(r => !(r.userId === currentUserId && r.emoji === emoji));
+                                                if (updated.length === 0) {
+                                                  const newState = { ...prev };
+                                                  delete newState[messageId];
+                                                  return newState;
+                                                }
+                                                return { ...prev, [messageId]: updated };
+                                              });
+                                            } else {
+                                              // If user already reacted with another emoji, remove it first
+                                              if (previousReaction) {
+                                                sendReactionUpdate('remove', previousReaction.emoji);
+                                              }
+
+                                              sendReactionUpdate('add', emoji);
+
+                                              setMessageReactions(prev => {
+                                                const existingReactions = prev[messageId] || [];
+                                                const filtered = existingReactions.filter(r => r.userId !== currentUserId);
+                                                const updated = [...filtered, { emoji, userId: currentUserId }];
+                                                return { ...prev, [messageId]: updated };
+                                              });
+                                            }
                                             setReactionPickerMessageId(null);
+                                            setReactionPickerPosition(null);
                                           }}
                                           style={{
                                             width: '32px',
@@ -1595,7 +1784,53 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                       <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
+                                      const messageItem = e.currentTarget.closest('.message-item') as HTMLElement;
+                                      if (messageItem) {
+                                        const itemRect = messageItem.getBoundingClientRect();
+                                        const messageBubble = messageItem.querySelector('.message-bubble') as HTMLElement;
+                                        const bubbleRect = messageBubble ? messageBubble.getBoundingClientRect() : itemRect;
+                                        
+                                        // Position picker above the message bubble, but adjust if near top of viewport
+                                        const pickerHeight = 50; // Approximate height of picker
+                                        const pickerWidth = 250; // Approximate width of picker
+                                        const spaceAbove = bubbleRect.top;
+                                        const spaceBelow = window.innerHeight - bubbleRect.bottom;
+                                        
+                                        let y: number;
+                                        if (spaceAbove < pickerHeight + 10 && spaceBelow > pickerHeight + 10) {
+                                          // Not enough space above, position below
+                                          y = bubbleRect.bottom + 5;
+                                        } else {
+                                          // Position above
+                                          y = bubbleRect.top - pickerHeight - 5;
+                                        }
+                                        
+                                        // Ensure it doesn't go off screen vertically
+                                        y = Math.max(10, Math.min(y, window.innerHeight - pickerHeight - 10));
+                                        
+                                        // Calculate horizontal position - center it relative to the message bubble
+                                        let x: number;
+                                        if (isOwn) {
+                                          // For own messages, align to right side of bubble
+                                          x = bubbleRect.right - (pickerWidth / 2);
+                                        } else {
+                                          // For received messages, align to left side of bubble
+                                          x = bubbleRect.left + (pickerWidth / 2);
+                                        }
+                                        
+                                        // Ensure it doesn't go off screen horizontally
+                                        x = Math.max(pickerWidth / 2 + 10, Math.min(x, window.innerWidth - pickerWidth / 2 - 10));
+                                        
+                                        setReactionPickerPosition({
+                                          x: x,
+                                          y: y,
+                                          isOwn: isOwn
+                                        });
+                                        setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
+                                      } else {
+                                        setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
+                                        setReactionPickerPosition(null);
+                                      }
                                     }}
                                         className="message-action-btn"
                                         style={{
@@ -1706,7 +1941,17 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                             )}
                             
                             {messageIndex === group.messages.length - 1 && (
-                              <div className="message-time" style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11px', color: '#999' }}>
+                              <div 
+                                className="message-time" 
+                                style={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '4px', 
+                                  marginTop: (messageReactions[message.id] && messageReactions[message.id].length > 0) ? '40px' : '4px', 
+                                  fontSize: '11px', 
+                                  color: '#999' 
+                                }}
+                              >
                                 {formatTime(message.created_at)}
                                 {isOwn && (
                                   <div className="message-status">
@@ -1820,12 +2065,64 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                   </svg>
                                 </button>
                                 
-                                {/* Emoji Reaction Button - Messenger Style */}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
-                                  }}
+                                  {/* Emoji Reaction Button - Messenger Style */}
+                                      <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const messageItem = e.currentTarget.closest('.message-item') as HTMLElement;
+                                      if (messageItem) {
+                                        const messageBubble = messageItem.querySelector('.message-bubble') as HTMLElement;
+                                        if (!messageBubble) return;
+                                        
+                                        const bubbleRect = messageBubble.getBoundingClientRect();
+                                        
+                                        // Position picker above the message bubble, but adjust if near top of viewport
+                                        const pickerHeight = 50; // Approximate height of picker
+                                        const pickerWidth = 220; // Approximate width of picker (6 emojis + padding)
+                                        const spaceAbove = bubbleRect.top;
+                                        const spaceBelow = window.innerHeight - bubbleRect.bottom;
+                                        
+                                        let y: number;
+                                        if (spaceAbove < pickerHeight + 10 && spaceBelow > pickerHeight + 10) {
+                                          // Not enough space above, position below
+                                          y = bubbleRect.bottom + 5;
+                                        } else {
+                                          // Position above
+                                          y = bubbleRect.top - pickerHeight - 5;
+                                        }
+                                        
+                                        // Ensure it doesn't go off screen vertically
+                                        y = Math.max(10, Math.min(y, window.innerHeight - pickerHeight - 10));
+                                        
+                                        // Calculate horizontal position - align to the side of the bubble
+                                        let x: number;
+                                        if (isOwn) {
+                                          // For own messages, align to right edge of bubble
+                                          x = bubbleRect.right;
+                                        } else {
+                                          // For received messages, align to left edge of bubble
+                                          x = bubbleRect.left;
+                                        }
+                                        
+                                        // Adjust to keep picker on screen
+                                        if (x + pickerWidth > window.innerWidth - 10) {
+                                          x = window.innerWidth - pickerWidth - 10;
+                                        }
+                                        if (x < 10) {
+                                          x = 10;
+                                        }
+                                        
+                                        setReactionPickerPosition({
+                                          x: x,
+                                          y: y,
+                                          isOwn: isOwn
+                                        });
+                                        setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
+                                      } else {
+                                        setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
+                                        setReactionPickerPosition(null);
+                                      }
+                                    }}
                                   className="message-action-btn"
                                   style={{
                                     width: '32px',
@@ -2262,6 +2559,79 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                   }}
                 >
                   Download
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Dialog */}
+        {showDeleteConfirmation && (
+          <div 
+            onClick={() => setShowDeleteConfirmation(false)}
+            style={{
+              position: 'fixed', 
+              inset: 0, 
+              background: 'rgba(0,0,0,0.5)',
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              zIndex: 1001
+            }}
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: '#fff',
+                borderRadius: 12,
+                padding: '24px',
+                maxWidth: '400px',
+                width: '90%',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
+              }}
+            >
+              <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: 600, color: '#333' }}>
+                Delete Conversation?
+              </h3>
+              <p style={{ margin: '0 0 24px 0', color: '#666', fontSize: '14px', lineHeight: '1.5' }}>
+                Are you sure you want to delete this conversation with <strong>{conversation?.other_participant?.name || 'this user'}</strong>?
+                <br /><br />
+                This action cannot be undone. All messages will be removed from your inbox.
+              </p>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setShowDeleteConfirmation(false)}
+                  disabled={isDeletingConversation}
+                  style={{
+                    padding: '10px 20px',
+                    border: '1px solid #ddd',
+                    borderRadius: 8,
+                    background: '#fff',
+                    color: '#333',
+                    cursor: isDeletingConversation ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    opacity: isDeletingConversation ? 0.6 : 1
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteConversation}
+                  disabled={isDeletingConversation}
+                  style={{
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: 8,
+                    background: '#dc3545',
+                    color: 'white',
+                    cursor: isDeletingConversation ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    opacity: isDeletingConversation ? 0.6 : 1
+                  }}
+                >
+                  {isDeletingConversation ? 'Deleting...' : 'Delete Conversation'}
                 </button>
               </div>
             </div>

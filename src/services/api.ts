@@ -28,16 +28,25 @@ const publicApi = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken');
+    
+    // ✅ FIX: Don't warn about missing token for authentication endpoints
+    const isAuthEndpoint = config.url?.includes('token/') || 
+                          config.url?.includes('login') || 
+                          config.url?.includes('csrf');
+    
     if (token) {
       config.headers = config.headers || {};
       config.headers['Authorization'] = `Bearer ${token}`;
-    } else {
+    } else if (!isAuthEndpoint) {
+      // Only warn if not an auth endpoint (login/token requests don't need existing tokens)
       console.warn('No access token found in localStorage');
     }
+    
     if (process.env.NODE_ENV === 'development') {
       console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, {
         headers: config.headers,
-        hasToken: !!token
+        hasToken: !!token,
+        isAuthEndpoint
       });
     }
     return config;
@@ -126,33 +135,39 @@ api.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config || {};
-    if (error.response?.status === 401 && !(originalRequest as any)._retry) {
+    
+    // ✅ FIX: Don't try to refresh token for auth endpoints themselves
+    const isAuthEndpoint = originalRequest.url?.includes('token/') || 
+                          originalRequest.url?.includes('login');
+    
+    // ✅ FIX: Only attempt token refresh for 401 errors on non-auth endpoints
+    if (error.response?.status === 401 && !isAuthEndpoint && !(originalRequest as any)._retry) {
       (originalRequest as any)._retry = true;
       if (!refreshing) {
         refreshing = (async () => {
           try {
             const refreshToken = localStorage.getItem('refreshToken');
             if (!refreshToken) {
-              console.warn('No refresh token available, redirecting to login');
+              console.warn('[Auth] No refresh token available, redirecting to login');
               throw new Error('No refresh token available');
             }
-            console.log('Attempting to refresh token...');
+            console.log('[Auth] Attempting to refresh token...');
             const response = await axios.post(`${API_BASE}token/refresh/`, { refresh: refreshToken });
             const newAccess = response.data?.access;
             if (!newAccess) {
-              console.error('No access token in refresh response');
+              console.error('[Auth] No access token in refresh response');
               throw new Error('No access token in refresh response');
             }
-            console.log('Token refreshed successfully');
+            console.log('[Auth] Token refreshed successfully');
             localStorage.setItem('accessToken', newAccess);
             return newAccess;
           } catch (refreshError: any) {
-            console.error('Token refresh failed:', refreshError?.response?.status || refreshError?.message);
+            console.error('[Auth] Token refresh failed:', refreshError?.response?.status || refreshError?.message);
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
             localStorage.removeItem('user');
-            if (window.location.pathname !== '/login') {
-              console.log('Redirecting to login page...');
+            if (window.location.pathname !== '/login' && window.location.pathname !== '/first-login-change-password') {
+              console.log('[Auth] Redirecting to login page...');
               window.location.href = '/login';
             }
             throw refreshError;
@@ -167,7 +182,7 @@ api.interceptors.response.use(
         const newAccessToken = await refreshing;
         (originalRequest.headers as any) = (originalRequest.headers as any) || {};
         (originalRequest.headers as any).Authorization = `Bearer ${newAccessToken}`;
-        console.log('Retrying request with new token...');
+        console.log('[Auth] Retrying request with new token...');
         // Silently retry - don't log the 401 error since it's being handled
         return api(originalRequest);
       } catch (refreshError) {
@@ -267,15 +282,41 @@ export const checkFollowStatus = async (userId: number) => {
 
 // --- SECURITY NOTE: Login is now strictly username + password. No birthdate login allowed. ---
 export const loginUser = async (acc_username: string, acc_password: string) => {
-  console.log('Sending login request:', { acc_username, acc_password });
+  // ✅ FIX: Trim and validate credentials before sending
+  const trimmedUsername = acc_username?.trim() || '';
+  const trimmedPassword = acc_password?.trim() || '';
+  
+  console.log('Sending login request:', { acc_username: trimmedUsername, password: '***' });
+  
+  // ✅ FIX: Validate credentials before making request
+  if (!trimmedUsername) {
+    return { success: false, message: 'Username is required' };
+  }
+  if (!trimmedPassword) {
+    return { success: false, message: 'Password is required' };
+  }
+  
   try {
-    const response = await api.post('token/', { acc_username, acc_password });
+    const response = await api.post('token/', { 
+      acc_username: trimmedUsername, 
+      acc_password: trimmedPassword 
+    });
     console.log('Login response received:', response.data);
+    
+    // ✅ FIX: Validate response before saving
+    if (!response.data.access || !response.data.refresh) {
+      console.error('Invalid login response - missing tokens:', response.data);
+      return { success: false, message: 'Invalid server response - missing tokens' };
+    }
     
     // Save tokens and user info to localStorage
     localStorage.setItem('accessToken', response.data.access);
     localStorage.setItem('refreshToken', response.data.refresh);
     localStorage.setItem('user', JSON.stringify(response.data.user));
+    
+    console.log('✅ Tokens saved successfully');
+    console.log('Access token length:', response.data.access.length);
+    console.log('Refresh token length:', response.data.refresh.length);
     
     return { success: true, ...response.data };
   } catch (error: any) {
@@ -733,6 +774,9 @@ export const createPost = async (postData: {
   post_image?: string; // Backward compatibility
   post_images?: string[]; // Multiple images
   type?: string;
+  is_event?: boolean; // NEW: Whether this post is an event
+  event_date?: string; // NEW: Event date (YYYY-MM-DD format)
+  event_time?: string; // NEW: Event time (HH:MM format)
 }) => {
   console.log('Sending post creation request:', postData);
   console.log('API base URL:', API_BASE);
@@ -995,6 +1039,11 @@ export const deleteMessageApi = async (conversationId: number, messageId: number
 export const updateMessageApi = async (conversationId: number, messageId: number, content: string) => {
   const { data } = await api.put(`messaging/conversations/${conversationId}/messages/${messageId}/`, { content });
   return data as MessageItem;
+};
+
+export const deleteConversation = async (conversationId: number) => {
+  const { data } = await api.delete(`messaging/conversations/${conversationId}/delete/`);
+  return data as { status: string; message: string; conversation_id: number; fully_deleted: boolean };
 };
 
 export const searchUsersForMessaging = async (q: string) => {
@@ -1495,6 +1544,69 @@ export const uploadVoucherFile = async (requestId: number, file: File) => {
       'Content-Type': 'multipart/form-data'
     }
   });
+  return response.data;
+};
+
+// ==========================
+// Calendar Event API Functions
+// ==========================
+
+export interface CalendarEventData {
+  event_id?: number;
+  title: string;
+  description?: string;
+  event_type: 'deadline' | 'event' | 'reminder' | 'holiday' | 'meeting' | 'announcement';
+  event_date: string; // YYYY-MM-DD
+  event_time?: string; // HH:MM
+  color?: string; // Hex color
+  is_public?: boolean;
+  post_id?: number;
+  created_by?: {
+    user_id: number;
+    name: string;
+  };
+  created_at?: string;
+  updated_at?: string;
+}
+
+// Get all calendar events (with optional filters)
+export const getCalendarEvents = async (params?: {
+  start_date?: string;
+  end_date?: string;
+  event_type?: string;
+  is_public?: boolean;
+}) => {
+  const response = await api.get('calendar-events/', { params });
+  return response.data;
+};
+
+// Get events for a specific month (optimized for calendar display)
+export const getCalendarEventsByMonth = async (year: number, month: number) => {
+  const response = await api.get(`calendar-events/month/${year}/${month}/`);
+  return response.data;
+};
+
+// Get single event details
+export const getCalendarEvent = async (eventId: number) => {
+  const response = await api.get(`calendar-events/${eventId}/`);
+  return response.data;
+};
+
+// Create new calendar event (Admin only)
+export const createCalendarEvent = async (eventData: CalendarEventData) => {
+  const response = await api.post('calendar-events/', eventData);
+  return response.data;
+};
+
+// Update calendar event (Admin only)
+export const updateCalendarEvent = async (eventId: number, eventData: Partial<CalendarEventData>) => {
+  const response = await api.put(`calendar-events/${eventId}/`, eventData);
+  return response.data;
+};
+
+// Delete calendar event (Admin only)
+export const deleteCalendarEvent = async (eventId: number) => {
+  const response = await api.delete(`calendar-events/${eventId}/`);
   return response.data;
 };
 

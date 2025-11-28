@@ -99,6 +99,10 @@ interface PostItem {
   likes?: LikeItem[];
   liked_by_user?: boolean;
   reposts_count?: number;
+  // Event fields
+  is_event?: boolean;
+  event_date?: string;
+  event_time?: string;
 }
 
 interface PostCardProps {
@@ -2623,9 +2627,70 @@ const PostCard: React.FC<PostCardProps> = ({
                   Donation
                 </span>
               )}
+              {post.is_event && (
+                <>
+                  <span style={{
+                    backgroundColor: '#3b82f6',
+                    color: '#ffffff',
+                    fontSize: '10px',
+                    fontWeight: '600',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                  }}>
+                    Event
+                  </span>
+                  {(() => {
+                    if (!post.event_date) return null;
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const eventDate = new Date(post.event_date);
+                    eventDate.setHours(0, 0, 0, 0);
+                    const isEventPast = eventDate < today;
+                    
+                    return isEventPast ? (
+                      <span style={{
+                        backgroundColor: '#9ca3af',
+                        color: '#ffffff',
+                        fontSize: '10px',
+                        fontWeight: '600',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                        marginLeft: '4px'
+                      }}>
+                        ENDED
+                      </span>
+                    ) : null;
+                  })()}
+                </>
+              )}
             </div>
             <div className="post-author-details" style={{ color: '#666', fontSize: '12px' }}>
               <span>{formatTime(post.created_at) || 'Unknown time'}</span>
+              {post.is_event && post.event_date && (
+                <>
+                  <span style={{ margin: '0 4px' }}>•</span>
+                  <span style={{ color: '#1e40af', fontWeight: 500 }}>
+                    {new Date(post.event_date).toLocaleDateString('en-US', { 
+                      weekday: 'short',
+                      year: 'numeric', 
+                      month: 'short', 
+                      day: 'numeric' 
+                    })}
+                  </span>
+                  {post.event_time && (
+                    <>
+                      <span style={{ margin: '0 4px' }}>•</span>
+                      <span style={{ color: '#475569' }}>🕐 {post.event_time}</span>
+                    </>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -2817,21 +2882,21 @@ const PostCard: React.FC<PostCardProps> = ({
         </div>
       ) : (
         <div 
-          className="post-content"
-          style={{
-            wordWrap: 'break-word',
-            wordBreak: 'break-word',
-            overflowWrap: 'break-word',
-            whiteSpace: 'pre-wrap',
-            maxWidth: '100%',
-            fontSize: '14px',
-            lineHeight: '1.5',
-            color: '#333',
-            marginBottom: '8px'
-          }}
-        >
-          {renderTextWithLinks(post.post_content)}
-        </div>
+            className="post-content"
+            style={{
+              wordWrap: 'break-word',
+              wordBreak: 'break-word',
+              overflowWrap: 'break-word',
+              whiteSpace: 'pre-wrap',
+              maxWidth: '100%',
+              fontSize: '14px',
+              lineHeight: '1.5',
+              color: '#333',
+              marginBottom: '8px'
+            }}
+          >
+            {renderTextWithLinks(post.post_content)}
+          </div>
       )}
 
       {/* Multiple Images Display */}

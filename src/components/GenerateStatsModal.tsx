@@ -264,77 +264,111 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       }
       
       // Work from top to bottom
-      // 1. Signature section at the top
+      // 1. Signature section at the top (no boxes, clean format)
       if (settings.signature_enabled !== false) {
-        const boxHeight = 12;
+        const sectionWidth = 70;
+        const lineHeight = 7;
         
         // Prepared by section (left)
         const preparedX = 40;
-        const preparedY1 = currentY;
-        const preparedY2 = preparedY1 + boxHeight;
-        const preparedY3 = preparedY2 + boxHeight;
+        let preparedY = currentY;
         
-        // Draw two separate boxes for Prepared by
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.5);
-        
-        // Box 1: Label
-        doc.rect(preparedX, preparedY1, 70, boxHeight);
-        doc.setFontSize(8);
+        // "Prepared by:" text (no box)
+        doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
-        doc.text('Prepared by:', preparedX + 35, preparedY1 + 6, { align: 'center' });
+        doc.text('Prepared by:', preparedX + sectionWidth / 2, preparedY, { align: 'center' });
+        preparedY += lineHeight + 2;
         
-        // Box 2: Name
-        doc.rect(preparedX, preparedY2, 70, boxHeight);
+        // Name in Bold
         const preparedByName = settings.prepared_by_name || 'MARIE JOY B. ALIT, Ph.D.';
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.text(preparedByName, preparedX + 35, preparedY2 + 6, { align: 'center' });
+        doc.setFontSize(10);
+        doc.text(preparedByName, preparedX + sectionWidth / 2, preparedY, { align: 'center' });
+        preparedY += lineHeight + 2;
         
-        // Title outside box
+        // Signature Line (horizontal line)
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.3);
+        doc.line(preparedX, preparedY, preparedX + sectionWidth, preparedY);
+        preparedY += lineHeight + 2;
+        
+        // Title
         const preparedByTitle = settings.prepared_by_title || 'University Director for Alumni Affairs';
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        doc.text(preparedByTitle, preparedX + 35, preparedY3 + 2, { align: 'center' });
+        doc.setFontSize(8);
+        doc.text(preparedByTitle, preparedX + sectionWidth / 2, preparedY, { align: 'center' });
+        const preparedFinalY = preparedY + lineHeight;
         
         // Approved by section (right)
         const approvedX = pageWidth - 110;
-        const approvedY1 = currentY;
-        const approvedY2 = approvedY1 + boxHeight;
-        const approvedY3 = approvedY2 + boxHeight;
+        let approvedY = currentY;
         
-        // Box 1: Label
-        doc.rect(approvedX, approvedY1, 70, boxHeight);
-        doc.setFontSize(8);
+        // "Approved by:" text (no box)
+        doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
-        doc.text('Approved by:', approvedX + 35, approvedY1 + 6, { align: 'center' });
+        doc.text('Approved by:', approvedX + sectionWidth / 2, approvedY, { align: 'center' });
+        approvedY += lineHeight + 2;
         
-        // Box 2: Name
-        doc.rect(approvedX, approvedY2, 70, boxHeight);
+        // Name in Bold
         const approvedByName = settings.approved_by_name || 'ROMEO P. MONTECILLO, Ph.D.';
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.text(approvedByName, approvedX + 35, approvedY2 + 6, { align: 'center' });
+        doc.setFontSize(10);
+        doc.text(approvedByName, approvedX + sectionWidth / 2, approvedY, { align: 'center' });
+        approvedY += lineHeight + 2;
         
-        // Title outside box
+        // Signature Line (horizontal line)
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.3);
+        doc.line(approvedX, approvedY, approvedX + sectionWidth, approvedY);
+        approvedY += lineHeight + 2;
+        
+        // Title
         const approvedByTitle = settings.approved_by_title || 'Vice President for Student Affairs';
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        doc.text(approvedByTitle, approvedX + 35, approvedY3 + 2, { align: 'center' });
+        doc.setFontSize(8);
+        doc.text(approvedByTitle, approvedX + sectionWidth / 2, approvedY, { align: 'center' });
+        const approvedFinalY = approvedY + lineHeight;
         
-        currentY = Math.max(preparedY3, approvedY3) + 10;
+        currentY = Math.max(preparedFinalY, approvedFinalY) + 10;
       }
       
-      // 2. Footer image below signature
+      // 2. Footer image below signature (with proper aspect ratio)
       if (settings.footer_image_enabled !== false) {
         const footerBase64 = await loadImageOrUrl(settings.footer_image_url || '', footerImage);
         
         if (footerBase64) {
-          const footerWidth = pageWidth - 40;
-          const footerHeight = 12;
+          // Calculate proper aspect ratio to prevent stretching
+          const maxFooterWidth = pageWidth - 40;
+          const maxFooterHeight = 120; // Increased maximum height to prevent stretching
           
-          doc.addImage(footerBase64, 'PNG', 20, currentY, footerWidth, footerHeight);
-          currentY += footerHeight + 5;
+          // Create an image element to get natural dimensions
+          const img = new Image();
+          img.src = footerBase64;
+          await new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve; // Continue even if image fails to load
+          });
+          
+          let footerWidth = maxFooterWidth;
+          let footerHeight = maxFooterHeight;
+          
+          // If we have image dimensions, calculate proper aspect ratio
+          if (img.width && img.height) {
+            const aspectRatio = img.width / img.height;
+            // Calculate height based on width while maintaining aspect ratio
+            footerHeight = footerWidth / aspectRatio;
+            // If calculated height exceeds max, adjust width instead
+            if (footerHeight > maxFooterHeight) {
+              footerHeight = maxFooterHeight;
+              footerWidth = footerHeight * aspectRatio;
+            }
+          }
+          
+          // Center the image horizontally
+          const footerX = (pageWidth - footerWidth) / 2;
+          doc.addImage(footerBase64, 'PNG', footerX, currentY, footerWidth, footerHeight);
+          // Increased spacing after image to prevent text overlap
+          currentY += footerHeight + 20;
         }
       }
       
@@ -496,7 +530,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   // EXCEL FOOTER FUNCTION
   // ========================================
   // Utility function to add institutional footer to Excel
-  const addInstitutionalFooterToExcel = async (workbook: any, sheet: any, startRow: number) => {
+  const addInstitutionalFooterToExcel = async (workbook: any, sheet: any, startRow: number, statsType?: string) => {
     const settings = reportSettings || {};
     
     // Check if footer is enabled
@@ -506,93 +540,245 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     
     let r = startRow + 2;
     
-    // Add signature section if enabled
+    // Add signature section if enabled (NO BOXES - clean plain text format matching PDF)
+    // PDF shows both sections centered in their respective halves of the page
     if (settings.signature_enabled !== false) {
       // Skip a row for spacing
       r++;
       
-      // Prepared by section (left side)
-      sheet.getCell(`C${r}`).value = 'Prepared by:';
-      sheet.getCell(`C${r}`).font = { bold: false, size: 10 };
-      sheet.getCell(`C${r}`).alignment = { horizontal: 'center' };
-      sheet.mergeCells(`C${r}:D${r}`);
+      // Use balanced column layout: B-D for left (3 cols), E-G for right (3 cols)
+      // This creates equal halves with centered content, matching PDF layout
       
-      // Approved by section (right side)
+      // Row 1: "Prepared by:" / "Approved by:" labels (plain text, no boxes, centered)
+      // Match PDF: font size 9, normal weight, centered in their sections
+      sheet.getCell(`B${r}`).value = 'Prepared by:';
+      sheet.getCell(`B${r}`).font = { bold: false, size: 9 };
+      sheet.getCell(`B${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      sheet.mergeCells(`B${r}:D${r}`);
+      
       sheet.getCell(`E${r}`).value = 'Approved by:';
-      sheet.getCell(`E${r}`).font = { bold: false, size: 10 };
-      sheet.getCell(`E${r}`).alignment = { horizontal: 'center' };
-      sheet.mergeCells(`E${r}:F${r}`);
+      sheet.getCell(`E${r}`).font = { bold: false, size: 9 };
+      sheet.getCell(`E${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      sheet.mergeCells(`E${r}:G${r}`);
       r++;
       
-      // Names row
+      // Row 2: Names in Bold (plain text, no boxes, centered)
+      // Match PDF: font size 10, bold, centered in their sections
       const preparedByName = settings.prepared_by_name || 'MARIE JOY B. ALIT, Ph.D.';
-      sheet.getCell(`C${r}`).value = preparedByName;
-      sheet.getCell(`C${r}`).font = { bold: true, size: 11 };
-      sheet.getCell(`C${r}`).alignment = { horizontal: 'center' };
-      sheet.mergeCells(`C${r}:D${r}`);
+      sheet.getCell(`B${r}`).value = preparedByName;
+      sheet.getCell(`B${r}`).font = { bold: true, size: 10 };
+      sheet.getCell(`B${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      sheet.mergeCells(`B${r}:D${r}`);
       
       const approvedByName = settings.approved_by_name || 'ROMEO P. MONTECILLO, Ph.D.';
       sheet.getCell(`E${r}`).value = approvedByName;
-      sheet.getCell(`E${r}`).font = { bold: true, size: 11 };
-      sheet.getCell(`E${r}`).alignment = { horizontal: 'center' };
-      sheet.mergeCells(`E${r}:F${r}`);
+      sheet.getCell(`E${r}`).font = { bold: true, size: 10 };
+      sheet.getCell(`E${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      sheet.mergeCells(`E${r}:G${r}`);
       r++;
       
-      // Titles row
+      // Row 3: Signature Lines (two separate horizontal lines, centered under names)
+      // Match PDF: horizontal line with thin style, centered in their sections
+      const signatureRow = sheet.getRow(r);
+      
+      // Prepared by signature line - centered in B-D space
+      // Use column C (middle of B-D) for the line to center it
+      signatureRow.getCell(2).border = { 
+        top: { style: 'none' },
+        bottom: { style: 'none' },
+        left: { style: 'none' },
+        right: { style: 'none' }
+      };
+      signatureRow.getCell(2).value = '';
+      signatureRow.getCell(3).border = { 
+        bottom: { style: 'thin' },
+        top: { style: 'none' },
+        left: { style: 'none' },
+        right: { style: 'none' }
+      };
+      signatureRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+      signatureRow.getCell(4).border = { 
+        top: { style: 'none' },
+        bottom: { style: 'none' },
+        left: { style: 'none' },
+        right: { style: 'none' }
+      };
+      signatureRow.getCell(4).value = '';
+      
+      // GAP COLUMN - Empty buffer to prevent border connection
+      signatureRow.getCell(5).border = { 
+        top: { style: 'none' },
+        bottom: { style: 'none' },
+        left: { style: 'none' },
+        right: { style: 'none' }
+      };
+      signatureRow.getCell(5).value = '';
+      
+      // Approved by signature line - centered in E-G space
+      // Use column F (middle of E-G) for the line to center it
+      signatureRow.getCell(6).border = { 
+        bottom: { style: 'thin' },
+        top: { style: 'none' },
+        left: { style: 'none' },
+        right: { style: 'none' }
+      };
+      signatureRow.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' };
+      signatureRow.getCell(7).border = { 
+        top: { style: 'none' },
+        bottom: { style: 'none' },
+        left: { style: 'none' },
+        right: { style: 'none' }
+      };
+      signatureRow.getCell(7).value = '';
+      
+      signatureRow.height = 15;
+      r++;
+      
+      // Row 4: Titles (plain text, no boxes, centered)
+      // Match PDF: font size 8, normal weight, centered in their sections
       const preparedByTitle = settings.prepared_by_title || 'University Director for Alumni Affairs';
-      sheet.getCell(`C${r}`).value = preparedByTitle;
-      sheet.getCell(`C${r}`).font = { bold: false, size: 9 };
-      sheet.getCell(`C${r}`).alignment = { horizontal: 'center' };
-      sheet.mergeCells(`C${r}:D${r}`);
+      sheet.getCell(`B${r}`).value = preparedByTitle;
+      sheet.getCell(`B${r}`).font = { bold: false, size: 8 };
+      sheet.getCell(`B${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      sheet.mergeCells(`B${r}:D${r}`);
       
       const approvedByTitle = settings.approved_by_title || 'Vice President for Student Affairs';
       sheet.getCell(`E${r}`).value = approvedByTitle;
-      sheet.getCell(`E${r}`).font = { bold: false, size: 9 };
-      sheet.getCell(`E${r}`).alignment = { horizontal: 'center' };
-      sheet.mergeCells(`E${r}:F${r}`);
+      sheet.getCell(`E${r}`).font = { bold: false, size: 8 };
+      sheet.getCell(`E${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      sheet.mergeCells(`E${r}:G${r}`);
       r += 2;
     }
     
-    // Add footer image if enabled
+    // Add footer image if enabled (with proper aspect ratio and centered like PDF)
     if (settings.footer_image_enabled !== false) {
-      const footerImgBase64 = await loadImageOrUrl(settings.footer_image_url || '', footerImage);
+      // Get the appropriate footer image based on statistics type
+      // Priority: type-specific URL > generic URL > generic default image
+      let footerImageUrl = settings.footer_image_url || '';
+      
+      // Check for type-specific footer URL if statsType is provided
+      if (statsType) {
+        const typeSpecificKey = `${statsType.toLowerCase()}_footer_image_url`;
+        const typeSpecificUrl = (settings as any)[typeSpecificKey];
+        
+        // Use type-specific footer if configured, otherwise use generic
+        if (typeSpecificUrl) {
+          footerImageUrl = typeSpecificUrl;
+        }
+        // If no type-specific footer is configured, footerImageUrl already has the generic one
+      }
+      
+      // Load the footer image (will use generic footer as fallback if URL fails)
+      const footerImgBase64 = await loadImageOrUrl(footerImageUrl, footerImage);
       if (footerImgBase64) {
+        // Calculate proper aspect ratio to prevent stretching (matching PDF logic exactly)
+        const img = new Image();
+        img.src = footerImgBase64;
+        await new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        });
+        
+        // Match PDF logic exactly: Calculate available width and maintain aspect ratio
+        // Excel columns A-H typically span approximately 800-1000 pixels
+        // Use a standard width that works well for most Excel sheets
+        const estimatedSheetWidth = 900; // pixels (reasonable estimate for columns A-H)
+        const maxFooterWidth = estimatedSheetWidth - 40; // Match PDF: pageWidth - 40
+        const maxFooterHeight = 120; // Increased maximum height to prevent stretching (matching PDF)
+        
+        // Initialize with max dimensions
+        let footerWidth = maxFooterWidth;
+        let footerHeight = maxFooterHeight;
+        
+        // CRITICAL: Maintain aspect ratio to prevent stretching (matching PDF logic exactly)
+        if (img.naturalWidth && img.naturalHeight && img.naturalWidth > 0 && img.naturalHeight > 0) {
+          // Use naturalWidth/naturalHeight for accurate aspect ratio
+          const aspectRatio = img.naturalWidth / img.naturalHeight;
+          
+          // Calculate height based on width while maintaining aspect ratio
+          footerHeight = footerWidth / aspectRatio;
+          
+          // If calculated height exceeds max, adjust width instead (matching PDF logic)
+          if (footerHeight > maxFooterHeight) {
+            footerHeight = maxFooterHeight;
+            footerWidth = footerHeight * aspectRatio;
+          }
+        } else if (img.width && img.height && img.width > 0 && img.height > 0) {
+          // Fallback to width/height if naturalWidth/Height not available
+          const aspectRatio = img.width / img.height;
+          footerHeight = footerWidth / aspectRatio;
+          if (footerHeight > maxFooterHeight) {
+            footerHeight = maxFooterHeight;
+            footerWidth = footerHeight * aspectRatio;
+          }
+        }
+        
+        // Ensure dimensions are valid
+        if (footerWidth <= 0 || footerHeight <= 0 || !isFinite(footerWidth) || !isFinite(footerHeight)) {
+          // Fallback to reasonable defaults if calculation failed
+          footerWidth = 860;
+          footerHeight = 60;
+        }
+        
         const footerImgId = workbook.addImage({
           base64: footerImgBase64.split(',')[1],
           extension: 'png',
         });
+        
+        // Get the image's natural aspect ratio
+        let aspectRatio = 1;
+        if (img.naturalWidth && img.naturalHeight && img.naturalWidth > 0 && img.naturalHeight > 0) {
+          aspectRatio = img.naturalWidth / img.naturalHeight;
+        } else if (img.width && img.height && img.width > 0 && img.height > 0) {
+          aspectRatio = img.width / img.height;
+        }
+        
+        // Recalculate based on aspect ratio
+        footerHeight = footerWidth / aspectRatio;
+        
+        // Ensure height doesn't exceed reasonable maximum
+        const maxHeight = 200; // Increased maximum height in pixels to prevent stretching
+        if (footerHeight > maxHeight) {
+          footerHeight = maxHeight;
+          footerWidth = footerHeight * aspectRatio;
+        }
+        
+        // Add the image to span from column C (index 2) to column F (index 5)
+        // Using tl/br with editAs: 'twoCell' to ensure it spans exactly C to F
+        const rowsNeeded = Math.ceil(footerHeight / 20) + 2; // Calculate rows based on height
         sheet.addImage(footerImgId, {
-          tl: { col: 2, row: r - 1 },
-          ext: { width: 2000, height: 60 },
+          tl: { col: 2, row: r - 1 }, // Start at column C (index 2)
+          br: { col: 6, row: r - 1 + rowsNeeded }, // End at column F+1 (index 6) to span C-F
+          editAs: 'twoCell' // Image resizes with cells, spanning C to F
         });
+        r += rowsNeeded;
       }
-      r += 4;
     }
     
-    // Add generated date
+    // Add generated date (matching PDF: font size 8, normal weight, not italic)
     const generatedDate = new Date().toLocaleDateString('en-US', { 
       year: 'numeric', 
       month: 'long', 
       day: 'numeric' 
     });
     sheet.getCell(`A${r}`).value = `Generated on: ${generatedDate}`;
-    sheet.getCell(`A${r}`).font = { italic: true, size: 9 };
-    sheet.getCell(`A${r}`).alignment = { horizontal: 'center' };
+    sheet.getCell(`A${r}`).font = { bold: false, size: 8 }; // Match PDF: size 8, normal (not italic)
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
     sheet.mergeCells(`A${r}:H${r}`);
     r++;
     
-    // Add footer information
+    // Add footer information (matching PDF: font size 8, normal weight, not italic)
     const footerText1 = settings.footer_text1 || 'Generated by Cebu Technological University Alumni Affairs Office';
     sheet.getCell(`A${r}`).value = footerText1;
-    sheet.getCell(`A${r}`).font = { italic: true, size: 9 };
-    sheet.getCell(`A${r}`).alignment = { horizontal: 'center' };
+    sheet.getCell(`A${r}`).font = { bold: false, size: 8 }; // Match PDF: size 8, normal (not italic)
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
     sheet.mergeCells(`A${r}:H${r}`);
     r++;
     
     const footerText2 = settings.footer_text2 || 'This report is generated automatically by the Alumni Tracking System';
     sheet.getCell(`A${r}`).value = footerText2;
-    sheet.getCell(`A${r}`).font = { italic: true, size: 9 };
-    sheet.getCell(`A${r}`).alignment = { horizontal: 'center' };
+    sheet.getCell(`A${r}`).font = { bold: false, size: 8 }; // Match PDF: size 8, normal (not italic)
+    sheet.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
     sheet.mergeCells(`A${r}:H${r}`);
     
     return r;
@@ -651,7 +837,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     try {
       if (selectedType === 'ALL') {
         // Fetch all four types in parallel
-        const [qpro, ched, suc, aacup] = await Promise.all([
+        const [qpro, ched, suc, aacup, highPosition] = await Promise.all([
           queryClient.fetchQuery({
             queryKey: [
               'stats',
@@ -684,12 +870,20 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ],
             queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, 'AACUP'),
           }) as Promise<AnyStats>,
+          queryClient.fetchQuery({
+            queryKey: [
+              'stats',
+              'generate',
+              { year: selectedYear, course: selectedProgram, type: 'HIGH_POSITION' },
+            ],
+            queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, 'HIGH_POSITION'),
+          }) as Promise<AnyStats>,
         ]);
-        setAllStats({ QPRO: qpro, CHED: ched, SUC: suc, AACUP: aacup });
+        setAllStats({ QPRO: qpro, CHED: ched, SUC: suc, AACUP: aacup, HIGH_POSITION: highPosition });
         setGeneratedStats(null);
-        if (onGenerate) onGenerate({ QPRO: qpro, CHED: ched, SUC: suc, AACUP: aacup });
+        if (onGenerate) onGenerate({ QPRO: qpro, CHED: ched, SUC: suc, AACUP: aacup, HIGH_POSITION: highPosition });
         // Fetch detailed data for all
-        (['QPRO', 'CHED', 'SUC', 'AACUP'] as StatsType[]).forEach(async (type) => {
+        (['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION'] as StatsType[]).forEach(async (type) => {
           setDetailedLoading((prev) => ({ ...prev, [type]: true }));
           try {
             const res = await queryClient.fetchQuery({
@@ -886,6 +1080,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   // QPRO export helpers (placed before export to avoid hoist issues)
   const qproHeaders = [
     'Program',
+    'Batch_Graduated',
     'Last_Name',
     'First_Name',
     'Middle_Name',
@@ -918,6 +1113,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
     return [
       safe(row['Program']),
+      safe(pick(['Batch_Graduated', 'batch', 'year_graduated', 'Batch', 'Year_Graduated'])),
       safe(row['Last_Name']),
       safe(row['First_Name']),
       safe(row['Middle_Name']),
@@ -933,8 +1129,8 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   // Enhanced sorting function: answered tracker first (alphabetical), not answered last (alphabetical)
   const sortAlumniData = (mappedData: any[][]) => {
     return mappedData.sort((a, b) => {
-      const aAnswered = a[4] !== 'Not Tracked'; // Status is at index 4
-      const bAnswered = b[4] !== 'Not Tracked';
+      const aAnswered = a[5] !== 'Not Tracked'; // Status is now at index 5 (after adding Batch_Graduated)
+      const bAnswered = b[5] !== 'Not Tracked';
       
       // First priority: answered vs not answered
       if (aAnswered !== bAnswered) {
@@ -942,9 +1138,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       }
       
       // Second priority: alphabetical by last name, then first name, then middle name
-      // Index: 1 = Last_Name, 2 = First_Name, 3 = Middle_Name (after column reorder)
-      const aLastName = (a[1] || '').toLowerCase().trim();
-      const bLastName = (b[1] || '').toLowerCase().trim();
+      // Index: 2 = Last_Name, 3 = First_Name, 4 = Middle_Name (after adding Batch_Graduated at index 1)
+      const aLastName = (a[2] || '').toLowerCase().trim();
+      const bLastName = (b[2] || '').toLowerCase().trim();
       const lastNameCompare = aLastName.localeCompare(bLastName);
       
       if (lastNameCompare !== 0) {
@@ -952,8 +1148,8 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       }
       
       // If last names are the same, sort by first name
-      const aFirstName = (a[2] || '').toLowerCase().trim();
-      const bFirstName = (b[2] || '').toLowerCase().trim();
+      const aFirstName = (a[3] || '').toLowerCase().trim();
+      const bFirstName = (b[3] || '').toLowerCase().trim();
       const firstNameCompare = aFirstName.localeCompare(bFirstName);
       
       if (firstNameCompare !== 0) {
@@ -961,8 +1157,8 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       }
       
       // If first names are also the same, sort by middle name
-      const aMiddleName = (a[3] || '').toLowerCase().trim();
-      const bMiddleName = (b[3] || '').toLowerCase().trim();
+      const aMiddleName = (a[4] || '').toLowerCase().trim();
+      const bMiddleName = (b[4] || '').toLowerCase().trim();
       return aMiddleName.localeCompare(bMiddleName);
     });
   };
@@ -1243,10 +1439,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   };
 
   // High Position helpers for ALL export reuse
-  const headersHighPosition = ['Program','Last_Name','First_Name','Middle_Name','Company_Name_Current','Position_Current'];
+  const headersHighPosition = ['Program','Batch_Graduated','Last_Name','First_Name','Middle_Name','Company_Name_Current','Position_Current'];
   const mapHighPositionRow = (alumnusOrRow: any) => {
     // Supports both high_position_data shape and detailed row shape
     const course = alumnusOrRow.course || alumnusOrRow['Program'] || '';
+    const batch = alumnusOrRow.batch || alumnusOrRow.year_graduated || alumnusOrRow['Batch_Graduated'] || alumnusOrRow['Batch'] || alumnusOrRow['Year_Graduated'] || '';
     const company = alumnusOrRow.company || alumnusOrRow['Company_Name_Current'] || '';
     const position = alumnusOrRow.position || alumnusOrRow['Position_Current'] || '';
     if (alumnusOrRow.name) {
@@ -1255,10 +1452,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       const first = parts[0] || '';
       const last = parts.length > 1 ? parts[parts.length - 1] : '';
       const middle = parts.length > 2 ? parts.slice(1, parts.length - 1).join(' ') : '';
-      return [course, last, first, middle, company, position];
+      return [course, batch, last, first, middle, company, position];
     }
     return [
       course,
+      batch,
       alumnusOrRow['Last_Name'] || '',
       alumnusOrRow['First_Name'] || '',
       alumnusOrRow['Middle_Name'] || '',
@@ -1485,7 +1683,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       
       // Prepare table data with two-row header
       const breakdownHead = [
-        ['PROGRAMS', 'TOTAL', 'E', 'UE', 'NT', 'GT', 'QUARTER ONE', '', '', 'QUARTER TWO', '', '', 'QUARTER THREE', '', '', 'QUARTER FOUR', '', ''],
+        ['PROGRAMS', 'TOTAL', 'E', 'UE', 'NT', 'GT', 'FIRST QUARTER', '', '', 'SECOND QUARTER', '', '', 'THIRD QUARTER', '', '', 'FOURTH QUARTER', '', ''],
         ['', '', '', '', '', '', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT']
       ];
       
@@ -1532,6 +1730,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       yPosition = (doc as any).lastAutoTable.finalY + 10;
       checkPageBreak(20);
 
+      // Add institutional footer BEFORE detailed data
+      await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      doc.addPage(); // Add new page for detailed data
+      yPosition = 20; // Reset yPosition for new page
+
       // Detailed data
       const detailedData = detailedDataByType['QPRO'] || [];
       if (detailedData.length > 0) {
@@ -1552,12 +1755,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           styles: { fontSize: 6, cellPadding: 1 },
           headStyles: { fillColor: [29, 78, 137], textColor: 255 },
           columnStyles: {
-            4: { cellWidth: 20 }, // Status
-            5: { cellWidth: 35 }, // Company
-            6: { cellWidth: 30 }, // Position
-            7: { cellWidth: 25 }, // Salary
-            8: { cellWidth: 20 }, // Sector
-            9: { cellWidth: 30 }, // Post graduate
+            1: { cellWidth: 12 }, // Batch_Graduated
+            5: { cellWidth: 20 }, // Status
+            6: { cellWidth: 35 }, // Company
+            7: { cellWidth: 30 }, // Position
+            8: { cellWidth: 25 }, // Salary
+            9: { cellWidth: 20 }, // Sector
+            10: { cellWidth: 30 }, // Post graduate
           },
         });
       }
@@ -1590,6 +1794,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       yPosition = (doc as any).lastAutoTable.finalY + 10;
       checkPageBreak(20);
 
+      // Add institutional footer BEFORE detailed data
+      await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      doc.addPage(); // Add new page for detailed data
+      yPosition = 20; // Reset yPosition for new page
+
       // Detailed data for CHED
       const detailedData = detailedDataByType['CHED'] || [];
       if (detailedData.length > 0) {
@@ -1610,12 +1819,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           styles: { fontSize: 6, cellPadding: 1 },
           headStyles: { fillColor: [23, 162, 184], textColor: 255 },
           columnStyles: {
-            4: { cellWidth: 20 }, // Status
-            5: { cellWidth: 35 }, // Company
-            6: { cellWidth: 30 }, // Position
-            7: { cellWidth: 25 }, // Salary
-            8: { cellWidth: 20 }, // Sector
-            9: { cellWidth: 30 }, // Post graduate
+            1: { cellWidth: 12 }, // Batch_Graduated
+            5: { cellWidth: 20 }, // Status
+            6: { cellWidth: 35 }, // Company
+            7: { cellWidth: 30 }, // Position
+            8: { cellWidth: 25 }, // Salary
+            9: { cellWidth: 20 }, // Sector
+            10: { cellWidth: 30 }, // Post graduate
           },
         });
       }
@@ -1651,6 +1861,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       yPosition = (doc as any).lastAutoTable.finalY + 10;
       checkPageBreak(20);
 
+      // Add institutional footer BEFORE detailed data
+      await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      doc.addPage(); // Add new page for detailed data
+      yPosition = 20; // Reset yPosition for new page
+
       // Detailed data for AACUP
       const detailedData = detailedDataByType['AACUP'] || [];
       if (detailedData.length > 0) {
@@ -1671,12 +1886,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           styles: { fontSize: 6, cellPadding: 1 },
           headStyles: { fillColor: [40, 167, 69], textColor: 255 },
           columnStyles: {
-            4: { cellWidth: 20 }, // Status
-            5: { cellWidth: 35 }, // Company
-            6: { cellWidth: 30 }, // Position
-            7: { cellWidth: 25 }, // Salary
-            8: { cellWidth: 20 }, // Sector
-            9: { cellWidth: 30 }, // Post graduate
+            1: { cellWidth: 12 }, // Batch_Graduated
+            5: { cellWidth: 20 }, // Status
+            6: { cellWidth: 35 }, // Company
+            7: { cellWidth: 30 }, // Position
+            8: { cellWidth: 25 }, // Salary
+            9: { cellWidth: 20 }, // Sector
+            10: { cellWidth: 30 }, // Post graduate
           },
         });
       }
@@ -1711,6 +1927,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       yPosition = (doc as any).lastAutoTable.finalY + 10;
       checkPageBreak(20);
 
+      // Add institutional footer BEFORE detailed data
+      await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      doc.addPage(); // Add new page for detailed data
+      yPosition = 20; // Reset yPosition for new page
+
       // Detailed data for SUC
       const detailedData = detailedDataByType['SUC'] || [];
       if (detailedData.length > 0) {
@@ -1731,12 +1952,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           styles: { fontSize: 6, cellPadding: 1 },
           headStyles: { fillColor: [29, 78, 137], textColor: 255 },
           columnStyles: {
-            4: { cellWidth: 20 }, // Status
-            5: { cellWidth: 35 }, // Company
-            6: { cellWidth: 30 }, // Position
-            7: { cellWidth: 25 }, // Salary
-            8: { cellWidth: 20 }, // Sector
-            9: { cellWidth: 30 }, // Post graduate
+            1: { cellWidth: 12 }, // Batch_Graduated
+            5: { cellWidth: 20 }, // Status
+            6: { cellWidth: 35 }, // Company
+            7: { cellWidth: 30 }, // Position
+            8: { cellWidth: 25 }, // Salary
+            9: { cellWidth: 20 }, // Sector
+            10: { cellWidth: 30 }, // Post graduate
           },
         });
       }
@@ -1759,24 +1981,66 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         body: summaryData.slice(1),
         startY: yPosition,
         theme: 'grid',
-        headStyles: { fillColor: [255, 193, 7], textColor: 0, fontStyle: 'bold' },
+        headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
         styles: { fontSize: 9 },
       });
 
       yPosition = (doc as any).lastAutoTable.finalY + 10;
       checkPageBreak(20);
 
+      // Add institutional footer BEFORE detailed data
+      await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      doc.addPage(); // Add new page for detailed data
+      yPosition = 20; // Reset yPosition for new page
+
       // Detailed data for HIGH_POSITION
-      const detailedData = detailedDataByType['HIGH_POSITION'] || [];
-      if (detailedData.length > 0) {
+      let detailedData = detailedDataByType['HIGH_POSITION'] || [];
+      
+      // Use high_position_data from stats if available, otherwise filter detailed data
+      if (stats.high_position_data && Array.isArray(stats.high_position_data) && stats.high_position_data.length > 0) {
+        // Convert high_position_data format to detailed data format
+        detailedData = stats.high_position_data.map((hp: any) => ({
+          Program: hp.course || '',
+          Last_Name: hp.name?.split(' ').slice(-1)[0] || '',
+          First_Name: hp.name?.split(' ')[0] || '',
+          Middle_Name: hp.name?.split(' ').slice(1, -1).join(' ') || '',
+          Company_Name_Current: hp.company || '',
+          Position_Current: hp.position || '',
+        }));
+      } else if (detailedData.length > 0) {
+        // Filter detailed data to only high position alumni
+        detailedData = detailedData.filter((alumnus: any) => {
+          const position = (alumnus.Position_Current || alumnus.position_current || '').toLowerCase();
+          return position.includes('manager') || position.includes('director') || 
+                 position.includes('ceo') || position.includes('president') || 
+                 position.includes('vp') || position.includes('vice president') ||
+                 position.includes('head') || position.includes('chief') ||
+                 position.includes('executive') || position.includes('senior');
+        });
+      }
+      
+      // Always show detailed data section for consistency
+      // If detailedData is still empty, try to get it from stats
+      if (detailedData.length === 0 && stats.high_position_data && Array.isArray(stats.high_position_data) && stats.high_position_data.length > 0) {
+        detailedData = stats.high_position_data.map((hp: any) => ({
+          Program: hp.course || '',
+          Last_Name: hp.name?.split(' ').slice(-1)[0] || '',
+          First_Name: hp.name?.split(' ')[0] || '',
+          Middle_Name: hp.name?.split(' ').slice(1, -1).join(' ') || '',
+          Company_Name_Current: hp.company || '',
+          Position_Current: hp.position || '',
+        }));
+      }
+      
+      // Always show the detailed data section header and table
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
-        doc.text('Detailed Alumni Data', 20, yPosition);
+      doc.text('High Position Detailed Alumni Data', 20, yPosition);
         yPosition += 6;
 
-        // Use the same headers as Excel export for consistency
-        const headers = qproHeaders;
-        const rows = detailedData.map((row: any) => mapQPRORow(row));
+      // Use High Position specific headers and mapper
+      const headers = headersHighPosition;
+      const rows = detailedData.map((row: any) => mapHighPositionRow(row));
 
         autoTable(doc, {
           head: [headers],
@@ -1784,25 +2048,26 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           startY: yPosition,
           theme: 'striped',
           styles: { fontSize: 6, cellPadding: 1 },
-          headStyles: { fillColor: [255, 193, 7], textColor: 0 },
+        headStyles: { fillColor: [29, 78, 137], textColor: 255 },
           columnStyles: {
-            4: { cellWidth: 20 }, // Status
-            5: { cellWidth: 35 }, // Company
-            6: { cellWidth: 30 }, // Position
-            7: { cellWidth: 25 }, // Salary
-            8: { cellWidth: 20 }, // Sector
-            9: { cellWidth: 30 }, // Post graduate
+            0: { cellWidth: 15 }, // Program
+            1: { cellWidth: 12 }, // Batch_Graduated
+            2: { cellWidth: 15 }, // Last_Name
+            3: { cellWidth: 15 }, // First_Name
+            4: { cellWidth: 15 }, // Middle_Name
+            5: { cellWidth: 20 }, // Company_Name_Current
+            6: { cellWidth: 20 }, // Position_Current
           },
         });
-      }
     } else if (exportType === 'ALL') {
-      // Summary for all types
+      // PHASE 1: Summary for all types
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
       doc.text('Complete Statistics Summary - All Types', 20, yPosition);
       yPosition += 10;
 
-      for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP']) {
+      // First loop: Add ONLY summaries for all types
+      for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
         const stats = statsByType[type];
         if (!stats) continue;
 
@@ -1810,7 +2075,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
-        doc.text(`${type} Statistics`, 20, yPosition);
+        doc.text(`${type === 'HIGH_POSITION' ? 'High Position' : type} Statistics`, 20, yPosition);
         yPosition += 6;
 
         let summaryData: string[][] = [['Metric', 'Value', 'Percentage']];
@@ -1847,7 +2112,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           
           // Prepare table data with two-row header
           const breakdownHead = [
-            ['PROGRAMS', 'TOTAL', 'E', 'UE', 'NT', 'GT', 'QUARTER ONE', '', '', 'QUARTER TWO', '', '', 'QUARTER THREE', '', '', 'QUARTER FOUR', '', ''],
+            ['PROGRAMS', 'TOTAL', 'E', 'UE', 'NT', 'GT', 'FIRST QUARTER', '', '', 'SECOND QUARTER', '', '', 'THIRD QUARTER', '', '', 'FOURTH QUARTER', '', ''],
             ['', '', '', '', '', '', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT']
           ];
           
@@ -1916,6 +2181,12 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Absorption Rate', '', `${stats.absorption_rate || 0}%`],
             ['High Position Rate', '', `${stats.high_position_rate || 0}%`]
           );
+        } else if (type === 'HIGH_POSITION') {
+          summaryData.push(
+            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+            ['High Position Alumni', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+            ['High Position Rate', '', `${stats.high_position_rate || 0}%`]
+          );
         }
 
         if (type !== 'QPRO') {
@@ -1930,45 +2201,92 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
           yPosition = (doc as any).lastAutoTable.finalY + 10;
         }
+      }
+
+      // PHASE 2: Add footer BEFORE all detailed data
+      checkPageBreak(20);
+      await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      doc.addPage(); // New page for detailed data
+      yPosition = 20;
+
+      // PHASE 3: Add detailed alumni data for ALL types
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Detailed Alumni Data - All Types', 20, yPosition);
+      yPosition += 10;
+
+      for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
+        let detailedData = detailedDataByType[type] || [];
+        if (detailedData.length === 0) continue;
         
-        // Add detailed alumni data for each type
-        const detailedData = detailedDataByType[type] || [];
-        if (detailedData.length > 0) {
-          checkPageBreak(40);
-          
-          doc.setFontSize(10);
-          doc.setFont('helvetica', 'bold');
-          doc.text(`${type} Detailed Alumni Data`, 20, yPosition);
-          yPosition += 6;
+        // For HIGH_POSITION, filter to only show high position alumni
+        if (type === 'HIGH_POSITION') {
+          const stats = statsByType[type];
+          if (stats?.high_position_data && Array.isArray(stats.high_position_data) && stats.high_position_data.length > 0) {
+            detailedData = stats.high_position_data.map((hp: any) => ({
+              Program: hp.course || '',
+              Batch_Graduated: hp.year_graduated || hp.batch || '',
+              Last_Name: hp.name?.split(' ').slice(-1)[0] || '',
+              First_Name: hp.name?.split(' ')[0] || '',
+              Middle_Name: hp.name?.split(' ').slice(1, -1).join(' ') || '',
+              Company_Name_Current: hp.company || '',
+              Position_Current: hp.position || '',
+            }));
+          } else if (detailedData.length > 0) {
+            detailedData = detailedData.filter((alumnus: any) => {
+              const position = (alumnus.Position_Current || alumnus.position_current || '').toLowerCase();
+              return position.includes('manager') || position.includes('director') || 
+                     position.includes('ceo') || position.includes('president') || 
+                     position.includes('vp') || position.includes('vice president') ||
+                     position.includes('head') || position.includes('chief') ||
+                     position.includes('executive') || position.includes('senior');
+            });
+          }
+        }
+        
+        checkPageBreak(40);
+        
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${type === 'HIGH_POSITION' ? 'High Position' : type} Detailed Alumni Data`, 20, yPosition);
+        yPosition += 6;
 
-          // Use the same headers as Excel export for consistency
-          const headers = qproHeaders;
-          const rows = sortAlumniData(detailedData.map((row: any) => mapQPRORow(row)));
+        const headers = type === 'HIGH_POSITION' ? headersHighPosition : qproHeaders;
+        const rows = type === 'HIGH_POSITION' 
+          ? detailedData.map((row: any) => mapHighPositionRow(row))
+          : sortAlumniData(detailedData.map((row: any) => mapQPRORow(row)));
 
-          autoTable(doc, {
-            head: [headers],
-            body: rows,
-            startY: yPosition,
-            theme: 'striped',
-            styles: { fontSize: 6, cellPadding: 1 },
-            headStyles: { fillColor: [29, 78, 137], textColor: 255 },
-            columnStyles: {
-              4: { cellWidth: 20 }, // Status
-              5: { cellWidth: 35 }, // Company
-              6: { cellWidth: 30 }, // Position
-              7: { cellWidth: 25 }, // Salary
-              8: { cellWidth: 20 }, // Sector
-              9: { cellWidth: 30 }, // Post graduate
-            },
+        autoTable(doc, {
+          head: [headers],
+          body: rows,
+          startY: yPosition,
+          theme: 'striped',
+          styles: { fontSize: 6, cellPadding: 1 },
+          headStyles: { fillColor: [29, 78, 137], textColor: 255 },
+          columnStyles: type === 'HIGH_POSITION' ? {
+            0: { cellWidth: 15 }, // Program
+            1: { cellWidth: 12 }, // Batch_Graduated
+            2: { cellWidth: 15 }, // Last_Name
+            3: { cellWidth: 15 }, // First_Name
+            4: { cellWidth: 15 }, // Middle_Name
+            5: { cellWidth: 20 }, // Company_Name_Current
+            6: { cellWidth: 20 }, // Position_Current
+          } : {
+            5: { cellWidth: 20 }, // Status
+            6: { cellWidth: 35 }, // Company
+            7: { cellWidth: 30 }, // Position
+            8: { cellWidth: 25 }, // Salary
+            9: { cellWidth: 20 }, // Sector
+            10: { cellWidth: 30 }, // Post graduate
+          },
         });
 
         yPosition = (doc as any).lastAutoTable.finalY + 10;
-        }
       }
     }
 
-    // Add institutional footer to all pages
-    await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+    // Footer is now added BEFORE detailed data in each section above
+    // No need to add footer here again for single type exports
 
     // Save PDF
     const filename = `Alumni_Statistics_${exportType}_${selectedYear}_${selectedProgram}.pdf`;
@@ -2293,6 +2611,230 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       return elements;
     };
 
+    // Helper function to add Word footer (reusable)
+    const addWordFooter = async (): Promise<(Paragraph | Table)[]> => {
+      const elements: (Paragraph | Table)[] = [];
+      
+      // Add spacing before footer
+      elements.push(
+        new Paragraph({
+          text: '',
+          spacing: { before: 800, after: 200 },
+        })
+      );
+
+      // Add signature section if enabled
+      if (settings.signature_enabled !== false && settings.footer_enabled !== false) {
+        elements.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.NONE },
+              bottom: { style: BorderStyle.NONE },
+              left: { style: BorderStyle.NONE },
+              right: { style: BorderStyle.NONE },
+              insideHorizontal: { style: BorderStyle.NONE },
+              insideVertical: { style: BorderStyle.NONE },
+            },
+            rows: [
+              new TableRow({
+                children: [
+                  // Left cell - Prepared by
+                  new TableCell({
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: 'Prepared by:', size: 18 })],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 0, after: 180 },
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: settings.prepared_by_name || 'MARIE JOY B. ALIT, Ph.D.',
+                            bold: true,
+                            size: 20,
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 0, after: 180 },
+                      }),
+                      new Table({
+                        width: { size: 70, type: WidthType.PERCENTAGE },
+                        columnWidths: [100],
+                        borders: {
+                          top: { style: BorderStyle.NONE },
+                          bottom: { style: BorderStyle.SINGLE, size: 3, color: '000000' },
+                          left: { style: BorderStyle.NONE },
+                          right: { style: BorderStyle.NONE },
+                          insideHorizontal: { style: BorderStyle.NONE },
+                          insideVertical: { style: BorderStyle.NONE },
+                        },
+                        alignment: AlignmentType.CENTER,
+                        rows: [
+                          new TableRow({
+                            children: [
+                              new TableCell({
+                                children: [
+                                  new Paragraph({
+                                    text: '',
+                                    spacing: { before: 0, after: 0 },
+                                  }),
+                                ],
+                                margins: { top: 0, bottom: 0, left: 0, right: 0 },
+                              }),
+                            ],
+                            height: { value: 60, rule: 'atLeast' },
+                          }),
+                        ],
+                      }),
+                      new Paragraph({
+                        text: '',
+                        spacing: { before: 0, after: 180 },
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: settings.prepared_by_title || 'University Director for Alumni Affairs',
+                            size: 16,
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 0, after: 0 },
+                      }),
+                    ],
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                    verticalAlign: 'top',
+                  }),
+                  // Right cell - Approved by
+                  new TableCell({
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: 'Approved by:', size: 18 })],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 0, after: 180 },
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: settings.approved_by_name || 'ROMEO P. MONTECILLO, Ph.D.',
+                            bold: true,
+                            size: 20,
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 0, after: 180 },
+                      }),
+                      new Table({
+                        width: { size: 70, type: WidthType.PERCENTAGE },
+                        columnWidths: [100],
+                        borders: {
+                          top: { style: BorderStyle.NONE },
+                          bottom: { style: BorderStyle.SINGLE, size: 3, color: '000000' },
+                          left: { style: BorderStyle.NONE },
+                          right: { style: BorderStyle.NONE },
+                          insideHorizontal: { style: BorderStyle.NONE },
+                          insideVertical: { style: BorderStyle.NONE },
+                        },
+                        alignment: AlignmentType.CENTER,
+                        rows: [
+                          new TableRow({
+                            children: [
+                              new TableCell({
+                                children: [
+                                  new Paragraph({
+                                    text: '',
+                                    spacing: { before: 0, after: 0 },
+                                  }),
+                                ],
+                                margins: { top: 0, bottom: 0, left: 0, right: 0 },
+                              }),
+                            ],
+                            height: { value: 60, rule: 'atLeast' },
+                          }),
+                        ],
+                      }),
+                      new Paragraph({
+                        text: '',
+                        spacing: { before: 0, after: 180 },
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: settings.approved_by_title || 'Vice President for Student Affairs',
+                            size: 16,
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 0, after: 0 },
+                      }),
+                    ],
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                    verticalAlign: 'top',
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new Paragraph({
+            text: '',
+            spacing: { after: 200 },
+          })
+        );
+      }
+
+      // Add footer image if enabled
+      if (settings.footer_enabled !== false && settings.footer_image_enabled !== false) {
+        const footerBase64 = await loadImageOrUrl(settings.footer_image_url || '', footerImage);
+        if (footerBase64) {
+          const img = new Image();
+          img.src = footerBase64;
+          await new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve;
+          });
+          
+          let footerWidth = 600;
+          let footerHeight = 60;
+          
+          if (img.width && img.height) {
+            const aspectRatio = img.width / img.height;
+            footerHeight = footerWidth / aspectRatio;
+            if (footerHeight > 200) {
+              footerHeight = 200;
+              footerWidth = footerHeight * aspectRatio;
+            }
+          }
+          
+          elements.push(
+            new Paragraph({
+              children: [
+                new ImageRun({
+                  data: footerBase64.split(',')[1],
+                  type: 'png',
+                  transformation: {
+                    width: footerWidth,
+                    height: footerHeight,
+                  },
+                }),
+              ],
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 300 },
+            })
+          );
+        }
+      }
+      
+      // Add page break after footer
+      elements.push(
+        new Paragraph({
+          text: '',
+          pageBreakBefore: true,
+        })
+      );
+      
+      return elements;
+    };
+
     // Helper function to create detailed alumni data table
     const createDetailedTable = (title: string, detailedData: any[]): (Paragraph | Table)[] => {
       const elements: (Paragraph | Table)[] = [];
@@ -2454,44 +2996,44 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               shading: { fill: argbToDocxShading('FF1D4E89') },
               verticalMerge: 'restart',
             }),
-            // QUARTER ONE (merges 3 columns)
+            // FIRST QUARTER (merges 3 columns)
             new TableCell({
               children: [
                 new Paragraph({
-                  children: [new TextRun({ text: 'QUARTER ONE', bold: true, color: 'FFFFFF' })],
+                  children: [new TextRun({ text: 'FIRST QUARTER', bold: true, color: 'FFFFFF' })],
                   alignment: AlignmentType.CENTER,
                 }),
               ],
               shading: { fill: argbToDocxShading('FF1D4E89') },
               columnSpan: 3,
             }),
-            // QUARTER TWO (merges 3 columns)
+            // SECOND QUARTER (merges 3 columns)
             new TableCell({
               children: [
                 new Paragraph({
-                  children: [new TextRun({ text: 'QUARTER TWO', bold: true, color: 'FFFFFF' })],
+                  children: [new TextRun({ text: 'SECOND QUARTER', bold: true, color: 'FFFFFF' })],
                   alignment: AlignmentType.CENTER,
                 }),
               ],
               shading: { fill: argbToDocxShading('FF1D4E89') },
               columnSpan: 3,
             }),
-            // QUARTER THREE (merges 3 columns)
+            // THIRD QUARTER (merges 3 columns)
             new TableCell({
               children: [
                 new Paragraph({
-                  children: [new TextRun({ text: 'QUARTER THREE', bold: true, color: 'FFFFFF' })],
+                  children: [new TextRun({ text: 'THIRD QUARTER', bold: true, color: 'FFFFFF' })],
                   alignment: AlignmentType.CENTER,
                 }),
               ],
               shading: { fill: argbToDocxShading('FF1D4E89') },
               columnSpan: 3,
             }),
-            // QUARTER FOUR (merges 3 columns)
+            // FOURTH QUARTER (merges 3 columns)
             new TableCell({
               children: [
                 new Paragraph({
-                  children: [new TextRun({ text: 'QUARTER FOUR', bold: true, color: 'FFFFFF' })],
+                  children: [new TextRun({ text: 'FOURTH QUARTER', bold: true, color: 'FFFFFF' })],
                   alignment: AlignmentType.CENTER,
                 }),
               ],
@@ -2681,6 +3223,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         })
       );
       
+      // Add footer BEFORE detailed alumni data
+      children.push(...await addWordFooter());
+      
       // Add detailed alumni data
       const detailedData = detailedDataByType['QPRO'] || [];
       children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
@@ -2695,6 +3240,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
       ];
       children.push(...createSummaryTable('CHED Statistics Summary', summaryData));
+      
+      // Add footer BEFORE detailed alumni data
+      children.push(...await addWordFooter());
       
       // Add detailed alumni data
       const detailedData = detailedDataByType['CHED'] || [];
@@ -2715,6 +3263,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       ];
       children.push(...createSummaryTable('AACUP Statistics Summary', summaryData));
       
+      // Add footer BEFORE detailed alumni data
+      children.push(...await addWordFooter());
+      
       // Add detailed alumni data
       const detailedData = detailedDataByType['AACUP'] || [];
       children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
@@ -2730,6 +3281,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       ];
       children.push(...createSummaryTable('SUC Statistics Summary', summaryData));
       
+      // Add footer BEFORE detailed alumni data
+      children.push(...await addWordFooter());
+      
       // Add detailed alumni data
       const detailedData = detailedDataByType['SUC'] || [];
       children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
@@ -2743,12 +3297,112 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       ];
       children.push(...createSummaryTable('High Position Statistics Summary', summaryData));
       
+      // Add footer BEFORE detailed alumni data
+      children.push(...await addWordFooter());
+      
       // Add detailed alumni data
-      const detailedData = detailedDataByType['HIGH_POSITION'] || [];
-      children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
+      let detailedData = detailedDataByType['HIGH_POSITION'] || [];
+      
+      // Use high_position_data from stats if available, otherwise filter detailed data
+      if (stats.high_position_data && Array.isArray(stats.high_position_data) && stats.high_position_data.length > 0) {
+        // Convert high_position_data format to detailed data format
+        detailedData = stats.high_position_data.map((hp: any) => ({
+          Program: hp.course || '',
+          Last_Name: hp.name?.split(' ').slice(-1)[0] || '',
+          First_Name: hp.name?.split(' ')[0] || '',
+          Middle_Name: hp.name?.split(' ').slice(1, -1).join(' ') || '',
+          Company_Name_Current: hp.company || '',
+          Position_Current: hp.position || '',
+        }));
+      } else if (detailedData.length > 0) {
+        // Filter detailed data to only high position alumni
+        detailedData = detailedData.filter((alumnus: any) => {
+          const position = (alumnus.Position_Current || alumnus.position_current || '').toLowerCase();
+          return position.includes('manager') || position.includes('director') || 
+                 position.includes('ceo') || position.includes('president') || 
+                 position.includes('vp') || position.includes('vice president') ||
+                 position.includes('head') || position.includes('chief') ||
+                 position.includes('executive') || position.includes('senior');
+        });
+      }
+      
+      // Always show detailed data section for consistency
+      // If detailedData is still empty, try to get it from stats
+      if (detailedData.length === 0 && stats.high_position_data && Array.isArray(stats.high_position_data) && stats.high_position_data.length > 0) {
+        detailedData = stats.high_position_data.map((hp: any) => ({
+          Program: hp.course || '',
+          Last_Name: hp.name?.split(' ').slice(-1)[0] || '',
+          First_Name: hp.name?.split(' ')[0] || '',
+          Middle_Name: hp.name?.split(' ').slice(1, -1).join(' ') || '',
+          Company_Name_Current: hp.company || '',
+          Position_Current: hp.position || '',
+        }));
+      }
+      
+      // Always show the detailed data section header and table
+      children.push(
+        new Paragraph({
+          text: 'High Position Detailed Alumni Data',
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: 400, after: 200 },
+        })
+      );
+      
+      const headers = headersHighPosition;
+      const rows = detailedData.map((row: any) => mapHighPositionRow(row));
+    
+      children.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            // Header row
+            new TableRow({
+              children: headers.map((header, idx) =>
+                new TableCell({
+                  children: [
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: header,
+                          bold: true,
+                          color: 'FFFFFF',
+                        }),
+                      ],
+                      alignment: AlignmentType.CENTER,
+                    }),
+                  ],
+                  shading: { fill: argbToDocxShading('FF1D4E89') },
+                  width: { size: idx === 0 ? 15 : idx === 1 ? 15 : idx === 2 ? 15 : idx === 3 ? 15 : idx === 4 ? 20 : 20, type: WidthType.PERCENTAGE },
+                })
+              ),
+            }),
+            // Data rows
+            ...rows.map((row) =>
+              new TableRow({
+                children: row.map((cell: any, idx: number) =>
+                  new TableCell({
+                    children: [
+                      new Paragraph({
+                        text: String(cell || ''),
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE },
+                      bottom: { style: BorderStyle.SINGLE },
+                      left: { style: BorderStyle.SINGLE },
+                      right: { style: BorderStyle.SINGLE },
+                    },
+                  })
+                ),
+              })
+            ),
+          ],
+        })
+      );
     } else if (exportType === 'ALL') {
-      // Summary for all types
-      for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP']) {
+      // PHASE 1: Summary for all types (summaries ONLY)
+      for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
         const stats = statsByType[type];
         if (!stats) continue;
 
@@ -2792,9 +3446,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Absorption Rate', '', `${stats.absorption_rate || 0}%`],
             ['High Position Rate', '', `${stats.high_position_rate || 0}%`]
           );
+        } else if (type === 'HIGH_POSITION') {
+          summaryData.push(
+            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+            ['High Position Alumni', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+            ['High Position Rate', '', `${stats.high_position_rate || 0}%`]
+          );
         }
 
-        children.push(...createSummaryTable(`${type} Statistics`, summaryData));
+        children.push(...createSummaryTable(`${type === 'HIGH_POSITION' ? 'High Position' : type} Statistics`, summaryData));
         
         // Add Employability Report by Program table for QPRO in ALL export
         if (type === 'QPRO') {
@@ -2844,22 +3504,22 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                   verticalMerge: 'restart',
                 }),
                 new TableCell({
-                  children: [new Paragraph({ children: [new TextRun({ text: 'QUARTER ONE', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  children: [new Paragraph({ children: [new TextRun({ text: 'FIRST QUARTER', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
                   shading: { fill: argbToDocxShading('FF1D4E89') },
                   columnSpan: 3,
                 }),
                 new TableCell({
-                  children: [new Paragraph({ children: [new TextRun({ text: 'QUARTER TWO', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  children: [new Paragraph({ children: [new TextRun({ text: 'SECOND QUARTER', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
                   shading: { fill: argbToDocxShading('FF1D4E89') },
                   columnSpan: 3,
                 }),
                 new TableCell({
-                  children: [new Paragraph({ children: [new TextRun({ text: 'QUARTER THREE', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  children: [new Paragraph({ children: [new TextRun({ text: 'THIRD QUARTER', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
                   shading: { fill: argbToDocxShading('FF1D4E89') },
                   columnSpan: 3,
                 }),
                 new TableCell({
-                  children: [new Paragraph({ children: [new TextRun({ text: 'QUARTER FOUR', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+                  children: [new Paragraph({ children: [new TextRun({ text: 'FOURTH QUARTER', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
                   shading: { fill: argbToDocxShading('FF1D4E89') },
                   columnSpan: 3,
                 }),
@@ -2969,212 +3629,112 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             })
           );
         }
+      }
+
+      // PHASE 2: Add footer BEFORE all detailed data
+      children.push(...await addWordFooter());
+
+      // PHASE 3: Add detailed alumni data for ALL types
+      for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
+        let detailedData = detailedDataByType[type] || [];
+        if (detailedData.length === 0) continue;
         
-        // Add detailed alumni data for each type
-        const detailedData = detailedDataByType[type] || [];
-        children.push(...createDetailedTable(`${type} Detailed Alumni Data`, detailedData));
-      }
-    }
-
-    // ========================================
-    // WORD FOOTER SECTION
-    // ========================================
-    // Add spacing before footer
-    children.push(
-      new Paragraph({
-        text: '',
-        spacing: { before: 800, after: 200 },
-      })
-    );
-
-    // Add signature section if enabled
-    if (settings.signature_enabled !== false && settings.footer_enabled !== false) {
-      // Create a container table to hold both signature sections side-by-side
-      children.push(
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          borders: {
-            top: { style: BorderStyle.NONE },
-            bottom: { style: BorderStyle.NONE },
-            left: { style: BorderStyle.NONE },
-            right: { style: BorderStyle.NONE },
-            insideHorizontal: { style: BorderStyle.NONE },
-            insideVertical: { style: BorderStyle.NONE },
-          },
-          rows: [
-            new TableRow({
-              children: [
-                // Left cell with Prepared by table
-                new TableCell({
-                  children: [
-                    new Table({
-                      width: { size: 100, type: WidthType.PERCENTAGE },
-                      borders: {
-                        top: { style: BorderStyle.SINGLE },
-                        bottom: { style: BorderStyle.SINGLE },
-                        left: { style: BorderStyle.SINGLE },
-                        right: { style: BorderStyle.SINGLE },
-                        insideHorizontal: { style: BorderStyle.SINGLE },
-                      },
-                      rows: [
-                        new TableRow({
+        // For HIGH_POSITION, filter to only show high position alumni
+        if (type === 'HIGH_POSITION') {
+          const stats = statsByType[type];
+          if (stats?.high_position_data && Array.isArray(stats.high_position_data) && stats.high_position_data.length > 0) {
+            detailedData = stats.high_position_data.map((hp: any) => ({
+              Program: hp.course || '',
+              Batch_Graduated: hp.year_graduated || hp.batch || '',
+              Last_Name: hp.name?.split(' ').slice(-1)[0] || '',
+              First_Name: hp.name?.split(' ')[0] || '',
+              Middle_Name: hp.name?.split(' ').slice(1, -1).join(' ') || '',
+              Company_Name_Current: hp.company || '',
+              Position_Current: hp.position || '',
+            }));
+          } else if (detailedData.length > 0) {
+            detailedData = detailedData.filter((alumnus: any) => {
+              const position = (alumnus.Position_Current || alumnus.position_current || '').toLowerCase();
+              return position.includes('manager') || position.includes('director') || 
+                     position.includes('ceo') || position.includes('president') || 
+                     position.includes('vp') || position.includes('vice president') ||
+                     position.includes('head') || position.includes('chief') ||
+                     position.includes('executive') || position.includes('senior');
+            });
+          }
+        }
+        
+        // Add detailed data table for this type
+        if (type === 'HIGH_POSITION') {
+          children.push(
+            new Paragraph({
+              text: 'High Position Detailed Alumni Data',
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 400, after: 200 },
+            })
+          );
+          
+          const headers = headersHighPosition;
+          const rows = detailedData.map((row: any) => mapHighPositionRow(row));
+          
+          children.push(
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              rows: [
+                new TableRow({
+                  children: headers.map((header, idx) =>
+                    new TableCell({
+                      children: [
+                        new Paragraph({
                           children: [
-                            new TableCell({
-                              children: [
-                                new Paragraph({
-                                  text: 'Prepared by:',
-                                  alignment: AlignmentType.CENTER,
-                                  spacing: { before: 0, after: 0 },
-                                }),
-                              ],
+                            new TextRun({
+                              text: header,
+                              bold: true,
+                              color: 'FFFFFF',
                             }),
                           ],
-                        }),
-                        new TableRow({
-                          children: [
-                            new TableCell({
-                              children: [
-                                new Paragraph({
-                                  children: [
-                                    new TextRun({
-                                      text: settings.prepared_by_name || 'MARIE JOY B. ALIT, Ph.D.',
-                                      bold: true,
-                                    }),
-                                  ],
-                                  alignment: AlignmentType.CENTER,
-                                  spacing: { before: 0, after: 0 },
-                                }),
-                              ],
-                            }),
-                          ],
+                          alignment: AlignmentType.CENTER,
                         }),
                       ],
-                    }),
-                    new Paragraph({
-                      text: settings.prepared_by_title || 'University Director for Alumni Affairs',
-                      alignment: AlignmentType.CENTER,
-                      spacing: { before: 50, after: 0 },
-                    }),
-                  ],
-                  width: { size: 50, type: WidthType.PERCENTAGE },
+                      shading: { fill: argbToDocxShading('FF1D4E89') },
+                      width: { size: idx === 0 ? 15 : idx === 1 ? 12 : idx === 2 ? 15 : idx === 3 ? 15 : idx === 4 ? 15 : idx === 5 ? 20 : 20, type: WidthType.PERCENTAGE },
+                    })
+                  ),
                 }),
-                // Right cell with Approved by table
-                new TableCell({
-                  children: [
-                    new Table({
-                      width: { size: 100, type: WidthType.PERCENTAGE },
-                      borders: {
-                        top: { style: BorderStyle.SINGLE },
-                        bottom: { style: BorderStyle.SINGLE },
-                        left: { style: BorderStyle.SINGLE },
-                        right: { style: BorderStyle.SINGLE },
-                        insideHorizontal: { style: BorderStyle.SINGLE },
-                      },
-                      rows: [
-                        new TableRow({
-                          children: [
-                            new TableCell({
-                              children: [
-                                new Paragraph({
-                                  text: 'Approved by:',
-                                  alignment: AlignmentType.CENTER,
-                                  spacing: { before: 0, after: 0 },
-                                }),
-                              ],
-                            }),
-                          ],
-                        }),
-                        new TableRow({
-                          children: [
-                            new TableCell({
-                              children: [
-                                new Paragraph({
-                                  children: [
-                                    new TextRun({
-                                      text: settings.approved_by_name || 'ROMEO P. MONTECILLO, Ph.D.',
-                                      bold: true,
-                                    }),
-                                  ],
-                                  alignment: AlignmentType.CENTER,
-                                  spacing: { before: 0, after: 0 },
-                                }),
-                              ],
-                            }),
-                          ],
-                        }),
-                      ],
-                    }),
-                    new Paragraph({
-                      text: settings.approved_by_title || 'Vice President for Student Affairs',
-                      alignment: AlignmentType.CENTER,
-                      spacing: { before: 50, after: 0 },
-                    }),
-                  ],
-                  width: { size: 50, type: WidthType.PERCENTAGE },
-                }),
+                ...rows.map((row) =>
+                  new TableRow({
+                    children: row.map((cell: any, idx: number) =>
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            text: String(cell || ''),
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        borders: {
+                          top: { style: BorderStyle.SINGLE },
+                          bottom: { style: BorderStyle.SINGLE },
+                          left: { style: BorderStyle.SINGLE },
+                          right: { style: BorderStyle.SINGLE },
+                        },
+                      })
+                    ),
+                  })
+                ),
               ],
-            }),
-          ],
-        }),
-        new Paragraph({
-          text: '',
-          spacing: { after: 200 },
-        })
-      );
-    }
-
-    // Add footer image if enabled
-    if (settings.footer_enabled !== false && settings.footer_image_enabled !== false) {
-      const footerBase64 = await loadImageOrUrl(settings.footer_image_url || '', footerImage);
-    if (footerBase64) {
-      children.push(
-        new Paragraph({
-          children: [
-            new ImageRun({
-              data: footerBase64.split(',')[1],
-              type: 'png',
-              transformation: {
-                width: 600,
-                  height: 30,
-              },
-            }),
-          ],
-          alignment: AlignmentType.CENTER,
-            spacing: { after: 100 },
-          })
-        );
+            })
+          );
+        } else {
+          children.push(...createDetailedTable(`${type} Detailed Alumni Data`, detailedData));
+        }
       }
     }
 
-    // Add generated date
-    const generatedDate = new Date().toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-    children.push(
-      new Paragraph({
-        text: `Generated on: ${generatedDate}`,
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 200 },
-      })
-    );
-
-    // Add footer text if footer enabled
-    if (settings.footer_enabled !== false) {
-      children.push(
-        new Paragraph({
-          text: settings.footer_text1 || 'Generated by Cebu Technological University Alumni Affairs Office',
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 100 },
-      }),
-      new Paragraph({
-          text: settings.footer_text2 || 'This report is generated automatically by the Alumni Tracking System',
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 100 },
-      })
-    );
-    }
+    // ========================================
+    // WORD FOOTER - NOW ADDED BEFORE DETAILED DATA
+    // ========================================
+    // Footer is now added BEFORE detailed alumni data in each section above using addWordFooter()
+    // No need to add footer here again
 
     // Create document
     const doc = new Document({
@@ -3335,10 +3895,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.mergeCells(`M${r}:O${r}`);
         sheet.mergeCells(`P${r}:R${r}`);
         
-        sheet.getCell(`G${r}`).value = 'QUARTER ONE';
-        sheet.getCell(`J${r}`).value = 'QUARTER TWO';
-        sheet.getCell(`M${r}`).value = 'QUARTER THREE';
-        sheet.getCell(`P${r}`).value = 'QUARTER FOUR';
+        sheet.getCell(`G${r}`).value = 'FIRST QUARTER';
+        sheet.getCell(`J${r}`).value = 'SECOND QUARTER';
+        sheet.getCell(`M${r}`).value = 'THIRD QUARTER';
+        sheet.getCell(`P${r}`).value = 'FOURTH QUARTER';
         
         ['G', 'J', 'M', 'P'].forEach(col => {
           sheet.getCell(`${col}${r}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -3405,6 +3965,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         });
         r += 2;
 
+        // Add institutional footer BEFORE detailed data
+        r = await addInstitutionalFooterToExcel(workbook, sheet, r);
+        r += 2; // Add spacing after footer
+
         sheet.getCell(`A${r}`).value = 'QPRO Detailed Alumni Data'; r++;
         const headerRow = sheet.addRow(qproHeaders);
         // Make headers bold with blue background and white text
@@ -3419,9 +3983,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r++;
         const mapped = sortAlumniData((detailedDataByType['QPRO'] || []).map(mapQPRORow));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
-
-        // Add institutional footer
-        await addInstitutionalFooterToExcel(workbook, sheet, r);
 
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
@@ -3494,6 +4055,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`B${r}`).value = generatedStats.total_alumni;
         sheet.getCell(`C${r}`).value = '100%'; r += 2;
 
+        // Add institutional footer BEFORE detailed data
+        r = await addInstitutionalFooterToExcel(workbook, sheet, r);
+        r += 2; // Add spacing after footer
+
         // Detailed
         sheet.getCell(`A${r}`).value = 'CHED Detailed Alumni Data'; r++;
         const headerRow = sheet.addRow(qproHeaders);
@@ -3509,9 +4074,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r++;
         const mapped = sortAlumniData((detailedDataByType['CHED'] || []).map(mapQPRORow));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
-
-        // Add institutional footer
-        await addInstitutionalFooterToExcel(workbook, sheet, r);
 
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
@@ -3593,6 +4155,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`B${r}`).value = generatedStats.total_alumni;
         sheet.getCell(`C${r}`).value = '100%'; r += 2;
 
+        // Add institutional footer BEFORE detailed data
+        r = await addInstitutionalFooterToExcel(workbook, sheet, r);
+        r += 2; // Add spacing after footer
+
         // Detailed
         sheet.getCell(`A${r}`).value = 'AACUP Detailed Alumni Data'; r++;
         const headerRow = sheet.addRow(qproHeaders);
@@ -3608,9 +4174,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r++;
         const mapped2 = sortAlumniData((detailedDataByType['AACUP'] || []).map(mapQPRORow));
         mapped2.forEach((vals) => { sheet.addRow(vals); r++; });
-
-        // Add institutional footer
-        await addInstitutionalFooterToExcel(workbook, sheet, r);
 
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
@@ -3655,21 +4218,36 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           };
         });
         r++;
-        // High Position metrics
+        // High Position metrics (Total Alumni first, matching PDF/Word format)
+        sheet.getCell(`A${r}`).value = 'Total Alumni';
+        sheet.getCell(`B${r}`).value = generatedStats.total_alumni;
+        sheet.getCell(`C${r}`).value = '100%'; r++;
         const hpCount = Number(generatedStats.high_position_count) || 0;
         sheet.getCell(`A${r}`).value = 'High Position Alumni';
         sheet.getCell(`B${r}`).value = hpCount;
         sheet.getCell(`C${r}`).value = `${pct(hpCount, generatedStats.total_alumni)}`; r++;
         sheet.getCell(`A${r}`).value = 'High Position Rate';
-        sheet.getCell(`C${r}`).value = `${generatedStats.high_position_rate || pct(hpCount, generatedStats.total_alumni)}%`; r++;
-        sheet.getCell(`A${r}`).value = 'Total Alumni';
-        sheet.getCell(`B${r}`).value = generatedStats.total_alumni;
-        sheet.getCell(`C${r}`).value = '100%'; r += 2;
+        sheet.getCell(`C${r}`).value = `${generatedStats.high_position_rate || pct(hpCount, generatedStats.total_alumni)}%`; r += 2;
 
         // Detailed: only high-position alumni with limited columns
+        // Always show detailed data section for consistency
         const headersHP = ['Program','Last_Name','First_Name','Middle_Name','Company_Name_Current','Position_Current'];
         sheet.getCell(`A${r}`).value = 'High Position Detailed Alumni Data'; r++;
-        sheet.addRow(headersHP); r++;
+        const headerRow = sheet.addRow(headersHP);
+        // Make headers bold with blue background and white text
+        headerRow.eachCell((cell) => {
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1D4E89' }
+          };
+        });
+        r++;
+
+        // Add institutional footer BEFORE detailed data
+        r = await addInstitutionalFooterToExcel(workbook, sheet, r);
+        r += 2; // Add spacing after footer
 
         const rows: any[] = [];
         if (generatedStats.high_position_data && Array.isArray(generatedStats.high_position_data)) {
@@ -3691,19 +4269,52 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           });
         } else {
           const raw = detailedDataByType['HIGH_POSITION'] || [];
+          // If raw data is empty, try to get from high_position_data in stats
+          if (raw.length === 0 && generatedStats.high_position_data && Array.isArray(generatedStats.high_position_data)) {
+            generatedStats.high_position_data.forEach((alumnus: any) => {
+              const course = alumnus.course || '';
+              const name = (alumnus.name || '').trim();
+              const parts = name.split(/\s+/);
+              const first = parts[0] || '';
+              const last = parts.length > 1 ? parts[parts.length - 1] : '';
+              const middle = parts.length > 2 ? parts.slice(1, parts.length - 1).join(' ') : '';
+              rows.push([
+                course,
+                last,
+                first,
+                middle,
+                alumnus.company || '',
+                alumnus.position || '',
+              ]);
+            });
+          } else {
           raw.forEach((row: any) => {
-            if (row['Position_Current']) {
+              // Check if it's a high position (either has Position_Current or matches high position criteria)
+              const position = (row['Position_Current'] || row['position_current'] || '').toLowerCase();
+              const isHighPosition = position && (
+                position.includes('manager') || position.includes('director') || 
+                position.includes('ceo') || position.includes('president') || 
+                position.includes('vp') || position.includes('vice president') ||
+                position.includes('head') || position.includes('chief') ||
+                position.includes('executive') || position.includes('senior')
+              );
+              
+              if (row['Position_Current'] || isHighPosition) {
               rows.push([
                 row['Program'] || '',
+                  row['Last_Name'] || '',
                 row['First_Name'] || '',
                 row['Middle_Name'] || '',
-                row['Last_Name'] || '',
                 row['Company_Name_Current'] || '',
                 row['Position_Current'] || '',
               ]);
             }
           });
         }
+        }
+        
+        // Add rows (even if empty, to show the table structure)
+        if (rows.length > 0) {
         // Respondents first: defined by having company or position
         rows.sort((a, b) => {
           const aAns = (a[4] && `${a[4]}`.trim()) || (a[5] && `${a[5]}`.trim()) ? 1 : 0;
@@ -3711,9 +4322,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           return bAns - aAns;
         });
         rows.forEach((vals) => { sheet.addRow(vals); r++; });
-
-        // Add institutional footer
-        await addInstitutionalFooterToExcel(workbook, sheet, r);
+        }
 
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
@@ -3794,6 +4403,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`B${r}`).value = generatedStats.total_alumni;
         sheet.getCell(`C${r}`).value = '100%'; r += 2;
 
+        // Add institutional footer BEFORE detailed data
+        r = await addInstitutionalFooterToExcel(workbook, sheet, r);
+        r += 2; // Add spacing after footer
+
         // Detailed
         sheet.getCell(`A${r}`).value = 'SUC Detailed Alumni Data'; r++;
         const headerRow = sheet.addRow(qproHeaders);
@@ -3809,9 +4422,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r++;
         const mapped = sortAlumniData((detailedDataByType['SUC'] || []).map(mapQPRORow));
         mapped.forEach((vals) => { sheet.addRow(vals); r++; });
-
-        // Add institutional footer
-        await addInstitutionalFooterToExcel(workbook, sheet, r);
 
         // Auto size and wrap
         autoSizeAndWrapSheet(sheet);
@@ -3847,13 +4457,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         worksheet.getCell(`B${rowIdx}`).value = selectedProgram || 'All';
         worksheet.getCell(`A${rowIdx}`).font = { bold: true };
         rowIdx += 2;
+        
+        // PHASE 1: Add ONLY summaries for all types
         for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
           const stats = statsByType[type];
           if (!stats) {
             console.warn(`No stats found for type: ${type}`);
             continue;
           }
-          worksheet.getCell(`A${rowIdx}`).value = `${type} Statistics`;
+          worksheet.getCell(`A${rowIdx}`).value = `${type === 'HIGH_POSITION' ? 'High Position' : type} Statistics`;
           worksheet.getCell(`A${rowIdx}`).font = { bold: true };
           rowIdx++;
           worksheet.getCell(`A${rowIdx}`).value = 'Metric';
@@ -3931,10 +4543,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.mergeCells(`M${rowIdx}:O${rowIdx}`);
             worksheet.mergeCells(`P${rowIdx}:R${rowIdx}`);
             
-            worksheet.getCell(`G${rowIdx}`).value = 'QUARTER ONE';
-            worksheet.getCell(`J${rowIdx}`).value = 'QUARTER TWO';
-            worksheet.getCell(`M${rowIdx}`).value = 'QUARTER THREE';
-            worksheet.getCell(`P${rowIdx}`).value = 'QUARTER FOUR';
+            worksheet.getCell(`G${rowIdx}`).value = 'FIRST QUARTER';
+            worksheet.getCell(`J${rowIdx}`).value = 'SECOND QUARTER';
+            worksheet.getCell(`M${rowIdx}`).value = 'THIRD QUARTER';
+            worksheet.getCell(`P${rowIdx}`).value = 'FOURTH QUARTER';
             
             ['G', 'J', 'M', 'P'].forEach(col => {
               worksheet.getCell(`${col}${rowIdx}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -4194,16 +4806,37 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             });
           }
           rowIdx++;
+        }
+        
+        // PHASE 2: Add footer BEFORE all detailed data
+        rowIdx = await addInstitutionalFooterToExcel(workbook, worksheet, rowIdx);
+        rowIdx += 2; // Add spacing after footer
+        
+        // PHASE 3: Add detailed data for ALL types
+        worksheet.getCell(`A${rowIdx}`).value = '=== DETAILED ALUMNI DATA - ALL TYPES ===';
+        worksheet.getCell(`A${rowIdx}`).font = { bold: true, size: 12 };
+        rowIdx += 2;
+        
+        for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
+          const stats = statsByType[type];
           // Skip all chart images in ALL export
           // Build tailored detailed tables per type
           const rows = detailedDataByType[type] as any[];
-          if (Array.isArray(rows) && rows.length > 0) {
-            worksheet.getCell(`A${rowIdx}`).value = `${type} Detailed Alumni Data`;
-            rowIdx++;
             if (type === 'HIGH_POSITION') {
+            // For HIGH_POSITION, prepare the data
+            let highPositionRows: any[] = [];
+            if (stats.high_position_data && Array.isArray(stats.high_position_data) && stats.high_position_data.length > 0) {
+              // Convert high_position_data format to detailed data format
+              highPositionRows = stats.high_position_data.map((hp: any) => ({
+                Program: hp.course || '',
+                Last_Name: hp.name?.split(' ').slice(-1)[0] || '',
+                First_Name: hp.name?.split(' ')[0] || '',
+                Middle_Name: hp.name?.split(' ').slice(1, -1).join(' ') || '',
+                Company_Name_Current: hp.company || '',
+                Position_Current: hp.position || '',
+              }));
+            } else if (Array.isArray(rows) && rows.length > 0) {
               // Filter to only high-position alumni if high_position_data is not available
-              let highPositionRows = rows;
-              if (!stats.high_position_data || !Array.isArray(stats.high_position_data)) {
                 highPositionRows = rows.filter((alumnus: any) => {
                   const position = (alumnus.Position_Current || alumnus.position_current || '').toLowerCase();
                   return position.includes('manager') || position.includes('director') || 
@@ -4212,10 +4845,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                          position.includes('head') || position.includes('chief') ||
                          position.includes('executive') || position.includes('senior');
                 });
-              } else {
-                highPositionRows = stats.high_position_data;
               }
               
+            // Always show detailed data section for HIGH_POSITION
+            worksheet.getCell(`A${rowIdx}`).value = 'High Position Detailed Alumni Data';
+            rowIdx++;
               const mappedHP = highPositionRows.map(mapHighPositionRow);
               const headerRow = worksheet.addRow(headersHighPosition);
               // Make headers bold with blue background and white text
@@ -4229,63 +4863,62 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               });
               rowIdx++;
               mappedHP.forEach((vals: (string | number)[]) => { worksheet.addRow(vals); rowIdx++; });
-              // Excel sheet names must be <= 31 chars; use a concise, clear name
-              const detailSheet = workbook.addWorksheet('High Position Details');
-              
-              // Add institutional header to detail sheet
-              let detailRowIdx = await addInstitutionalHeaderToExcel(workbook, detailSheet, 1);
-              
-              // Add summary metrics to HIGH_POSITION sheet
-              detailSheet.getCell(`A${detailRowIdx}`).value = 'HIGH_POSITION Statistics Summary';
-              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
-              detailRowIdx++;
-              detailSheet.getCell(`A${detailRowIdx}`).value = 'Generated Date';
-              detailSheet.getCell(`B${detailRowIdx}`).value = new Date().toLocaleDateString();
-              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
-              detailRowIdx++;
-              detailSheet.getCell(`A${detailRowIdx}`).value = 'Year Filter';
-              detailSheet.getCell(`B${detailRowIdx}`).value = selectedYear || 'ALL';
-              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
-              detailRowIdx++;
-              detailSheet.getCell(`A${detailRowIdx}`).value = 'Program Filter';
-              detailSheet.getCell(`B${detailRowIdx}`).value = selectedProgram || 'ALL';
-              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
-              detailRowIdx += 2;
-              detailSheet.getCell(`A${detailRowIdx}`).value = '=== SUMMARY STATISTICS ===';
-              detailRowIdx++;
-              detailSheet.getCell(`A${detailRowIdx}`).value = 'Metric';
-              detailSheet.getCell(`B${detailRowIdx}`).value = 'Value';
-              detailSheet.getCell(`C${detailRowIdx}`).value = 'Percentage';
-              // Make summary headers bold with blue background and white text
+            
+            // Also create a separate complete worksheet for HIGH_POSITION
+            const hpDetailSheet = workbook.addWorksheet('High Position Statistics');
+            let hpDetailRowIdx = await addInstitutionalHeaderToExcel(workbook, hpDetailSheet, 1);
+            
+            // Add metadata
+            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).value = 'Generated Date';
+            hpDetailSheet.getCell(`B${hpDetailRowIdx}`).value = new Date().toLocaleDateString();
+            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).font = { bold: true };
+            hpDetailRowIdx++;
+            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).value = 'Year Filter';
+            hpDetailSheet.getCell(`B${hpDetailRowIdx}`).value = selectedYear || 'ALL';
+            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).font = { bold: true };
+            hpDetailRowIdx++;
+            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).value = 'Program Filter';
+            hpDetailSheet.getCell(`B${hpDetailRowIdx}`).value = selectedProgram || 'ALL';
+            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).font = { bold: true };
+            hpDetailRowIdx += 2;
+            
+            // Add summary statistics
+            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).value = '=== SUMMARY STATISTICS ===';
+            hpDetailRowIdx++;
+            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).value = 'Metric';
+            hpDetailSheet.getCell(`B${hpDetailRowIdx}`).value = 'Value';
+            hpDetailSheet.getCell(`C${hpDetailRowIdx}`).value = 'Percentage';
               ['A', 'B', 'C'].forEach(col => {
-                detailSheet.getCell(`${col}${detailRowIdx}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                detailSheet.getCell(`${col}${detailRowIdx}`).fill = {
+              hpDetailSheet.getCell(`${col}${hpDetailRowIdx}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+              hpDetailSheet.getCell(`${col}${hpDetailRowIdx}`).fill = {
                   type: 'pattern',
                   pattern: 'solid',
                   fgColor: { argb: 'FF1D4E89' }
                 };
               });
-              detailRowIdx++;
-              
-              detailSheet.getCell(`A${detailRowIdx}`).value = 'Total Alumni';
-              detailSheet.getCell(`B${detailRowIdx}`).value = stats.total_alumni || 0;
-              detailSheet.getCell(`C${detailRowIdx}`).value = '100%';
-              detailRowIdx++;
-              detailSheet.getCell(`A${detailRowIdx}`).value = 'High Position Alumni';
-              detailSheet.getCell(`B${detailRowIdx}`).value = stats.high_position_count || 0;
-              detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.high_position_count, stats.total_alumni);
-              detailRowIdx++;
-              detailSheet.getCell(`A${detailRowIdx}`).value = 'High Position Rate';
-              detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.high_position_rate || 0}%`;
-              detailRowIdx++;
-              
-              detailRowIdx += 2;
-              detailSheet.getCell(`A${detailRowIdx}`).value = '=== HIGH POSITION DETAILED ALUMNI DATA ===';
-              detailRowIdx++;
-              
-              const detailHeaderRow = detailSheet.addRow(headersHighPosition);
-              // Make headers bold with blue background and white text
-              detailHeaderRow.eachCell((cell) => {
+            hpDetailRowIdx++;
+            
+            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).value = 'Total Alumni';
+            hpDetailSheet.getCell(`B${hpDetailRowIdx}`).value = stats.total_alumni || 0;
+            hpDetailSheet.getCell(`C${hpDetailRowIdx}`).value = '100%';
+            hpDetailRowIdx++;
+            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).value = 'High Position Alumni';
+            hpDetailSheet.getCell(`B${hpDetailRowIdx}`).value = stats.high_position_count || 0;
+            hpDetailSheet.getCell(`C${hpDetailRowIdx}`).value = pct(stats.high_position_count, stats.total_alumni);
+            hpDetailRowIdx++;
+            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).value = 'High Position Rate';
+            hpDetailSheet.getCell(`C${hpDetailRowIdx}`).value = `${stats.high_position_rate || 0}%`;
+            hpDetailRowIdx += 2;
+            
+            // Add footer BEFORE detailed data
+            hpDetailRowIdx = await addInstitutionalFooterToExcel(workbook, hpDetailSheet, hpDetailRowIdx);
+            hpDetailRowIdx += 2; // Add spacing after footer
+            
+            // Add detailed data
+            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).value = 'High Position Detailed Alumni Data';
+            hpDetailRowIdx++;
+            const hpDetailHeaderRow = hpDetailSheet.addRow(headersHighPosition);
+            hpDetailHeaderRow.eachCell((cell) => {
                 cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
                 cell.fill = {
                   type: 'pattern',
@@ -4293,18 +4926,16 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                   fgColor: { argb: 'FF1D4E89' }
                 };
               });
-              detailRowIdx++;
+            hpDetailRowIdx++;
               mappedHP.forEach((vals: (string | number)[]) => { 
-                detailSheet.addRow(vals);
-                detailRowIdx++;
-              });
-              
-              // Add institutional footer to detail sheet
-              await addInstitutionalFooterToExcel(workbook, detailSheet, detailRowIdx);
-              
-              autoSizeAndWrapSheet(detailSheet);
-            } else {
-              const mapped = sortAlumniData(rows.map(mapQPRORow));
+              hpDetailSheet.addRow(vals); 
+              hpDetailRowIdx++; 
+            });
+            
+            autoSizeAndWrapSheet(hpDetailSheet);
+          } else if (Array.isArray(rows) && rows.length > 0) {
+            worksheet.getCell(`A${rowIdx}`).value = `${type} Detailed Alumni Data`;
+            rowIdx++;
               const headerRow = worksheet.addRow(qproHeaders);
               // Make headers bold with blue background and white text
               headerRow.eachCell((cell) => {
@@ -4316,16 +4947,14 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                 };
               });
               rowIdx++;
+            const mapped = sortAlumniData(rows.map(mapQPRORow));
               mapped.forEach((vals) => { worksheet.addRow(vals); rowIdx++; });
-              const detailSheet = workbook.addWorksheet(`${type} Detailed Alumni Data`);
               
-              // Add institutional header to detail sheet
+            // Also create a separate complete worksheet for this type
+            const detailSheet = workbook.addWorksheet(`${type} Statistics`);
               let detailRowIdx = await addInstitutionalHeaderToExcel(workbook, detailSheet, 1);
               
-              // Add summary metrics to individual sheets
-              detailSheet.getCell(`A${detailRowIdx}`).value = `${type} Statistics Summary`;
-              detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
-              detailRowIdx++;
+            // Add metadata
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Generated Date';
               detailSheet.getCell(`B${detailRowIdx}`).value = new Date().toLocaleDateString();
               detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
@@ -4338,12 +4967,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               detailSheet.getCell(`B${detailRowIdx}`).value = selectedProgram || 'ALL';
               detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
               detailRowIdx += 2;
+            
+            // Add summary statistics for this type
               detailSheet.getCell(`A${detailRowIdx}`).value = '=== SUMMARY STATISTICS ===';
               detailRowIdx++;
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Metric';
               detailSheet.getCell(`B${detailRowIdx}`).value = 'Value';
               detailSheet.getCell(`C${detailRowIdx}`).value = 'Percentage';
-              // Make summary headers bold with blue background and white text
               ['A', 'B', 'C'].forEach(col => {
                 detailSheet.getCell(`${col}${detailRowIdx}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
                 detailSheet.getCell(`${col}${detailRowIdx}`).fill = {
@@ -4374,103 +5004,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                 detailSheet.getCell(`A${detailRowIdx}`).value = 'Untracked';
                 detailSheet.getCell(`B${detailRowIdx}`).value = stats.untracked_count || 0;
                 detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.untracked_count, stats.total_alumni);
-                detailRowIdx += 2;
-                
-                // Add Employability Report by Program table for QPRO
-                detailSheet.getCell(`A${detailRowIdx}`).value = '=== EMPLOYABILITY REPORT BY PROGRAM ===';
                 detailRowIdx++;
-                
-                const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
-                
-                // First header row with overall stats and quarter labels
-                const progHeaderRow = detailSheet.addRow([
-                  'PROGRAMS', 'TOTAL', 'E', 'UE', 'NT', 'GT', '', '', '', '', '', '', '', '', '', '', '', ''
-                ]);
-                progHeaderRow.eachCell((cell, colNumber) => {
-                  cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                  cell.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FF1D4E89' }
-                  };
-                  cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                });
-                
-                // Merge cells for quarter labels
-                detailSheet.mergeCells(`G${detailRowIdx}:I${detailRowIdx}`);
-                detailSheet.mergeCells(`J${detailRowIdx}:L${detailRowIdx}`);
-                detailSheet.mergeCells(`M${detailRowIdx}:O${detailRowIdx}`);
-                detailSheet.mergeCells(`P${detailRowIdx}:R${detailRowIdx}`);
-                
-                detailSheet.getCell(`G${detailRowIdx}`).value = 'QUARTER ONE';
-                detailSheet.getCell(`J${detailRowIdx}`).value = 'QUARTER TWO';
-                detailSheet.getCell(`M${detailRowIdx}`).value = 'QUARTER THREE';
-                detailSheet.getCell(`P${detailRowIdx}`).value = 'QUARTER FOUR';
-                
-                ['G', 'J', 'M', 'P'].forEach(col => {
-                  detailSheet.getCell(`${col}${detailRowIdx}`).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                  detailSheet.getCell(`${col}${detailRowIdx}`).fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FF1D4E89' }
-                  };
-                  detailSheet.getCell(`${col}${detailRowIdx}`).alignment = { horizontal: 'center', vertical: 'middle' };
-                });
-                detailRowIdx++;
-                
-                // Second header row
-                const progSubHeaderRow = detailSheet.addRow([
-                  '', '', '', '', '', '', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT'
-                ]);
-                progSubHeaderRow.eachCell((cell, colNumber) => {
-                  cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                  cell.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FF1D4E89' }
-                  };
-                  cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                });
-                detailRowIdx++;
-                
-                // Add data rows
-                programBreakdown.forEach(progData => {
-                  const progRow = detailSheet.addRow([
-                    progData.program,
-                    progData.total,
-                    progData.employed,
-                    progData.unemployed,
-                    progData.notTracked,
-                    progData.trackingRate,
-                    progData.q1.employed,
-                    progData.q1.unemployed,
-                    progData.q1.trackingRate,
-                    progData.q2.employed,
-                    progData.q2.unemployed,
-                    progData.q2.trackingRate,
-                    progData.q3.employed,
-                    progData.q3.unemployed,
-                    progData.q3.trackingRate,
-                    progData.q4.employed,
-                    progData.q4.unemployed,
-                    progData.q4.trackingRate,
-                  ]);
-                  
-                  // Style TOTAL row
-                  if (progData.isTotal) {
-                    progRow.eachCell((cell) => {
-                      cell.font = { bold: true };
-                      cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FFFFFFFF' }
-                      };
-                    });
-                  }
-                  
-                  detailRowIdx++;
-                });
-                detailRowIdx += 2;
               } else if (type === 'CHED') {
                 detailSheet.getCell(`A${detailRowIdx}`).value = 'Total Alumni';
                 detailSheet.getCell(`B${detailRowIdx}`).value = stats.total_alumni || 0;
@@ -4479,10 +5013,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                 detailSheet.getCell(`A${detailRowIdx}`).value = 'Pursuing Further Study';
                 detailSheet.getCell(`B${detailRowIdx}`).value = stats.pursuing_further_study || 0;
                 detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.pursuing_further_study, stats.total_alumni);
-                detailRowIdx++;
-                detailSheet.getCell(`A${detailRowIdx}`).value = 'Not Pursuing';
-                detailSheet.getCell(`B${detailRowIdx}`).value = (stats.total_alumni || 0) - (stats.pursuing_further_study || 0);
-                detailSheet.getCell(`C${detailRowIdx}`).value = pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni);
                 detailRowIdx++;
                 detailSheet.getCell(`A${detailRowIdx}`).value = 'Further Study Rate';
                 detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.further_study_rate || 0}%`;
@@ -4503,10 +5033,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                 detailSheet.getCell(`A${detailRowIdx}`).value = 'High Position';
                 detailSheet.getCell(`B${detailRowIdx}`).value = stats.high_position_count || 0;
                 detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.high_position_count, stats.total_alumni);
-                detailRowIdx++;
-                detailSheet.getCell(`A${detailRowIdx}`).value = 'Other Positions';
-                detailSheet.getCell(`B${detailRowIdx}`).value = (stats.total_alumni || 0) - (stats.high_position_count || 0);
-                detailSheet.getCell(`C${detailRowIdx}`).value = pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni);
                 detailRowIdx++;
                 detailSheet.getCell(`A${detailRowIdx}`).value = 'Government';
                 detailSheet.getCell(`B${detailRowIdx}`).value = stats.public_count || 0;
@@ -4553,11 +5079,15 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               }
               
               detailRowIdx += 2;
-              detailSheet.getCell(`A${detailRowIdx}`).value = `=== ${type} DETAILED ALUMNI DATA ===`;
-              detailRowIdx++;
               
+            // Add footer BEFORE detailed data
+            detailRowIdx = await addInstitutionalFooterToExcel(workbook, detailSheet, detailRowIdx);
+            detailRowIdx += 2; // Add spacing after footer
+              
+            // Add detailed data
+            detailSheet.getCell(`A${detailRowIdx}`).value = `${type} Detailed Alumni Data`;
+            detailRowIdx++;
               const detailHeaderRow = detailSheet.addRow(qproHeaders);
-              // Make headers bold with blue background and white text
               detailHeaderRow.eachCell((cell) => {
                 cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
                 cell.fill = {
@@ -4572,11 +5102,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                 detailRowIdx++;
               });
               
-              // Add institutional footer to detail sheet
-              await addInstitutionalFooterToExcel(workbook, detailSheet, detailRowIdx);
-              
               autoSizeAndWrapSheet(detailSheet);
-            }
           }
         }
       } else {
@@ -4772,6 +5298,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         }
         // Add extra buffer rows to prevent overlap
         rowIdx += 5; // fixed buffer to avoid relying on lastRow
+        
+        // Add institutional footer BEFORE detailed data
+        rowIdx = await addInstitutionalFooterToExcel(workbook, worksheet, rowIdx);
+        rowIdx += 2; // Add spacing after footer
+        
         // Add detailed data for this section (same as ALL export)
         let lastHeader: string[] | null = null;
         const rows = detailedDataByType[generatedStats.type] as any[];
@@ -4825,8 +5356,8 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         (workbook as any).worksheets.forEach((s: ExcelJS.Worksheet) => autoSizeAndWrapSheet(s));
       }
 
-      // Add institutional footer to main worksheet
-      await addInstitutionalFooterToExcel(workbook, worksheet, rowIdx);
+      // Footer is now added BEFORE detailed data in each section above
+      // No need to add footer here again
 
       // Download the Excel file
       const buffer = await workbook.xlsx.writeBuffer();

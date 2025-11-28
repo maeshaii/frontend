@@ -541,7 +541,8 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 20px;
+  padding: 20px 20px 20px 20px;
+  padding-top: 80px; /* Extra top padding so first messages start lower, allowing reaction picker to be visible */
   background: var(--background-secondary);
   position: relative;
   min-height: 0; /* Important: allows flex item to shrink below content size */
@@ -554,6 +555,7 @@
   gap: 20px;
   position: relative;
   z-index: 1;
+  overflow: visible;
 }
 
 /* Date Separator */
@@ -579,6 +581,8 @@
   flex-direction: column;
   margin-bottom: 20px;
   gap: 8px;
+  overflow: visible;
+  position: relative;
 }
 
 .message-group.sent {
@@ -595,6 +599,8 @@
   gap: 8px;
   margin-bottom: 8px;
   max-width: 70%;
+  overflow: visible;
+  position: relative;
 }
 
 .message-item.sent {
@@ -634,6 +640,8 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  overflow: visible;
+  position: relative;
 }
 
 .message-sender {
@@ -1225,6 +1233,7 @@
   
   .messages-container {
     padding: 16px;
+    padding-top: 80px; /* Extra top padding so first messages start lower, allowing reaction picker to be visible */
   }
   
   .message-bubble {
@@ -1778,6 +1787,7 @@
   
   .messages-container {
     padding: 16px;
+    padding-top: 80px; /* Extra top padding so first messages start lower, allowing reaction picker to be visible */
   }
   
   .input-container {

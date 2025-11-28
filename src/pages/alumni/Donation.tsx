@@ -556,7 +556,7 @@ const DonationPage: React.FC = () => {
               p: 3,
               borderRadius: 3,
               boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-              background: '#c62828',
+              background: '#2e7d32',
               color: 'white'
             }}
           >
@@ -610,7 +610,7 @@ const DonationPage: React.FC = () => {
           }}>
             <Typography variant="h6" component="div" fontWeight="bold" sx={{ 
               mb: 2,
-              color: '#c62828',
+              color: '#2e7d32',
               display: 'flex',
               alignItems: 'center',
               gap: 1,
@@ -628,7 +628,7 @@ const DonationPage: React.FC = () => {
                   width: 8, 
                   height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#c62828',
+                  bgcolor: '#2e7d32',
                   mr: 1.5,
                   mt: 0.75,
                   flexShrink: 0
@@ -642,7 +642,7 @@ const DonationPage: React.FC = () => {
                   width: 8, 
                   height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#c62828',
+                  bgcolor: '#2e7d32',
                   mr: 1.5,
                   mt: 0.75,
                   flexShrink: 0
@@ -656,7 +656,7 @@ const DonationPage: React.FC = () => {
                   width: 8, 
                   height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#c62828',
+                  bgcolor: '#2e7d32',
                   mr: 1.5,
                   mt: 0.75,
                   flexShrink: 0
@@ -670,7 +670,7 @@ const DonationPage: React.FC = () => {
                   width: 8, 
                   height: 8, 
                   borderRadius: '50%', 
-                  bgcolor: '#c62828',
+                  bgcolor: '#2e7d32',
                   mr: 1.5,
                   mt: 0.75,
                   flexShrink: 0

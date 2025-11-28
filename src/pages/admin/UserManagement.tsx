@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../admin/global/sidebar';
-import { api, updateUserStatus, verifyAdminPassword } from '../../services/api';
+import { api, updateUserStatus } from '../../services/api';
 import PasswordVisibilityIcon from '../../components/PasswordVisibilityIcon';
 import { toast } from '../../utils/toast';
 
@@ -53,6 +53,52 @@ interface User {
     user_status?: string;
 }
 
+interface CreateUserFormData {
+  acc_username: string;
+  f_name: string;
+  m_name: string;
+  l_name: string;
+  email: string;
+  phone_number: string;
+  gender: string;
+  account_type: '' | 'alumni' | 'peso' | 'coordinator' | 'ojt';
+  acc_password: string;
+  acc_password_confirm: string;
+  course: string;
+  section: string;
+  year_graduated: string;
+  address: string;
+  birthdate: string;
+  ojt_start_date: string;
+  ojt_end_date: string;
+  job_code: string;
+}
+
+const REQUIRED_FIELD_CONFIG: Record<'alumni' | 'peso' | 'coordinator', Array<{ key: keyof CreateUserFormData; label: string }>> = {
+  alumni: [
+    { key: 'f_name', label: 'First Name' },
+    { key: 'l_name', label: 'Last Name' },
+    { key: 'gender', label: 'Gender' },
+    { key: 'email', label: 'Email' },
+    { key: 'phone_number', label: 'Phone Number' },
+    { key: 'birthdate', label: 'Birthdate' },
+    { key: 'year_graduated', label: 'Year Graduated' },
+    { key: 'course', label: 'Program' },
+    { key: 'address', label: 'Address' },
+  ],
+  peso: [
+    { key: 'acc_password', label: 'Password' },
+    { key: 'acc_password_confirm', label: 'Confirm Password' },
+  ],
+  coordinator: [
+    { key: 'course', label: 'Program' },
+    { key: 'acc_password', label: 'Password' },
+    { key: 'acc_password_confirm', label: 'Confirm Password' },
+  ],
+};
+
+const REQUIRED_ASTERISK_STYLE = { color: '#dc2626', marginLeft: '4px' };
+
 const UserManagement: React.FC = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
@@ -78,19 +124,13 @@ const UserManagement: React.FC = () => {
   const [pendingStatusAction, setPendingStatusAction] = useState<'activate' | 'deactivate' | null>(null);
   const [accountFilter, setAccountFilter] = useState<'all' | 'alumni' | 'ojt'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [securityVerified, setSecurityVerified] = useState(false);
-  const [showSecurityModal, setShowSecurityModal] = useState(false);
-  const [securityPassword, setSecurityPassword] = useState('');
-  const [securityError, setSecurityError] = useState('');
-  const [securityLoading, setSecurityLoading] = useState(false);
-  const [showSecurityPassword, setShowSecurityPassword] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const [emailValue, setEmailValue] = useState('');
   const [emailLoading, setEmailLoading] = useState(false);
   const userUpdatesSocketRef = useRef<WebSocket | null>(null);
   
   // Create user form state
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<CreateUserFormData>({
     acc_username: '',
     f_name: '',
     m_name: '',
@@ -189,31 +229,11 @@ const UserManagement: React.FC = () => {
     }
   }, []);
 
-  // Check if already verified in this session
   useEffect(() => {
-    const sessionVerified = sessionStorage.getItem('userManagementVerified');
-    if (sessionVerified === 'true') {
-      setSecurityVerified(true);
-      setShowSecurityModal(false);
-    } else {
-      setShowSecurityModal(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!securityVerified) return;
     fetchUsers();
-  }, [securityVerified, fetchUsers]);
+  }, [fetchUsers]);
 
   useEffect(() => {
-    if (!securityVerified) {
-      if (userUpdatesSocketRef.current) {
-        userUpdatesSocketRef.current.close(1000, 'Security verification revoked');
-        userUpdatesSocketRef.current = null;
-      }
-      return;
-    }
-
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
     const token = localStorage.getItem('accessToken');
@@ -255,7 +275,7 @@ const UserManagement: React.FC = () => {
         userUpdatesSocketRef.current = null;
       }
     };
-  }, [securityVerified, fetchUsers]);
+  }, [fetchUsers]);
 
   // Reset password form and email when selected user changes
   useEffect(() => {
@@ -381,31 +401,6 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  const handleSecuritySubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!securityPassword.trim()) {
-      setSecurityError('Password is required');
-      return;
-    }
-    try {
-      setSecurityLoading(true);
-      setSecurityError('');
-      await verifyAdminPassword(securityPassword.trim());
-      setSecurityVerified(true);
-      // Store verification in sessionStorage so it persists for the session
-      sessionStorage.setItem('userManagementVerified', 'true');
-      setShowSecurityModal(false);
-      setSecurityPassword('');
-      setShowSecurityPassword(false);
-      await fetchUsers();
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Verification failed';
-      setSecurityError(message);
-    } finally {
-      setSecurityLoading(false);
-    }
-  };
-
   const closeDetailsModal = () => {
     setShowDetailsModal(false);
     setSelectedUser(null);
@@ -506,6 +501,26 @@ const UserManagement: React.FC = () => {
       return;
     }
 
+    if (
+      formData.account_type === 'alumni' ||
+      formData.account_type === 'peso' ||
+      formData.account_type === 'coordinator'
+    ) {
+      const requiredFields = REQUIRED_FIELD_CONFIG[formData.account_type];
+      for (const field of requiredFields) {
+        const rawValue = formData[field.key] || '';
+        const normalizedValue =
+          field.key === 'phone_number' ? rawValue.replace(/\D/g, '') : rawValue.trim();
+
+        if (!normalizedValue) {
+          const message = `${field.label} is required`;
+          setError(message);
+          toast.error(message);
+          return;
+        }
+      }
+    }
+
     const requiredNameFields: Array<{ value: string; label: string }> = [
       { value: (formData.f_name || '').trim(), label: 'First Name' },
       { value: (formData.l_name || '').trim(), label: 'Last Name' },
@@ -575,6 +590,16 @@ const UserManagement: React.FC = () => {
       if (phoneDigits.length !== 11) {
         setError('Phone number must be exactly 11 digits');
         toast.error('Phone number must be exactly 11 digits');
+        return;
+      }
+    }
+
+    if (formData.account_type === 'alumni') {
+      const email = (formData.email || '').trim();
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(email)) {
+        setError('Please enter a valid email address (e.g., user@gmail.com)');
+        toast.error('Please enter a valid email address (e.g., user@gmail.com)');
         return;
       }
     }
@@ -704,6 +729,10 @@ const UserManagement: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    const accountTypeValue: CreateUserFormData['account_type'] =
+      name === 'account_type'
+        ? (value as CreateUserFormData['account_type'])
+        : formData.account_type;
     
     // If account type is selected, show the rest of the form
     if (name === 'account_type') {
@@ -712,12 +741,12 @@ const UserManagement: React.FC = () => {
     
     // If account type changes, clear password fields and handle account-specific logic
     if (name === 'account_type') {
-      if (value === 'coordinator' || value === 'peso') {
+      if (accountTypeValue === 'coordinator' || accountTypeValue === 'peso') {
         // Clear all other fields except username and password for coordinator/peso
         setFormData(prev => {
           const base = {
             ...prev,
-            account_type: value,
+            account_type: accountTypeValue,
             f_name: '',
             m_name: '',
             l_name: '',
@@ -735,24 +764,29 @@ const UserManagement: React.FC = () => {
             acc_password: '',
             acc_password_confirm: ''
           };
-          if (value === 'coordinator') {
+          if (accountTypeValue === 'coordinator') {
             // Clean up course value - remove N/A if present
             const cleanedCourse = (prev.course || '').trim().replace(/\s*N\/A\s*/gi, '').trim();
             const programLabel = (cleanedCourse || 'Coordinator').toUpperCase();
             return { ...base, f_name: programLabel, l_name: 'Coordinator' };
           }
-          if (value === 'peso') {
+          if (accountTypeValue === 'peso') {
             return { ...base, f_name: 'PESO', l_name: 'Account' };
           }
           return base;
         });
-      } else if (value === 'alumni' || value === 'ojt') {
+      } else if (accountTypeValue === 'alumni' || accountTypeValue === 'ojt') {
         // Clear password fields for alumni/ojt since password is auto-generated
         setFormData(prev => ({
           ...prev,
-          account_type: value,
+          account_type: accountTypeValue,
           acc_password: '',
           acc_password_confirm: ''
+        }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          account_type: accountTypeValue,
         }));
       }
     } else if (name === 'course' && formData.account_type === 'coordinator') {
@@ -764,6 +798,14 @@ const UserManagement: React.FC = () => {
         course: cleanedCourse,
         f_name: programLabel.toUpperCase(),
         l_name: 'Coordinator'
+      }));
+    } else if (name === 'acc_username' && formData.account_type === 'alumni') {
+      // For alumni, only allow numbers and limit to 7 digits
+      const numericValue = value.replace(/\D/g, ''); // Remove all non-digit characters
+      const limitedValue = numericValue.slice(0, 7); // Limit to 7 digits
+      setFormData(prev => ({
+        ...prev,
+        [name]: limitedValue
       }));
     } else {
       setFormData(prev => ({
@@ -780,6 +822,8 @@ const UserManagement: React.FC = () => {
   const passwordHelperText = passwordRequired
     ? ''
     : 'Leave empty to auto-generate';
+  const renderRequiredMark = (visible = true) =>
+    visible ? <span style={REQUIRED_ASTERISK_STYLE}>*</span> : null;
 
   const filteredUsers = users.filter((user) => {
     const matchesFilter =
@@ -807,8 +851,6 @@ const UserManagement: React.FC = () => {
       <Sidebar />
       
       <div className="admin-content-page" style={{ flex: 1, padding: '32px 40px', marginLeft: 'var(--sidebar-width, 220px)' }}>
-        {securityVerified ? (
-          <>
         {/* Header Section */}
         <div style={{ marginBottom: '32px' }}>
           <h1 style={{ 
@@ -1197,40 +1239,10 @@ const UserManagement: React.FC = () => {
             </div>
           </div>
         )}
-          </>
-        ) : (
-          <div style={{ 
-            backgroundColor: 'white',
-            borderRadius: '16px',
-            padding: '60px 30px',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-            border: '1px solid #e2e8f0',
-            textAlign: 'center'
-          }}>
-            <h2 style={{ margin: '0 0 12px 0', color: '#0f172a' }}>Verification Required</h2>
-            <p style={{ margin: '0 0 24px 0', color: '#475569', fontSize: '14px' }}>
-              Re-enter your admin password to access user management features.
-            </p>
-            <button
-              onClick={() => setShowSecurityModal(true)}
-              style={{
-                padding: '10px 22px',
-                borderRadius: '999px',
-                border: 'none',
-                backgroundColor: '#1d4ed8',
-                color: 'white',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              Unlock User Management
-            </button>
-          </div>
-        )}
       </div>
 
       {/* User Details Modal */}
-      {securityVerified && showDetailsModal && selectedUser && (
+      {showDetailsModal && selectedUser && (
         <div 
           style={{
             position: 'fixed',
@@ -1881,203 +1893,7 @@ const UserManagement: React.FC = () => {
         </div>
       )}
 
-      {showSecurityModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: '24px',
-            background: 'rgba(0, 0, 0, 0.5)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 1600
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setSecurityPassword('');
-              setShowSecurityPassword(false);
-              setSecurityError('');
-              setShowSecurityModal(false);
-            }
-          }}
-        >
-          <form
-            onSubmit={handleSecuritySubmit}
-            style={{
-              width: 'min(400px, 90vw)',
-              borderRadius: '16px',
-              padding: '32px',
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-              backgroundColor: '#ffffff',
-              position: 'relative'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{
-              margin: '0 0 24px 0',
-              fontSize: '22px',
-              fontWeight: 700,
-              color: '#1f2937',
-              textAlign: 'center'
-            }}>
-              Confirm Admin Password
-            </h2>
-
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px'
-              }}
-            >
-              {securityError && (
-                <div
-                  style={{
-                    width: '100%',
-                    borderRadius: '8px',
-                    padding: '12px 14px',
-                    background: '#fef2f2',
-                    color: '#b91c1c',
-                    border: '1px solid #fecaca',
-                    fontSize: '13px'
-                  }}
-                >
-                  {securityError}
-                </div>
-              )}
-
-              <div>
-                <label style={{
-                  display: 'block',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  color: '#1f2937',
-                  marginBottom: '8px'
-                }}>
-                  Password:
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type={showSecurityPassword ? 'text' : 'password'}
-                    value={securityPassword}
-                    onChange={(e) => setSecurityPassword(e.target.value)}
-                    placeholder="Enter password"
-                    style={{
-                      width: '100%',
-                      padding: '12px 56px 12px 16px',
-                      borderRadius: '8px',
-                      border: '1px solid #d1d5db',
-                      backgroundColor: '#ffffff',
-                      fontSize: '15px',
-                      color: '#1f2937',
-                      outline: 'none',
-                      transition: 'border-color 0.2s ease',
-                      boxSizing: 'border-box'
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = '#2563eb';
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = '#d1d5db';
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSecurityPassword(!showSecurityPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
-                      border: 'none',
-                      backgroundColor: 'transparent',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      transition: 'opacity 0.2s ease, background-color 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.opacity = '0.7';
-                      e.currentTarget.style.backgroundColor = '#f3f4f6';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.opacity = '1';
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                    aria-label={showSecurityPassword ? 'Hide password' : 'Show password'}
-                  >
-                    <PasswordVisibilityIcon show={showSecurityPassword} size={26} color="#4b5563" />
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSecurityPassword('');
-                    setShowSecurityPassword(false);
-                    setSecurityError('');
-                    setShowSecurityModal(false);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '12px 0',
-                    borderRadius: '8px',
-                    border: '1px solid #d1d5db',
-                    backgroundColor: '#ffffff',
-                    color: '#374151',
-                    fontSize: '15px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'background-color 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#f9fafb';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#ffffff';
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={securityLoading}
-                  style={{
-                    flex: 1,
-                    padding: '12px 0',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: securityLoading ? '#9ca3af' : '#2563eb',
-                    color: 'white',
-                    fontSize: '15px',
-                    fontWeight: 700,
-                    cursor: securityLoading ? 'not-allowed' : 'pointer',
-                    transition: 'background-color 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!securityLoading) e.currentTarget.style.backgroundColor = '#1d4ed8';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!securityLoading) e.currentTarget.style.backgroundColor = '#2563eb';
-                  }}
-                >
-                  {securityLoading ? 'Verifying...' : 'Submit'}
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {securityVerified && showStatusConfirm && selectedUser && (
+      {showStatusConfirm && selectedUser && (
         <div
           style={{
             position: 'fixed',
@@ -2161,7 +1977,7 @@ const UserManagement: React.FC = () => {
       )}
 
       {/* Create User Modal */}
-      {securityVerified && showCreateModal && (
+      {showCreateModal && (
         <div 
           style={{
             position: 'fixed',
@@ -2282,7 +2098,7 @@ const UserManagement: React.FC = () => {
             }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#212529' }}>
-                  Account Type *
+                  Account Type {renderRequiredMark()}
                 </label>
                 <select
                   name="account_type"
@@ -2326,13 +2142,18 @@ const UserManagement: React.FC = () => {
                 <>
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#212529' }}>
-                  Username * <span style={{ fontSize: '12px', color: '#6c757d', fontWeight: 'normal' }}>(CTU ID)</span>
+                  Username {renderRequiredMark()} <span style={{ fontSize: '12px', color: '#6c757d', fontWeight: 'normal' }}>(CTU ID)</span>
+                  {formData.account_type === 'alumni' && (
+                    <span style={{ fontSize: '11px', color: '#6c757d', fontWeight: 'normal', marginLeft: '4px' }}>(7 digits only)</span>
+                  )}
                 </label>
                 <input
                   type="text"
                   name="acc_username"
                   value={formData.acc_username}
                   onChange={handleInputChange}
+                  maxLength={formData.account_type === 'alumni' ? 7 : undefined}
+                  inputMode={formData.account_type === 'alumni' ? 'numeric' : 'text'}
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -2351,7 +2172,7 @@ const UserManagement: React.FC = () => {
                     e.target.style.borderColor = '#dee2e6';
                     e.target.style.boxShadow = 'none';
                   }}
-                  placeholder="Enter username"
+                  placeholder={formData.account_type === 'alumni' ? 'Enter 7-digit CTU ID (numbers only)' : 'Enter username'}
                 />
               </div>
 
@@ -2359,7 +2180,7 @@ const UserManagement: React.FC = () => {
                 <>
                   <div>
                     <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#212529' }}>
-                      Password
+                      Password {renderRequiredMark(passwordRequired)}
                     </label>
                     <div style={{ position: 'relative' }}>
                       <input
@@ -2430,7 +2251,7 @@ const UserManagement: React.FC = () => {
                   marginBottom: '16px'
                 }}>
                   <p style={{ margin: 0, fontSize: '13px', color: '#0369a1', fontWeight: '500' }}>
-                    <strong>Password:</strong> Will be automatically generated for {formData.account_type === 'alumni' ? 'Alumni' : 'OJT'} accounts.
+                    <strong>Password</strong> will be automatically generated for {formData.account_type === 'alumni' ? 'Alumni' : 'OJT'} accounts.
                   </p>
                 </div>
               )}
@@ -2438,7 +2259,7 @@ const UserManagement: React.FC = () => {
               {passwordRequired && (
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#212529' }}>
-                    Confirm Password <span style={{ fontSize: '12px', color: '#6c757d', fontWeight: 'normal' }}>(Required)</span>
+                    Confirm Password {renderRequiredMark(passwordRequired)} <span style={{ fontSize: '12px', color: '#6c757d', fontWeight: 'normal' }}>(Required)</span>
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
@@ -2503,7 +2324,7 @@ const UserManagement: React.FC = () => {
                 <>
                 <div>
                     <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#212529' }}>
-                    Program *
+                    Program {renderRequiredMark(true)}
                   </label>
                   <select
                     name="course"
@@ -2548,7 +2369,7 @@ const UserManagement: React.FC = () => {
                 <>
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#495057' }}>
-                  First Name *
+                  First Name {renderRequiredMark(isAlumniSelected)}
                 </label>
                 <input
                   type="text"
@@ -2614,7 +2435,7 @@ const UserManagement: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#495057' }}>
-                  Last Name *
+                  Last Name {renderRequiredMark(isAlumniSelected)}
                 </label>
                 <input
                   type="text"
@@ -2647,7 +2468,7 @@ const UserManagement: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#495057' }}>
-                  Gender
+                  Gender {renderRequiredMark(isAlumniSelected)}
                 </label>
                 <select
                   name="gender"
@@ -2683,7 +2504,7 @@ const UserManagement: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#495057' }}>
-                  Email
+                  Email {renderRequiredMark(isAlumniSelected)}
                 </label>
                 <input
                   type="email"
@@ -2727,7 +2548,7 @@ const UserManagement: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#495057' }}>
-                  Phone Number
+                  Phone Number {renderRequiredMark(isAlumniSelected)}
                 </label>
                 <input
                   type="tel"
@@ -2774,7 +2595,7 @@ const UserManagement: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#495057' }}>
-                  Birthdate
+                  Birthdate {renderRequiredMark(isAlumniSelected)}
                 </label>
                 <input
                   type="date"
@@ -2807,7 +2628,7 @@ const UserManagement: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#495057' }}>
-                  Year Graduated
+                  Year Graduated {renderRequiredMark(isAlumniSelected)}
                 </label>
                 <select
                   name="year_graduated"
@@ -2840,13 +2661,13 @@ const UserManagement: React.FC = () => {
                   {(() => {
                     const currentYear = new Date().getFullYear();
                     const startYear = 1980; // Start from 1980 to accommodate older alumni
-                    const endYear = currentYear + 1; // Allow current year + 1 for next academic year
+                    const endYear = currentYear; // Only show up to current year (people can't graduate in the future)
                     const options = [];
-                    for (let year = startYear; year <= endYear; year++) {
-                      const nextYear = year + 1;
+                    // Generate single years in descending order (newest first)
+                    for (let year = endYear; year >= startYear; year--) {
                       options.push(
                         <option key={year} value={year}>
-                          {year}-{nextYear}
+                          {year}
                         </option>
                       );
                     }
@@ -2857,7 +2678,45 @@ const UserManagement: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#495057' }}>
-                  Address
+                  Program {renderRequiredMark(isAlumniSelected)}
+                </label>
+                <select
+                  name="course"
+                  value={formData.course}
+                  onChange={handleInputChange}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                    transition: 'all 0.2s ease',
+                    boxSizing: 'border-box',
+                    fontWeight: '500',
+                    color: formData.course ? '#1e293b' : '#9ca3af',
+                    backgroundColor: '#ffffff',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#3b82f6';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e2e8f0';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                >
+                  <option value="">Select program</option>
+                  <option value="BSIT">BSIT</option>
+                  <option value="BSIS">BSIS</option>
+                  <option value="BIT-CT">BIT-CT</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#495057' }}>
+                  Address {renderRequiredMark(isAlumniSelected)}
                 </label>
                 <input
                   type="text"
