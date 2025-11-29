@@ -11,7 +11,7 @@ import '../authAnimations.css';
 const background = require('../../../images/ctu.jpg');
 const ccictLogo = require('../../../images/ccict.png');
 const alumniLogo = require('../../../images/ctu alumni logo.jpg');
-const whereNaYouLogo = require('../../../images/final_logos-removebg-preview.png');
+const whereNaYouLogo = require('../../../images/wny-logo.png');
 
 const ResetPassword = () => {
   const navigate = useNavigate();

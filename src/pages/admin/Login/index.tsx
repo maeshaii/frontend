@@ -7,7 +7,7 @@ import '../authAnimations.css';
 const background = require('../../../images/ctu.jpg');
 const alumniLogo = require('../../../images/ctu alumni logo.jpg');
 const ccictLogo = require('../../../images/ccict.png');
-const whereNaYouLogo = require('../../../images/final_logos-removebg-preview.png');
+const whereNaYouLogo = require('../../../images/wny-logo.png');
 
 const Login = () => {
   const navigate = useNavigate();
@@ -148,7 +148,11 @@ const Login = () => {
                 }}
               />
               <div style={styles.brandTextContainer}>
-                <h2 style={styles.brandTitle} className="login-brand-title">WHERENAYOU</h2>
+                <h2 style={styles.brandTitle} className="login-brand-title">
+                  <span style={styles.brandTitleText}>Where</span>
+                  <span style={styles.brandTitleText}>Na</span>
+                  <span style={styles.brandTitleText}>You</span>
+                </h2>
                 <p style={styles.brandTagline} className="login-brand-tagline">Connecting OJTs & Alumni Journeys</p>
                 <p style={styles.brandSubtitle}>Excellence in Technology Education</p>
               </div>
@@ -163,7 +167,7 @@ const Login = () => {
                 <div style={styles.partnerLogo} className="login-partner-logo">
                   <img src={ccictLogo} alt="CCICT Logo" style={styles.partnerLogoImage} className="login-partner-logo-image" />
                 </div>
-                <p style={styles.partnerName} className="login-partner-name">College of Computer, Information and Communications Technology</p>
+                <p style={styles.partnerName} className="login-partner-name">College of Computer,<br />Information and Communications Technology</p>
               </div>
               <div style={styles.partnerItem}>
                 <div style={styles.partnerLogo} className="login-partner-logo">
@@ -308,6 +312,10 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'white',
     padding: '2rem',
     paddingTop: '3rem',
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
   },
   brandContainer: {
     display: 'flex',
@@ -315,12 +323,15 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     gap: '1.5rem',
     marginBottom: '0.5rem',
+    marginLeft: '-3rem',
   },
   brandLogo: {
-    width: '90px',
-    height: '90px',
+    width: 'auto',
+    height: 'calc(4rem * 1.2 + 0.5rem + 1.5rem * 1.3)',
     objectFit: 'contain',
     filter: 'brightness(0) saturate(100%) invert(100%)',
+    flexShrink: 0,
+    alignSelf: 'flex-start',
   },
   brandTextContainer: {
     display: 'flex',
@@ -328,18 +339,24 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'flex-start',
     gap: '0.5rem',
     position: 'relative',
+    justifyContent: 'flex-start',
   },
   brandTitle: {
-    fontSize: '3.5rem',
+    fontSize: '4rem',
     fontWeight: '700',
     margin: 0,
     padding: 0,
     textShadow: '0 4px 8px rgba(0, 0, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.6)',
     letterSpacing: '0',
-    color: '#ffffff',
     lineHeight: '1.2',
     textAlign: 'left',
+    display: 'flex',
+    alignItems: 'baseline',
+    alignSelf: 'flex-start',
     width: '100%',
+  },
+  brandTitleText: {
+    color: '#ffffff',
   },
   brandTagline: {
     fontSize: '1.5rem',
@@ -351,6 +368,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#ffffff',
     lineHeight: '1.3',
     textAlign: 'left',
+    alignSelf: 'flex-start',
     width: '100%',
   },
   brandSubtitle: {
@@ -360,9 +378,10 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 0,
     opacity: 0.9,
     textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-    textAlign: 'left',
+    textAlign: 'center',
     alignSelf: 'center',
     width: '100%',
+    marginLeft: '-3rem',
   },
   collaborationContainer: {
     position: 'absolute',

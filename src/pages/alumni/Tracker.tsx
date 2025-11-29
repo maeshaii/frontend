@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTracker } from '../../hooks/useTracker';
 import Question from '../admin/tracker/questions';
 
@@ -73,7 +73,16 @@ const AlumniTracker: React.FC = () => {
     checkAuth();
   }, [userId]);
   
-  const { state } = useTracker(userId);
+  const { state, refreshStatus } = useTracker(userId);
+  const location = useLocation();
+
+  // Refresh tracker status when navigating to this page (to sync with mobile submissions)
+  useEffect(() => {
+    // Refresh status when location changes to this page
+    if (userId && isAuthenticated) {
+      refreshStatus();
+    }
+  }, [location.pathname, userId, isAuthenticated, refreshStatus]);
 
   // Show loading while checking authentication
   if (isAuthenticated === null) {
