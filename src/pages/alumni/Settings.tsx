@@ -1579,8 +1579,8 @@ const Settings: React.FC = () => {
                                       variant="contained"
                                       component="span"
                                       sx={{
-                                        backgroundColor: '#475569',
-                                        '&:hover': { backgroundColor: '#334155' },
+                                        backgroundColor: '#174f84',
+                                        '&:hover': { backgroundColor: '#0d3a5f' },
                                         textTransform: 'none',
                                         fontWeight: 600
                                       }}

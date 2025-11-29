@@ -414,7 +414,7 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
                   value={postContent}
                   onChange={(e) => {
                     setPostContent(e.target.value);
-                    // Auto-resize textarea
+                    // Auto-resize textarea with max height
                     e.target.style.height = 'auto';
                     e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
                   }}
@@ -429,6 +429,7 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
                   style={{
                     width: '100%',
                     minHeight: '120px',
+                    maxHeight: '200px',
                     padding: '12px 12px 12px 12px',
                     fontSize: '15px',
                     border: '1px solid #eee',
@@ -441,6 +442,8 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
                     outline: 'none',
                     lineHeight: '1.5',
                     boxSizing: 'border-box',
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
                   }}
                   required
                   ref={textareaRef}

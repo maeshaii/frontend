@@ -642,7 +642,11 @@ const PostCard: React.FC<PostCardProps> = ({
 
   // Helper function to process mentions in a text segment with partial match support
   const processMentionsInText = (textSegment: string, keyPrefix: string): React.ReactNode[] => {
-    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
+    // CRITICAL: Added word boundary lookahead (?=\s|$|[.,!?;:]) to prevent over-matching
+    // This ensures mentions stop at whitespace, end of string, or punctuation
+    // Example: "@Stephanie Mari sdsadass" matches only "@Stephanie Mari" (stops at space before "sdsadass")
+    // Using non-greedy *? to match the shortest possible mention text
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*?)(?=\s|$|[.,!?;:])/g;
     const result: React.ReactNode[] = [];
     let lastIndex = 0;
     let match;
@@ -902,7 +906,10 @@ const PostCard: React.FC<PostCardProps> = ({
     // - www. URLs
     // - plain domains (like fb.com, example.com, etc.)
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,})([^\s]*)?)/gi;
-    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
+    // CRITICAL: Added word boundary lookahead (?=\s|$|[.,!?;:]) to prevent over-matching
+    // This ensures mentions stop at whitespace, end of string, or punctuation
+    // Using non-greedy *? to match the shortest possible mention text
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*?)(?=\s|$|[.,!?;:])/g;
     // Note: We intentionally do NOT auto-detect regular names anymore to avoid
     // over-highlighting common words. Only URLs and @mentions are interactive.
     
@@ -1874,11 +1881,14 @@ const PostCard: React.FC<PostCardProps> = ({
                   style={{
                     width: '100%',
                     minHeight: '60px',
+                    maxHeight: '300px',
                     padding: '8px',
                     border: '1px solid #ddd',
                     borderRadius: '8px',
                     fontSize: '14px',
-                    resize: 'vertical'
+                    resize: 'vertical',
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
                   }}
                   placeholder="Add a caption..."
                 />
@@ -2805,11 +2815,14 @@ const PostCard: React.FC<PostCardProps> = ({
             style={{
               width: '100%',
               minHeight: '80px',
+              maxHeight: '300px',
               padding: '8px',
               border: '1px solid #ddd',
               borderRadius: '8px',
               fontSize: '14px',
-              resize: 'vertical'
+              resize: 'vertical',
+              overflowY: 'auto',
+              overflowX: 'hidden',
             }}
           />
           <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
@@ -3629,13 +3642,16 @@ const PostCard: React.FC<PostCardProps> = ({
                                 style={{
                                   width: '100%',
                                   minHeight: '50px',
+                                  maxHeight: '200px',
                                   padding: '8px 12px',
                                   border: '1px solid #ccd0d5',
                                   borderRadius: '18px',
                                   fontSize: '13px',
                                   resize: 'vertical',
                                   backgroundColor: '#ffffff',
-                                  fontFamily: 'inherit'
+                                  fontFamily: 'inherit',
+                                  overflowY: 'auto',
+                                  overflowX: 'hidden',
                                 }}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter' && !e.shiftKey) {

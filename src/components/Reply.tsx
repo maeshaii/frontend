@@ -206,7 +206,11 @@ const Reply: React.FC<ReplyProps> = ({
 
   const renderTextWithLinks = (text: string) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
+    // CRITICAL: Added word boundary lookahead (?=\s|$|[.,!?;:]) to prevent over-matching
+    // This ensures mentions stop at whitespace, end of string, or punctuation
+    // Example: "@Stephanie Mari sdsadass" matches only "@Stephanie Mari" (stops at space before "sdsadass")
+    // Using non-greedy *? to match the shortest possible mention text
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*?)(?=\s|$|[.,!?;:])/g;
     // Do not auto-detect plain names to avoid over-highlighting
     
     const parts = text.split(urlRegex);

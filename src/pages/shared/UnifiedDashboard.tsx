@@ -126,6 +126,13 @@ interface SuggestedUser {
   profile_pic: string;
   batch?: string | number;
   isFollowing?: boolean;
+  account_type?: {
+    admin?: boolean;
+    peso?: boolean;
+    user?: boolean;
+    coordinator?: boolean;
+    ojt?: boolean;
+  };
 }
 
 function getPostTimestamp(post: PostItem): string | null {
@@ -2380,9 +2387,12 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                   }} style={{ cursor: 'pointer' }}>
                     <img src={user.profile_pic ? (String(user.profile_pic).startsWith('http') ? user.profile_pic : `http://127.0.0.1:8000${user.profile_pic}`) : ctulogo} alt={user.name} className="suggested-user-profile-image" />
                     <div className="suggested-user-name">{user.name} {user.batch ? `(${user.batch})` : ''}</div>
-                    <button className="suggested-user-follow-button" onClick={e => { e.stopPropagation(); handleFollow(user.id); }} disabled={followLoading[user.id]}>
-                      {followLoading[user.id] ? '...' : 'Follow'}
-                    </button>
+                    {/* Hide Follow button when current user is admin/peso (auto-follows everyone) or when suggested user is admin/peso */}
+                    {!isAdmin && !isPeso && !user.account_type?.admin && !user.account_type?.peso && (
+                      <button className="suggested-user-follow-button" onClick={e => { e.stopPropagation(); handleFollow(user.id); }} disabled={followLoading[user.id]}>
+                        {followLoading[user.id] ? '...' : 'Follow'}
+                      </button>
+                    )}
                   </div>
                 ))
               ) : (
@@ -2657,16 +2667,19 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                   }}>
                     {user.batch ? `(${user.batch})` : ''}
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleFollow(user.id);
-                    }}
-                    disabled={followLoading[user.id]}
-                    className="suggested-user-follow-button"
-                  >
-                    {followLoading[user.id] ? '...' : 'Follow'}
-                  </button>
+                  {/* Hide Follow button when current user is admin/peso (auto-follows everyone) or when suggested user is admin/peso */}
+                  {!isAdmin && !isPeso && !user.account_type?.admin && !user.account_type?.peso && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleFollow(user.id);
+                      }}
+                      disabled={followLoading[user.id]}
+                      className="suggested-user-follow-button"
+                    >
+                      {followLoading[user.id] ? '...' : 'Follow'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -2838,6 +2851,14 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
           dismissedUntil.setDate(dismissedUntil.getDate() + 7);
           localStorage.setItem('employmentUpdateReminderDismissedUntil', dismissedUntil.toISOString());
           console.log('🔍 Employment reminder dismissed until:', dismissedUntil);
+        }}
+        onNoChanges={() => {
+          setShowEmploymentUpdateModal(false);
+          // Dismiss permanently (user confirmed no changes needed)
+          const dismissedUntil = new Date();
+          dismissedUntil.setDate(dismissedUntil.getDate() + 180); // 6 months
+          localStorage.setItem('employmentUpdateReminderDismissedUntil', dismissedUntil.toISOString());
+          console.log('✅ User confirmed no changes - reminder dismissed for 6 months');
         }}
       />
       

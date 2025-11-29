@@ -804,33 +804,13 @@ const ReportSettingsPage: React.FC = () => {
 
         {/* Preset Cards Section */}
         <div style={cardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <div>
-              <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1c4e80', margin: 0, marginBottom: '4px' }}>
-                Saved Presets
-              </h2>
-              <p style={{ fontSize: '14px', color: '#6b7280', margin: 0 }}>
-                Click on a preset to preview or apply it instantly
-              </p>
-            </div>
-            <button
-              onClick={() => setShowSavePresetModal(true)}
-              style={{
-                backgroundColor: '#1c4e80',
-                color: 'white',
-                padding: '10px 20px',
-                borderRadius: '8px',
-                border: 'none',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-              }}
-            >
-              <span>+</span> Save Current as Preset
-            </button>
+          <div style={{ marginBottom: '20px' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1c4e80', margin: 0, marginBottom: '4px' }}>
+              Saved Presets
+            </h2>
+            <p style={{ fontSize: '14px', color: '#6b7280', margin: 0 }}>
+              Click on a preset to preview or apply it instantly
+            </p>
           </div>
 
           {presets.length === 0 ? (

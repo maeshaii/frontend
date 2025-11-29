@@ -1479,10 +1479,20 @@ const Question: React.FC<QuestionProps> = ({ previewModeFromParent, userId }) =>
                           {getQuestionNumber(catIdx, qIdx)}. {q.text}
                           {q.required && <span style={{ color: 'red', marginLeft: 4 }}>*</span>}
                         </label>
+                        {/* Add sub-header for question 31 (Supporting Documents for awards/recognition) */}
+                        {q.type === 'file' && q.text && (() => {
+                          const lowerText = q.text.toLowerCase();
+                          return (lowerText.includes('supporting documents') || lowerText.includes('supporting document')) && 
+                                 (lowerText.includes('awards') || lowerText.includes('award') || lowerText.includes('recognition'));
+                        })() && (
+                          <div style={{ marginTop: 4, marginBottom: 8, color: '#666', fontSize: 14, fontStyle: 'italic' }}>
+                            Upload only images
+                          </div>
+                        )}
                         {/* Add sub-header for question 32 */}
                         {q.type === 'file' && q.text && q.text.toLowerCase().includes('employment supporting document') && q.text.toLowerCase().includes('current') && (
                           <div style={{ marginTop: 4, marginBottom: 8, color: '#666', fontSize: 14, fontStyle: 'italic' }}>
-                            Upload Certificate of Employment or Company ID
+                            Upload Certificate of Employment or Company ID, only images
                           </div>
                         )}
                         <div>

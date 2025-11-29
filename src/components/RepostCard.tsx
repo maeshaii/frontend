@@ -819,7 +819,10 @@ const RepostCard: React.FC<RepostCardProps> = ({
 
   // Helper function to process mentions in a text segment with partial match support
   const processMentionsInText = (textSegment: string, keyPrefix: string): React.ReactNode[] => {
-    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
+    // CRITICAL: Added word boundary lookahead (?=\s|$|[.,!?;:]) to prevent over-matching
+    // This ensures mentions stop at whitespace, end of string, or punctuation
+    // Using non-greedy *? to match the shortest possible mention text
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*?)(?=\s|$|[.,!?;:])/g;
     const result: React.ReactNode[] = [];
     let lastIndex = 0;
     let match;
@@ -1049,7 +1052,10 @@ const RepostCard: React.FC<RepostCardProps> = ({
     // - www. URLs
     // - plain domains (like fb.com, example.com, etc.)
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,})([^\s]*)?)/gi;
-    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)/g;
+    // CRITICAL: Added word boundary lookahead (?=\s|$|[.,!?;:]) to prevent over-matching
+    // This ensures mentions stop at whitespace, end of string, or punctuation
+    // Using non-greedy *? to match the shortest possible mention text
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*?)(?=\s|$|[.,!?;:])/g;
     // Note: We intentionally do NOT auto-detect regular names anymore to avoid
     // over-highlighting common words. Only URLs and @mentions are interactive.
     
@@ -1600,6 +1606,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
             style={{
               width: '100%',
               minHeight: '80px',
+              maxHeight: '300px',
               padding: '12px',
               border: '1px solid #ddd',
               borderRadius: '8px',
@@ -1607,7 +1614,9 @@ const RepostCard: React.FC<RepostCardProps> = ({
               fontFamily: 'inherit',
               resize: 'vertical',
               outline: 'none',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              overflowY: 'auto',
+              overflowX: 'hidden',
             }}
             autoFocus
           />
@@ -1646,7 +1655,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
 
       {/* Repost caption (if not editing) */}
       {!localEditingRepost && repost.repost_caption && repost.repost_caption.trim() && (
-        <div style={{ fontSize: 14, color: '#333', lineHeight: 1.5, marginBottom: 12 }}>
+        <div style={{ fontSize: 14, color: '#333', lineHeight: 1.5, marginBottom: 12, whiteSpace: 'pre-line', wordBreak: 'break-word' }}>
           {renderTextWithLinks(repost.repost_caption)}
         </div>
       )}
@@ -1823,6 +1832,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                   style={{
                     width: '100%',
                     minHeight: '80px',
+                    maxHeight: '300px',
                     padding: '12px',
                     border: '1px solid #ddd',
                     borderRadius: '8px',
@@ -1831,7 +1841,9 @@ const RepostCard: React.FC<RepostCardProps> = ({
                     resize: 'vertical',
                     outline: 'none',
                     boxSizing: 'border-box',
-                    marginBottom: '12px'
+                    marginBottom: '12px',
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
                   }}
                   autoFocus
                 />
@@ -1879,7 +1891,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
             ) : (
               original.post_content && (
                 <div 
-                  style={{ fontSize: 13, color: '#333', lineHeight: 1.5, marginBottom: 8 }}
+                  style={{ fontSize: 13, color: '#333', lineHeight: 1.5, marginBottom: 8, whiteSpace: 'pre-line', wordBreak: 'break-word' }}
                   onClick={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
                 >
@@ -2481,13 +2493,16 @@ const RepostCard: React.FC<RepostCardProps> = ({
                             style={{
                               width: '100%',
                               minHeight: '50px',
+                              maxHeight: '200px',
                               padding: '8px 12px',
                               border: '1px solid #ccd0d5',
                               borderRadius: '18px',
                               fontSize: '13px',
                               resize: 'vertical',
                               backgroundColor: '#ffffff',
-                              fontFamily: 'inherit'
+                              fontFamily: 'inherit',
+                              overflowY: 'auto',
+                              overflowX: 'hidden',
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && !e.shiftKey) {

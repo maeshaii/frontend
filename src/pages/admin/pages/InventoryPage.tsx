@@ -1172,7 +1172,7 @@ const InventoryPage: React.FC = () => {
                       onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
                     >
                       <option value="">Select type</option>
-                      <option value="voucher">Voucher</option>
+                      <option value="gcash">Gcash</option>
                       <option value="merchandise">Merchandise</option>
                     </select>
                   </div>
@@ -1384,7 +1384,7 @@ const InventoryPage: React.FC = () => {
                       onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
                     >
                       <option value="">Select type</option>
-                      <option value="voucher">Voucher</option>
+                      <option value="gcash">Gcash</option>
                       <option value="merchandise">Merchandise</option>
                     </select>
                   </div>

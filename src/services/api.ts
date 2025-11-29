@@ -1500,9 +1500,11 @@ export const getRewardHistory = async (limit: number = 50, trackerOnly: boolean 
 };
 
 // Request reward (user self-service)
-export const requestReward = async (rewardId: number) => {
+export const requestReward = async (rewardId: number, gcashNumber?: string, gcashName?: string) => {
   const response = await api.post('rewards/request/', {
-    reward_id: rewardId
+    reward_id: rewardId,
+    gcash_number: gcashNumber,
+    gcash_name: gcashName
   });
   return response.data;
 };
@@ -1515,13 +1517,33 @@ export const getRewardRequests = async (status?: string) => {
 };
 
 // Approve reward request (admin only)
-export const approveRewardRequest = async (requestId: number, voucherCode?: string, notes?: string, instructions?: string) => {
-  const response = await api.post(`rewards/requests/${requestId}/approve/`, {
-    voucher_code: voucherCode,
-    notes: notes || instructions,
-    instructions: instructions || notes
-  });
-  return response.data;
+export const approveRewardRequest = async (requestId: number, voucherCode?: string, notes?: string, instructions?: string, gcashReceipt?: File) => {
+  // Use FormData if we have a file to upload
+  if (gcashReceipt) {
+    const formData = new FormData();
+    formData.append('gcash_receipt', gcashReceipt);
+    if (notes || instructions) {
+      formData.append('notes', notes || instructions || '');
+    }
+    if (instructions || notes) {
+      formData.append('instructions', instructions || notes || '');
+    }
+    
+    const response = await api.post(`rewards/requests/${requestId}/approve/`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  } else {
+    // Use JSON for non-file data
+    const response = await api.post(`rewards/requests/${requestId}/approve/`, {
+      voucher_code: voucherCode,
+      notes: notes || instructions,
+      instructions: instructions || notes
+    });
+    return response.data;
+  }
 };
 
 // Claim reward request (user claims after admin approval)

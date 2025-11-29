@@ -91,6 +91,9 @@ const Responses: React.FC = () => {
     queryKey: ['tracker', 'responses', 'all'],
     queryFn: async () => fetchTrackerResponses(),
     enabled: !!trackerFormId,
+    staleTime: 0, // Always fetch fresh data
+    refetchOnMount: 'always', // Refetch every time component mounts
+    refetchOnWindowFocus: true, // Refetch when window regains focus
   });
   const alumniQuery = useQuery({
     queryKey: ['users', 'alumni', 'all'],
@@ -106,6 +109,9 @@ const Responses: React.FC = () => {
     queryKey: ['tracker', 'fileStats'],
     queryFn: async () => trackerApi.getFileStats(),
     enabled: !!trackerFormId,
+    staleTime: 0, // Always fetch fresh file stats
+    refetchOnMount: 'always', // Refetch every time
+    refetchOnWindowFocus: true, // Refetch when window regains focus
   });
 
   useEffect(() => {
@@ -671,7 +677,47 @@ const Responses: React.FC = () => {
         {/* File Documents Tab */}
         {activeTab === 'files' && (
           <div className="card">
-            <h3>File Documents Management</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ margin: 0 }}>File Documents Management</h3>
+              <button
+                onClick={async () => {
+                  await Promise.all([
+                    queryClient.invalidateQueries({ queryKey: ['tracker', 'responses', 'all'] }),
+                    queryClient.invalidateQueries({ queryKey: ['tracker', 'fileStats'] })
+                  ]);
+                  // Force immediate refetch
+                  responsesQuery.refetch();
+                  fileStatsQuery.refetch();
+                }}
+                disabled={responsesQuery.isFetching || fileStatsQuery.isFetching}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: (responsesQuery.isFetching || fileStatsQuery.isFetching) ? '#9ca3af' : '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: (responsesQuery.isFetching || fileStatsQuery.isFetching) ? 'not-allowed' : 'pointer',
+                  fontWeight: 500,
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (!responsesQuery.isFetching && !fileStatsQuery.isFetching) {
+                    e.currentTarget.style.backgroundColor = '#2563eb';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!responsesQuery.isFetching && !fileStatsQuery.isFetching) {
+                    e.currentTarget.style.backgroundColor = '#3b82f6';
+                  }
+                }}
+              >
+                {(responsesQuery.isFetching || fileStatsQuery.isFetching) ? '⏳ Refreshing...' : '🔄 Refresh Files'}
+              </button>
+            </div>
 
             {/* Category Filter */}
             <div style={{ marginBottom: 20 }}>

@@ -1279,6 +1279,8 @@ body::-webkit-scrollbar {
   color: #333;
   margin-bottom: 12px;
   line-height: 1.5;
+  white-space: pre-line;
+  word-break: break-word;
 }
 
 .profile-repost-original {
@@ -1320,12 +1322,13 @@ body::-webkit-scrollbar {
 }
 
 .profile-repost-original-content {
-  white-space: pre-wrap;
+  white-space: pre-line;
   max-width: 100%;
   font-size: 13px;
   line-height: 1.4;
   color: #333;
   margin-bottom: 8px;
+  word-break: break-word;
 }
 
 .profile-repost-original-image {

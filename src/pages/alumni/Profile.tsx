@@ -247,6 +247,8 @@ const AlumniProfile: React.FC = () => {
   const [showMonthlyLimitModal, setShowMonthlyLimitModal] = useState(false);
   const [showConfirmRequestModal, setShowConfirmRequestModal] = useState(false);
   const [pendingRewardRequest, setPendingRewardRequest] = useState<{id: number; name: string; value: string; type?: string} | null>(null);
+  const [gcashNumber, setGcashNumber] = useState('');
+  const [gcashName, setGcashName] = useState('');
   const [rewardDialog, setRewardDialog] = useState<RewardDialogState | null>(null);
   const [employmentData, setEmploymentData] = useState<any>(null);
   const [employmentLoading, setEmploymentLoading] = useState(false);
@@ -886,18 +888,33 @@ getPosts()
       value: reward.value,
       type: reward.type
     });
+    // Reset gcash fields when opening modal
+    setGcashNumber('');
+    setGcashName('');
     setShowConfirmRequestModal(true);
   };
 
   const confirmRequestReward = async () => {
     if (!pendingRewardRequest) return;
     
+    // Validate gcash fields if reward type is gcash
+    if (pendingRewardRequest.type?.toLowerCase() === 'gcash') {
+      if (!gcashNumber.trim()) {
+        alert('Please enter your Gcash number');
+        return;
+      }
+      if (!gcashName.trim()) {
+        alert('Please enter your Gcash name');
+        return;
+      }
+    }
+    
     const rewardId = pendingRewardRequest.id;
     setShowConfirmRequestModal(false);
     
     try {
       setClaimingReward(rewardId);
-      const response = await requestReward(rewardId);
+      const response = await requestReward(rewardId, gcashNumber, gcashName);
       
       if (response.success) {
         // Refresh requests
@@ -906,8 +923,10 @@ getPosts()
         // Refresh inventory
         await fetchInventoryItems();
         
-        // Close modal
+        // Close modal and reset gcash fields
         setPendingRewardRequest(null);
+        setGcashNumber('');
+        setGcashName('');
       } else {
         alert(response.message || 'Failed to request reward');
       }
@@ -1097,12 +1116,17 @@ getPosts()
     const wsUrl = `${wsBase}${wsHost}/ws/notifications/?token=${encodeURIComponent(token)}`;
 
     let ws: WebSocket | null = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 3;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
 
+    const connectWebSocket = () => {
     try {
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        console.log('WebSocket connected for points updates');
+          console.log('✅ WebSocket connected for points updates');
+          reconnectAttempts = 0; // Reset reconnect attempts on successful connection
       };
 
       ws.onmessage = (event) => {
@@ -1112,35 +1136,53 @@ getPosts()
             const pointsData = data.points;
             // Only update if it's for the current user
             if (Number(pointsData.user_id) === Number(currentId)) {
-              console.log('Points updated via WebSocket:', pointsData);
+                console.log('📊 Points updated via WebSocket:', pointsData);
               setUserPoints(pointsData);
             }
           }
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
-
-      ws.onclose = () => {
-        console.log('WebSocket disconnected for points updates');
-        // Optionally reconnect after a delay
-        setTimeout(() => {
-          if (isOwnProfile && currentId) {
-            // This will trigger the effect again
+            // Silently handle parse errors - not critical
+            console.debug('WebSocket message parse error:', error);
           }
-        }, 5000);
+        };
+
+        ws.onerror = () => {
+          // Silently handle WebSocket errors - app will continue working with polling
+          // Don't log errors as they're expected when WebSocket server is unavailable
+        };
+
+        ws.onclose = (event) => {
+          // Only log normal closures, not errors
+          if (event.code === 1000) {
+            console.log('WebSocket disconnected normally');
+          }
+          
+          // Attempt to reconnect only for unexpected closures and if under max attempts
+          if (event.code !== 1000 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS && isOwnProfile && currentId) {
+            reconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000); // Exponential backoff, max 10s
+            reconnectTimeout = setTimeout(() => {
+              console.debug(`Reconnecting WebSocket (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+              connectWebSocket();
+            }, delay);
+          }
       };
     } catch (error) {
-      console.error('Error setting up WebSocket:', error);
+        // Silently handle WebSocket setup errors - not critical for app functionality
+        console.debug('WebSocket setup error (non-critical):', error);
     }
+    };
+
+    // Initial connection attempt
+    connectWebSocket();
 
     return () => {
+      // Cleanup
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
       if (ws) {
-        ws.close();
+        ws.close(1000, 'Component cleanup');
       }
     };
   }, [isOwnProfile, currentId]);
@@ -2346,10 +2388,8 @@ getPosts()
           </div>
           )}
 
-          {/* Following - Hide for admin and PESO accounts */}
-          {(!user?.account_type?.peso || !isOwnProfile) &&
-           (!user?.account_type?.admin || !isOwnProfile) &&
-           (!user?.account_type?.ccict || isOwnProfile) && (
+          {/* Following - Hide for admin and PESO accounts completely (when viewing from any user perspective) */}
+          {!user?.account_type?.peso && !user?.account_type?.admin && (
           <div style={{ marginBottom: '24px' }}>
             <div className="profile-followers-header">
               <div className="profile-followers-title">Following ({following.length})</div>
@@ -5074,7 +5114,7 @@ getPosts()
                   // Sort so requestable rewards come first; non-requestable go to the bottom
                   .sort((a, b) => Number(b.requestable) - Number(a.requestable))
                   .map(({ item, requiredPoints, canAfford, availability }) => {
-                  const isVoucher = item.type?.toLowerCase().includes('voucher') || 
+                  const isGcash = item.type?.toLowerCase().includes('gcash') || 
                                     item.type?.toLowerCase().includes('gift card') ||
                                     item.type?.toLowerCase().includes('coupon');
                   const isMerchandise = item.type?.toLowerCase().includes('merchandise') || 
@@ -5616,6 +5656,7 @@ getPosts()
                                    req.reward_type?.toLowerCase().includes('merch') ||
                                    req.reward_type?.toLowerCase().includes('product') ||
                                    req.reward_type?.toLowerCase().includes('item');
+              const isGcash = req.reward_type?.toLowerCase().includes('gcash');
               // Only vouchers can be claimed by user, merchandise must be released by admin
               const canClaim = isApproved && !isClaimed && !isMerchandise;
               const isClaiming = claimingReward === req.request_id;
@@ -5708,24 +5749,35 @@ getPosts()
                       </div>
                       <div style={{ 
                         fontSize: '16px', 
-                        color: isPending ? '#f59e0b' : isApproved ? '#991b1b' : isClaimed ? '#4338ca' : '#6b7280',
+                        color: isPending ? '#f59e0b' : 
+                               (isApproved && !isClaimed && isGcash) ? '#16a34a' : // Green for "Sent" (Gcash)
+                               isApproved ? '#991b1b' : // Red for "Ready" (other rewards)
+                               isClaimed ? '#4338ca' : '#6b7280',
                         fontWeight: '600'
                       }}>
                         {isPending ? 'Pending' : 
-                         isApproved && !isClaimed ? 'Ready' :
+                         isApproved && !isClaimed ? (isGcash ? 'Sent' : 'Ready') :
                          isClaimed ? 'Claimed' : req.status}
                       </div>
                     </div>
                   </div>
 
                   {/* Dates */}
-                   {(req.requested_at || req.approved_at || (req.expires_at && !isClaimed)) && (
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(3, 1fr)', 
-                      gap: '16px',
-                      marginBottom: '24px'
-                    }}>
+                   {(() => {
+                      const showRequested = !!req.requested_at;
+                      const showApproved = !!req.approved_at;
+                      const showExpires = !!(req.expires_at && !isClaimed && !isGcash);
+                      const visibleCount = [showRequested, showApproved, showExpires].filter(Boolean).length;
+                      
+                      if (visibleCount === 0) return null;
+                      
+                      return (
+                        <div style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: `repeat(${visibleCount}, 1fr)`,
+                          gap: '16px',
+                          marginBottom: '24px'
+                        }}>
                       {req.requested_at && (
                         <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
                           <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Requested</div>
@@ -5754,7 +5806,7 @@ getPosts()
                           </div>
                         </div>
                       )}
-                      {req.expires_at && !isClaimed && (
+                      {req.expires_at && !isClaimed && !isGcash && (
                         <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
                           <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expires</div>
                           <div style={{ fontSize: '15px', color: '#111827', fontWeight: '600', marginBottom: '8px' }}>
@@ -5781,8 +5833,9 @@ getPosts()
                           )}
                         </div>
                       )}
-                    </div>
-                  )}
+                        </div>
+                      );
+                    })()}
 
                       {/* Instructions Section */}
                       {req.notes && (
@@ -5811,7 +5864,93 @@ getPosts()
                         </div>
                       )}
 
-                      {/* Voucher Code Section */}
+                      {/* Gcash Receipt Section */}
+                      {req.gcash_receipt && (req.status === 'approved' || req.status === 'claimed' || recentlyClaimed) && (() => {
+                        // Helper function to convert relative URL to absolute URL
+                        const getAbsoluteUrl = (url: string): string => {
+                          if (url.startsWith('http://') || url.startsWith('https://')) {
+                            return url;
+                          }
+                          // Get API base URL from environment or use default
+                          const apiBase = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+                          const baseUrl = apiBase.replace(/\/$/, '').replace(/\/api$/, '');
+                          return url.startsWith('/') ? `${baseUrl}${url}` : `${baseUrl}/${url}`;
+                        };
+                        
+                        const receiptUrl = getAbsoluteUrl(req.gcash_receipt);
+                        
+                        return (
+                          <div style={{ 
+                            marginBottom: '20px',
+                            padding: '20px', 
+                            background: '#f0fdf4',
+                            borderRadius: '12px',
+                            border: '1px solid #86efac'
+                          }}>
+                            <div style={{ 
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              marginBottom: '16px'
+                            }}>
+                              <span style={{ fontSize: '24px' }}>🧾</span>
+                              <span style={{ fontWeight: '600', color: '#166534', fontSize: '14px' }}>
+                                Payment Receipt
+                              </span>
+                            </div>
+                            <div style={{
+                              background: 'white',
+                              borderRadius: '8px',
+                              padding: '12px',
+                              border: '1px solid #86efac',
+                              minHeight: '200px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <img
+                                src={receiptUrl}
+                                alt="Gcash Receipt"
+                                style={{
+                                  width: '100%',
+                                  maxHeight: '400px',
+                                  objectFit: 'contain',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => window.open(receiptUrl, '_blank')}
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.onerror = null;
+                                  // Try alternative URL format if first attempt fails
+                                  const altUrl = req.gcash_receipt.startsWith('/') 
+                                    ? getAbsoluteUrl(req.gcash_receipt)
+                                    : getAbsoluteUrl(`/${req.gcash_receipt}`);
+                                  if (target.src !== altUrl) {
+                                    target.src = altUrl;
+                                  } else {
+                                    // If both attempts fail, show placeholder
+                                    target.style.display = 'none';
+                                    const parent = target.parentElement;
+                                    if (parent && !parent.querySelector('.error-placeholder')) {
+                                      const placeholder = document.createElement('div');
+                                      placeholder.className = 'error-placeholder';
+                                      placeholder.style.cssText = 'text-align: center; color: #94a3b8; padding: 20px;';
+                                      placeholder.textContent = 'Receipt image could not be loaded';
+                                      parent.appendChild(placeholder);
+                                    }
+                                  }
+                                }}
+                              />
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#166534', textAlign: 'center', marginTop: '12px', fontWeight: '500' }}>
+                              Click image to view full size
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Reward Code Section */}
                       {req.voucher_code && (req.status === 'claimed' || recentlyClaimed) && (
                         <div style={{ 
                           marginBottom: '20px',
@@ -5828,7 +5967,7 @@ getPosts()
                           }}>
                             <HiOutlineTicket size={20} color="#0284c7" />
                             <span style={{ fontWeight: '600', color: '#0c4a6e', fontSize: '14px' }}>
-                              Voucher Code
+                              Reward Code
                             </span>
                           </div>
                           <div style={{ 
@@ -5864,7 +6003,7 @@ getPosts()
                         }}>
                           <HiOutlineTicket size={20} color="#0284c7" />
                           <span style={{ color: '#0c4a6e', fontSize: '14px', fontWeight: '500' }}>
-                            Voucher code will be revealed once you claim this reward.
+                            Reward code will be revealed once you claim this reward.
                           </span>
                         </div>
                       )}
@@ -5911,7 +6050,7 @@ getPosts()
                           ) : (
                             <>
                               <HiOutlineGift size={16} />
-                              <span>Claim Reward</span>
+                              <span>{isGcash ? 'Okay' : 'Claim Reward'}</span>
                             </>
                           )}
                         </button>
@@ -6017,6 +6156,8 @@ getPosts()
           onClick={() => {
             setShowConfirmRequestModal(false);
             setPendingRewardRequest(null);
+            setGcashNumber('');
+            setGcashName('');
           }}
         >
           <div
@@ -6092,6 +6233,71 @@ getPosts()
                   </p>
                 );
               })()}
+              
+              {/* Gcash Input Fields - Only show for gcash rewards */}
+              {pendingRewardRequest.type && 
+               pendingRewardRequest.type.toLowerCase() === 'gcash' && (
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#374151',
+                      marginBottom: '8px'
+                    }}>
+                      Gcash Number <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={gcashNumber}
+                      onChange={(e) => setGcashNumber(e.target.value)}
+                      placeholder="e.g., 09123456789"
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        border: '2px solid #e5e7eb',
+                        borderRadius: '8px',
+                        fontSize: '15px',
+                        outline: 'none',
+                        transition: 'border-color 0.2s',
+                        boxSizing: 'border-box'
+                      }}
+                      onFocus={(e) => e.currentTarget.style.borderColor = '#1e3a5f'}
+                      onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+                    />
+                  </div>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#374151',
+                      marginBottom: '8px'
+                    }}>
+                      Gcash Account Name <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={gcashName}
+                      onChange={(e) => setGcashName(e.target.value)}
+                      placeholder="e.g., Juan Dela Cruz"
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        border: '2px solid #e5e7eb',
+                        borderRadius: '8px',
+                        fontSize: '15px',
+                        outline: 'none',
+                        transition: 'border-color 0.2s',
+                        boxSizing: 'border-box'
+                      }}
+                      onFocus={(e) => e.currentTarget.style.borderColor = '#1e3a5f'}
+                      onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+                    />
+                  </div>
+                </div>
+              )}
               
               {/* CTU Claim Notice - Only show for merchandise */}
               {pendingRewardRequest.type && 

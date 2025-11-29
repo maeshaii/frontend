@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import ctulogo from '../images/ctulogo.png';
-import { getProfilePicUrl } from '../utils/profilePicUtils';
+import { getProfilePicUrl, getImageUrl } from '../utils/profilePicUtils';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 interface RepostModalProps {
   isOpen: boolean;
@@ -18,6 +18,17 @@ interface RepostModalProps {
     };
     post_content: string;
     post_image?: string | null;
+    post_images?: Array<{
+      image_id: number;
+      image_url: string;
+      order: number;
+    }>;
+    images?: Array<{ // For donation posts
+      image_id?: number;
+      image_url: string;
+      url?: string;
+      order?: number;
+    } | string>; // Can be array of objects or strings
     created_at?: string | null;
   };
   currentUser: {
@@ -28,6 +39,43 @@ interface RepostModalProps {
 }
 
 const MAX_CAPTION_LENGTH = 1000;
+
+// Helper function to extract images from post (similar to PostCard and RepostCard)
+// Handles regular posts, forum posts, and donation posts
+const getImagesFromPost = (post: RepostModalProps['originalPost']): string[] => {
+  const images: string[] = [];
+  
+  // Add multiple images if available (for regular posts and forum posts)
+  if (post.post_images && post.post_images.length > 0) {
+    // Sort by order and extract URLs
+    const sortedImages = [...post.post_images].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    images.push(...sortedImages.map(img => img.image_url));
+  }
+  
+  // Add donation images if available (for donation posts)
+  // Donation posts use 'images' field instead of 'post_images'
+  if (images.length === 0 && (post as any).images && Array.isArray((post as any).images) && (post as any).images.length > 0) {
+    // Sort by order and extract URLs
+    const sortedImages = [...(post as any).images].sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+    // Handle both object format {image_url, order} and string format
+    images.push(...sortedImages.map((img: any) => {
+      if (typeof img === 'string') {
+        return img;
+      }
+      return img.image_url || img.url || img;
+    }));
+  }
+  
+  // Add single image if no multiple images and single image exists
+  if (images.length === 0 && post.post_image) {
+    images.push(post.post_image);
+  }
+  
+  // Remove duplicate URLs while preserving order
+  const uniqueImages = Array.from(new Set(images));
+  
+  return uniqueImages;
+};
 
 const RepostModal: React.FC<RepostModalProps> = ({
   isOpen,
@@ -40,6 +88,26 @@ const RepostModal: React.FC<RepostModalProps> = ({
   const [caption, setCaption] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
+  
+  // Extract images from original post
+  const originalImages = React.useMemo(() => getImagesFromPost(originalPost), [originalPost]);
+
+  // Dynamically calculate modal width based on content length
+  const modalWidth = React.useMemo(() => {
+    const contentLength = originalPost.post_content?.length || 0;
+    
+    // Base width: 430px for short posts
+    // Increase width progressively for longer posts
+    if (contentLength < 200) {
+      return 430;
+    } else if (contentLength < 500) {
+      return 520;
+    } else if (contentLength < 1000) {
+      return 620;
+    } else {
+      return 720; // Maximum width for very long posts
+    }
+  }, [originalPost.post_content]);
 
   // Resolve the actual logged-in user from localStorage to ensure correctness
   const effectiveCurrentUser = React.useMemo(() => {
@@ -73,8 +141,44 @@ const RepostModal: React.FC<RepostModalProps> = ({
           transform: translateY(0) scale(1);
         }
       }
-      .repost-original-content::-webkit-scrollbar {
-        display: none;
+      .repost-original-content::-webkit-scrollbar,
+      .repost-images-container::-webkit-scrollbar {
+        width: 12px;
+      }
+      .repost-original-content::-webkit-scrollbar-track,
+      .repost-images-container::-webkit-scrollbar-track {
+        background: #f3f4f6;
+        border-radius: 10px;
+        border: 2px solid #e5e7eb;
+      }
+      .repost-original-content::-webkit-scrollbar-thumb,
+      .repost-images-container::-webkit-scrollbar-thumb {
+        background: #4b5563;
+        border-radius: 10px;
+        border: 2px solid #374151;
+        min-height: 30px;
+      }
+      .repost-original-content::-webkit-scrollbar-thumb:hover,
+      .repost-images-container::-webkit-scrollbar-thumb:hover {
+        background: #374151;
+        border-color: #1f2937;
+      }
+      .repost-original-content::-webkit-scrollbar-thumb:active,
+      .repost-images-container::-webkit-scrollbar-thumb:active {
+        background: #1f2937;
+      }
+      /* Firefox scrollbar styling */
+      .repost-original-content,
+      .repost-images-container {
+        scrollbar-width: auto;
+        scrollbar-color: #4b5563 #f3f4f6;
+      }
+      /* Ensure textarea text is black, not blue */
+      .repost-caption-input {
+        color: #111827 !important;
+      }
+      .repost-caption-input::placeholder {
+        color: #9ca3af;
       }
     `;
     document.head.appendChild(style);
@@ -155,12 +259,16 @@ const RepostModal: React.FC<RepostModalProps> = ({
       <div
         style={{
           width: '100%',
-          maxWidth: 430,
+          maxWidth: modalWidth,
+          maxHeight: 'calc(100vh - 48px)',
           background: '#fff',
           borderRadius: 12,
           boxShadow: '0 15px 40px rgba(15, 23, 42, 0.2)',
           overflow: 'hidden',
           animation: 'slideUp 0.25s ease-out',
+          display: 'flex',
+          flexDirection: 'column',
+          transition: 'max-width 0.3s ease',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -172,6 +280,7 @@ const RepostModal: React.FC<RepostModalProps> = ({
             justifyContent: 'space-between',
             padding: '16px 20px',
             borderBottom: '1px solid #f1f5f9',
+            flexShrink: 0,
           }}
         >
           <button
@@ -205,7 +314,7 @@ const RepostModal: React.FC<RepostModalProps> = ({
           </button>
         </div>
 
-        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto', flex: 1 }}>
           {/* Current user */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <img
@@ -233,10 +342,16 @@ const RepostModal: React.FC<RepostModalProps> = ({
               <textarea
               placeholder="Add an optional caption..."
               value={caption}
-              onChange={(e) => handleCaptionChange(e.target.value)}
+              onChange={(e) => {
+                handleCaptionChange(e.target.value);
+                // Auto-resize textarea with max height
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+              }}
               style={{
                 width: '100%',
                 minHeight: 90,
+                maxHeight: 200,
                 borderRadius: 12,
                 border: '1px solid #e5e7eb',
                 padding: '14px 16px 32px 16px',
@@ -246,6 +361,9 @@ const RepostModal: React.FC<RepostModalProps> = ({
                 outline: 'none',
                 backgroundColor: '#fff',
                 boxSizing: 'border-box',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                color: '#111827',
               }}
               onFocus={(e) => {
                 e.currentTarget.style.borderColor = '#2563eb';
@@ -336,7 +454,7 @@ const RepostModal: React.FC<RepostModalProps> = ({
               >
                 <EmojiPicker
                   onEmojiClick={handleEmojiSelect}
-                  width={320}
+                  width={Math.min(340, modalWidth - 80)}
                   height={360}
                   previewConfig={{ showPreview: false }}
                   skinTonesDisabled
@@ -392,35 +510,129 @@ const RepostModal: React.FC<RepostModalProps> = ({
               style={{
                 fontSize: 14,
                 color: '#1f2937',
-                lineHeight: 1.5,
-                whiteSpace: 'pre-wrap',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-line',
                 wordBreak: 'break-word',
+                maxHeight: '400px',
+                overflowY: 'auto',
+                overflowWrap: 'break-word',
               }}
+              className="repost-original-content"
             >
               {originalPost.post_content}
             </div>
 
-            {originalPost.post_image && (
-              <img
-                src={
-                  typeof originalPost.post_image === 'string' && originalPost.post_image.startsWith('/media/')
-                    ? `http://127.0.0.1:8000${originalPost.post_image}`
-                    : typeof originalPost.post_image === 'string' && !originalPost.post_image.startsWith('http')
-                    ? `http://127.0.0.1:8000${originalPost.post_image}`
-                    : (originalPost.post_image as string)
-                }
+            {/* Images display - supports both single and multiple images */}
+            {originalImages.length > 0 && (
+              <div 
+                style={{ 
+                  marginTop: 12,
+                  maxHeight: '500px',
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  borderRadius: 12,
+                }}
+                className="repost-images-container"
+              >
+                {originalImages.length === 1 ? (
+                  // Single image - full width
+                  <img
+                    src={getImageUrl(originalImages[0])}
                 alt="Post"
                 style={{
                   width: '100%',
-                  borderRadius: 18,
+                      borderRadius: 12,
+                      objectFit: 'contain',
+                      maxHeight: 400,
+                      backgroundColor: '#f5f5f5',
+                      display: 'block',
+                    }}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.onerror = null;
+                      target.src = ctulogo as unknown as string;
+                    }}
+                  />
+                ) : (
+                  // Multiple images - grid layout
+                  <div
+                    style={{
+                      display: 'grid',
+                      gap: 4,
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      ...(originalImages.length === 2 ? {
+                        gridTemplateColumns: '1fr 1fr',
+                        height: 250
+                      } : originalImages.length === 3 ? {
+                        gridTemplateColumns: '2fr 1fr',
+                        gridTemplateRows: '1fr 1fr',
+                        height: 250
+                      } : originalImages.length === 4 ? {
+                        gridTemplateColumns: '1fr 1fr',
+                        gridTemplateRows: '1fr 1fr',
+                        height: 250
+                      } : {
+                        gridTemplateColumns: '1fr 1fr 1fr',
+                        gridTemplateRows: '1fr 1fr',
+                        height: 250
+                      })
+                    }}
+                  >
+                    {originalImages.slice(0, originalImages.length <= 6 ? originalImages.length : 6).map((image, index) => {
+                      let gridArea = '';
+                      if (originalImages.length === 3) {
+                        // Facebook 3-image layout: large left, two stacked right
+                        gridArea = index === 0 ? '1 / 1 / 3 / 2' : `1 / 2 / 2 / 3`;
+                        if (index === 2) gridArea = '2 / 2 / 3 / 3';
+                      }
+                      
+                      return (
+                        <div key={index} style={{ 
+                          position: 'relative',
+                          gridArea: gridArea,
+                          overflow: 'hidden',
+                          backgroundColor: '#f5f5f5'
+                        }}>
+                          <img
+                            src={getImageUrl(image)}
+                            alt={`Post ${index + 1}`}
+                            style={{
+                              width: '100%',
+                              height: '100%',
                   objectFit: 'cover',
-                  maxHeight: 260,
+                              display: 'block'
                 }}
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
-                  target.style.display = 'none';
-                }}
-              />
+                              target.onerror = null;
+                              target.src = ctulogo as unknown as string;
+                            }}
+                          />
+                          {originalImages.length > 6 && index === 5 && (
+                            <div style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'white',
+                              fontSize: 24,
+                              fontWeight: 'bold'
+                            }}>
+                              +{originalImages.length - 6}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

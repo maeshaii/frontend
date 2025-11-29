@@ -60,6 +60,9 @@ interface RewardRequest {
   reward_value: string;
   status: string;
   points_cost: number;
+  gcash_number: string | null;
+  gcash_name: string | null;
+  gcash_receipt: string | null;
   voucher_code: string | null;
   requested_at: string;
   approved_at: string | null;
@@ -118,6 +121,7 @@ const RewardsPage: React.FC = () => {
   }>>([]);
   const [milestoneTasksLoading, setMilestoneTasksLoading] = useState(false);
   const [voucherCode, setVoucherCode] = useState('');
+  const [gcashReceipt, setGcashReceipt] = useState<File | null>(null);
   const [approving, setApproving] = useState(false);
   const [releasing, setReleasing] = useState(false);
   const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
@@ -460,7 +464,8 @@ const RewardsPage: React.FC = () => {
         selectedRequest.request_id,
         voucherCode || undefined,
         instructions || undefined,
-        instructions || undefined
+        instructions || undefined,
+        gcashReceipt || undefined
       );
       
       if (response.success) {
@@ -492,6 +497,7 @@ const RewardsPage: React.FC = () => {
         setSelectedRequest(null);
         setInstructions('');
         setVoucherCode('');
+        setGcashReceipt(null);
         await fetchRewardRequests();
         await fetchRewardHistory();
       } else {
@@ -1872,6 +1878,7 @@ const RewardsPage: React.FC = () => {
                                       setSelectedRequest(req);
                                       setInstructions('');
                                       setVoucherCode('');
+                                      setGcashReceipt(null);
                                       setShowApproveModal(true);
                                     }}
                                     style={{
@@ -2630,6 +2637,7 @@ const RewardsPage: React.FC = () => {
                                       setSelectedRequest(req);
                                       setInstructions('');
                                       setVoucherCode('');
+                                      setGcashReceipt(null);
                                       setShowApproveModal(true);
                                     }}
                                     style={{
@@ -2831,6 +2839,7 @@ const RewardsPage: React.FC = () => {
                 setSelectedRequest(null);
                 setInstructions('');
                 setVoucherCode('');
+                setGcashReceipt(null);
               }
             }}
             >
@@ -2915,7 +2924,7 @@ const RewardsPage: React.FC = () => {
                 </div>
               </div>
 
-              {(selectedRequest.reward_type.toLowerCase().includes('voucher') || 
+              {(selectedRequest.reward_type.toLowerCase().includes('gcash') || 
                 selectedRequest.reward_type.toLowerCase().includes('gift card') || 
                 selectedRequest.reward_type.toLowerCase().includes('coupon')) && (
                 <div style={{ marginBottom: '20px' }}>
@@ -2926,31 +2935,90 @@ const RewardsPage: React.FC = () => {
                     color: '#374151', 
                     marginBottom: '8px'
                   }}>
-                    Voucher Code <span style={{ fontWeight: '400', color: '#94a3b8' }}>(Optional)</span>
+                    Gcash Receipt <span style={{ fontWeight: '400', color: '#94a3b8' }}>(Image only)</span>
                   </label>
-                  <input
-                    type="text"
-                    value={voucherCode}
-                    onChange={(e) => setVoucherCode(e.target.value)}
-                    placeholder="Enter voucher code..."
-                    style={{
-                      width: '100%',
-                      padding: '11px 14px',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      fontSize: '14px',
-                      transition: 'all 0.15s',
-                      backgroundColor: '#ffffff'
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = '#1e3a5f';
-                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(30, 58, 95, 0.1)';
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = '#e2e8f0';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                  />
+                  <div style={{
+                    border: '2px dashed #e2e8f0',
+                    borderRadius: '8px',
+                    padding: '20px',
+                    textAlign: 'center',
+                    backgroundColor: '#f8fafc',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#1e3a5f';
+                    e.currentTarget.style.backgroundColor = '#f1f5f9';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                    e.currentTarget.style.backgroundColor = '#f8fafc';
+                  }}
+                  onClick={() => document.getElementById('gcash-receipt-upload')?.click()}>
+                    <input
+                      id="gcash-receipt-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setGcashReceipt(file);
+                        }
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                    {gcashReceipt ? (
+                      <div>
+                        <div style={{ fontSize: '14px', color: '#1e3a5f', fontWeight: '500', marginBottom: '4px' }}>
+                          📄 {gcashReceipt.name}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>
+                          {(gcashReceipt.size / 1024).toFixed(2)} KB
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setGcashReceipt(null);
+                          }}
+                          style={{
+                            marginTop: '8px',
+                            padding: '4px 12px',
+                            fontSize: '12px',
+                            color: '#ef4444',
+                            background: 'transparent',
+                            border: '1px solid #ef4444',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: '32px', marginBottom: '8px' }}>📁</div>
+                        <div style={{ fontSize: '14px', color: '#374151', fontWeight: '500', marginBottom: '4px' }}>
+                          Click to upload receipt image
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                          PNG, JPG or JPEG
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {selectedRequest.gcash_number && (
+                    <div style={{
+                      marginTop: '12px',
+                      padding: '12px',
+                      background: '#f0f9ff',
+                      borderRadius: '6px',
+                      fontSize: '13px'
+                    }}>
+                      <div style={{ fontWeight: '600', color: '#0c4a6e', marginBottom: '4px' }}>User's Gcash Details:</div>
+                      <div style={{ color: '#0369a1' }}>📱 {selectedRequest.gcash_number}</div>
+                      <div style={{ color: '#0369a1' }}>👤 {selectedRequest.gcash_name}</div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -3008,6 +3076,7 @@ const RewardsPage: React.FC = () => {
                       setSelectedRequest(null);
                       setInstructions('');
                       setVoucherCode('');
+                      setGcashReceipt(null);
                     }
                   }}
                   disabled={approving}

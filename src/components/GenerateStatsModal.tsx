@@ -52,6 +52,55 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   const [detailedLoading, setDetailedLoading] = useState<Record<string, boolean>>({});
   const [currentChartSection, setCurrentChartSection] = useState<string>('');
   const [reportSettings, setReportSettings] = useState<any>(null);
+  
+  // Track if filters changed and need to regenerate before exporting
+  const [needsRegenerate, setNeedsRegenerate] = useState(true);
+  
+  // Toast notification state
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({
+    show: false,
+    message: '',
+    type: 'success'
+  });
+
+  // Show toast notification that auto-dismisses after 3 seconds
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' });
+    }, 3000);
+  };
+
+  // Add toast animation styles on mount
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      @keyframes slideOut {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   // Safe percent helper to avoid NaN when total is 0
   const pct = (part: number, total: number) => {
@@ -81,6 +130,23 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     } catch (error) {
       console.warn('Currency format fallback triggered:', error);
       return `₱${numeric.toFixed(2)}`;
+    }
+  };
+
+  // PDF-safe currency formatter (jsPDF cannot render ₱ symbol properly)
+  const formatCurrencyForPDF = (value: any) => {
+    const numeric = toNumericValue(value);
+    if (numeric === null) return 'N/A';
+    try {
+      // Use basic number formatting with PHP prefix instead of ₱ symbol
+      const formatted = new Intl.NumberFormat('en-PH', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(numeric);
+      return `PHP ${formatted}`;
+    } catch (error) {
+      console.warn('Currency format fallback triggered:', error);
+      return `PHP ${numeric.toFixed(2)}`;
     }
   };
 
@@ -882,6 +948,16 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         setAllStats({ QPRO: qpro, CHED: ched, SUC: suc, AACUP: aacup, HIGH_POSITION: highPosition });
         setGeneratedStats(null);
         if (onGenerate) onGenerate({ QPRO: qpro, CHED: ched, SUC: suc, AACUP: aacup, HIGH_POSITION: highPosition });
+        
+        // Show success toast for all statistics
+        const totalAlumni = qpro?.total_alumni || 0;
+        showToast(
+          `Successfully generated all statistics for ${totalAlumni} alumni.`
+        );
+        
+        // Enable export buttons after successful generation
+        setNeedsRegenerate(false);
+        
         // Fetch detailed data for all
         (['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION'] as StatsType[]).forEach(async (type) => {
           setDetailedLoading((prev) => ({ ...prev, [type]: true }));
@@ -911,9 +987,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         setAllStats(null);
         if (onGenerate) onGenerate(stats);
         // Show a proper success message for single type
-        alert(
+        showToast(
           `Successfully generated ${stats?.type || selectedType || 'statistics'} statistics for ${stats?.total_alumni || 'selected'} alumni.`
         );
+        
+        // Enable export buttons after successful generation
+        setNeedsRegenerate(false);
+        
         // Fetch detailed data for the selected type
         setDetailedLoading({ [selectedType]: true });
         try {
@@ -933,7 +1013,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       }
     } catch (error) {
       console.error('Error generating statistics:', error);
-      alert('Error generating statistics. Please try again.');
+      showToast('Error generating statistics. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
@@ -1728,15 +1808,18 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       });
 
       yPosition = (doc as any).lastAutoTable.finalY + 10;
-      checkPageBreak(20);
-
-      // Add institutional footer BEFORE detailed data
+      
+      // Add institutional footer after summary
       await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
-      doc.addPage(); // Add new page for detailed data
-      yPosition = 20; // Reset yPosition for new page
 
       // Detailed data
       const detailedData = detailedDataByType['QPRO'] || [];
+      
+      // Add new page for detailed data only if we have data
+      if (detailedData.length > 0) {
+        doc.addPage();
+        yPosition = 20;
+      }
       if (detailedData.length > 0) {
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
@@ -1787,21 +1870,22 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         body: summaryData.slice(1),
         startY: yPosition,
         theme: 'grid',
-        headStyles: { fillColor: [23, 162, 184], textColor: 255, fontStyle: 'bold' },
+        headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
         styles: { fontSize: 9 },
       });
 
       yPosition = (doc as any).lastAutoTable.finalY + 10;
-      checkPageBreak(20);
-
-      // Add institutional footer BEFORE detailed data
+      
+      // Add institutional footer after summary
       await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
-      doc.addPage(); // Add new page for detailed data
-      yPosition = 20; // Reset yPosition for new page
 
       // Detailed data for CHED
       const detailedData = detailedDataByType['CHED'] || [];
       if (detailedData.length > 0) {
+        // Add new page for detailed data
+        doc.addPage();
+        yPosition = 20; // Reset yPosition for new page
+
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
         doc.text('Detailed Alumni Data', 20, yPosition);
@@ -1817,7 +1901,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           startY: yPosition,
           theme: 'striped',
           styles: { fontSize: 6, cellPadding: 1 },
-          headStyles: { fillColor: [23, 162, 184], textColor: 255 },
+          headStyles: { fillColor: [29, 78, 137], textColor: 255 },
           columnStyles: {
             1: { cellWidth: 12 }, // Batch_Graduated
             5: { cellWidth: 20 }, // Status
@@ -1854,21 +1938,22 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         body: summaryData.slice(1),
         startY: yPosition,
         theme: 'grid',
-        headStyles: { fillColor: [40, 167, 69], textColor: 255, fontStyle: 'bold' },
+        headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
         styles: { fontSize: 9 },
       });
 
       yPosition = (doc as any).lastAutoTable.finalY + 10;
-      checkPageBreak(20);
-
-      // Add institutional footer BEFORE detailed data
+      
+      // Add institutional footer after summary
       await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
-      doc.addPage(); // Add new page for detailed data
-      yPosition = 20; // Reset yPosition for new page
 
       // Detailed data for AACUP
       const detailedData = detailedDataByType['AACUP'] || [];
       if (detailedData.length > 0) {
+        // Add new page for detailed data
+        doc.addPage();
+        yPosition = 20;
+        
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
         doc.text('Detailed Alumni Data', 20, yPosition);
@@ -1884,7 +1969,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           startY: yPosition,
           theme: 'striped',
           styles: { fontSize: 6, cellPadding: 1 },
-          headStyles: { fillColor: [40, 167, 69], textColor: 255 },
+          headStyles: { fillColor: [29, 78, 137], textColor: 255 },
           columnStyles: {
             1: { cellWidth: 12 }, // Batch_Graduated
             5: { cellWidth: 20 }, // Status
@@ -1908,7 +1993,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Total Alumni', String(stats.total_alumni || 0), '100%'],
         ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
         ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
-        ['Average Salary', formatCurrency(stats.average_salary), '--'],
+        ['Average Salary', formatCurrencyForPDF(stats.average_salary), '--'],
         ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
         ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
         ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
@@ -1925,16 +2010,17 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       });
 
       yPosition = (doc as any).lastAutoTable.finalY + 10;
-      checkPageBreak(20);
-
-      // Add institutional footer BEFORE detailed data
+      
+      // Add institutional footer after summary
       await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
-      doc.addPage(); // Add new page for detailed data
-      yPosition = 20; // Reset yPosition for new page
 
       // Detailed data for SUC
       const detailedData = detailedDataByType['SUC'] || [];
       if (detailedData.length > 0) {
+        // Add new page for detailed data
+        doc.addPage();
+        yPosition = 20;
+        
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
         doc.text('Detailed Alumni Data', 20, yPosition);
@@ -1986,12 +2072,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       });
 
       yPosition = (doc as any).lastAutoTable.finalY + 10;
-      checkPageBreak(20);
-
-      // Add institutional footer BEFORE detailed data
+      
+      // Add institutional footer after summary
       await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
-      doc.addPage(); // Add new page for detailed data
-      yPosition = 20; // Reset yPosition for new page
+      
+      // Add new page for detailed data
+      doc.addPage();
+      yPosition = 20;
 
       // Detailed data for HIGH_POSITION
       let detailedData = detailedDataByType['HIGH_POSITION'] || [];
@@ -2163,7 +2250,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
             ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
             ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
-            ['Average Salary', formatCurrency(stats.average_salary), '--'],
+            ['Average Salary', formatCurrencyForPDF(stats.average_salary), '--'],
             ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
             ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
             ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
@@ -2204,9 +2291,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       }
 
       // PHASE 2: Add footer BEFORE all detailed data
-      checkPageBreak(20);
       await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
-      doc.addPage(); // New page for detailed data
+      
+      // Add new page for detailed data
+      doc.addPage();
       yPosition = 20;
 
       // PHASE 3: Add detailed alumni data for ALL types
@@ -3275,7 +3363,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Metric', 'Value', 'Percentage'],
         ['Total Alumni', String(stats.total_alumni || 0), '100%'],
         ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
-        ['Average Salary', formatCurrency(stats.average_salary), '--'],
+        ['Average Salary', formatCurrencyForPDF(stats.average_salary), '--'],
         ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
         ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
       ];
@@ -3430,7 +3518,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
             ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
             ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
-            ['Average Salary', formatCurrency(stats.average_salary), '--'],
+            ['Average Salary', formatCurrencyForPDF(stats.average_salary), '--'],
             ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
             ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
             ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
@@ -3805,12 +3893,12 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       if (format === 'pdf') {
         await exportToPDF(statsByType, detailedDataByType, exportType);
         setExporting(false);
-        alert('PDF exported successfully!');
+        showToast('PDF exported successfully!');
         return;
       } else if (format === 'word') {
         await exportToWord(statsByType, detailedDataByType, exportType);
         setExporting(false);
-        alert('Word document exported successfully!');
+        showToast('Word document exported successfully!');
         return;
       }
 
@@ -5371,9 +5459,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       link.click();
       document.body.removeChild(link);
       console.log('Export completed successfully');
+      showToast('Excel file exported successfully!');
     } catch (error) {
       console.error('Error exporting data:', error);
-      alert('Error exporting data. Please try again.');
+      showToast('Error exporting data. Please try again.', 'error');
     } finally {
       setExporting(false);
     }
@@ -5652,7 +5741,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             <label style={label}>Year:</label>
             <select
               value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
+              onChange={(e) => {
+                setSelectedYear(e.target.value);
+                setNeedsRegenerate(true);
+              }}
               style={dropdown}
             >
               <option value="ALL">All Years</option>
@@ -5667,7 +5759,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             <label style={label}>Program:</label>
             <select
               value={selectedProgram}
-              onChange={(e) => setSelectedProgram(e.target.value)}
+              onChange={(e) => {
+                setSelectedProgram(e.target.value);
+                setNeedsRegenerate(true);
+              }}
               style={dropdown}
             >
               {courseOptions.map((course) => (
@@ -5684,7 +5779,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             <label style={label}>Statistics Report:</label>
             <select
               value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value as StatsType)}
+              onChange={(e) => {
+                setSelectedType(e.target.value as StatsType);
+                setNeedsRegenerate(true);
+              }}
               style={dropdown}
             >
               {typeOptions.map((type) => (
@@ -5695,26 +5793,44 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             </select>
           </div>
           <button
-            style={{...exportButton, backgroundColor: '#28a745', marginRight: '8px'}}
+            style={{
+              ...exportButton, 
+              backgroundColor: '#28a745', 
+              marginRight: '8px',
+              opacity: (exporting || loading || needsRegenerate) ? 0.5 : 1,
+              cursor: (exporting || loading || needsRegenerate) ? 'not-allowed' : 'pointer'
+            }}
             onClick={() => handleExportCompleteData('excel')}
-            disabled={exporting || loading}
-            title="Export data to Excel format"
+            disabled={exporting || loading || needsRegenerate}
+            title={needsRegenerate ? 'Please click Generate first' : 'Export data to Excel format'}
           >
             {exporting ? '⏳ Exporting...' : '📊 Export Excel'}
           </button>
           <button
-            style={{...exportButton, backgroundColor: '#dc3545', marginRight: '8px'}}
+            style={{
+              ...exportButton, 
+              backgroundColor: '#dc3545', 
+              marginRight: '8px',
+              opacity: (exporting || loading || needsRegenerate) ? 0.5 : 1,
+              cursor: (exporting || loading || needsRegenerate) ? 'not-allowed' : 'pointer'
+            }}
             onClick={() => handleExportCompleteData('pdf')}
-            disabled={exporting || loading}
-            title="Export data to PDF format"
+            disabled={exporting || loading || needsRegenerate}
+            title={needsRegenerate ? 'Please click Generate first' : 'Export data to PDF format'}
           >
             {exporting ? '⏳ Exporting...' : '📄 Export PDF'}
           </button>
           <button
-            style={{...exportButton, backgroundColor: '#0d6efd', marginRight: '8px'}}
+            style={{
+              ...exportButton, 
+              backgroundColor: '#0d6efd', 
+              marginRight: '8px',
+              opacity: (exporting || loading || needsRegenerate) ? 0.5 : 1,
+              cursor: (exporting || loading || needsRegenerate) ? 'not-allowed' : 'pointer'
+            }}
             onClick={() => handleExportCompleteData('word')}
-            disabled={exporting || loading}
-            title="Export data to Word format"
+            disabled={exporting || loading || needsRegenerate}
+            title={needsRegenerate ? 'Please click Generate first' : 'Export data to Word format'}
           >
             {exporting ? '⏳ Exporting...' : '📝 Export Word'}
           </button>
@@ -5794,6 +5910,34 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           </div>
         )}
       </div>
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          backgroundColor: toast.type === 'success' ? '#28a745' : '#dc3545',
+          color: 'white',
+          padding: '16px 24px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          zIndex: 10000,
+          maxWidth: '400px',
+          animation: 'slideIn 0.3s ease-out',
+          fontSize: '14px',
+          fontWeight: '500',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {toast.type === 'success' ? (
+              <span style={{ fontSize: '20px' }}>✓</span>
+            ) : (
+              <span style={{ fontSize: '20px' }}>✕</span>
+            )}
+            <span>{toast.message}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

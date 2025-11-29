@@ -378,6 +378,8 @@ const RepostNotificationModal: React.FC<RepostNotificationModalProps> = ({ isOpe
             color: #333;
             line-height: 1.4;
             margin-bottom: 8px;
+            white-space: pre-line;
+            word-break: break-word;
           }
 
           .profile-repost-original-image {
