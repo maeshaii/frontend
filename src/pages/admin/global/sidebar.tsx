@@ -14,7 +14,7 @@ import {
   FaSignOutAlt
 } from 'react-icons/fa';
 import { MdSettingsSuggest } from 'react-icons/md';
-import whereNaYouLogo from '../../../images/final_logos-removebg-preview.png';
+import whereNaYouLogo from '../../../images/wny-logo.png';
 import ConfirmModal from '../../../components/ConfirmModal';
 import './sidebar.css';
 import { getRewardRequests } from '../../../services/api';

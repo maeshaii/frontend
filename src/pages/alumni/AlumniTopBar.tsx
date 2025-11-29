@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ctulogo from '../../images/ctulogo.png';
-import whereNaYouLogo from '../../images/final_logos-removebg-preview.png';
+import whereNaYouLogo from '../../images/wny-logo.png';
 import { api, getAdminPesoUsers, getUserInfo, saveRecentSearch, getRecentSearches, deleteRecentSearch } from '../../services/api';
 import { RecentSearchWebSocket } from '../../services/recentSearchWebSocket';
 import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
