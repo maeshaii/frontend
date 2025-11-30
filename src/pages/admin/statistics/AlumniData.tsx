@@ -143,9 +143,9 @@ const AlumniData: React.FC = () => {
         case 'status':
           return obj.status || obj.Status || obj.user_status || '';
         case 'position':
-          return obj.position_current || trackerAnswersMap[obj.id]?.position_current || trackerAnswersMap[obj.user_id]?.position_current || '';
+          return obj.current_position || obj.position_current || trackerAnswersMap[obj.id]?.position_current || trackerAnswersMap[obj.user_id]?.position_current || '';
         case 'salary':
-          return obj.salary_current || trackerAnswersMap[obj.id]?.salary_current || trackerAnswersMap[obj.user_id]?.salary_current || '';
+          return obj.current_salary || obj.salary_current || trackerAnswersMap[obj.id]?.salary_current || trackerAnswersMap[obj.user_id]?.salary_current || '';
         case 'program':
           return obj.program || obj.Program_Name || obj.course || '';
         default:
@@ -180,9 +180,32 @@ const AlumniData: React.FC = () => {
     return sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />;
   };
 
-  // Format salary range: "5001_10000" -> "5,001 - 10,000"
+  // Format salary range: "5001_10000" -> "5,001 - 10,000" or "20,000 - 30,000" -> "20,000 - 30,000"
   const formatSalaryRange = (salary: string | undefined | null): string => {
     if (!salary || typeof salary !== 'string') return salary || '';
+    
+    // If it already contains a dash with spaces (formatted range), return as is
+    if (salary.includes(' - ')) {
+      // Already in format "20,000 - 30,000" - return as is
+      return salary;
+    }
+    
+    // If it contains a dash without spaces, add spaces
+    if (salary.includes('-') && !salary.includes(' - ')) {
+      const parts = salary.split('-');
+      if (parts.length === 2) {
+        const start = parts[0].trim();
+        const end = parts[1].trim();
+        // If both parts look like numbers (with or without commas), format them
+        const startNum = parseFloat(start.replace(/,/g, ''));
+        const endNum = parseFloat(end.replace(/,/g, ''));
+        if (!isNaN(startNum) && !isNaN(endNum)) {
+          return `${startNum.toLocaleString()} - ${endNum.toLocaleString()}`;
+        }
+        // If they're already formatted with commas, just add spaces
+        return `${start} - ${end}`;
+      }
+    }
     
     // Check if it contains underscore (range format)
     if (salary.includes('_')) {
@@ -196,7 +219,7 @@ const AlumniData: React.FC = () => {
       }
     }
     
-    // If not a range, try to format as number if possible
+    // If it's a single number, format it
     const num = parseFloat(salary.replace(/[^\d.]/g, ''));
     if (!isNaN(num)) {
       return num.toLocaleString();
@@ -526,38 +549,40 @@ const AlumniData: React.FC = () => {
                           </td>
                           <td style={styles.tableCell}>
                             <div style={styles.positionContainer}>
-                              {alumni.position_current ||
-                                alumni.company_name_current ||
-                                trackerAnswersMap[alumni.id]?.position_current ||
-                                trackerAnswersMap[alumni.user_id]?.position_current ? (
-                                <span>
-                                  {alumni.position_current ||
-                                    alumni.company_name_current ||
-                                    trackerAnswersMap[alumni.id]?.position_current ||
-                                    trackerAnswersMap[alumni.user_id]?.position_current}
-                                </span>
-                              ) : (
-                                <span style={styles.noData}>Not specified</span>
-                              )}
+                              {(() => {
+                                // Try multiple field names and sources - check backend response first
+                                const position = 
+                                  alumni.current_position ||  // From backend API
+                                  alumni.position_current || 
+                                  alumni.q_current_position ||
+                                  trackerAnswersMap[alumni.id]?.position_current ||
+                                  trackerAnswersMap[alumni.user_id]?.position_current;
+                                return position && position !== 'Not specified' ? (
+                                  <span>{position}</span>
+                                ) : (
+                                  <span style={styles.noData}>Not specified</span>
+                                );
+                              })()}
                             </div>
                           </td>
                           <td style={styles.tableCell}>
-                            {alumni.salary_current ||
-                              trackerAnswersMap[alumni.id]?.salary_current ||
-                              trackerAnswersMap[alumni.user_id]?.salary_current ? (
-                              <div style={styles.salaryContainer}>
-                                <span style={{ fontSize: '14px', fontWeight: 'bold', marginRight: '6px' }}>₱</span>
-                                <span>
-                                  {formatSalaryRange(
-                                    alumni.salary_current ||
-                                    trackerAnswersMap[alumni.id]?.salary_current ||
-                                    trackerAnswersMap[alumni.user_id]?.salary_current
-                                  )}
-                                </span>
-                              </div>
-                            ) : (
-                              <span style={styles.noData}>Not disclosed</span>
-                            )}
+                            {(() => {
+                              // Try multiple field names and sources - check backend response first
+                              const salary = 
+                                alumni.current_salary ||  // From backend API
+                                alumni.salary_current || 
+                                alumni.q_salary_range ||
+                                trackerAnswersMap[alumni.id]?.salary_current ||
+                                trackerAnswersMap[alumni.user_id]?.salary_current;
+                              return salary && salary !== 'Not disclosed' ? (
+                                <div style={styles.salaryContainer}>
+                                  <span style={{ fontSize: '14px', fontWeight: 'bold', marginRight: '6px' }}>₱</span>
+                                  <span>{formatSalaryRange(salary)}</span>
+                                </div>
+                              ) : (
+                                <span style={styles.noData}>Not disclosed</span>
+                              );
+                            })()}
                           </td>
                           <td style={styles.tableCell}>
                             <button
@@ -658,20 +683,40 @@ const AlumniData: React.FC = () => {
                     'Email': modalAlumni.email || modalAlumni.Email || getTrackerAnswerByLabel('email'),
                     'Program Name': modalAlumni.program || modalAlumni.Program_Name || modalAlumni.course || getTrackerAnswerByLabel('program'),
                     'Status': modalAlumni.employment_status || modalAlumni.status || modalAlumni.Status || modalAlumni.user_status || getTrackerAnswerByLabel('status'),
-                    'Employment Type': modalAlumni.employment_type || modalAlumni.Employment_Type || getTrackerAnswerByLabel('employment type'),
+                    'Employment Type': modalAlumni.employment_type || modalAlumni.q_employment_type || modalAlumni.Employment_Type || getTrackerAnswerByLabel('employment type'),
                     'Company': modalAlumni.company_name_current || modalAlumni['Company name current'] || modalAlumni.company || getTrackerAnswerByLabel('company') || getTrackerAnswerByLabel('employer') || getTrackerAnswerByLabel('current company'),
-                    'Position': modalAlumni.position_current || modalAlumni['Position current'] || getTrackerAnswerByLabel('current position'),
-                    'Sector': modalAlumni.sector_current || modalAlumni['Sector current'] || getTrackerAnswerByLabel('sector'),
+                    'Position': modalAlumni.position_current || modalAlumni.q_current_position || modalAlumni['Position current'] || getTrackerAnswerByLabel('current position'),
+                    'Sector': modalAlumni.sector_current || modalAlumni.q_sector_current || modalAlumni['Sector current'] || getTrackerAnswerByLabel('sector'),
                     'Scope': modalAlumni.scope_current || modalAlumni['Scope current'] || getTrackerAnswerByLabel('scope'),
                     'Employment Status': modalAlumni.employment_permanent || modalAlumni.Employment_Permanent || getTrackerAnswerByLabel('employment status') || getTrackerAnswerByLabel('permanent'),
                     'Employment Duration': formatEmploymentDuration(modalAlumni.employment_duration_current || modalAlumni['Employment duration current'] || modalAlumni.employment_duration || getTrackerAnswerByLabel('employment duration') || getTrackerAnswerByLabel('how long') || getTrackerAnswerByLabel('duration')),
-                    'Salary': formatSalaryRange(modalAlumni.salary_current || modalAlumni['Salary current'] || modalAlumni.salary || getTrackerAnswerByLabel('salary')),
+                    'Salary': formatSalaryRange(modalAlumni.salary_current || modalAlumni.q_salary_range || modalAlumni['Salary current'] || modalAlumni.salary || getTrackerAnswerByLabel('salary')),
                     'Supporting Document': formatSupportingDocument(modalAlumni.supporting_document_current || modalAlumni['Supporting document current'] || getTrackerAnswerByLabel('supporting document')),
-                    'Awards': modalAlumni.awards_recognition_current || modalAlumni['Awards recognition current'] || getTrackerAnswerByLabel('awards'),
-                    'Unemployment Reason': modalAlumni.unemployment_reason || modalAlumni['Unemployment reason'] || getTrackerAnswerByLabel('unemployment'),
-                    'Pursuing Further Study': modalAlumni.pursue_further_study || modalAlumni['Pursue further study'] || getTrackerAnswerByLabel('pursue'),
-                    'Date Started': modalAlumni.date_started || modalAlumni['Date started'] || getTrackerAnswerByLabel('date started'),
-                    'School Name': modalAlumni.school_name || modalAlumni['School name'] || modalAlumni.institution || modalAlumni.university || getTrackerAnswerByLabel('school') || getTrackerAnswerByLabel('institution') || getTrackerAnswerByLabel('university'),
+                    'Awards': modalAlumni.q_awards_received || modalAlumni.awards_recognition_current || modalAlumni['Awards recognition current'] || getTrackerAnswerByLabel('awards'),
+                    'Unemployment Reason': modalAlumni.q_unemployment_reason || (Array.isArray(modalAlumni.q_unemployment_reason) ? modalAlumni.q_unemployment_reason.join(', ') : '') || modalAlumni.unemployment_reason || modalAlumni['Unemployment reason'] || getTrackerAnswerByLabel('unemployment'),
+                    'Pursuing Further Study': (() => {
+                      const value = modalAlumni.pursue_further_study || modalAlumni['Pursue further study'] || getTrackerAnswerByLabel('pursue');
+                      // Preserve original capitalization
+                      return value;
+                    })(),
+                    'Date Started': modalAlumni.q_study_start_date || modalAlumni.date_started || modalAlumni['Date started'] || getTrackerAnswerByLabel('date started'),
+                    'School Name': modalAlumni.q_institution_name || modalAlumni.school_name || modalAlumni['School name'] || modalAlumni.institution || modalAlumni.university || getTrackerAnswerByLabel('school') || getTrackerAnswerByLabel('institution') || getTrackerAnswerByLabel('university'),
+                    'Post graduate degree': modalAlumni.q_post_graduate_degree || modalAlumni['Post graduate degree'] || getTrackerAnswerByLabel('post graduate') || getTrackerAnswerByLabel('postgraduate') || getTrackerAnswerByLabel('please specify post graduate'),
+                    'Units obtain': (() => {
+                      const units = modalAlumni.q_units_obtained || modalAlumni['Units obtain'] || modalAlumni['Total number of units obtain'] || getTrackerAnswerByLabel('units obtain') || getTrackerAnswerByLabel('total number of units');
+                      // Convert float to integer string if it's a number
+                      if (units) {
+                        try {
+                          const unitsNum = parseFloat(String(units));
+                          if (!isNaN(unitsNum) && unitsNum % 1 === 0) {
+                            return String(Math.floor(unitsNum));
+                          }
+                        } catch (e) {
+                          // If conversion fails, return as is
+                        }
+                      }
+                      return units;
+                    })(),
                   }).map(([label, value]) => (
                     <div key={label} style={styles.detailItem}>
                       <div style={styles.detailLabel}>{label}</div>

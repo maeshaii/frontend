@@ -101,8 +101,8 @@ interface PostItem {
   reposts_count?: number;
   // Event fields
   is_event?: boolean;
-  event_date?: string;
-  event_time?: string;
+  event_date?: string | null;
+  event_time?: string | null;
 }
 
 interface PostCardProps {
@@ -2006,31 +2006,94 @@ const PostCard: React.FC<PostCardProps> = ({
                     }}
                   />
                   <div>
-                    <div 
-                        className="profile-repost-original-author-info"
-                      onClick={() => {
-                        if (repostData.original_post?.user?.user_id) {
-                          const currentPath = window.location.pathname;
-                          if (currentPath.startsWith('/peso')) {
-                            window.location.href = `/peso/profile/${repostData.original_post.user.user_id}`;
-                          } else if (currentPath.startsWith('/ccict')) {
-                            window.location.href = `/ccict/profile/${repostData.original_post.user.user_id}`;
-                          } else {
-                            window.location.href = `/profile/${repostData.original_post.user.user_id}`;
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <div 
+                          className="profile-repost-original-author-info"
+                        onClick={() => {
+                          if (repostData.original_post?.user?.user_id) {
+                            const currentPath = window.location.pathname;
+                            if (currentPath.startsWith('/peso')) {
+                              window.location.href = `/peso/profile/${repostData.original_post.user.user_id}`;
+                            } else if (currentPath.startsWith('/ccict')) {
+                              window.location.href = `/ccict/profile/${repostData.original_post.user.user_id}`;
+                            } else {
+                              window.location.href = `/profile/${repostData.original_post.user.user_id}`;
+                            }
                           }
-                        }
-                      }}
-                    >
-                      {repostData.original_post.user?.f_name && repostData.original_post.user?.l_name
-                        ? renderName({ 
-                            f_name: repostData.original_post.user.f_name, 
-                            m_name: repostData.original_post.user.m_name, 
-                            l_name: repostData.original_post.user.l_name 
-                          })
-                        : repostData.original_post.user?.f_name || 'Original Post'}
+                        }}
+                      >
+                        {repostData.original_post.user?.f_name && repostData.original_post.user?.l_name
+                          ? renderName({ 
+                              f_name: repostData.original_post.user.f_name, 
+                              m_name: repostData.original_post.user.m_name, 
+                              l_name: repostData.original_post.user.l_name 
+                            })
+                          : repostData.original_post.user?.f_name || 'Original Post'}
+                      </div>
+                      {repostData.original_post.is_event && (
+                        <>
+                          <span style={{
+                            backgroundColor: '#3b82f6',
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            fontWeight: '600',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                          }}>
+                            Event
+                          </span>
+                          {(() => {
+                            if (!repostData.original_post.event_date) return null;
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const eventDate = new Date(repostData.original_post.event_date);
+                            eventDate.setHours(0, 0, 0, 0);
+                            const isEventPast = eventDate < today;
+                            
+                            return isEventPast ? (
+                              <span style={{
+                                backgroundColor: '#9ca3af',
+                                color: '#ffffff',
+                                fontSize: '10px',
+                                fontWeight: '600',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                                marginLeft: '4px'
+                              }}>
+                                ENDED
+                              </span>
+                            ) : null;
+                          })()}
+                        </>
+                      )}
                     </div>
-                      <div className="profile-repost-original-author-details">
+                      <div className="profile-repost-original-author-details" style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
                       <span>{formatTime(repostData.original_post.created_at)}</span>
+                      {repostData.original_post.is_event && repostData.original_post.event_date && (
+                        <>
+                          <span>•</span>
+                          <span style={{ color: '#1e40af', fontWeight: 500 }}>
+                            {new Date(repostData.original_post.event_date).toLocaleDateString('en-US', { 
+                              weekday: 'short',
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}
+                          </span>
+                          {repostData.original_post.event_time && (
+                            <>
+                              <span>•</span>
+                              <span style={{ color: '#475569' }}>🕐 {repostData.original_post.event_time}</span>
+                            </>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2332,7 +2395,10 @@ const PostCard: React.FC<PostCardProps> = ({
                     l_name: post.user?.l_name || '',
                     profile_pic: post.user?.profile_pic
                   },
-                  created_at: post.created_at || ''
+                  created_at: post.created_at || '',
+                  is_event: post.is_event,
+                  event_date: post.event_date,
+                  event_time: post.event_time
                 }}
                 currentUser={{
                   name: `${displayName}`,
@@ -2637,7 +2703,7 @@ const PostCard: React.FC<PostCardProps> = ({
                   Donation
                 </span>
               )}
-              {post.is_event && (
+              {(post.is_event || originalEmbedded?.is_event) && (
                 <>
                   <span style={{
                     backgroundColor: '#3b82f6',
@@ -2653,12 +2719,13 @@ const PostCard: React.FC<PostCardProps> = ({
                     Event
                   </span>
                   {(() => {
-                    if (!post.event_date) return null;
+                    const eventDate = originalEmbedded?.event_date || post.event_date;
+                    if (!eventDate) return null;
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
-                    const eventDate = new Date(post.event_date);
-                    eventDate.setHours(0, 0, 0, 0);
-                    const isEventPast = eventDate < today;
+                    const eventDateObj = new Date(eventDate);
+                    eventDateObj.setHours(0, 0, 0, 0);
+                    const isEventPast = eventDateObj < today;
                     
                     return isEventPast ? (
                       <span style={{
@@ -2682,21 +2749,21 @@ const PostCard: React.FC<PostCardProps> = ({
             </div>
             <div className="post-author-details" style={{ color: '#666', fontSize: '12px' }}>
               <span>{formatTime(post.created_at) || 'Unknown time'}</span>
-              {post.is_event && post.event_date && (
+              {((post.is_event || originalEmbedded?.is_event) && (post.event_date || originalEmbedded?.event_date)) && (
                 <>
                   <span style={{ margin: '0 4px' }}>•</span>
                   <span style={{ color: '#1e40af', fontWeight: 500 }}>
-                    {new Date(post.event_date).toLocaleDateString('en-US', { 
+                    {new Date(originalEmbedded?.event_date || post.event_date).toLocaleDateString('en-US', { 
                       weekday: 'short',
                       year: 'numeric', 
                       month: 'short', 
                       day: 'numeric' 
                     })}
                   </span>
-                  {post.event_time && (
+                  {(originalEmbedded?.event_time || post.event_time) && (
                     <>
                       <span style={{ margin: '0 4px' }}>•</span>
-                      <span style={{ color: '#475569' }}>🕐 {post.event_time}</span>
+                      <span style={{ color: '#475569' }}>🕐 {originalEmbedded?.event_time || post.event_time}</span>
                     </>
                   )}
                 </>
@@ -3220,7 +3287,10 @@ const PostCard: React.FC<PostCardProps> = ({
               l_name: post.user?.l_name || '',
               profile_pic: post.user?.profile_pic
             },
-            created_at: post.created_at || ''
+            created_at: post.created_at || '',
+            is_event: post.is_event,
+            event_date: post.event_date,
+            event_time: post.event_time
           }}
           currentUser={{
             name: `${displayName}`,

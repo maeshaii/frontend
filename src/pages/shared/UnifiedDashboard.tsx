@@ -97,6 +97,10 @@ interface PostItem {
   liked_by_user?: boolean;
   item_type?: 'post' | 'repost';  // New: distinguish between post and repost items
   sort_date?: string;  // New: for sorting feed items
+  // Event fields
+  is_event?: boolean;
+  event_date?: string | null;
+  event_time?: string | null;
 }
 
 interface RepostFeedItem {
@@ -2108,6 +2112,9 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
                             created_at: r.original_post?.created_at,
                             post_content: r.original_post?.post_content,
                             post_images: r.original_post?.post_images || [],
+                            is_event: r.original_post?.is_event,
+                            event_date: r.original_post?.event_date,
+                            event_time: r.original_post?.event_time,
                             user: {
                               user_id: r.original_post?.user?.user_id || 0,
                               f_name: r.original_post?.user?.f_name,

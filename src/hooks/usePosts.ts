@@ -36,6 +36,10 @@ interface PostItem {
   reposts?: any[];
   likes?: LikeItem[];
   liked_by_user?: boolean;
+  // Event fields
+  is_event?: boolean;
+  event_date?: string | null;
+  event_time?: string | null;
 }
 
 export const usePosts = ({ autoRefresh = false }: UsePostsOptions = {}) => {

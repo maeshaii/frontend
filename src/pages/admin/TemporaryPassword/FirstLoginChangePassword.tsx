@@ -136,21 +136,23 @@ const FirstLoginChangePassword: React.FC = () => {
       if (resp.success) {
         // ✅ FIX: Mark password change as successful BEFORE clearing flag
         passwordChangeSuccessful.current = true;
-        setSuccess('Password changed. Please login again.');
-        // ✅ FIX: Set flag to prevent PublicRoute from redirecting during success message
-        localStorage.setItem('password_change_completed', 'true');
+        setSuccess('Password changed. Redirecting to login...');
         // ✅ SECURITY: Clear must_change_password flag
         localStorage.removeItem('must_change_password');
         // Clear tokens AND user data to force fresh login
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user'); // ✅ FIX: Also remove user data
+        // Clear any password change flags
+        localStorage.removeItem('password_change_completed');
+        
+        setIsLoading(false);
+        
+        // ✅ FIX: Use window.location for hard redirect to prevent white screen
+        // This ensures a complete page reload and prevents React Router navigation race conditions
         setTimeout(() => {
-          setIsLoading(false);
-          // Clear the password_change_completed flag before navigating
-          localStorage.removeItem('password_change_completed');
-          navigate('/login', { replace: true });
-        }, 1000);
+          window.location.href = '/login';
+        }, 1500);
       } else {
         setIsLoading(false);
         setError(resp.message || 'Failed to change password');

@@ -19,6 +19,8 @@ const UsersIndex: React.FC = () => {
   const [selectedProgramImport, setSelectedProgramImport] = useState('');
   const [importLoading, setImportLoading] = useState(false);
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showImportErrorModal, setShowImportErrorModal] = useState(false);
+  const [importError, setImportError] = useState<{ title?: string; message: string; hint?: string; details?: string[] } | null>(null);
 
   useEffect(() => {
     const loadBatches = async () => {
@@ -376,7 +378,95 @@ const UsersIndex: React.FC = () => {
           setImportMessage(null);
         }, 3000);
       } else {
-        setImportMessage({ type: 'error', text: result.message || 'Import failed' });
+        // Check if this is a duplicate file (all records already exist)
+        if (result.is_duplicate_file) {
+          setImportError({
+            title: 'Duplicate File Detected',
+            message: result.message || 'All records in this file already exist in the system.',
+            hint: 'This file appears to have been imported before. Each file can only be imported once to prevent duplicate records.',
+            details: [
+              `Found ${result.duplicate_count || 0} records that already exist in the system.`,
+              'If you need to update existing records, please use the edit functionality instead.',
+              'If this is a new file with different data, please verify the CTU IDs are unique.'
+            ],
+          });
+          setShowImportErrorModal(true);
+          // Clear selected file
+          setSelectedFile(null);
+          return;
+        }
+        
+        // Check for CTU ID validation errors
+        const serverMessage = result.message || 'Import failed. Please review your template and try again.';
+        const normalizedMessage = serverMessage.toLowerCase();
+        
+        if (normalizedMessage.includes('invalid ctu_id format') || 
+            normalizedMessage.includes('ctu_id must be exactly 7') ||
+            (normalizedMessage.includes('ctu_id') && (normalizedMessage.includes('7') || normalizedMessage.includes('digit') || normalizedMessage.includes('numeric') || normalizedMessage.includes('exactly')))) {
+          // Show error modal for CTU ID validation errors
+          let hint: string | undefined = 'All CTU IDs must be exactly 7 numeric digits (e.g., 1234567).';
+          let details: string[] | undefined;
+          
+          // Parse the error message to extract row details
+          const lines = serverMessage.split('\n');
+          const errorLines = lines.filter((line: string) => line.trim().startsWith('Row'));
+          
+          // Also check for single error messages that mention specific CTU IDs
+          const hasSpecificError = serverMessage.includes("but got") || serverMessage.includes("character(s)");
+          
+          if (errorLines.length > 0) {
+            details = [
+              'The following rows have invalid CTU IDs:',
+              ...errorLines.slice(0, 15).map((line: string) => `• ${line.trim()}`),
+              ...(errorLines.length > 15 ? [`... and ${errorLines.length - 15} more error(s)`] : [])
+            ];
+          } else if (hasSpecificError) {
+            // Extract the specific error from the message
+            const errorMatch = serverMessage.match(/but got \d+ character\(s\): '([^']+)'/);
+            if (errorMatch) {
+              details = [
+                `Found invalid CTU ID: ${errorMatch[1]}`,
+                'Please check all CTU IDs in your file.',
+                'Each CTU ID must be exactly 7 numbers (no letters, no spaces).',
+                'Example: 1234567 ✅',
+                'Invalid: 123456 ❌ (too short)',
+                'Invalid: 12345678 ❌ (too long)',
+                'Invalid: 123456a ❌ (contains letter)'
+              ];
+            } else {
+              details = [
+                serverMessage.split('\n')[0] || 'Invalid CTU ID format detected.',
+                'Please check all CTU IDs in your file.',
+                'Each CTU ID must be exactly 7 numbers (no letters, no spaces).',
+                'Example: 1234567 ✅',
+                'Invalid: 123456 ❌ (too short)',
+                'Invalid: 12345678 ❌ (too long)',
+                'Invalid: 123456a ❌ (contains letter)'
+              ];
+            }
+          } else {
+            details = [
+              'Please check all CTU IDs in your file.',
+              'Each CTU ID must be exactly 7 numbers (no letters, no spaces).',
+              'Example: 1234567 ✅',
+              'Invalid: 123456 ❌ (too short)',
+              'Invalid: 12345678 ❌ (too long)',
+              'Invalid: 123456a ❌ (contains letter)'
+            ];
+          }
+          
+          setImportError({
+            title: 'Invalid CTU ID Format',
+            message: serverMessage,
+            hint,
+            details,
+          });
+          setShowImportErrorModal(true);
+          // Clear selected file since validation failed
+          setSelectedFile(null);
+        } else {
+          setImportMessage({ type: 'error', text: serverMessage });
+        }
       }
     } catch (error: any) {
       setImportMessage({ type: 'error', text: error.message || 'An unexpected error occurred' });
@@ -972,6 +1062,166 @@ const UsersIndex: React.FC = () => {
               </div>
             </div>
           </>
+        )}
+
+        {/* Import Error Modal */}
+        {showImportErrorModal && importError && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1100,
+            }}
+            onClick={() => {
+              setShowImportErrorModal(false);
+              setImportError(null);
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '28px',
+                maxWidth: importError.title === 'Invalid CTU ID Format' ? '600px' : '420px',
+                maxHeight: '90vh',
+                width: '92%',
+                boxShadow: '0 8px 20px rgba(0, 0, 0, 0.15)',
+                border: '1px solid #fecaca',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  marginBottom: '12px',
+                }}
+              >
+                <span style={{ fontSize: '28px' }}>⚠️</span>
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: '18px',
+                    fontWeight: 700,
+                    color: '#b91c1c',
+                  }}
+                >
+                  {importError.title || 'Import blocked'}
+                </h2>
+              </div>
+
+              <div style={{ overflowY: 'auto', flex: 1 }}>
+                {importError.title !== 'Invalid CTU ID Format' && (
+                  <p
+                    style={{
+                      margin: '0 0 12px',
+                      color: '#1f2937',
+                      lineHeight: 1.5,
+                      fontSize: '14px',
+                      whiteSpace: 'pre-wrap',
+                    }}
+                  >
+                    {importError.message}
+                  </p>
+                )}
+                {importError.title === 'Invalid CTU ID Format' && (
+                  <p
+                    style={{
+                      margin: '0 0 12px',
+                      color: '#dc2626',
+                      lineHeight: 1.5,
+                      fontSize: '14px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    The file cannot be imported because it contains invalid CTU IDs. Please fix all errors and try again.
+                  </p>
+                )}
+
+                {importError.hint && (
+                  <div
+                    style={{
+                      backgroundColor: '#fef3c7',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      color: '#92400e',
+                      fontSize: '13px',
+                      lineHeight: 1.45,
+                      marginBottom: '12px',
+                    }}
+                  >
+                    {importError.hint}
+                  </div>
+                )}
+                {importError.details && importError.details.length > 0 && (
+                  <div
+                    style={{
+                      backgroundColor: '#f9fafb',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      marginBottom: '12px',
+                      maxHeight: importError.title === 'Invalid CTU ID Format' ? '300px' : 'auto',
+                      overflowY: importError.title === 'Invalid CTU ID Format' ? 'auto' : 'visible',
+                    }}
+                  >
+                    <ul
+                      style={{
+                        margin: 0,
+                        padding: 0,
+                        color: '#374151',
+                        fontSize: '13px',
+                        lineHeight: 1.6,
+                        listStyle: 'none',
+                      }}
+                    >
+                      {importError.details.map((detail, idx) => (
+                        <li key={idx} style={{ marginBottom: '8px', paddingLeft: '8px' }}>
+                          {detail}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => {
+                    setShowImportErrorModal(false);
+                    setImportError(null);
+                  }}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: '#ef4444',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#dc2626';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#ef4444';
+                  }}
+                >
+                  Got it
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

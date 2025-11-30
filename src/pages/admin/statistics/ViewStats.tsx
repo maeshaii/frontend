@@ -16,6 +16,11 @@ const ViewStats: React.FC = () => {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [selectedBatchYear, setSelectedBatchYear] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateMessage, setDuplicateMessage] = useState('');
+  const [showCtuIdErrorModal, setShowCtuIdErrorModal] = useState(false);
+  const [ctuIdErrorMessage, setCtuIdErrorMessage] = useState('');
+  const [ctuIdErrorDetails, setCtuIdErrorDetails] = useState<string[]>([]);
 
   useEffect(() => {
     const loadStats = async () => {
@@ -97,7 +102,78 @@ const ViewStats: React.FC = () => {
         setImportFile(null);
       } else {
         const result = await response.json();
-        alert(result.message || 'Import completed.');
+        // Check if this is a duplicate file (all records already exist)
+        if (result.is_duplicate_file) {
+          setDuplicateMessage(result.message || 'All records in this file already exist in the system.');
+          setShowDuplicateModal(true);
+          setImportFile(null);
+        } else {
+          // Check for CTU ID validation errors
+          const serverMessage = result.message || 'Import failed. Please review your template and try again.';
+          const normalizedMessage = serverMessage.toLowerCase();
+          
+          if (normalizedMessage.includes('invalid ctu_id format') || 
+              normalizedMessage.includes('ctu_id must be exactly 7') ||
+              (normalizedMessage.includes('ctu_id') && (normalizedMessage.includes('7') || normalizedMessage.includes('digit') || normalizedMessage.includes('numeric') || normalizedMessage.includes('exactly')))) {
+            // Show error modal for CTU ID validation errors
+            setCtuIdErrorMessage(serverMessage);
+            
+            // Parse the error message to extract row details
+            const lines = serverMessage.split('\n');
+            const errorLines = lines.filter((line: string) => line.trim().startsWith('Row'));
+            
+            // Also check for single error messages that mention specific CTU IDs
+            const hasSpecificError = serverMessage.includes("but got") || serverMessage.includes("character(s)");
+            
+            let details: string[] = [];
+            if (errorLines.length > 0) {
+              details = [
+                'The following rows have invalid CTU IDs:',
+                ...errorLines.slice(0, 15).map((line: string) => `• ${line.trim()}`),
+                ...(errorLines.length > 15 ? [`... and ${errorLines.length - 15} more error(s)`] : [])
+              ];
+            } else if (hasSpecificError) {
+              // Extract the specific error from the message
+              const errorMatch = serverMessage.match(/but got \d+ character\(s\): '([^']+)'/);
+              if (errorMatch) {
+                details = [
+                  `Found invalid CTU ID: ${errorMatch[1]}`,
+                  'Please check all CTU IDs in your file.',
+                  'Each CTU ID must be exactly 7 numbers (no letters, no spaces).',
+                  'Example: 1234567 ✅',
+                  'Invalid: 123456 ❌ (too short)',
+                  'Invalid: 12345678 ❌ (too long)',
+                  'Invalid: 123456a ❌ (contains letter)'
+                ];
+              } else {
+                details = [
+                  serverMessage.split('\n')[0] || 'Invalid CTU ID format detected.',
+                  'Please check all CTU IDs in your file.',
+                  'Each CTU ID must be exactly 7 numbers (no letters, no spaces).',
+                  'Example: 1234567 ✅',
+                  'Invalid: 123456 ❌ (too short)',
+                  'Invalid: 12345678 ❌ (too long)',
+                  'Invalid: 123456a ❌ (contains letter)'
+                ];
+              }
+            } else {
+              details = [
+                'Please check all CTU IDs in your file.',
+                'Each CTU ID must be exactly 7 numbers (no letters, no spaces).',
+                'Example: 1234567 ✅',
+                'Invalid: 123456 ❌ (too short)',
+                'Invalid: 12345678 ❌ (too long)',
+                'Invalid: 123456a ❌ (contains letter)'
+              ];
+            }
+            
+            setCtuIdErrorDetails(details);
+            setShowCtuIdErrorModal(true);
+            setImportFile(null);
+          } else {
+            alert(result.message || 'Import completed.');
+          }
+        }
       }
     } catch { alert('Import failed!'); }
   };
@@ -138,37 +214,62 @@ const ViewStats: React.FC = () => {
     // BASIC INFORMATION (Required)
     const basicHeaders = [
       { header: 'CTU_ID', key: 'ctu_id', width: 15 },
-      { header: 'First_Name', key: 'first_name', width: 20 },
-      { header: 'Last_Name', key: 'last_name', width: 20 },
       { header: 'Gender', key: 'gender', width: 10 },
       { header: 'Year_Graduated', key: 'year_graduated', width: 18 },
       { header: 'Program', key: 'program', width: 15 },
-    ];
-
-    // BASIC INFORMATION (Optional)
-    const optionalBasicHeaders = [
+      { header: 'Email', key: 'email', width: 30 },
+      { header: 'Last_Name', key: 'last_name', width: 20 },
+      { header: 'First_Name', key: 'first_name', width: 20 },
       { header: 'Middle_Name', key: 'middle_name', width: 20 },
       { header: 'Birthdate', key: 'birthdate', width: 15 },
       { header: 'Phone_Number', key: 'phone_number', width: 18 },
-      { header: 'Address', key: 'address', width: 30 },
-      { header: 'Civil Status', key: 'civil_status', width: 15 },
       { header: 'Social Media', key: 'social_media', width: 25 },
-      { header: 'Section', key: 'section', width: 15 },
+      { header: 'Address', key: 'address', width: 30 },
+      { header: 'Complete Home Address', key: 'complete_home_address', width: 30 },
+      { header: 'Civil Status', key: 'civil_status', width: 15 },
     ];
 
-    // TRACKER QUESTION COLUMNS (for alumni who already answered tracker questions)
-    // Based on backend lines 1246, 1262, 1274, 1280, 1286, 1299
-    const trackerHeaders = [
+    // FIRST EMPLOYER AFTER GRADUATION
+    const firstEmployerHeaders = [
+      { header: 'Name of your organization/employer (1st employer right after graduation)', key: 'first_employer_name', width: 40 },
+      { header: 'Date Hired (1st employer right after graduation)', key: 'first_employer_date_hired', width: 30 },
+      { header: 'Position (1st employer right after graduation) N/A if not applicable', key: 'first_employer_position', width: 40 },
+      { header: 'Status of your employment (1st employer right after graduation)', key: 'first_employer_status', width: 40 },
+      { header: 'Company Address (1st employer right after graduation)', key: 'first_employer_company_address', width: 40 },
+      { header: 'Sector (1st employer right after graduation)', key: 'first_employer_sector', width: 30 },
+    ];
+
+    // CURRENT EMPLOYMENT STATUS
+    const currentEmploymentHeaders = [
       { header: 'Are you PRESENTLY employed?', key: 'are_you_presently_employed', width: 30 },
+      { header: 'Did you pursue futher study?', key: 'did_you_pursue_further_study', width: 30 },
+      { header: 'Are you employed by a company/organization or are you self employed ?', key: 'employment_type', width: 50 },
+      { header: 'Status of your current employment', key: 'status_of_current_employment', width: 35 },
       { header: 'Current Company Name', key: 'current_company_name', width: 30 },
       { header: 'Current Position', key: 'current_position', width: 30 },
       { header: 'Current Sector of your Job', key: 'current_sector_of_your_job', width: 30 },
-      { header: 'Current Salary Range', key: 'current_salary_range', width: 25 },
-      { header: 'Please specify post graduate/degree.', key: 'please_specify_post_graduate_degree', width: 35 },
+      { header: 'How long have you been employed?', key: 'how_long_employed', width: 30 },
+      { header: 'Current Salary range', key: 'current_salary_range', width: 25 },
+      { header: 'Have you received any awards or recognition during your employment?', key: 'awards_recognition', width: 50 },
+      { header: 'Employment Scope', key: 'employment_scope', width: 25 },
+      { header: 'Reason for unemployment', key: 'reason_for_unemployment', width: 30 },
+    ];
+
+    // FURTHER STUDY INFORMATION
+    const furtherStudyHeaders = [
+      { header: 'Date Started', key: 'date_started', width: 20 },
+      { header: 'Please specify post graduate/degree', key: 'post_graduate_degree', width: 40 },
+      { header: 'Name of Institution/University', key: 'institution_name', width: 40 },
+      { header: 'Total number of units obtain', key: 'units_obtained', width: 30 },
     ];
 
     // Combine all headers
-    const headers = [...basicHeaders, ...optionalBasicHeaders, ...trackerHeaders];
+    const headers = [
+      ...basicHeaders,
+      ...firstEmployerHeaders,
+      ...currentEmploymentHeaders,
+      ...furtherStudyHeaders
+    ];
     worksheet.columns = headers;
 
     // Style header row
@@ -185,70 +286,121 @@ const ViewStats: React.FC = () => {
     // Sample data rows - Example 1: Basic info only (no tracker data)
     const sampleDataBasic = {
       ctu_id: '1337580',
-      first_name: 'John',
-      last_name: 'Doe',
-      middle_name: 'Michael',
       gender: 'M',
       year_graduated: '2024',
       program: 'BSIT',
+      email: 'john.doe@example.com',
+      last_name: 'Doe',
+      first_name: 'John',
+      middle_name: 'Michael',
       birthdate: '2003-04-12',
       phone_number: '09123456789',
-      address: '123 Main Street, Cebu City, Cebu',
-      civil_status: 'Single',
       social_media: '@johndoe',
-      section: '',
+      address: '123 Main Street, Cebu City, Cebu',
+      complete_home_address: '123 Main Street, Cebu City, Cebu',
+      civil_status: 'Single',
+      first_employer_name: '',
+      first_employer_date_hired: '',
+      first_employer_position: '',
+      first_employer_status: '',
+      first_employer_company_address: '',
+      first_employer_sector: '',
       are_you_presently_employed: '',
+      did_you_pursue_further_study: '',
+      employment_type: '',
+      status_of_current_employment: '',
       current_company_name: '',
       current_position: '',
       current_sector_of_your_job: '',
+      how_long_employed: '',
       current_salary_range: '',
-      please_specify_post_graduate_degree: '',
+      awards_recognition: '',
+      employment_scope: '',
+      reason_for_unemployment: '',
+      date_started: '',
+      post_graduate_degree: '',
+      institution_name: '',
+      units_obtained: '',
     };
 
     // Example 2: With tracker data (employed)
     const sampleDataWithTracker = {
       ctu_id: '1337581',
-      first_name: 'Jane',
-      last_name: 'Smith',
-      middle_name: 'Marie',
       gender: 'F',
       year_graduated: '2024',
       program: 'BSIS',
+      email: 'jane.smith@example.com',
+      last_name: 'Smith',
+      first_name: 'Jane',
+      middle_name: 'Marie',
       birthdate: '2002-05-15',
       phone_number: '09187654321',
-      address: '456 Oak Avenue, Mandaue City, Cebu',
-      civil_status: 'Single',
       social_media: '@janesmith',
-      section: '',
+      address: '456 Oak Avenue, Mandaue City, Cebu',
+      complete_home_address: '456 Oak Avenue, Mandaue City, Cebu',
+      civil_status: 'Single',
+      first_employer_name: 'ABC Technology Solutions Inc.',
+      first_employer_date_hired: '2024-06-01',
+      first_employer_position: 'Junior Software Developer',
+      first_employer_status: 'Permanent',
+      first_employer_company_address: '123 Tech Street, Cebu City',
+      first_employer_sector: 'Private',
       are_you_presently_employed: 'Yes',
+      did_you_pursue_further_study: 'No',
+      employment_type: 'Employed by company/organization',
+      status_of_current_employment: 'Permanent',
       current_company_name: 'ABC Technology Solutions Inc.',
       current_position: 'Software Developer',
       current_sector_of_your_job: 'Private',
+      how_long_employed: '1-2 years',
       current_salary_range: '20,000 - 30,000',
-      please_specify_post_graduate_degree: '',
+      awards_recognition: 'Yes',
+      employment_scope: 'Local',
+      reason_for_unemployment: '',
+      date_started: '',
+      post_graduate_degree: '',
+      institution_name: '',
+      units_obtained: '',
     };
 
     // Example 3: With tracker data (unemployed, pursuing further study)
     const sampleDataUnemployed = {
       ctu_id: '1337582',
-      first_name: 'Mark',
-      last_name: 'Johnson',
-      middle_name: 'Paul',
       gender: 'M',
       year_graduated: '2024',
       program: 'BIT-CT',
+      email: 'mark.johnson@example.com',
+      last_name: 'Johnson',
+      first_name: 'Mark',
+      middle_name: 'Paul',
       birthdate: '2003-08-20',
       phone_number: '09234567890',
-      address: '789 Pine Road, Lapu-Lapu City, Cebu',
-      civil_status: 'Married',
       social_media: '@markjohnson',
-      section: '',
+      address: '789 Pine Road, Lapu-Lapu City, Cebu',
+      complete_home_address: '789 Pine Road, Lapu-Lapu City, Cebu',
+      civil_status: 'Married',
+      first_employer_name: '',
+      first_employer_date_hired: '',
+      first_employer_position: '',
+      first_employer_status: '',
+      first_employer_company_address: '',
+      first_employer_sector: '',
       are_you_presently_employed: 'No',
+      did_you_pursue_further_study: 'Yes',
+      employment_type: '',
+      status_of_current_employment: '',
       current_company_name: '',
       current_position: '',
       current_sector_of_your_job: '',
+      how_long_employed: '',
       current_salary_range: '',
-      please_specify_post_graduate_degree: 'Master of Science in Information Technology',
+      awards_recognition: '',
+      employment_scope: '',
+      reason_for_unemployment: 'Pursuing further studies',
+      date_started: '2024-09-01',
+      post_graduate_degree: 'Master of Science in Information Technology',
+      institution_name: 'Cebu Technological University',
+      units_obtained: '12',
     };
 
     // Add sample data rows
@@ -267,11 +419,12 @@ const ViewStats: React.FC = () => {
       { instructions: 'REQUIRED COLUMNS (Must be filled for all alumni):' },
       { instructions: '═══════════════════════════════════════════════════════════════' },
       { instructions: '  • CTU_ID: Unique identifier for the alumni (e.g., 1337580)' },
-      { instructions: '  • First_Name: First name of the alumni' },
-      { instructions: '  • Last_Name: Last name of the alumni' },
       { instructions: '  • Gender: Must be exactly "M" for Male or "F" for Female (case-sensitive)' },
       { instructions: '  • Year_Graduated: Graduation year (e.g., 2024)' },
       { instructions: '  • Program: Must be exactly one of: BSIT, BSIS, or BIT-CT' },
+      { instructions: '  • Email: Email address of the alumni' },
+      { instructions: '  • Last_Name: Last name of the alumni' },
+      { instructions: '  • First_Name: First name of the alumni' },
       { instructions: '' },
       { instructions: '═══════════════════════════════════════════════════════════════' },
       { instructions: 'OPTIONAL BASIC COLUMNS (Can be left empty):' },
@@ -280,23 +433,48 @@ const ViewStats: React.FC = () => {
       { instructions: '  • Birthdate: Date of birth (Format: YYYY-MM-DD or MM/DD/YYYY)' },
       { instructions: '    Examples: 2003-04-12 or 04/12/2003' },
       { instructions: '  • Phone_Number: Contact number (e.g., 09123456789)' },
-      { instructions: '  • Address: Complete address' },
-      { instructions: '  • Civil Status: Marital status (e.g., Single, Married, etc.)' },
       { instructions: '  • Social Media: Social media handle (e.g., @username)' },
-      { instructions: '  • Section: Class section (if applicable)' },
+      { instructions: '  • Address: Complete current address' },
+      { instructions: '  • Complete Home Address: Complete home address' },
+      { instructions: '  • Civil Status: Marital status (e.g., Single, Married, etc.)' },
       { instructions: '' },
       { instructions: '═══════════════════════════════════════════════════════════════' },
-      { instructions: 'TRACKER QUESTION COLUMNS (For alumni who answered tracker questions):' },
+      { instructions: 'FIRST EMPLOYER AFTER GRADUATION (Optional):' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: '  • Name of your organization/employer (1st employer right after graduation)' },
+      { instructions: '  • Date Hired (1st employer right after graduation): Format YYYY-MM-DD' },
+      { instructions: '  • Position (1st employer right after graduation): N/A if not applicable' },
+      { instructions: '  • Status of your employment (1st employer right after graduation): e.g., Permanent, Contract' },
+      { instructions: '  • Company Address (1st employer right after graduation)' },
+      { instructions: '  • Sector (1st employer right after graduation): Private, Government, or Public' },
+      { instructions: '' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: 'CURRENT EMPLOYMENT STATUS (For alumni who answered tracker questions):' },
       { instructions: '═══════════════════════════════════════════════════════════════' },
       { instructions: '  These columns are for importing alumni who have already answered tracker questions.' },
       { instructions: '  Leave these empty if the alumni has not answered the tracker yet.' },
       { instructions: '' },
       { instructions: '  • Are you PRESENTLY employed?: Must be "Yes" or "No" (or "Y"/"N")' },
+      { instructions: '  • Did you pursue futher study?: Must be "Yes" or "No" (or "Y"/"N")' },
+      { instructions: '  • Are you employed by a company/organization or are you self employed?:' },
+      { instructions: '    Options: "Employed by company/organization" or "Self employed"' },
+      { instructions: '  • Status of your current employment: e.g., Permanent, Contract, Probationary' },
       { instructions: '  • Current Company Name: Name of current employer' },
       { instructions: '  • Current Position: Job title/position (e.g., Software Developer)' },
       { instructions: '  • Current Sector of your Job: Must be "Private", "Government", or "Public"' },
-      { instructions: '  • Current Salary Range: Salary range (e.g., 20,000 - 30,000)' },
-      { instructions: '  • Please specify post graduate/degree.: Post-graduate degree if pursuing further study' },
+      { instructions: '  • How long have you been employed?: e.g., "1-2 years", "6 months"' },
+      { instructions: '  • Current Salary range: Salary range (e.g., 20,000 - 30,000)' },
+      { instructions: '  • Have you received any awards or recognition during your employment?: Yes/No' },
+      { instructions: '  • Employment Scope: Local or International' },
+      { instructions: '  • Reason for unemployment: Required if not presently employed' },
+      { instructions: '' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: 'FURTHER STUDY INFORMATION (If pursuing further study):' },
+      { instructions: '═══════════════════════════════════════════════════════════════' },
+      { instructions: '  • Date Started: Start date of further study (Format: YYYY-MM-DD)' },
+      { instructions: '  • Please specify post graduate/degree: e.g., Master of Science in IT' },
+      { instructions: '  • Name of Institution/University: Name of the educational institution' },
+      { instructions: '  • Total number of units obtain: Number of units obtained' },
       { instructions: '' },
       { instructions: '═══════════════════════════════════════════════════════════════' },
       { instructions: 'IMPORTANT NOTES:' },
@@ -575,6 +753,127 @@ const ViewStats: React.FC = () => {
                     <button style={{ ...styles.importButton, background: '#e5e7eb', color: '#111827' }} onClick={() => setShowExportModal(false)}>Cancel</button>
                     <button style={{ ...styles.importButton }} onClick={handleExport}>Export to Excel</button>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Duplicate File Modal */}
+        {showDuplicateModal && (
+          <div style={styles.modalOverlay}>
+            <div style={{ ...styles.modalContent, maxWidth: 500 }}>
+              <div style={styles.modalHeader}>
+                <h2 style={{ ...styles.modalTitle, color: '#f59e0b' }}>⚠️ Duplicate File Detected</h2>
+                <button onClick={() => setShowDuplicateModal(false)} style={styles.modalCloseButton}>×</button>
+              </div>
+              <div style={styles.modalBody}>
+                <div style={{ marginBottom: '20px' }}>
+                  <p style={{ fontSize: '16px', color: '#374151', marginBottom: '12px' }}>
+                    {duplicateMessage}
+                  </p>
+                  <div style={{ 
+                    padding: '12px', 
+                    backgroundColor: '#fef3c7', 
+                    borderRadius: '8px', 
+                    border: '1px solid #fbbf24',
+                    marginTop: '16px'
+                  }}>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#92400e' }}>
+                      <strong>Note:</strong> This file appears to have been imported before. Each file can only be imported once to prevent duplicate records.
+                    </p>
+                  </div>
+                  <div style={{ marginTop: '16px', fontSize: '14px', color: '#6b7280' }}>
+                    <p style={{ margin: '8px 0' }}>• If you need to update existing records, please use the edit functionality instead.</p>
+                    <p style={{ margin: '8px 0' }}>• If this is a new file with different data, please verify the CTU IDs are unique.</p>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                  <button 
+                    style={{ ...styles.importButton, background: '#3b82f6', color: 'white' }} 
+                    onClick={() => setShowDuplicateModal(false)}
+                  >
+                    Understood
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Invalid CTU ID Format Modal */}
+        {showCtuIdErrorModal && (
+          <div style={styles.modalOverlay}>
+            <div style={{ ...styles.modalContent, maxWidth: 600 }}>
+              <div style={styles.modalHeader}>
+                <h2 style={{ ...styles.modalTitle, color: '#ef4444' }}>❌ Invalid CTU ID Format</h2>
+                <button onClick={() => setShowCtuIdErrorModal(false)} style={styles.modalCloseButton}>×</button>
+              </div>
+              <div style={styles.modalBody}>
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ 
+                    padding: '12px', 
+                    backgroundColor: '#fee2e2', 
+                    borderRadius: '8px', 
+                    border: '1px solid #fca5a5',
+                    marginBottom: '16px'
+                  }}>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#991b1b', fontWeight: '600' }}>
+                      All CTU IDs must be exactly 7 numeric digits (e.g., 1234567).
+                    </p>
+                  </div>
+                  
+                  {ctuIdErrorDetails.length > 0 && (
+                    <div style={{ 
+                      maxHeight: '300px', 
+                      overflowY: 'auto', 
+                      padding: '12px', 
+                      backgroundColor: '#f9fafb', 
+                      borderRadius: '8px',
+                      border: '1px solid #e5e7eb',
+                      marginBottom: '16px'
+                    }}>
+                      {ctuIdErrorDetails.map((detail, idx) => (
+                        <p key={idx} style={{ 
+                          margin: idx === 0 ? '0 0 8px 0' : '4px 0', 
+                          fontSize: '14px', 
+                          color: '#374151',
+                          fontWeight: idx === 0 ? '600' : 'normal'
+                        }}>
+                          {detail}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  
+                  <div style={{ 
+                    padding: '12px', 
+                    backgroundColor: '#eff6ff', 
+                    borderRadius: '8px', 
+                    border: '1px solid #93c5fd',
+                    marginTop: '16px'
+                  }}>
+                    <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#1e40af', fontWeight: '600' }}>
+                      Requirements:
+                    </p>
+                    <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '14px', color: '#1e40af' }}>
+                      <li>Exactly 7 characters</li>
+                      <li>Only numbers (0-9)</li>
+                      <li>No letters, spaces, or special characters</li>
+                    </ul>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                  <button 
+                    style={{ ...styles.importButton, background: '#ef4444', color: 'white' }} 
+                    onClick={() => {
+                      setShowCtuIdErrorModal(false);
+                      setCtuIdErrorMessage('');
+                      setCtuIdErrorDetails([]);
+                    }}
+                  >
+                    I Understand
+                  </button>
                 </div>
               </div>
             </div>

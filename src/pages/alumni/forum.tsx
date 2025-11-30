@@ -71,6 +71,10 @@ interface PostItem {
   }>;
   liked_by_user?: boolean;
   type?: string;
+  // Event fields
+  is_event?: boolean;
+  event_date?: string | null;
+  event_time?: string | null;
 }
 
 const ForumPage: React.FC = () => {
@@ -954,6 +958,9 @@ const ForumPage: React.FC = () => {
                             created_at: item.repostData.original_post.created_at,
                             post_content: item.repostData.original_post.post_content,
                             post_images: item.repostData.original_post.post_images || (item.repostData.original_post.post_image ? [{ image_id: 0, image_url: item.repostData.original_post.post_image, order: 0 }] : undefined),
+                            is_event: item.repostData.original_post.is_event,
+                            event_date: item.repostData.original_post.event_date,
+                            event_time: item.repostData.original_post.event_time,
                             user: item.repostData.original_post.user
                           } : undefined
                         }}

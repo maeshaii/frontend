@@ -163,6 +163,10 @@ interface PostItem {
   reposts?: RepostItem[];
   likes?: LikeItem[];
   liked_by_user?: boolean;
+  // Event fields
+  is_event?: boolean;
+  event_date?: string | null;
+  event_time?: string | null;
 }
 
 type RewardDialogState = {
@@ -2702,6 +2706,9 @@ getPosts()
                       created_at: repostItem.original_post.created_at,
                       post_content: repostItem.original_post.post_content,
                       post_images: repostItem.original_post.post_images || (repostItem.original_post.post_image ? [{ image_id: 0, image_url: repostItem.original_post.post_image, order: 0 }] : undefined),
+                      is_event: repostItem.original_post.is_event,
+                      event_date: repostItem.original_post.event_date,
+                      event_time: repostItem.original_post.event_time,
                       user: repostItem.original_post.user ? { 
                         user_id: repostItem.original_post.user.user_id || 0, 
                         f_name: repostItem.original_post.user.f_name, 

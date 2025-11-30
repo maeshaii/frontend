@@ -23,6 +23,9 @@ interface RepostButtonProps {
       profile_pic?: string;
     };
     created_at: string;
+    is_event?: boolean;
+    event_date?: string | null;
+    event_time?: string | null;
   };
   currentUser: {
     name: string;

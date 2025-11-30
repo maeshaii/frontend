@@ -30,6 +30,9 @@ interface RepostModalProps {
       order?: number;
     } | string>; // Can be array of objects or strings
     created_at?: string | null;
+    is_event?: boolean;
+    event_date?: string | null;
+    event_time?: string | null;
   };
   currentUser: {
     name: string;
@@ -497,12 +500,77 @@ const RepostModal: React.FC<RepostModalProps> = ({
                 }}
               />
               <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>
-                  {originalPost.user?.f_name && originalPost.user?.l_name
-                    ? `${originalPost.user.f_name} ${originalPost.user.m_name || ''} ${originalPost.user.l_name}`.trim()
-                    : originalPost.user?.f_name || 'User'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>
+                    {originalPost.user?.f_name && originalPost.user?.l_name
+                      ? `${originalPost.user.f_name} ${originalPost.user.m_name || ''} ${originalPost.user.l_name}`.trim()
+                      : originalPost.user?.f_name || 'User'}
+                  </div>
+                  {originalPost.is_event && (
+                    <>
+                      <span style={{
+                        backgroundColor: '#3b82f6',
+                        color: '#ffffff',
+                        fontSize: '10px',
+                        fontWeight: '600',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                      }}>
+                        Event
+                      </span>
+                      {(() => {
+                        if (!originalPost.event_date) return null;
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const eventDate = new Date(originalPost.event_date);
+                        eventDate.setHours(0, 0, 0, 0);
+                        const isEventPast = eventDate < today;
+                        
+                        return isEventPast ? (
+                          <span style={{
+                            backgroundColor: '#9ca3af',
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            fontWeight: '600',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                            marginLeft: '4px'
+                          }}>
+                            ENDED
+                          </span>
+                        ) : null;
+                      })()}
+                    </>
+                  )}
                 </div>
-                <div style={{ fontSize: 12, color: '#9ca3af' }}>{formatTime(originalPost.created_at)}</div>
+                <div style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                  <span>{formatTime(originalPost.created_at)}</span>
+                  {originalPost.is_event && originalPost.event_date && (
+                    <>
+                      <span>•</span>
+                      <span style={{ color: '#1e40af', fontWeight: 500 }}>
+                        {new Date(originalPost.event_date).toLocaleDateString('en-US', { 
+                          weekday: 'short',
+                          year: 'numeric', 
+                          month: 'short', 
+                          day: 'numeric' 
+                        })}
+                      </span>
+                      {originalPost.event_time && (
+                        <>
+                          <span>•</span>
+                          <span style={{ color: '#475569' }}>🕐 {originalPost.event_time}</span>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 

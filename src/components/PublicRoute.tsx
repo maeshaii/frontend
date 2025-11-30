@@ -155,7 +155,8 @@ export const PublicRoute: React.FC<PublicRouteProps> = ({
         alignItems: 'center',
         height: '100vh',
         fontSize: '1.2rem',
-        color: '#666'
+        color: '#666',
+        backgroundColor: '#ffffff'
       }}>
         Loading...
       </div>

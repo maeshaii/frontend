@@ -20,6 +20,16 @@ const Login = () => {
 
   // 🔒 SECURITY: Check if user is already authenticated
   useEffect(() => {
+    // ✅ FIX: Don't redirect if we just came from password change
+    // This prevents white screen when navigating from first-login-change-password
+    const passwordChanged = location.state && (location.state as any).passwordChanged === true;
+    if (passwordChanged) {
+      console.log('[Login] Arrived from password change - allowing login page to render');
+      // Clear any stale flags
+      localStorage.removeItem('password_change_completed');
+      return;
+    }
+    
     const token = localStorage.getItem('accessToken');
     const user = localStorage.getItem('user');
     
@@ -51,7 +61,7 @@ const Login = () => {
         localStorage.removeItem('user');
       }
     }
-  }, [navigate]);
+  }, [navigate, location.state]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

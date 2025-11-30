@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
 import { fetchOJTStatistics, importOJT, setSendDate, getSendDates, checkAllSentStatus, deleteSendDate } from '../../services/api';
-import logoLogin from '../../images/logo.png';
+import whereNaYouLogo from '../../images/wny-logo.png';
 import { FaUpload, FaChartBar, FaSignOutAlt, FaDownload, FaCalendarAlt, FaUsers, FaBars, FaTimes } from 'react-icons/fa';
 import { toast } from '../../utils/toast';
 
@@ -362,7 +362,64 @@ export default function Dashboard() {
             const normalizedMessage = serverMessage.toLowerCase();
             let hint: string | undefined;
             let details: string[] | undefined;
-            if (normalizedMessage.includes('second-import template')) {
+            let errorTitle = 'Import blocked';
+            
+            // Check for CTU ID validation errors
+            if (normalizedMessage.includes('invalid ctu_id format') || 
+                normalizedMessage.includes('ctu_id must be exactly 7') ||
+                (normalizedMessage.includes('ctu_id') && (normalizedMessage.includes('7') || normalizedMessage.includes('digit') || normalizedMessage.includes('numeric') || normalizedMessage.includes('exactly')))) {
+              errorTitle = 'Invalid CTU ID Format';
+              hint = 'All CTU IDs must be exactly 7 numeric digits (e.g., 1234567).';
+              // Parse the error message to extract row details
+              const lines = serverMessage.split('\n');
+              const errorLines = lines.filter((line: string) => line.trim().startsWith('Row'));
+              
+              // Also check for single error messages that mention specific CTU IDs
+              const hasSpecificError = serverMessage.includes("but got") || serverMessage.includes("character(s)");
+              
+              if (errorLines.length > 0) {
+                details = [
+                  'The following rows have invalid CTU IDs:',
+                  ...errorLines.slice(0, 15).map((line: string) => `• ${line.trim()}`),
+                  ...(errorLines.length > 15 ? [`... and ${errorLines.length - 15} more error(s)`] : [])
+                ];
+              } else if (hasSpecificError) {
+                // Extract the specific error from the message
+                const errorMatch = serverMessage.match(/but got \d+ character\(s\): '([^']+)'/);
+                if (errorMatch) {
+                  details = [
+                    `Found invalid CTU ID: ${errorMatch[1]}`,
+                    'Please check all CTU IDs in your file.',
+                    'Each CTU ID must be exactly 7 numbers (no letters, no spaces).',
+                    'Example: 1234567 ✅',
+                    'Invalid: 123456 ❌ (too short)',
+                    'Invalid: 12345678 ❌ (too long)',
+                    'Invalid: 123456a ❌ (contains letter)'
+                  ];
+                } else {
+                  details = [
+                    serverMessage.split('\n')[0] || 'Invalid CTU ID format detected.',
+                    'Please check all CTU IDs in your file.',
+                    'Each CTU ID must be exactly 7 numbers (no letters, no spaces).',
+                    'Example: 1234567 ✅',
+                    'Invalid: 123456 ❌ (too short)',
+                    'Invalid: 12345678 ❌ (too long)',
+                    'Invalid: 123456a ❌ (contains letter)'
+                  ];
+                }
+              } else {
+                details = [
+                  'Please check all CTU IDs in your file.',
+                  'Each CTU ID must be exactly 7 numbers (no letters, no spaces).',
+                  'Example: 1234567 ✅',
+                  'Invalid: 123456 ❌ (too short)',
+                  'Invalid: 12345678 ❌ (too long)',
+                  'Invalid: 123456a ❌ (contains letter)'
+                ];
+              }
+              // Clear selected files since validation failed
+              clearSelectedFiles();
+            } else if (normalizedMessage.includes('second-import template')) {
               hint = 'Add students first, then company info.';
             } else if (normalizedMessage.includes('immediately after creating')) {
               const recentIds = Array.isArray(result.recent_ctu_ids) ? result.recent_ctu_ids : [];
@@ -383,7 +440,7 @@ export default function Dashboard() {
               ];
             }
             setImportError({
-              title: 'Import blocked',
+              title: errorTitle,
               message: serverMessage,
               hint,
               details,
@@ -787,14 +844,14 @@ export default function Dashboard() {
     },
     logoContainer: {
       width: '100%',
-      maxWidth: isCollapsed ? '60px' : '180px',
+      maxWidth: isCollapsed ? '60px' : '220px',
       margin: '0 auto',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       gap: isCollapsed ? '0' : '6px',
-      overflow: 'hidden',
-      padding: isCollapsed ? '6px' : '12px 0',
+      overflow: 'visible' as const,
+      padding: isCollapsed ? '6px' : '12px 8px',
       transition: 'all 0.3s ease',
       flexWrap: 'nowrap' as const,
     },
@@ -814,21 +871,20 @@ export default function Dashboard() {
       width: '100%',
       height: '100%',
       objectFit: 'contain' as const,
-      filter: 'brightness(0) saturate(100%) invert(100%)',
-      transition: 'filter 0.3s ease',
+      transition: 'opacity 0.3s ease, transform 0.3s ease',
       userSelect: 'none' as const,
       pointerEvents: 'none' as const,
       display: 'block',
     },
     logoText: {
-      fontSize: isCollapsed ? '18px' : '28px',
-      textAlign: 'center' as const,
+      fontSize: isCollapsed ? '18px' : '24px',
+      textAlign: 'left' as const,
       fontWeight: '700' as const,
       color: '#ffffff',
       fontFamily: '"Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      letterSpacing: isCollapsed ? '0.5px' : '1.2px',
+      letterSpacing: isCollapsed ? '0.5px' : '0.8px',
       textShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
-      overflow: 'hidden',
+      overflow: 'visible' as const,
       transition: 'all 0.3s ease',
       whiteSpace: 'nowrap' as const,
       opacity: isCollapsed ? 0 : 1,
@@ -1111,14 +1167,17 @@ export default function Dashboard() {
             <div style={styles.logoContainer}>
               <div style={styles.logoIcon}>
                 <img 
-                  src={logoLogin} 
+                  src={whereNaYouLogo} 
                   alt="WhereNaYou Logo" 
                   style={styles.logoIconImage}
                   onError={(e) => {
-                    // Fallback: hide image if it fails to load
-                    (e.target as HTMLImageElement).style.display = 'none';
+                    // Graceful fallback: hide image if it fails to load
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    console.warn('WhereNaYou logo failed to load');
                   }}
                   loading="eager"
+                  decoding="async"
                 />
               </div>
               <h1 style={styles.logoText}>{isCollapsed ? 'WNY' : 'WhereNaYou'}</h1>
@@ -3256,6 +3315,10 @@ export default function Dashboard() {
           onClick={() => {
             setShowImportErrorModal(false);
             setImportError(null);
+            // Clear files if it was a CTU ID validation error
+            if (importError?.title === 'Invalid CTU ID Format') {
+              clearSelectedFiles();
+            }
           }}
         >
           <div
@@ -3263,10 +3326,13 @@ export default function Dashboard() {
               backgroundColor: 'white',
               borderRadius: '12px',
               padding: '28px',
-              maxWidth: '420px',
+              maxWidth: importError.title === 'Invalid CTU ID Format' ? '600px' : '420px',
+              maxHeight: '90vh',
               width: '92%',
               boxShadow: '0 8px 20px rgba(0, 0, 0, 0.15)',
               border: '1px solid #fecaca',
+              display: 'flex',
+              flexDirection: 'column',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -3291,55 +3357,89 @@ export default function Dashboard() {
               </h2>
             </div>
 
-            <p
-              style={{
-                margin: '0 0 12px',
-                color: '#1f2937',
-                lineHeight: 1.5,
-                fontSize: '14px',
-              }}
-            >
-              {importError.message}
-            </p>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {importError.title !== 'Invalid CTU ID Format' && (
+                <p
+                  style={{
+                    margin: '0 0 12px',
+                    color: '#1f2937',
+                    lineHeight: 1.5,
+                    fontSize: '14px',
+                    whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {importError.message}
+                </p>
+              )}
+              {importError.title === 'Invalid CTU ID Format' && (
+                <p
+                  style={{
+                    margin: '0 0 12px',
+                    color: '#dc2626',
+                    lineHeight: 1.5,
+                    fontSize: '14px',
+                    fontWeight: 600,
+                  }}
+                >
+                  The file cannot be imported because it contains invalid CTU IDs. Please fix all errors and try again.
+                </p>
+              )}
 
-            {importError.hint && (
-              <div
-                style={{
-                  backgroundColor: '#fef3c7',
-                  borderRadius: '8px',
-                  padding: '12px',
-                  color: '#92400e',
-                  fontSize: '13px',
-                  lineHeight: 1.45,
-                  marginBottom: '12px',
-                }}
-              >
-                {importError.hint}
-              </div>
-            )}
-            {importError.details && importError.details.length > 0 && (
-              <ul
-                style={{
-                  margin: '0 0 12px 18px',
-                  padding: 0,
-                  color: '#374151',
-                  fontSize: '13px',
-                  lineHeight: 1.4,
-                }}
-              >
-                {importError.details.map((detail, idx) => (
-                  <li key={idx} style={{ marginBottom: '6px' }}>
-                    {detail}
-                  </li>
-                ))}
-              </ul>
-            )}
+              {importError.hint && (
+                <div
+                  style={{
+                    backgroundColor: '#fef3c7',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    color: '#92400e',
+                    fontSize: '13px',
+                    lineHeight: 1.45,
+                    marginBottom: '12px',
+                  }}
+                >
+                  {importError.hint}
+                </div>
+              )}
+              {importError.details && importError.details.length > 0 && (
+                <div
+                  style={{
+                    backgroundColor: '#f9fafb',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '12px',
+                    maxHeight: importError.title === 'Invalid CTU ID Format' ? '300px' : 'auto',
+                    overflowY: importError.title === 'Invalid CTU ID Format' ? 'auto' : 'visible',
+                  }}
+                >
+                  <ul
+                    style={{
+                      margin: 0,
+                      padding: 0,
+                      color: '#374151',
+                      fontSize: '13px',
+                      lineHeight: 1.6,
+                      listStyle: 'none',
+                    }}
+                  >
+                    {importError.details.map((detail, idx) => (
+                      <li key={idx} style={{ marginBottom: '8px', paddingLeft: '8px' }}>
+                        {detail}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 onClick={() => {
                   setShowImportErrorModal(false);
                   setImportError(null);
+                  // Clear files if it was a CTU ID validation error
+                  if (importError?.title === 'Invalid CTU ID Format') {
+                    clearSelectedFiles();
+                  }
                 }}
                 style={{
                   padding: '10px 20px',

@@ -59,6 +59,10 @@ export interface PostItemLite {
   likes_count?: number;
   comments_count?: number;
   reposts_count?: number;
+  // Event fields
+  is_event?: boolean;
+  event_date?: string | null;
+  event_time?: string | null;
 }
 
 interface CommentLite {
@@ -1710,7 +1714,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
                 onError={handleProfilePicError}
               />
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <div style={{ fontWeight: 'bold', fontSize: 13, color: '#333' }}>{originalPosterName || 'Original Post'}</div>
                   {original.donation_id && (
                     <span style={{
@@ -1727,8 +1731,70 @@ const RepostCard: React.FC<RepostCardProps> = ({
                       Donation
                     </span>
                   )}
+                  {original.is_event && (
+                    <>
+                      <span style={{
+                        backgroundColor: '#3b82f6',
+                        color: '#ffffff',
+                        fontSize: '10px',
+                        fontWeight: '600',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                      }}>
+                        Event
+                      </span>
+                      {(() => {
+                        if (!original.event_date) return null;
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const eventDate = new Date(original.event_date);
+                        eventDate.setHours(0, 0, 0, 0);
+                        const isEventPast = eventDate < today;
+                        
+                        return isEventPast ? (
+                          <span style={{
+                            backgroundColor: '#9ca3af',
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            fontWeight: '600',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                          }}>
+                            ENDED
+                          </span>
+                        ) : null;
+                      })()}
+                    </>
+                  )}
                 </div>
-                <div style={{ fontSize: 11, color: '#666' }}>{formatTime(original.created_at)}</div>
+                <div style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                  <span>{formatTime(original.created_at)}</span>
+                  {original.is_event && original.event_date && (
+                    <>
+                      <span>•</span>
+                      <span style={{ color: '#1e40af', fontWeight: 500 }}>
+                        {new Date(original.event_date).toLocaleDateString('en-US', { 
+                          weekday: 'short',
+                          year: 'numeric', 
+                          month: 'short', 
+                          day: 'numeric' 
+                        })}
+                      </span>
+                      {original.event_time && (
+                        <>
+                          <span>•</span>
+                          <span style={{ color: '#475569' }}>🕐 {original.event_time}</span>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
             

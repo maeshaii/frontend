@@ -191,7 +191,11 @@ api.interceptors.response.use(
       }
     }
     // Only log other errors in development
-    if (process.env.NODE_ENV === 'development' && error.response?.status !== 401) {
+    // Skip logging 400 errors for validation issues that are handled by UI (like CTU ID validation)
+    // These errors are expected and displayed to users via modals/toasts
+    if (process.env.NODE_ENV === 'development' && 
+        error.response?.status !== 401 && 
+        error.response?.status !== 400) {
       console.error(`API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
         status: error.response?.status,
         data: error.response?.data
