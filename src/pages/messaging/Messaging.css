@@ -36,11 +36,14 @@
 /* ===== MAIN CONTAINER ===== */
 .messaging-container {
 	display: flex;
-  height: 100vh;
+  flex: 1; /* Take remaining space after topbar */
+  min-height: 0; /* Allow flex item to shrink - CRITICAL for flex children */
   background: var(--background-primary);
   font-family: var(--font-family);
   overflow: hidden;
   position: relative;
+  /* Ensure it doesn't exceed parent height */
+  max-height: 100%;
 }
 
 /* ===== LEFT SIDEBAR (CONVERSATIONS) ===== */
@@ -64,6 +67,8 @@
   position: relative;
   overflow: hidden;
   min-width: 0;
+  min-height: 0; /* Allow flex item to shrink - CRITICAL */
+  max-height: 100%; /* Don't exceed parent height */
 }
 
 
@@ -381,9 +386,10 @@
   flex-direction: column;
   background: var(--background-primary);
   position: relative;
-  height: 100%;
-  max-height: 100vh;
+  min-height: 0; /* Critical: allows flex item to shrink */
   overflow: hidden;
+  /* Ensure flex children properly distribute space */
+  align-items: stretch;
 }
 
 
@@ -397,6 +403,7 @@
   position: sticky;
   top: 0;
   z-index: 15;
+  flex-shrink: 0; /* Prevent header from shrinking */
 }
 
 .chat-header-avatar {
@@ -504,6 +511,7 @@
   background: var(--background-primary);
   border-bottom: 1px solid var(--border-light);
   gap: 12px;
+  flex-shrink: 0; /* Prevent mobile header from shrinking */
 }
 
 .back-btn {
@@ -538,15 +546,16 @@
 
 /* Messages Area */
 .messages-container {
-  flex: 1;
+  flex: 1 1 auto; /* Allow flex grow and shrink */
   overflow-y: auto;
   overflow-x: hidden;
   padding: 20px 20px 20px 20px;
   padding-top: 80px; /* Extra top padding so first messages start lower, allowing reaction picker to be visible */
+  padding-bottom: 20px; /* Add bottom padding so last message isn't cut off */
   background: var(--background-secondary);
   position: relative;
   min-height: 0; /* Important: allows flex item to shrink below content size */
-  max-height: calc(100vh - 300px); /* Ensure space for header and input */
+  /* Don't set max-height - let flexbox handle the distribution */
 }
 
 .messages-list {
@@ -1036,26 +1045,38 @@
 
 /* Input Area */
 .input-container {
-  padding: 16px 20px;
+  padding: 8px 16px;
   background: var(--background-primary);
   border-top: 1px solid var(--border-light);
-  flex-shrink: 0; /* Prevent input from shrinking */
-  z-index: 15;
-  position: sticky;
-  bottom: 0;
-  min-height: 80px; /* Ensure minimum height for input area */
+  flex-shrink: 0 !important; /* Prevent input from shrinking - CRITICAL - Force with !important */
+  z-index: 100; /* High z-index to ensure it's always on top */
+  position: relative;
+  min-height: 55px; /* Further reduced minimum height */
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05); /* Add subtle shadow to separate from messages */
+  width: 100%;
+  max-width: 100%; /* Ensure it doesn't overflow */
+  box-sizing: border-box; /* Include padding in width calculation */
+  display: block !important; /* Force display */
+  visibility: visible !important; /* Force visibility */
+  opacity: 1 !important; /* Ensure it's not transparent */
+  /* Ensure it's always at the bottom of the flex container */
+  margin-top: auto;
+  /* Ensure it stays within viewport */
+  overflow: hidden; /* Prevent content from overflowing */
 }
 
 .input-wrapper {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: 6px;
   background: var(--background-secondary);
   border-radius: var(--radius-large);
-  padding: 8px 12px;
+  padding: 5px 10px;
   border: 1px solid var(--border-light);
   transition: all var(--transition-fast);
-  min-height: 44px; /* Ensure proper height for input */
+  min-height: 36px; /* Further reduced height */
+  max-width: 100%; /* Prevent overflow */
+  box-sizing: border-box; /* Include padding in width calculation */
 }
 
 .input-wrapper:focus-within {
@@ -1103,12 +1124,15 @@
   font-size: 14px;
   color: var(--text-primary);
   font-weight: 400;
-  line-height: 1.4;
+  line-height: 1.3;
   resize: none;
-  min-height: 20px;
-  max-height: 100px;
+  min-height: 18px;
+  max-height: 80px;
   font-family: var(--font-family);
-  padding: 4px 0;
+  padding: 3px 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+  max-width: 100%; /* Prevent textarea from overflowing */
 }
 
 .message-input::placeholder {
@@ -1119,15 +1143,16 @@
 .send-btn {
   background: var(--primary-color);
   color: white;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all var(--transition-fast);
-  font-size: 16px;
+  font-size: 14px;
+  flex-shrink: 0; /* Prevent button from shrinking */
 }
 
 .send-btn:hover {
@@ -1256,24 +1281,6 @@
 
 .input-action-btn.primary:hover {
   background: var(--primary-hover);
-}
-
-.message-input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  outline: none;
-  font-size: 15px;
-  color: var(--text-primary);
-  resize: none;
-  max-height: 120px;
-  min-height: 20px;
-  line-height: 1.4;
-  padding: 8px 0;
-}
-
-.message-input::placeholder {
-  color: var(--text-muted);
 }
 
 /* Attachment Preview */
@@ -1523,7 +1530,10 @@
 
 /* ===== MESSAGING PAGE ===== */
 .messaging-page {
+  display: flex;
+  flex-direction: column;
   height: 100vh;
+  max-height: 100vh;
   background: var(--background-secondary);
   position: relative;
   overflow: hidden;

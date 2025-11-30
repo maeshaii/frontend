@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { ConversationSummary, listConversations } from '../../services/api';
 import AlumniTopBar from '../alumni/AlumniTopBar';
 import ConversationList from './ConversationList';
 import ModernChatInterface from './ModernChatInterface';
 import UserSearch from './UserSearch';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
+import { getNotificationWebSocket } from '../../services/notificationWebSocket';
 import './Messaging.css';
 import './ErrorFallback.css';
 
@@ -49,7 +50,7 @@ const Messaging: React.FC = () => {
   }, []);
 
   // Load conversations function
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
       try {
         setIsLoading(true);
         const data = await listConversations();
@@ -79,14 +80,14 @@ const Messaging: React.FC = () => {
       } finally {
         setIsLoading(false);
       }
-    };
+    }, []);
 
   // Load conversations on mount
   useEffect(() => {
     loadConversations();
   }, []);
 
-  // Listen for conversation deletion event
+  // Listen for conversation deletion event (from local UI actions)
   useEffect(() => {
     const handleConversationDeleted = async () => {
       // Clear selection and reload conversations
@@ -100,6 +101,51 @@ const Messaging: React.FC = () => {
       window.removeEventListener('conversationDeleted', handleConversationDeleted);
     };
   }, []); // Empty deps - use function closure
+
+  // Setup WebSocket listener for real-time conversation deletion events (from other devices/platforms)
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+
+    const ws = getNotificationWebSocket(token);
+    
+    const handleWebSocketEvent = (event: any) => {
+      if (event.type === 'conversation_deleted') {
+        console.log('WebSocket: Conversation deleted event received:', event.conversation_id);
+        
+        // Clear selection if deleted conversation is selected
+        setSelectedConversation(prev => {
+          if (prev?.conversation_id === event.conversation_id) {
+            return null;
+          }
+          return prev;
+        });
+        
+        // Remove from local state immediately
+        setConversations(prev => prev.filter(c => c.conversation_id !== event.conversation_id));
+        
+        // Reload conversations to ensure consistency
+        loadConversations();
+        
+        // Also dispatch custom event for consistency with local deletions
+        window.dispatchEvent(new CustomEvent('conversationDeleted', { 
+          detail: { conversation_id: event.conversation_id } 
+        }));
+      }
+    };
+
+    ws.onEvent(handleWebSocketEvent);
+    
+    ws.connect().catch(error => {
+      console.warn('Failed to connect notification WebSocket for conversation deletion updates:', error);
+    });
+
+    return () => {
+      // Note: Don't disconnect the global WebSocket as it might be used by other components
+      // Just remove our event handler - the onEvent will keep the callback in the array
+      // This is fine as the callback will check the event type and only act on conversation_deleted
+    };
+  }, [loadConversations]); // Include loadConversations in deps
 
   // Listen for read events from the chat view to zero-out unread in sidebar instantly
   useEffect(() => {

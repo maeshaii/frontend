@@ -24,6 +24,7 @@ export type NotificationWsEvent =
   | { type: 'connection_denied'; reason: string; message: string }
   | { type: 'rate_limit_exceeded'; reason: string; retry_after?: number }
   | { type: 'recent_search_update'; recent_searches?: any[]; recent?: any[] }
+  | { type: 'conversation_deleted'; conversation_id: number; fully_deleted: boolean; timestamp: string }
   | { type: 'pong'; timestamp: string }
   | { type: 'error'; message: string };
 
