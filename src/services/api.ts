@@ -1046,8 +1046,24 @@ export const updateMessageApi = async (conversationId: number, messageId: number
 };
 
 export const deleteConversation = async (conversationId: number) => {
-  const { data } = await api.delete(`messaging/conversations/${conversationId}/delete/`);
-  return data as { status: string; message: string; conversation_id: number; fully_deleted: boolean };
+  console.log('🔵 [WEB API] deleteConversation called:', { conversation_id: conversationId });
+  try {
+    const { data } = await api.delete(`messaging/conversations/${conversationId}/delete/`);
+    console.log('🔵 [WEB API] deleteConversation response:', {
+      status: data?.status,
+      message: data?.message,
+      conversation_id: data?.conversation_id,
+      fully_deleted: data?.fully_deleted
+    });
+    return data as { status: string; message: string; conversation_id: number; fully_deleted: boolean };
+  } catch (error: any) {
+    console.error('🔵 [WEB API] deleteConversation ERROR:', {
+      conversation_id: conversationId,
+      error: error?.message,
+      response: error?.response?.data
+    });
+    throw error;
+  }
 };
 
 export const searchUsersForMessaging = async (q: string) => {

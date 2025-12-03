@@ -59,6 +59,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
   const wsRef = useRef<ConversationWebSocket | null>(null);
   const typingIndicatorRef = useRef<TypingIndicator | null>(null);
   const typingTimeoutRef = useRef<number | null>(null);
+  const isCleaningUpRef = useRef(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [downloadFile, setDownloadFile] = useState<{url: string, name: string} | null>(null);
@@ -502,7 +503,8 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
           window.dispatchEvent(new CustomEvent('conversationRead', { detail: { conversationId: conversation.conversation_id } }));
         } else if (status === 'error') {
           console.error('❌ [WebSocket] Connection error - Messages will not be real-time');
-        } else if (status === 'disconnected') {
+        } else if (status === 'disconnected' && !isCleaningUpRef.current) {
+          // Only warn if it's an unexpected disconnection, not during cleanup
           console.warn('⚠️ [WebSocket] Disconnected - Messages will not be real-time');
         }
       };
@@ -683,6 +685,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
 
   // Connect WebSocket when conversation changes (separate effect to avoid loops)
   useEffect(() => {
+    isCleaningUpRef.current = false;
     if (conversation && currentUser) {
       console.log('🔌 [WebSocket] Setting up connection for conversation:', conversation.conversation_id);
       connectWebSocket();
@@ -690,6 +693,7 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
 
     return () => {
       console.log('🔌 [WebSocket] Cleaning up connection');
+      isCleaningUpRef.current = true;
       if (wsRef.current) {
         wsRef.current.disconnect();
         wsRef.current = null;
@@ -787,6 +791,24 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         console.log('Created saved message:', savedMessage); // Debug log
         
         setMessages(prev => replaceTempMessage(prev, tempId, savedMessage));
+
+        // Notify other components (like the conversation list) that a new message was sent
+        window.dispatchEvent(new CustomEvent('newMessage', {
+          detail: {
+            conversationId: conversation.conversation_id,
+            message: savedMessage,
+            fromCurrentUser: true,
+          },
+        }));
+
+        // Immediately refresh conversations so newly created threads show up without a full reload
+        import('../../services/api').then(({ listConversations }) => {
+          listConversations()
+            .then(conversations => {
+              window.dispatchEvent(new CustomEvent('conversationsUpdated', { detail: conversations }));
+            })
+            .catch(err => console.error('Failed to refresh conversations after sending message:', err));
+        });
       } catch (error) {
         logger.error('Send failed', error);
         setMessages(prev => removeTempMessage(prev, tempId));
@@ -916,22 +938,46 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
   const handleDeleteConversation = async () => {
     if (!conversation) return;
     
+    const conversationId = conversation.conversation_id;
+    const otherUserId = conversation.other_participant?.user_id;
+    
+    logger.info('🔵 [WEB DELETE] START - Deleting conversation from chat interface:', {
+      conversation_id: conversationId,
+      other_user_id: otherUserId,
+      other_user_name: conversation.other_participant?.name
+    });
+    
     setIsDeletingConversation(true);
     try {
-      await deleteConversation(conversation.conversation_id);
-      logger.info('Conversation deleted successfully');
+      logger.info('🔵 [WEB DELETE] Calling deleteConversation API...');
+      const response = await deleteConversation(conversationId);
+      
+      logger.info('🔵 [WEB DELETE] API Response:', {
+        status: response?.status,
+        message: response?.message,
+        conversation_id: response?.conversation_id,
+        fully_deleted: response?.fully_deleted
+      });
+      
+      const fullyDeleted = response?.fully_deleted === true;
+      logger.info('🔵 [WEB DELETE] Deletion decision:', {
+        fully_deleted: fullyDeleted,
+        should_navigate_away: true // Always navigate away for deleting user
+      });
       
       // Clear conversation and close modals
       setShowDeleteConfirmation(false);
       setShowConversationMenu(false);
       
-      // Navigate back without page reload to avoid white screen
+      // Always navigate away since the user deleted it (even if it still exists for others)
       if (onBack) {
         onBack();
       } else {
         // Navigate to correct route (/messages not /messaging)
         navigate('/messages', { replace: true });
       }
+      
+      logger.info('🔵 [WEB DELETE] END - Deletion complete, navigated away');
       
       // Trigger conversation list refresh via custom event instead of reload
       window.dispatchEvent(new CustomEvent('conversationDeleted', { 

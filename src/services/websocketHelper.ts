@@ -252,11 +252,20 @@ export class ConversationWebSocket {
 
   disconnect() {
     this.isDestroyed = true;
+    this.isConnecting = false;
     if (this.ws) {
-      this.ws.close(1000, 'User disconnected');
+      // Only close if WebSocket is in a state that allows closing
+      // readyState: 0 = CONNECTING, 1 = OPEN, 2 = CLOSING, 3 = CLOSED
+      if (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN) {
+        try {
+          this.ws.close(1000, 'User disconnected');
+        } catch (error) {
+          // Ignore errors when closing - WebSocket might already be closing/closed
+          console.debug('WebSocket close error (ignored):', error);
+        }
+      }
       this.ws = null;
     }
-    this.isConnecting = false;
     this.reconnectAttempts = 0;
     this.rateLimitRetryAfter = 0;
     connectionManager.unregisterConnection(this.connectionId);

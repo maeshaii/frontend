@@ -49,7 +49,16 @@ const ModernMessagingPage: React.FC = () => {
         }
         
         // Must have valid other_participant with valid user_id
+        // EXCEPTION: Allow conversations without other_participant if they have messages
+        // This handles the case where the other user deleted the conversation but it still exists for this user
         if (!conv.other_participant || !conv.other_participant.user_id || conv.other_participant.user_id <= 0) {
+          // If conversation has messages, keep it (other user deleted but conversation still exists)
+          if (conv.last_message && conv.last_message.content) {
+            logger.info('Keeping conversation without other_participant (has messages):', {
+              conversation_id: conv.conversation_id
+            });
+            return true;
+          }
           console.warn('Filtering out conversation with invalid other_participant:', conv);
           return false;
         }
@@ -114,36 +123,72 @@ const ModernMessagingPage: React.FC = () => {
 
   // Listen for conversation deletion event (from local UI actions)
   useEffect(() => {
-    const handleConversationDeleted = async () => {
+    const handleConversationDeleted = async (e?: Event) => {
+      const detail = (e as CustomEvent)?.detail || {};
+      const conversationId = detail.conversation_id;
+      const fullyDeleted = detail.fully_deleted;
+      
+      logger.info('🔵 [WEB EVENT] conversationDeleted event received:', {
+        conversation_id: conversationId,
+        fully_deleted: fullyDeleted,
+        current_conversations_count: conversations.length
+      });
+      
       // Clear selection and reload conversations
       setSelectedConversation(null);
       
       // Reload conversations directly
       try {
+        logger.info('🔵 [WEB EVENT] Reloading conversations from API...');
         setIsLoading(true);
         const data = await listConversations();
         
+        logger.info('🔵 [WEB EVENT] API returned conversations:', {
+          total_count: data?.length || 0,
+          conversations: data?.map((c: any) => ({
+            id: c.conversation_id,
+            other_user_id: c.other_participant?.user_id,
+            other_user_name: c.other_participant?.name
+          }))
+        });
+        
         // Filter out conversations with invalid data
         const validConversations = (data || []).filter(conv => {
-          if (!conv.conversation_id || conv.conversation_id <= 0) return false;
-          if (!conv.other_participant || !conv.other_participant.user_id || conv.other_participant.user_id <= 0) return false;
+          if (!conv.conversation_id || conv.conversation_id <= 0) {
+            logger.warn('🔵 [WEB EVENT] Filtering out conversation with invalid conversation_id:', conv);
+            return false;
+          }
+          if (!conv.other_participant || !conv.other_participant.user_id || conv.other_participant.user_id <= 0) {
+            logger.warn('🔵 [WEB EVENT] Filtering out conversation with invalid other_participant:', {
+              conversation_id: conv.conversation_id,
+              other_participant: conv.other_participant
+            });
+            return false;
+          }
           return true;
         });
         
+        logger.info('🔵 [WEB EVENT] Valid conversations after filtering:', {
+          valid_count: validConversations.length,
+          filtered_out: (data?.length || 0) - validConversations.length,
+          valid_ids: validConversations.map((c: any) => c.conversation_id)
+        });
+        
         setConversations(validConversations);
+        logger.info('🔵 [WEB EVENT] Conversations reloaded and state updated');
       } catch (error) {
-        logger.error('Failed to reload conversations after deletion:', error);
+        logger.error('🔵 [WEB EVENT] ERROR - Failed to reload conversations after deletion:', error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    window.addEventListener('conversationDeleted', handleConversationDeleted);
+    window.addEventListener('conversationDeleted', handleConversationDeleted as EventListener);
     
     return () => {
-      window.removeEventListener('conversationDeleted', handleConversationDeleted);
+      window.removeEventListener('conversationDeleted', handleConversationDeleted as EventListener);
     };
-  }, [logger]);
+  }, [logger, conversations.length]);
 
   // Setup WebSocket listener for real-time conversation deletion events (from other devices/platforms)
   useEffect(() => {
@@ -154,26 +199,57 @@ const ModernMessagingPage: React.FC = () => {
     
     const handleWebSocketEvent = (event: any) => {
       if (event.type === 'conversation_deleted') {
-        logger.info('WebSocket: Conversation deleted event received:', event.conversation_id);
-        
-        // Clear selection if deleted conversation is selected
-        setSelectedConversation(prev => {
-          if (prev?.conversation_id === event.conversation_id) {
-            return null;
-          }
-          return prev;
+        logger.info(`🔵 [WEB WEBSOCKET] Conversation deleted event received:`, {
+          conversation_id: event.conversation_id,
+          fully_deleted: event.fully_deleted,
+          timestamp: event.timestamp || new Date().toISOString()
         });
         
-        // Remove from local state immediately
-        setConversations(prev => prev.filter(c => c.conversation_id !== event.conversation_id));
+        const currentConversationsCount = conversations.length;
+        const conversationExists = conversations.some(c => c.conversation_id === event.conversation_id);
         
-        // Reload conversations to ensure consistency
+        logger.info(`🔵 [WEB WEBSOCKET] Current state:`, {
+          conversations_count: currentConversationsCount,
+          conversation_exists_in_list: conversationExists
+        });
+        
+        // CRITICAL FIX: Only remove from UI if conversation was fully deleted
+        // If fully_deleted is false, the conversation still exists for other participants
+        if (event.fully_deleted === true) {
+          logger.info(`🔵 [WEB WEBSOCKET] Conversation fully deleted - removing from UI`);
+          // Conversation was fully deleted - remove from UI
+          setSelectedConversation(prev => {
+            if (prev?.conversation_id === event.conversation_id) {
+              logger.info(`🔵 [WEB WEBSOCKET] Clearing selected conversation`);
+              return null;
+            }
+            return prev;
+          });
+          
+          // Remove from local state immediately
+          setConversations(prev => {
+            const filtered = prev.filter(c => c.conversation_id !== event.conversation_id);
+            logger.info(`🔵 [WEB WEBSOCKET] Removed from local state:`, {
+              before_count: prev.length,
+              after_count: filtered.length
+            });
+            return filtered;
+          });
+        } else {
+          // Conversation still exists for other participants - just reload
+          logger.info(`🔵 [WEB WEBSOCKET] Conversation NOT fully deleted - keeping in UI, will reload`);
+          logger.info(`🔵 [WEB WEBSOCKET] This means other participants still have access to this conversation`);
+        }
+        
+        // Always reload conversations to ensure consistency
+        logger.info(`🔵 [WEB WEBSOCKET] Reloading conversations from API...`);
         loadConversations();
         
         // Also dispatch custom event for consistency with local deletions
         window.dispatchEvent(new CustomEvent('conversationDeleted', { 
-          detail: { conversation_id: event.conversation_id } 
+          detail: { conversation_id: event.conversation_id, fully_deleted: event.fully_deleted } 
         }));
+        logger.info(`🔵 [WEB WEBSOCKET] Dispatched conversationDeleted custom event`);
       }
     };
 

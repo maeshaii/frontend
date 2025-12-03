@@ -606,7 +606,7 @@ const UserManagement: React.FC = () => {
 
     const normalizedFirstName = (formData.f_name || '').trim();
     const normalizedLastName = (formData.l_name || '').trim();
-    const normalizedMiddleName = (formData.m_name || '').trim() || 'N/A';
+    const normalizedMiddleName = (formData.m_name || '').trim();
     const createdUsername = trimmedUsername;
 
     try {
@@ -619,8 +619,11 @@ const UserManagement: React.FC = () => {
       const submitData: any = {
         ctu_id: createdUsername, // Backend expects 'ctu_id' not 'acc_username'
         account_type: accountTypeValue,
-        m_name: normalizedMiddleName,
       };
+
+      if (normalizedMiddleName) {
+        submitData.m_name = normalizedMiddleName;
+      }
 
       // Password handling:
       // - For coordinator/peso: password is required (validated above)
@@ -2429,7 +2432,7 @@ const UserManagement: React.FC = () => {
                     e.target.style.borderColor = '#e2e8f0';
                     e.target.style.boxShadow = 'none';
                   }}
-                  placeholder="Enter middle name (type N/A if none)"
+                  placeholder="Enter middle name (leave blank if none)"
                 />
               </div>
 

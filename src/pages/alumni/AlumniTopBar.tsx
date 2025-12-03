@@ -294,7 +294,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
       ws.disconnect();
       recentSearchWsRef.current = null;
     };
-  }, [normalizeRecentSearchData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps: WebSocket should only connect once on mount, normalizeRecentSearchData is stable
 
   // Auto-toggle recent searches dropdown when focused with no query
   React.useEffect(() => {
@@ -332,7 +333,8 @@ const AlumniTopBar: React.FC<AlumniTopBarProps> = ({
 
     window.addEventListener('recentSearchUpdate', handleRecentSearchUpdate);
     return () => window.removeEventListener('recentSearchUpdate', handleRecentSearchUpdate);
-  }, [normalizeRecentSearchData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps: normalizeRecentSearchData is stable, event listener should only be set up once
 
 
   React.useEffect(() => {

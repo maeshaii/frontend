@@ -1737,7 +1737,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Total Alumni', String(stats.total_alumni || 0), '100%'],
         ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
         ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
-        ['Employment Rate', '', `${stats.employment_rate || 0}%`],
         ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)],
       ];
 
@@ -1860,7 +1859,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Total Alumni', String(stats.total_alumni || 0), '100%'],
         ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
         ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
-        ['Further Study Rate', '', `${stats.further_study_rate || 0}%`],
         ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
         ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
       ];
@@ -1928,9 +1926,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
         ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
         ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)],
-        ['Employment Rate', '', `${stats.employment_rate || 0}%`],
-        ['Absorption Rate', '', `${stats.absorption_rate || 0}%`],
-        ['High Position Rate', '', `${stats.high_position_rate || 0}%`],
       ];
 
       autoTable(doc, {
@@ -2059,7 +2054,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Metric', 'Value', 'Percentage'],
         ['Total Alumni', String(stats.total_alumni || 0), '100%'],
         ['High Position Alumni', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
-        ['High Position Rate', '', `${stats.high_position_rate || 0}%`],
       ];
 
       autoTable(doc, {
@@ -2172,7 +2166,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
             ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
             ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
-            ['Employment Rate', '', `${stats.employment_rate || 0}%`],
             ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)]
           );
           
@@ -2241,7 +2234,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
             ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
             ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
-            ['Further Study Rate', '', `${stats.further_study_rate || 0}%`],
             ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
             ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)]
           );
@@ -2263,16 +2255,12 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
             ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
             ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
-            ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)],
-            ['Employment Rate', '', `${stats.employment_rate || 0}%`],
-            ['Absorption Rate', '', `${stats.absorption_rate || 0}%`],
-            ['High Position Rate', '', `${stats.high_position_rate || 0}%`]
+            ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)]
           );
         } else if (type === 'HIGH_POSITION') {
           summaryData.push(
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-            ['High Position Alumni', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
-            ['High Position Rate', '', `${stats.high_position_rate || 0}%`]
+            ['High Position Alumni', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)]
           );
         }
 
@@ -2997,7 +2985,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Total Alumni', String(stats.total_alumni || 0), '100%'],
         ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
         ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
-        ['Employment Rate', '', `${stats.employment_rate || 0}%`],
         ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)],
       ];
       children.push(...createSummaryTable('QPRO Statistics Summary', summaryData));
@@ -3324,7 +3311,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Total Alumni', String(stats.total_alumni || 0), '100%'],
         ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
         ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
-        ['Further Study Rate', '', `${stats.further_study_rate || 0}%`],
         ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
       ];
       children.push(...createSummaryTable('CHED Statistics Summary', summaryData));
@@ -3345,9 +3331,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
         ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
         ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)],
-        ['Employment Rate', '', `${stats.employment_rate || 0}%`],
-        ['Absorption Rate', '', `${stats.absorption_rate || 0}%`],
-        ['High Position Rate', '', `${stats.high_position_rate || 0}%`],
       ];
       children.push(...createSummaryTable('AACUP Statistics Summary', summaryData));
       
@@ -3381,7 +3364,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ['Metric', 'Value', 'Percentage'],
         ['Total Alumni', String(stats.total_alumni || 0), '100%'],
         ['High Position Alumni', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
-        ['High Position Rate', '', `${stats.high_position_rate || 0}%`],
       ];
       children.push(...createSummaryTable('High Position Statistics Summary', summaryData));
       
@@ -3501,7 +3483,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
             ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
             ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
-            ['Employment Rate', '', `${stats.employment_rate || 0}%`],
             ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)]
           );
         } else if (type === 'CHED') {
@@ -3509,7 +3490,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
             ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
             ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
-            ['Further Study Rate', '', `${stats.further_study_rate || 0}%`],
             ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
             ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)]
           );
@@ -3530,15 +3510,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
             ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
             ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
-            ['Employment Rate', '', `${stats.employment_rate || 0}%`],
-            ['Absorption Rate', '', `${stats.absorption_rate || 0}%`],
-            ['High Position Rate', '', `${stats.high_position_rate || 0}%`]
+            ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
+            ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)]
           );
         } else if (type === 'HIGH_POSITION') {
           summaryData.push(
             ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-            ['High Position Alumni', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
-            ['High Position Rate', '', `${stats.high_position_rate || 0}%`]
+            ['High Position Alumni', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)]
           );
         }
 
@@ -3942,9 +3920,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'Unemployed';
         sheet.getCell(`B${r}`).value = generatedStats.unemployed_count;
         sheet.getCell(`C${r}`).value = `${pct(generatedStats.unemployed_count, generatedStats.total_alumni)}`; r++;
-        // Employment Rate (percentage only)
-        sheet.getCell(`A${r}`).value = 'Employment Rate';
-        sheet.getCell(`C${r}`).value = `${pct(generatedStats.employed_count, generatedStats.total_alumni)}`; r++;
         // Untracked
         const untracked = Number(generatedStats.untracked_count) || Math.max(
           (Number(generatedStats.total_alumni) || 0) - (Number(generatedStats.employed_count) || 0) - (Number(generatedStats.unemployed_count) || 0),
@@ -4130,9 +4105,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'Self-Employed';
         sheet.getCell(`B${r}`).value = selfEmp;
         sheet.getCell(`C${r}`).value = `${pct(selfEmp, generatedStats.total_alumni)}`; r++;
-        // Further Study Rate (percentage only)
-        sheet.getCell(`A${r}`).value = 'Further Study Rate';
-        sheet.getCell(`C${r}`).value = `${generatedStats.further_study_rate}%`; r++;
         // Not Pursuing (derived)
         const notPursuing = Math.max((Number(generatedStats.total_alumni) || 0) - pursuing, 0);
         sheet.getCell(`A${r}`).value = 'Not Pursuing';
@@ -4231,13 +4203,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'Awards Received';
         sheet.getCell(`B${r}`).value = awards;
         sheet.getCell(`C${r}`).value = `${pct(awards, generatedStats.total_alumni)}`; r++;
-        // Employment/Absorption/High Position Rates (percent only)
-        sheet.getCell(`A${r}`).value = 'Employment Rate';
-        sheet.getCell(`C${r}`).value = `${generatedStats.employment_rate || pct(employed, generatedStats.total_alumni)}%`; r++;
-        sheet.getCell(`A${r}`).value = 'Absorption Rate';
-        sheet.getCell(`C${r}`).value = `${generatedStats.absorption_rate || pct(absorbed, generatedStats.total_alumni)}%`; r++;
-        sheet.getCell(`A${r}`).value = 'High Position Rate';
-        sheet.getCell(`C${r}`).value = `${generatedStats.high_position_rate || pct(highPos, generatedStats.total_alumni)}%`; r++;
         // Total
         sheet.getCell(`A${r}`).value = 'Total Alumni';
         sheet.getCell(`B${r}`).value = generatedStats.total_alumni;
@@ -4314,8 +4279,8 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'High Position Alumni';
         sheet.getCell(`B${r}`).value = hpCount;
         sheet.getCell(`C${r}`).value = `${pct(hpCount, generatedStats.total_alumni)}`; r++;
-        sheet.getCell(`A${r}`).value = 'High Position Rate';
-        sheet.getCell(`C${r}`).value = `${generatedStats.high_position_rate || pct(hpCount, generatedStats.total_alumni)}%`; r += 2;
+        r += 1;
+        r++; // spacing before detailed section
 
         // Detailed: only high-position alumni with limited columns
         // Always show detailed data section for consistency
@@ -4465,9 +4430,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'Other Positions';
         sheet.getCell(`B${r}`).value = otherPos;
         sheet.getCell(`C${r}`).value = `${pct(otherPos, generatedStats.total_alumni)}`; r++;
-        // Leadership Rate (percent only)
-        sheet.getCell(`A${r}`).value = 'Leadership Rate';
-        sheet.getCell(`C${r}`).value = `${pct(highPos, generatedStats.total_alumni)}`; r++;
         const avgSalary = toNumericValue(generatedStats.average_salary);
         sheet.getCell(`A${r}`).value = 'Average Salary';
         if (avgSalary !== null) {
@@ -4577,10 +4539,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
             worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni;
             worksheet.getCell(`C${rowIdx}`).value = '100%';
-            rowIdx++;
-            worksheet.getCell(`A${rowIdx}`).value = 'Employment Rate';
-            worksheet.getCell(`B${rowIdx}`).value = `${stats.employment_rate}%`;
-            worksheet.getCell(`C${rowIdx}`).value = `${stats.employment_rate}%`;
             rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Employed Count';
             worksheet.getCell(`B${rowIdx}`).value = stats.employed_count;
@@ -4710,21 +4668,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.getCell(`C${rowIdx}`).value =
               `${pct(stats.pursuing_further_study, stats.total_alumni)}`;
             rowIdx++;
-            worksheet.getCell(`A${rowIdx}`).value = 'Further Study Rate';
-            worksheet.getCell(`B${rowIdx}`).value =
-              `${pct(stats.further_study_rate, stats.total_alumni)}`;
-            worksheet.getCell(`C${rowIdx}`).value =
-              `${pct(stats.further_study_rate, stats.total_alumni)}`;
-            rowIdx++;
             worksheet.getCell(`A${rowIdx}`).value = 'Not Pursuing Further Study';
             worksheet.getCell(`B${rowIdx}`).value =
               stats.total_alumni - stats.pursuing_further_study;
             worksheet.getCell(`C${rowIdx}`).value =
               `${pct(stats.total_alumni - stats.pursuing_further_study, stats.total_alumni)}`;
-            rowIdx++;
-            worksheet.getCell(`A${rowIdx}`).value = 'Academic Advancement Rate';
-            worksheet.getCell(`B${rowIdx}`).value =
-              `${pct(stats.further_study_rate, stats.total_alumni)}`;
             rowIdx++;
           } else if (stats?.type === 'SUC') {
             worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
@@ -4740,10 +4688,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni - stats.high_position_count;
             worksheet.getCell(`C${rowIdx}`).value =
               `${pct(stats.total_alumni - stats.high_position_count, stats.total_alumni)}`;
-            rowIdx++;
-            worksheet.getCell(`A${rowIdx}`).value = 'Leadership Rate';
-            worksheet.getCell(`B${rowIdx}`).value =
-              `${pct(stats.high_position_count, stats.total_alumni)}`;
             rowIdx++;
           const avgSalary = toNumericValue(stats.average_salary);
           worksheet.getCell(`A${rowIdx}`).value = 'Average Salary';
@@ -4814,18 +4758,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.getCell(`C${rowIdx}`).value =
               `${pct(stats.total_alumni - stats.employed_count - stats.absorbed_count - stats.high_position_count, stats.total_alumni)}`;
             rowIdx++;
-            worksheet.getCell(`A${rowIdx}`).value = 'Employment Rate';
-            worksheet.getCell(`B${rowIdx}`).value =
-              `${pct(stats.employed_count, stats.total_alumni)}`;
-            rowIdx++;
-            worksheet.getCell(`A${rowIdx}`).value = 'Absorption Rate';
-            worksheet.getCell(`B${rowIdx}`).value =
-              `${pct(stats.absorbed_count, stats.total_alumni)}`;
-            rowIdx++;
-            worksheet.getCell(`A${rowIdx}`).value = 'Leadership Rate';
-            worksheet.getCell(`B${rowIdx}`).value =
-              `${pct(stats.high_position_count, stats.total_alumni)}`;
-            rowIdx++;
           } else if (stats?.type === 'HIGH_POSITION') {
             worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
             worksheet.getCell(`B${rowIdx}`).value = stats.total_alumni || 0;
@@ -4834,10 +4766,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             worksheet.getCell(`A${rowIdx}`).value = 'High Position Alumni';
             worksheet.getCell(`B${rowIdx}`).value = stats.high_position_count;
             worksheet.getCell(`C${rowIdx}`).value = `${pct(stats.high_position_count, stats.total_alumni)}`;
-            rowIdx++;
-            worksheet.getCell(`A${rowIdx}`).value = 'High Position Rate';
-            worksheet.getCell(`B${rowIdx}`).value = `${stats.high_position_rate}%`;
-            worksheet.getCell(`C${rowIdx}`).value = `${stats.high_position_rate}%`;
             rowIdx++;
             
             // Add detailed high position alumni data
@@ -4994,8 +4922,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             hpDetailSheet.getCell(`B${hpDetailRowIdx}`).value = stats.high_position_count || 0;
             hpDetailSheet.getCell(`C${hpDetailRowIdx}`).value = pct(stats.high_position_count, stats.total_alumni);
             hpDetailRowIdx++;
-            hpDetailSheet.getCell(`A${hpDetailRowIdx}`).value = 'High Position Rate';
-            hpDetailSheet.getCell(`C${hpDetailRowIdx}`).value = `${stats.high_position_rate || 0}%`;
             hpDetailRowIdx += 2;
             
             // Add footer BEFORE detailed data
@@ -5086,9 +5012,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                 detailSheet.getCell(`B${detailRowIdx}`).value = stats.unemployed_count || 0;
                 detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.unemployed_count, stats.total_alumni);
                 detailRowIdx++;
-                detailSheet.getCell(`A${detailRowIdx}`).value = 'Employment Rate';
-                detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.employment_rate || 0}%`;
-                detailRowIdx++;
                 detailSheet.getCell(`A${detailRowIdx}`).value = 'Untracked';
                 detailSheet.getCell(`B${detailRowIdx}`).value = stats.untracked_count || 0;
                 detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.untracked_count, stats.total_alumni);
@@ -5101,9 +5024,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                 detailSheet.getCell(`A${detailRowIdx}`).value = 'Pursuing Further Study';
                 detailSheet.getCell(`B${detailRowIdx}`).value = stats.pursuing_further_study || 0;
                 detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.pursuing_further_study, stats.total_alumni);
-                detailRowIdx++;
-                detailSheet.getCell(`A${detailRowIdx}`).value = 'Further Study Rate';
-                detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.further_study_rate || 0}%`;
                 detailRowIdx++;
                 detailSheet.getCell(`A${detailRowIdx}`).value = 'Job Aligned';
                 detailSheet.getCell(`B${detailRowIdx}`).value = stats.job_aligned_count || 0;
@@ -5154,15 +5074,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
                 detailSheet.getCell(`A${detailRowIdx}`).value = 'High Position';
                 detailSheet.getCell(`B${detailRowIdx}`).value = stats.high_position_count || 0;
                 detailSheet.getCell(`C${detailRowIdx}`).value = pct(stats.high_position_count, stats.total_alumni);
-                detailRowIdx++;
-                detailSheet.getCell(`A${detailRowIdx}`).value = 'Employment Rate';
-                detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.employment_rate || 0}%`;
-                detailRowIdx++;
-                detailSheet.getCell(`A${detailRowIdx}`).value = 'Absorption Rate';
-                detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.absorption_rate || 0}%`;
-                detailRowIdx++;
-                detailSheet.getCell(`A${detailRowIdx}`).value = 'High Position Rate';
-                detailSheet.getCell(`C${detailRowIdx}`).value = `${stats.high_position_rate || 0}%`;
                 detailRowIdx++;
               }
               
@@ -5230,12 +5141,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           worksheet.getCell(`B${rowIdx}`).value = generatedStats.total_alumni;
           worksheet.getCell(`C${rowIdx}`).value = '100%';
           rowIdx++;
-          worksheet.getCell(`A${rowIdx}`).value = 'Employment Rate';
-          worksheet.getCell(`B${rowIdx}`).value =
-            `${pct(generatedStats.employed_count, generatedStats.total_alumni)}`;
-          worksheet.getCell(`C${rowIdx}`).value =
-            `${pct(generatedStats.employed_count, generatedStats.total_alumni)}`;
-          rowIdx++;
           worksheet.getCell(`A${rowIdx}`).value = 'Employed Count';
           worksheet.getCell(`B${rowIdx}`).value = generatedStats.employed_count;
           worksheet.getCell(`C${rowIdx}`).value =
@@ -5264,21 +5169,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           worksheet.getCell(`C${rowIdx}`).value =
             `${pct(generatedStats.pursuing_further_study, generatedStats.total_alumni)}`;
           rowIdx++;
-          worksheet.getCell(`A${rowIdx}`).value = 'Further Study Rate';
-          worksheet.getCell(`B${rowIdx}`).value =
-            `${pct(generatedStats.further_study_rate, generatedStats.total_alumni)}`;
-          worksheet.getCell(`C${rowIdx}`).value =
-            `${pct(generatedStats.further_study_rate, generatedStats.total_alumni)}`;
-          rowIdx++;
           worksheet.getCell(`A${rowIdx}`).value = 'Not Pursuing Further Study';
           worksheet.getCell(`B${rowIdx}`).value =
             generatedStats.total_alumni - generatedStats.pursuing_further_study;
           worksheet.getCell(`C${rowIdx}`).value =
             `${pct(generatedStats.total_alumni - generatedStats.pursuing_further_study, generatedStats.total_alumni)}`;
-          rowIdx++;
-          worksheet.getCell(`A${rowIdx}`).value = 'Academic Advancement Rate';
-          worksheet.getCell(`B${rowIdx}`).value =
-            `${pct(generatedStats.further_study_rate, generatedStats.total_alumni)}`;
           rowIdx++;
         } else if (generatedStats?.type === 'SUC') {
           worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
@@ -5295,10 +5190,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             generatedStats.total_alumni - generatedStats.high_position_count;
           worksheet.getCell(`C${rowIdx}`).value =
             `${pct(generatedStats.total_alumni - generatedStats.high_position_count, generatedStats.total_alumni)}`;
-          rowIdx++;
-          worksheet.getCell(`A${rowIdx}`).value = 'Leadership Rate';
-          worksheet.getCell(`B${rowIdx}`).value =
-            `${pct(generatedStats.high_position_count, generatedStats.total_alumni)}`;
           rowIdx++;
         } else if (generatedStats?.type === 'AACUP') {
           worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
@@ -5328,18 +5219,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             generatedStats.high_position_count;
           worksheet.getCell(`C${rowIdx}`).value =
             `${pct(generatedStats.total_alumni - generatedStats.employed_count - generatedStats.absorbed_count - generatedStats.high_position_count, generatedStats.total_alumni)}`;
-          rowIdx++;
-          worksheet.getCell(`A${rowIdx}`).value = 'Employment Rate';
-          worksheet.getCell(`B${rowIdx}`).value =
-            `${pct(generatedStats.employed_count, generatedStats.total_alumni)}`;
-          rowIdx++;
-          worksheet.getCell(`A${rowIdx}`).value = 'Absorption Rate';
-          worksheet.getCell(`B${rowIdx}`).value =
-            `${pct(generatedStats.absorbed_count, generatedStats.total_alumni)}`;
-          rowIdx++;
-          worksheet.getCell(`A${rowIdx}`).value = 'Leadership Rate';
-          worksheet.getCell(`B${rowIdx}`).value =
-            `${pct(generatedStats.high_position_count, generatedStats.total_alumni)}`;
           rowIdx++;
         } else {
           worksheet.getCell(`A${rowIdx}`).value = 'Total Alumni';
@@ -5521,6 +5400,66 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       }
     }
     console.log(`Rendering ${type} with stats:`, parsedStats);
+
+    const summaryRow = (
+      metric: string,
+      value: React.ReactNode,
+      percentage: React.ReactNode,
+      bold = false
+    ) => (
+      <tr key={`${type}-${metric}`}>
+        <td style={{ ...td, fontWeight: bold ? 700 : undefined }}>{metric}</td>
+        <td style={{ ...td, fontWeight: bold ? 700 : undefined }}>{value}</td>
+        <td style={{ ...td, fontWeight: bold ? 700 : undefined }}>{percentage}</td>
+      </tr>
+    );
+
+    const rows: Array<{ metric: string; value: React.ReactNode; percentage: React.ReactNode; bold?: boolean }> = [];
+    const total = Number(parsedStats.total_alumni) || 0;
+
+    if (type === 'QPRO') {
+      rows.push(
+        { metric: 'Employed', value: Number(parsedStats.employed_count) || 0, percentage: pct(Number(parsedStats.employed_count) || 0, total) },
+        { metric: 'Unemployed', value: Number(parsedStats.unemployed_count) || 0, percentage: pct(Number(parsedStats.unemployed_count) || 0, total) },
+        { metric: 'Untracked', value: Number(parsedStats.untracked_count) || 0, percentage: pct(Number(parsedStats.untracked_count) || 0, total) },
+        { metric: 'Total Alumni', value: total, percentage: '100%', bold: true }
+      );
+    } else if (type === 'CHED') {
+      rows.push(
+        { metric: 'Pursuing Further Study', value: Number(parsedStats.pursuing_further_study) || 0, percentage: pct(Number(parsedStats.pursuing_further_study) || 0, total) },
+        { metric: 'Job Alignment', value: Number(parsedStats.job_aligned_count) || 0, percentage: pct(Number(parsedStats.job_aligned_count) || 0, total) },
+        { metric: 'Self-Employed', value: Number(parsedStats.self_employed_count) || 0, percentage: pct(Number(parsedStats.self_employed_count) || 0, total) },
+        { metric: 'Total Alumni', value: total, percentage: '100%', bold: true }
+      );
+    } else if (type === 'SUC') {
+      const highPosition = Number(parsedStats.high_position_count) || 0;
+      const otherPositions = Math.max(total - highPosition, 0);
+      rows.push(
+        { metric: 'High Position', value: highPosition, percentage: pct(highPosition, total) },
+        { metric: 'Other Positions', value: otherPositions, percentage: pct(otherPositions, total) },
+        { metric: 'Average Salary', value: formatCurrency(parsedStats.average_salary), percentage: '--' },
+        { metric: 'Government', value: Number(parsedStats.public_count) || 0, percentage: pct(Number(parsedStats.public_count) || 0, total) },
+        { metric: 'Private', value: Number(parsedStats.private_count) || 0, percentage: pct(Number(parsedStats.private_count) || 0, total) },
+        { metric: 'Local', value: Number(parsedStats.local_count) || 0, percentage: pct(Number(parsedStats.local_count) || 0, total) },
+        { metric: 'International', value: Number(parsedStats.international_count) || 0, percentage: pct(Number(parsedStats.international_count) || 0, total) },
+        { metric: 'Total Alumni', value: total, percentage: '100%', bold: true }
+      );
+    } else if (type === 'AACUP') {
+      rows.push(
+        { metric: 'Employed', value: Number(parsedStats.employed_count) || 0, percentage: pct(Number(parsedStats.employed_count) || 0, total) },
+        { metric: 'Absorbed', value: Number(parsedStats.absorbed_count) || 0, percentage: pct(Number(parsedStats.absorbed_count) || 0, total) },
+        { metric: 'High Position', value: Number(parsedStats.high_position_count) || 0, percentage: pct(Number(parsedStats.high_position_count) || 0, total) },
+        { metric: 'Self-Employed', value: Number(parsedStats.self_employed_count) || 0, percentage: pct(Number(parsedStats.self_employed_count) || 0, total) },
+        { metric: 'Awards Received', value: Number(parsedStats.awards_count) || 0, percentage: pct(Number(parsedStats.awards_count) || 0, total) },
+        { metric: 'Total Alumni', value: total, percentage: '100%', bold: true }
+      );
+    } else if (type === 'HIGH_POSITION') {
+      rows.push(
+        { metric: 'High Position Alumni', value: Number(parsedStats.high_position_count) || 0, percentage: pct(Number(parsedStats.high_position_count) || 0, total) },
+        { metric: 'Total Alumni', value: total, percentage: '100%', bold: true }
+      );
+    }
+
     return (
       <div
         style={{
@@ -5542,186 +5481,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             </tr>
           </thead>
           <tbody>
-            {/* Render summary rows based on type */}
-            {type === 'QPRO' && (
-              <>
-                <tr>
-                  <td style={td}>Employed</td>
-                  <td style={td}>{Number(stats.employed_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.employed_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>Unemployed</td>
-                  <td style={td}>{Number(stats.unemployed_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.unemployed_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>Employment Rate</td>
-                  <td style={td}></td>
-                  <td style={td}>{(Number(stats.employment_rate) || 0).toFixed(2)}%</td>
-                </tr>
-                <tr>
-                  <td style={td}>Untracked</td>
-                  <td style={td}>{Number(stats.untracked_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.untracked_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>Total Alumni</td>
-                  <td style={td}>{Number(stats.total_alumni) || 0}</td>
-                  <td style={td}>100%</td>
-                </tr>
-              </>
-            )}
-            {type === 'CHED' && (
-              <>
-                <tr>
-                  <td style={td}>Pursuing Further Study</td>
-                  <td style={td}>{Number(stats.pursuing_further_study) || 0}</td>
-                  <td style={td}>{pct(Number(stats.pursuing_further_study) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr key="ched-job-alignment">
-                  <td style={td}>Job Alignment</td>
-                  <td style={td}>{Number(parsedStats.job_aligned_count) || 0}</td>
-                  <td style={td}>
-                    {pct(Number(parsedStats.job_aligned_count) || 0, stats.total_alumni)}
-                  </td>
-                </tr>
-                <tr key="ched-self-employed">
-                  <td style={td}>Self-Employed</td>
-                  <td style={td}>{Number(parsedStats.self_employed_count) || 0}</td>
-                  <td style={td}>
-                    {pct(Number(parsedStats.self_employed_count) || 0, stats.total_alumni)}
-                  </td>
-                </tr>
-                <tr>
-                  <td style={td}>Further Study Rate</td>
-                  <td style={td}></td>
-                  <td style={td}>{(Number(stats.further_study_rate) || 0).toFixed(2)}%</td>
-                </tr>
-                <tr>
-                  <td style={td}>Total Alumni</td>
-                  <td style={td}>{Number(stats.total_alumni) || 0}</td>
-                  <td style={td}>100%</td>
-                </tr>
-              </>
-            )}
-            {type === 'SUC' && (
-              <>
-                <tr>
-                  <td style={td}>High Position</td>
-                  <td style={td}>{Number(stats.high_position_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.high_position_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>Other Positions</td>
-                  <td style={td}>{(Number(stats.total_alumni) || 0) - (Number(stats.high_position_count) || 0)}</td>
-                  <td style={td}>{pct(((Number(stats.total_alumni) || 0) - (Number(stats.high_position_count) || 0)), Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>High Position Rate</td>
-                  <td style={td}></td>
-                  <td style={td}>{(Number(stats.high_position_rate) || 0).toFixed(2)}%</td>
-                </tr>
-                <tr>
-                  <td style={td}>Average Salary</td>
-                  <td style={td}>{formatCurrency(stats.average_salary)}</td>
-                  <td style={td}>--</td>
-                </tr>
-                <tr>
-                  <td style={td}>Government</td>
-                  <td style={td}>{Number(stats.public_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.public_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>Private</td>
-                  <td style={td}>{Number(stats.private_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.private_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>Local</td>
-                  <td style={td}>{Number(stats.local_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.local_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>International</td>
-                  <td style={td}>{Number(stats.international_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.international_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>Total Alumni</td>
-                  <td style={td}>{Number(stats.total_alumni) || 0}</td>
-                  <td style={td}>100%</td>
-                </tr>
-              </>
-            )}
-            {type === 'AACUP' && (
-              <>
-                <tr>
-                  <td style={td}>Employed</td>
-                  <td style={td}>{Number(stats.employed_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.employed_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>Absorbed</td>
-                  <td style={td}>{Number(stats.absorbed_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.absorbed_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>High Position</td>
-                  <td style={td}>{Number(stats.high_position_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.high_position_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>Self-Employed</td>
-                  <td style={td}>{Number(stats.self_employed_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.self_employed_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>Awards Received</td>
-                  <td style={td}>{Number(stats.awards_count) || 0}</td>
-                  <td style={td}>{pct(Number(stats.awards_count) || 0, Number(stats.total_alumni) || 0)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>Employment Rate</td>
-                  <td style={td}></td>
-                  <td style={td}>{(Number(stats.employment_rate) || 0).toFixed(2)}%</td>
-                </tr>
-                <tr>
-                  <td style={td}>Absorption Rate</td>
-                  <td style={td}></td>
-                  <td style={td}>{(Number(stats.absorption_rate) || 0).toFixed(2)}%</td>
-                </tr>
-                <tr>
-                  <td style={td}>High Position Rate</td>
-                  <td style={td}></td>
-                  <td style={td}>{(Number(stats.high_position_rate) || 0).toFixed(2)}%</td>
-                </tr>
-                <tr>
-                  <td style={td}>Total Alumni</td>
-                  <td style={td}>{Number(stats.total_alumni) || 0}</td>
-                  <td style={td}>100%</td>
-                </tr>
-              </>
-            )}
-            {type === 'HIGH_POSITION' && (
-              <>
-                <tr>
-                  <td style={td}>High Position Alumni</td>
-                  <td style={td}>{stats.high_position_count}</td>
-                  <td style={td}>{pct(stats.high_position_count, stats.total_alumni)}</td>
-                </tr>
-                <tr>
-                  <td style={td}>High Position Rate</td>
-                  <td style={td}></td>
-                  <td style={td}>{stats.high_position_rate}%</td>
-                </tr>
-                <tr>
-                  <td style={td}>Total Alumni</td>
-                  <td style={td}>{stats.total_alumni}</td>
-                  <td style={td}>{pct(stats.total_alumni, stats.total_alumni)}</td>
-                </tr>
-              </>
-            )}
+            {rows.map((row) => summaryRow(row.metric, row.value, row.percentage, row.bold))}
           </tbody>
         </table>
       </div>
@@ -5774,16 +5534,18 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, marginBottom: 20 }}>
+        <div style={{ marginBottom: 6 }}>
+          <label style={{ ...label, marginBottom: 0 }}>Statistics Report:</label>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
           <div style={{ flex: 1 }}>
-            <label style={label}>Statistics Report:</label>
             <select
               value={selectedType}
               onChange={(e) => {
                 setSelectedType(e.target.value as StatsType);
                 setNeedsRegenerate(true);
               }}
-              style={dropdown}
+              style={{ ...dropdown, width: '100%' }}
             >
               {typeOptions.map((type) => (
                 <option key={type.value} value={type.value}>

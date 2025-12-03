@@ -459,6 +459,20 @@ const RewardsPage: React.FC = () => {
     if (!selectedRequest || approving) return;
 
     try {
+    const isGcashReward =
+      selectedRequest.reward_type.toLowerCase().includes('gcash') ||
+      selectedRequest.reward_type.toLowerCase().includes('gift card') ||
+      selectedRequest.reward_type.toLowerCase().includes('coupon');
+
+    if (isGcashReward && !gcashReceipt) {
+      setStatusModal({
+        title: 'GCash Receipt Required',
+        message: 'Please upload a GCash receipt image before approving this reward request.',
+        variant: 'error'
+      });
+      return;
+    }
+
       setApproving(true);
       const response = await approveRewardRequest(
         selectedRequest.request_id,
@@ -997,7 +1011,7 @@ const RewardsPage: React.FC = () => {
                   <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'white' }}>
                     {trackerFormResponsesCount}
                   </div>
-                  <div style={styles.inventorySubtitle}>users updated employment</div>
+                  <div style={styles.inventorySubtitle}>updated employment</div>
                 </>
               ) : (
                 <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.9)' }}>No employment updates</div>
@@ -2929,14 +2943,15 @@ const RewardsPage: React.FC = () => {
                 selectedRequest.reward_type.toLowerCase().includes('coupon')) && (
                 <div style={{ marginBottom: '20px' }}>
                   <label style={{ 
-                    display: 'block', 
-                    fontSize: '13px', 
-                    fontWeight: '500', 
-                    color: '#374151', 
-                    marginBottom: '8px'
-                  }}>
-                    Gcash Receipt <span style={{ fontWeight: '400', color: '#94a3b8' }}>(Image only)</span>
-                  </label>
+                  display: 'block', 
+                  fontSize: '13px', 
+                  fontWeight: '500', 
+                  color: '#374151', 
+                  marginBottom: '8px'
+                }}>
+                  Gcash Receipt <span style={{ color: '#ef4444' }}>*</span>{' '}
+                  <span style={{ fontWeight: '400', color: '#94a3b8' }}>(Image only)</span>
+                </label>
                   <div style={{
                     border: '2px dashed #e2e8f0',
                     borderRadius: '8px',

@@ -19,6 +19,7 @@ interface ConversationItemProps {
   isOnline?: boolean;
   showMinimal?: boolean; // If true, only show avatar and name (for Online tab)
   onDelete?: (conversationId: number) => void;
+  onConversationDeleted?: () => void;
 }
 
 const ConversationItem: React.FC<ConversationItemProps> = ({ 
@@ -27,7 +28,8 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   onClick,
   isOnline = false,
   showMinimal = false,
-  onDelete
+  onDelete,
+  onConversationDeleted
 }) => {
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
   const [isLoadingPic, setIsLoadingPic] = useState(false);
@@ -117,16 +119,56 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   const handleDeleteClick = async () => {
     if (!conversation.conversation_id || conversation.conversation_id < 0) return;
     
+    const conversationId = conversation.conversation_id;
+    const otherUserId = conversation.other_participant?.user_id;
+    
+    console.log('🔵 [WEB DELETE] START - Deleting conversation:', {
+      conversation_id: conversationId,
+      other_user_id: otherUserId,
+      other_user_name: conversation.other_participant?.name
+    });
+    
     setIsDeleting(true);
     try {
-      await deleteConversation(conversation.conversation_id);
+      console.log('🔵 [WEB DELETE] Calling deleteConversation API...');
+      const response = await deleteConversation(conversationId);
+      
+      console.log('🔵 [WEB DELETE] API Response:', {
+        status: response?.status,
+        message: response?.message,
+        conversation_id: response?.conversation_id,
+        fully_deleted: response?.fully_deleted
+      });
+      
+      const fullyDeleted = response?.fully_deleted === true;
+      
+      console.log('🔵 [WEB DELETE] Deletion decision:', {
+        fully_deleted: fullyDeleted,
+        should_remove_from_ui: fullyDeleted
+      });
+      
       setShowDeleteConfirm(false);
       setShowMenu(false);
-      if (onDelete) {
-        onDelete(conversation.conversation_id);
+      
+      // CRITICAL FIX: Only call onDelete (which removes from UI) if conversation was fully deleted
+      // If fully_deleted is false, the conversation still exists for other participants
+      // The parent component will reload conversations, which will handle the removal for the deleting user
+      if (fullyDeleted && onDelete) {
+        console.log('🔵 [WEB DELETE] Conversation fully deleted - calling onDelete callback to remove from UI');
+        onDelete(conversationId);
+      } else if (!fullyDeleted) {
+        console.log('🔵 [WEB DELETE] Conversation NOT fully deleted - keeping in UI, will reload');
+        console.log('🔵 [WEB DELETE] This means other participants still have access to this conversation');
+        // Still notify parent to reload, but don't remove from UI immediately
+        // The reload will handle it (conversation won't appear for deleting user since they're no longer a participant)
+        if (onConversationDeleted) {
+          onConversationDeleted();
+        }
       }
+      
+      console.log('🔵 [WEB DELETE] END - Deletion complete');
     } catch (error) {
-      console.error('Failed to delete conversation:', error);
+      console.error('🔵 [WEB DELETE] ERROR - Failed to delete conversation:', error);
       alert('Failed to delete conversation. Please try again.');
     } finally {
       setIsDeleting(false);
@@ -312,7 +354,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
                 <p style={{ margin: '0 0 24px 0', color: '#666', fontSize: '14px', lineHeight: '1.5' }}>
                   Are you sure you want to delete this conversation with <strong>{conversation.other_participant?.name || 'this user'}</strong>?
                   <br /><br />
-                  This action cannot be undone.
+                  <strong>Important:</strong> Deleting will permanently remove this chat for <em>both</em> of you, including all past messages. This action cannot be undone.
                 </p>
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                   <button
@@ -440,27 +482,46 @@ const ConversationList: React.FC<ConversationListProps> = ({
   }, [localConversations]);
 
   const handleConversationDeleted = useCallback((conversationId: number) => {
-    // Remove from local state immediately
-    setLocalConversations(prev => prev.filter(c => c.conversation_id !== conversationId));
+    console.log('🔵 [WEB DELETE] handleConversationDeleted called:', {
+      conversation_id: conversationId,
+      selected_conversation_id: selectedConversationId,
+      current_conversations_count: localConversations.length
+    });
+    
+    // NOTE: This callback is only called when fully_deleted === true (see handleDeleteClick)
+    // So we can safely remove from local state immediately
+    const beforeCount = localConversations.length;
+    setLocalConversations(prev => {
+      const filtered = prev.filter(c => c.conversation_id !== conversationId);
+      console.log('🔵 [WEB DELETE] Removed from local state:', {
+        before_count: beforeCount,
+        after_count: filtered.length,
+        removed: beforeCount - filtered.length
+      });
+      return filtered;
+    });
     
     // Clear any selected conversation that was deleted
     if (conversationId === selectedConversationId) {
+      console.log('🔵 [WEB DELETE] Clearing selected conversation');
       // Clear selection by passing null
       onConversationSelect(null);
     }
     
     // Notify parent component to reload
     if (onConversationDeleted) {
+      console.log('🔵 [WEB DELETE] Notifying parent to reload conversations');
       onConversationDeleted();
     }
     
     // Force a refresh after a short delay to ensure backend is updated
     setTimeout(() => {
       if (onConversationDeleted) {
+        console.log('🔵 [WEB DELETE] Delayed reload (500ms)');
         onConversationDeleted();
       }
     }, 500);
-  }, [onConversationDeleted, selectedConversationId, onConversationSelect]);
+  }, [onConversationDeleted, selectedConversationId, onConversationSelect, localConversations.length]);
 
   // Filter conversations based on search query and active filter
   useEffect(() => {
@@ -688,6 +749,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   isOnline={isOnline}
                   showMinimal={activeFilter === 'online'}
                   onDelete={handleConversationDeleted}
+                  onConversationDeleted={onConversationDeleted}
                 />
               );
             })

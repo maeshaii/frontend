@@ -335,9 +335,9 @@ const ResetPassword = () => {
                 }}
               />
               <div style={styles.brandTextContainer}>
-                <h2 style={styles.brandTitle} className="reset-password-brand-title">WHERENAYOU</h2>
+                <h2 style={styles.brandTitle} className="reset-password-brand-title">WhereNaYou</h2>
                 <p style={styles.brandTagline} className="reset-password-brand-tagline">Connecting OJTs & Alumni Journeys</p>
-                <p style={styles.brandSubtitle}>Excellence in Technology Education</p>
+                
               </div>
             </div>
           </div>

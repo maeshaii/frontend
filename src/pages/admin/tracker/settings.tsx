@@ -772,18 +772,6 @@ const Settings: React.FC = () => {
                 >
                     📧 Send via Email
                   </button>
-                <button
-                  className="border-button"
-                  onClick={handleSendSms}
-                  style={{
-                    background: '#0a9396',
-                    color: '#fff',
-                    fontWeight: '600'
-                  }}
-                  title="Send tracker form link via SMS to selected users"
-                >
-                    📱 Send via SMS
-                  </button>
             </div>
             </div>
           {/* Search and Filter Controls */}

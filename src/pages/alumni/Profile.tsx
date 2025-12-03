@@ -4,7 +4,7 @@ import AlumniTopBar from './AlumniTopBar';
 import ctulogo from '../../images/ctulogo.png';
 import './profile.css';
 import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api, createConversation } from '../../services/api';
-import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment, getUserPoints, getInventoryItems, requestReward, getRewardRequests, claimRewardRequest, getEngagementPointsSettings, cancelRewardRequest } from '../../services/api';
+import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment, getUserPoints, getInventoryItems, requestReward, getRewardRequests, claimRewardRequest, getEngagementPointsSettings, cancelRewardRequest, fetchTrackerResponsesByUser } from '../../services/api';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
@@ -234,6 +234,7 @@ const AlumniProfile: React.FC = () => {
     tracker_form: 0
   });
   const [trackerFormEnabled, setTrackerFormEnabled] = useState(false);
+  const [hasCompletedTracker, setHasCompletedTracker] = useState(false);
   const [originalPostModalData, setOriginalPostModalData] = useState<any | null>(null);
   const [showRewardsModal, setShowRewardsModal] = useState(false);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
@@ -308,16 +309,18 @@ const AlumniProfile: React.FC = () => {
       }
       const userObj = JSON.parse(userStr);
       const currentUserId = userObj.user_id || userObj.id;
+      let viewingOwn = false;
       
       // Check if userId is invalid (undefined, "undefined", or not a valid number)
       if (!userId || userId === 'undefined' || isNaN(Number(userId))) {
         // No valid ID in URL, so this is the current user's profile
         userId = currentUserId;
+        viewingOwn = true;
         setIsOwnProfile(true);
         console.log('Profile: Loading own profile, userId:', userId);
       } else {
         // There's a valid ID in URL, check if it's the current user's profile
-        const viewingOwn = Number(userId) === Number(currentUserId);
+        viewingOwn = Number(userId) === Number(currentUserId);
         setIsOwnProfile(viewingOwn);
         console.log('Profile: Loading profile for userId:', userId, 'isOwnProfile:', viewingOwn, 'currentUserId:', currentUserId);
       }
@@ -399,6 +402,24 @@ const AlumniProfile: React.FC = () => {
           } else {
             // If not Alumni or OJT, ensure userPoints is null
             setUserPoints(null);
+          }
+          
+          if (viewingOwn && profileData.account_type?.user && profileData.user_id) {
+            try {
+              const trackerStatus = await fetchTrackerResponsesByUser(profileData.user_id);
+              const completed = Boolean(
+                trackerStatus &&
+                trackerStatus.success &&
+                Array.isArray(trackerStatus.responses) &&
+                trackerStatus.responses.length > 0
+              );
+              setHasCompletedTracker(completed);
+            } catch (trackerStatusError) {
+              console.error('Error checking tracker completion status:', trackerStatusError);
+              setHasCompletedTracker(false);
+            }
+          } else {
+            setHasCompletedTracker(false);
           }
           
           // Update localStorage only if viewing own profile
@@ -903,8 +924,13 @@ getPosts()
     
     // Validate gcash fields if reward type is gcash
     if (pendingRewardRequest.type?.toLowerCase() === 'gcash') {
-      if (!gcashNumber.trim()) {
+      const trimmedNumber = gcashNumber.trim();
+      if (!trimmedNumber) {
         alert('Please enter your Gcash number');
+        return;
+      }
+      if (!/^\d{11}$/.test(trimmedNumber)) {
+        alert('Gcash number must be exactly 11 digits.');
         return;
       }
       if (!gcashName.trim()) {
@@ -918,7 +944,11 @@ getPosts()
     
     try {
       setClaimingReward(rewardId);
-      const response = await requestReward(rewardId, gcashNumber, gcashName);
+      const response = await requestReward(
+        rewardId,
+        gcashNumber.trim(),
+        gcashName.trim()
+      );
       
       if (response.success) {
         // Refresh requests
@@ -2288,8 +2318,8 @@ getPosts()
                     </button>
                   </div>
 
-                  {/* Tracker Form Button - Only visible if enabled and user is alumni */}
-                  {trackerFormEnabled && user?.account_type?.user && (
+                  {/* Tracker Form Button - Only visible if enabled, viewing own alumni profile, and tracker incomplete */}
+                  {trackerFormEnabled && user?.account_type?.user && isOwnProfile && !hasCompletedTracker && (
                     <div style={{ marginTop: '12px' }}>
                       <button
                         onClick={() => navigate('/tracker')}
@@ -5486,8 +5516,9 @@ getPosts()
                                                  req.reward_type?.toLowerCase().includes('merch') ||
                                                  req.reward_type?.toLowerCase().includes('product') ||
                                                  req.reward_type?.toLowerCase().includes('item');
-                            // Only vouchers can be claimed by user, merchandise must be released by admin
-                            const canClaim = isApproved && !isClaimed && !isMerchandise;
+                            const isGcash = req.reward_type?.toLowerCase().includes('gcash');
+                            // Only vouchers can be claimed by user, merchandise & gcash are handled by admins
+                            const canClaim = isApproved && !isClaimed && !isMerchandise && !isGcash;
                             // Only pending requests can be cancelled (backend restriction)
                             const canCancel = isPending;
 
@@ -5664,8 +5695,8 @@ getPosts()
                                    req.reward_type?.toLowerCase().includes('product') ||
                                    req.reward_type?.toLowerCase().includes('item');
               const isGcash = req.reward_type?.toLowerCase().includes('gcash');
-              // Only vouchers can be claimed by user, merchandise must be released by admin
-              const canClaim = isApproved && !isClaimed && !isMerchandise;
+              // Only vouchers can be claimed by user, merchandise and gcash are handled by admins
+              const canClaim = isApproved && !isClaimed && !isMerchandise && !isGcash;
               const isClaiming = claimingReward === req.request_id;
 
                   return (
@@ -6057,7 +6088,7 @@ getPosts()
                           ) : (
                             <>
                               <HiOutlineGift size={16} />
-                              <span>{isGcash ? 'Okay' : 'Claim Reward'}</span>
+                              <span>Claim Reward</span>
                             </>
                           )}
                         </button>
@@ -6257,8 +6288,13 @@ getPosts()
                     </label>
                     <input
                       type="text"
+                      inputMode="numeric"
+                      maxLength={11}
                       value={gcashNumber}
-                      onChange={(e) => setGcashNumber(e.target.value)}
+                      onChange={(e) => {
+                        const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 11);
+                        setGcashNumber(digitsOnly);
+                      }}
                       placeholder="e.g., 09123456789"
                       style={{
                         width: '100%',
@@ -6273,6 +6309,9 @@ getPosts()
                       onFocus={(e) => e.currentTarget.style.borderColor = '#1e3a5f'}
                       onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
                     />
+                    <div style={{ marginTop: '6px', fontSize: '12px', color: '#6b7280' }}>
+                      Enter the 11-digit mobile number linked to your verified GCash account.
+                    </div>
                   </div>
                   <div style={{ marginBottom: '16px' }}>
                     <label style={{
@@ -6287,7 +6326,11 @@ getPosts()
                     <input
                       type="text"
                       value={gcashName}
-                      onChange={(e) => setGcashName(e.target.value)}
+                      onChange={(e) => {
+                        // Allow letters, spaces, and basic punctuation, but strip digits
+                        const withoutDigits = e.target.value.replace(/\d/g, '');
+                        setGcashName(withoutDigits);
+                      }}
                       placeholder="e.g., Juan Dela Cruz"
                       style={{
                         width: '100%',
@@ -6302,6 +6345,20 @@ getPosts()
                       onFocus={(e) => e.currentTarget.style.borderColor = '#1e3a5f'}
                       onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
                     />
+                    <div style={{ marginTop: '6px', fontSize: '12px', color: '#6b7280' }}>
+                      Make sure the name matches the verified owner of the GCash account.
+                    </div>
+                  </div>
+                  <div style={{ 
+                    background: '#fef9c3', 
+                    border: '1px solid #fde68a',
+                    borderRadius: '8px',
+                    padding: '12px 14px',
+                    fontSize: '13px',
+                    color: '#92400e',
+                    lineHeight: 1.5
+                  }}>
+                    ✅ Please double-check that the GCash number is verified and the name you entered is accurate. Once the transaction has proceeded, it is not reversible.
                   </div>
                 </div>
               )}

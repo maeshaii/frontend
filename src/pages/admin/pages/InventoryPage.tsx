@@ -168,12 +168,16 @@ const InventoryPage: React.FC = () => {
 
   const handleAddInventoryItem = async () => {
     // Validate all required fields
-    if (!newItemName || !newItemName.trim()) {
+    const trimmedName = newItemName?.trim() || '';
+    const trimmedType = newItemType?.trim() || '';
+    const trimmedValue = newItemValue?.trim() || '';
+
+    if (!trimmedName) {
       showNotification('error', 'Item name is required');
       return;
     }
     
-    if (!newItemType || !newItemType.trim()) {
+    if (!trimmedType) {
       showNotification('error', 'Item type is required');
       return;
     }
@@ -186,18 +190,28 @@ const InventoryPage: React.FC = () => {
     }
     
     // Validate value
-    if (!newItemValue || newItemValue.trim() === '' || newItemValue.trim() === '0') {
+    if (!trimmedValue || trimmedValue === '0') {
       showNotification('error', 'Please enter a valid value (e.g., $25, 100 pts)');
+      return;
+    }
+
+    // Prevent duplicate item names (case-insensitive)
+    const normalizedName = trimmedName.toLowerCase();
+    const duplicateItem = inventoryItems.find(
+      (item) => item.name.trim().toLowerCase() === normalizedName
+    );
+    if (duplicateItem) {
+      showNotification('error', `"${trimmedName}" already exists. Update its stock instead.`);
       return;
     }
     
     try {
-      console.log('Adding inventory item:', { name: newItemName.trim(), type: newItemType.trim(), quantity, value: newItemValue.trim() });
+      console.log('Adding inventory item:', { name: trimmedName, type: trimmedType, quantity, value: trimmedValue });
       const response = await addInventoryItem({
-        name: newItemName.trim(),
-        type: newItemType.trim(),
+        name: trimmedName,
+        type: trimmedType,
         quantity: quantity,
-        value: newItemValue.trim()
+        value: trimmedValue
       });
       
       if (response.success) {
@@ -1893,13 +1907,8 @@ const InventoryPage: React.FC = () => {
                                     <div style={{
                                       fontSize: '12px',
                                       color: '#3b82f6',
-                                      fontWeight: '600',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '4px'
+                                      fontWeight: '600'
                                     }}>
-                                      <span>→</span>
-                                      <span>{currentQuantity}</span>
                                     </div>
                                   )}
                                 </div>

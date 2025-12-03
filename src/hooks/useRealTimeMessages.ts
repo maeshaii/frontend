@@ -3,7 +3,7 @@
  * Handles WebSocket connection for message updates and polling fallback.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, startTransition } from 'react';
 import { listConversations } from '../services/api';
 import { getConversationWsUrl } from '../services/api';
 
@@ -47,8 +47,16 @@ export function useRealTimeMessages(
     const peopleWithUnread = conversations.filter((conv) => {
       return (conv.unread_count || 0) > 0;
     }).length;
-    setUnreadCount(peopleWithUnread);
-    setTotalConversations(conversations.length);
+    
+    // CRITICAL FIX: Use startTransition to mark state updates as non-urgent
+    // This prevents "setState during render" warnings by deferring updates
+    // Also defer the console.log to avoid any synchronous operations during render
+    startTransition(() => {
+      setUnreadCount(peopleWithUnread);
+      setTotalConversations(conversations.length);
+    });
+    
+    // Log outside of startTransition to avoid any potential issues
     console.log('📨 Updated message unread count:', peopleWithUnread, 'people with unread messages from', conversations.length, 'conversations');
   }, []);
 

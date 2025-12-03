@@ -52,31 +52,66 @@ const Messaging: React.FC = () => {
   // Load conversations function
   const loadConversations = useCallback(async () => {
       try {
+        console.log('🔵 [WEB LOAD] Loading conversations from API...');
         setIsLoading(true);
         const data = await listConversations();
+        
+        console.log('🔵 [WEB LOAD] API returned conversations:', {
+          total_count: data?.length || 0,
+          conversations: data?.map((c: any) => ({
+            id: c.conversation_id,
+            other_user_id: c.other_participant?.user_id,
+            other_user_name: c.other_participant?.name,
+            unread_count: c.unread_count
+          }))
+        });
         
         // CRITICAL: Filter out conversations with invalid data
         const validConversations = (data || []).filter(conv => {
           // Must have valid conversation_id
           if (!conv.conversation_id || conv.conversation_id <= 0) {
-            console.warn('Filtering out conversation with invalid conversation_id:', conv);
+            console.warn('🔵 [WEB LOAD] Filtering out conversation with invalid conversation_id:', conv);
             return false;
           }
           
           // Must have valid other_participant with valid user_id
+          // EXCEPTION: Allow conversations without other_participant if they have messages
+          // This handles the case where the other user deleted the conversation but it still exists for this user
           if (!conv.other_participant || !conv.other_participant.user_id || conv.other_participant.user_id <= 0) {
-            console.warn('Filtering out conversation with invalid other_participant:', conv);
+            // If conversation has messages, keep it (other user deleted but conversation still exists)
+            if (conv.last_message && conv.last_message.content) {
+              console.log('🔵 [WEB LOAD] Keeping conversation without other_participant (has messages):', {
+                conversation_id: conv.conversation_id,
+                has_last_message: !!conv.last_message
+              });
+              return true;
+            }
+            console.warn('🔵 [WEB LOAD] Filtering out conversation with invalid other_participant:', {
+              conversation_id: conv.conversation_id,
+              other_participant: conv.other_participant
+            });
             return false;
           }
           
           return true;
         });
         
+        console.log('🔵 [WEB LOAD] Valid conversations after filtering:', {
+          valid_count: validConversations.length,
+          filtered_out: (data?.length || 0) - validConversations.length,
+          valid_ids: validConversations.map((c: any) => c.conversation_id)
+        });
+        
         setConversations(validConversations);
         // Emit event to update badge in top bar
-        window.dispatchEvent(new CustomEvent('conversationsUpdated', { detail: validConversations }));
+        // CRITICAL FIX: Defer event dispatch to avoid state updates during render
+        // Use setTimeout to ensure this happens after the current render cycle
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('conversationsUpdated', { detail: validConversations }));
+        }, 0);
+        console.log('🔵 [WEB LOAD] Conversations loaded and state updated');
       } catch (error) {
-        console.error('Failed to load conversations:', error);
+        console.error('🔵 [WEB LOAD] ERROR - Failed to load conversations:', error);
       } finally {
         setIsLoading(false);
       }
@@ -111,26 +146,60 @@ const Messaging: React.FC = () => {
     
     const handleWebSocketEvent = (event: any) => {
       if (event.type === 'conversation_deleted') {
-        console.log('WebSocket: Conversation deleted event received:', event.conversation_id);
-        
-        // Clear selection if deleted conversation is selected
-        setSelectedConversation(prev => {
-          if (prev?.conversation_id === event.conversation_id) {
-            return null;
-          }
-          return prev;
+        console.log('🔵 [WEB WEBSOCKET] Conversation deleted event received:', {
+          conversation_id: event.conversation_id,
+          fully_deleted: event.fully_deleted,
+          timestamp: event.timestamp || new Date().toISOString()
         });
         
-        // Remove from local state immediately
-        setConversations(prev => prev.filter(c => c.conversation_id !== event.conversation_id));
+        const currentConversationsCount = conversations.length;
+        const conversationExists = conversations.some(c => c.conversation_id === event.conversation_id);
         
-        // Reload conversations to ensure consistency
+        console.log('🔵 [WEB WEBSOCKET] Current state:', {
+          conversations_count: currentConversationsCount,
+          conversation_exists_in_list: conversationExists
+        });
+        
+        // CRITICAL FIX: Only remove from UI if conversation was fully deleted
+        // If fully_deleted is false, the conversation still exists for other participants
+        // We should reload to get updated data, but not remove it immediately
+        if (event.fully_deleted === true) {
+          console.log('🔵 [WEB WEBSOCKET] Conversation fully deleted - removing from UI');
+          // Conversation was fully deleted - remove from UI
+          setSelectedConversation(prev => {
+            if (prev?.conversation_id === event.conversation_id) {
+              console.log('🔵 [WEB WEBSOCKET] Clearing selected conversation');
+              return null;
+            }
+            return prev;
+          });
+          
+          // Remove from local state immediately
+          setConversations(prev => {
+            const filtered = prev.filter(c => c.conversation_id !== event.conversation_id);
+            console.log('🔵 [WEB WEBSOCKET] Removed from local state:', {
+              before_count: prev.length,
+              after_count: filtered.length
+            });
+            return filtered;
+          });
+        } else {
+          // Conversation still exists for other participants
+          // Just reload to get updated conversation list (user was removed from participants)
+          // Don't remove from UI - let the reload handle it
+          console.log('🔵 [WEB WEBSOCKET] Conversation NOT fully deleted - keeping in UI, will reload');
+          console.log('🔵 [WEB WEBSOCKET] This means other participants still have access to this conversation');
+        }
+        
+        // Always reload conversations to ensure consistency
+        console.log('🔵 [WEB WEBSOCKET] Reloading conversations from API...');
         loadConversations();
         
         // Also dispatch custom event for consistency with local deletions
         window.dispatchEvent(new CustomEvent('conversationDeleted', { 
-          detail: { conversation_id: event.conversation_id } 
+          detail: { conversation_id: event.conversation_id, fully_deleted: event.fully_deleted } 
         }));
+        console.log('🔵 [WEB WEBSOCKET] Dispatched conversationDeleted custom event');
       }
     };
 

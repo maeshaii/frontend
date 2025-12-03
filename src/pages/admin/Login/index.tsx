@@ -164,7 +164,7 @@ const Login = () => {
                   <span style={styles.brandTitleText}>You</span>
                 </h2>
                 <p style={styles.brandTagline} className="login-brand-tagline">Connecting OJTs & Alumni Journeys</p>
-                <p style={styles.brandSubtitle}>Excellence in Technology Education</p>
+               
               </div>
             </div>
           </div>
@@ -577,17 +577,20 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '4px',
   },
   errorContainer: {
-    background: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.3)',
-    borderRadius: '8px',
-    padding: '0.75rem',
-    marginTop: '0.5rem',
+    background: '#fee2e2',
+    border: '1px solid #dc2626',
+    borderRadius: '10px',
+    padding: '0.9rem 1rem',
+    marginTop: '0.75rem',
+    boxShadow: '0 6px 18px rgba(220, 38, 38, 0.2)',
   },
   errorText: {
-    color: '#fca5a5',
-    fontSize: '0.9rem',
+    color: '#b91c1c',
+    fontSize: '0.95rem',
+    fontWeight: 600,
     margin: 0,
     textAlign: 'center',
+    letterSpacing: '0.02em',
   },
   button: {
     background: 'linear-gradient(135deg, #ffffff 0%, #f0f8ff 100%)',

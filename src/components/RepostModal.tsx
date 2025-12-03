@@ -262,16 +262,17 @@ const RepostModal: React.FC<RepostModalProps> = ({
       <div
         style={{
           width: '100%',
-          maxWidth: modalWidth,
+          maxWidth: showEmojiPicker ? 750 : modalWidth,
+          minWidth: showEmojiPicker ? 600 : 400,
           maxHeight: 'calc(100vh - 48px)',
           background: '#fff',
           borderRadius: 12,
           boxShadow: '0 15px 40px rgba(15, 23, 42, 0.2)',
-          overflow: 'hidden',
+          overflow: 'visible', // changed from 'hidden' to 'visible'
           animation: 'slideUp 0.25s ease-out',
           display: 'flex',
           flexDirection: 'column',
-          transition: 'max-width 0.3s ease',
+          transition: 'max-width 0.3s ease, min-width 0.3s ease',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -300,7 +301,7 @@ const RepostModal: React.FC<RepostModalProps> = ({
           >
             ×
           </button>
-          <div style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Repost</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Create a repost</div>
           <button
             onClick={handleSubmit}
             style={{
@@ -339,45 +340,46 @@ const RepostModal: React.FC<RepostModalProps> = ({
             <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>{effectiveCurrentUser.name}</div>
           </div>
 
-          {/* Caption input */}
-          <div style={{ display: 'flex', gap: 16, width: '100%', alignItems: 'flex-start' }}>
-            <div style={{ position: 'relative', width: '100%' }}>
+          {/* Caption input + Emoji Picker, now horizontal row layout */}
+          <div style={{ display: 'flex', flexDirection: 'row', gap: 16, width: '100%', alignItems: 'flex-start' }}>
+            {/* Textarea column */}
+            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
               <textarea
-              placeholder="Add an optional caption..."
-              value={caption}
-              onChange={(e) => {
-                handleCaptionChange(e.target.value);
-                // Auto-resize textarea with max height
-                e.target.style.height = 'auto';
-                e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
-              }}
-              style={{
-                width: '100%',
-                minHeight: 90,
-                maxHeight: 200,
-                borderRadius: 12,
-                border: '1px solid #e5e7eb',
-                padding: '14px 16px 32px 16px',
-                fontSize: 14,
-                resize: 'none',
-                fontFamily: 'inherit',
-                outline: 'none',
-                backgroundColor: '#fff',
-                boxSizing: 'border-box',
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                color: '#111827',
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = '#2563eb';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = '#e5e7eb';
-              }}
-              className="repost-caption-input"
-              maxLength={MAX_CAPTION_LENGTH}
+                placeholder="Add an optional caption..."
+                value={caption}
+                onChange={(e) => {
+                  handleCaptionChange(e.target.value);
+                  // Auto-resize textarea with max height
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                }}
+                style={{
+                  width: '100%',
+                  minHeight: 90,
+                  maxHeight: 200,
+                  borderRadius: 12,
+                  border: '1px solid #e5e7eb',
+                  padding: '14px 16px 32px 16px',
+                  fontSize: 14,
+                  resize: 'none',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  backgroundColor: '#fff',
+                  boxSizing: 'border-box',
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  color: '#111827',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#2563eb';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                }}
+                className="repost-caption-input"
+                maxLength={MAX_CAPTION_LENGTH}
               />
-              {/* Emoji + count */}
+              {/* Emoji + count BOTTOM RIGHT of textarea */}
               <div
                 style={{
                   position: 'absolute',
@@ -440,7 +442,7 @@ const RepostModal: React.FC<RepostModalProps> = ({
                 </div>
               </div>
             </div>
-
+            {/* Emoji picker as FLEX PEER, not inside textarea column */}
             {showEmojiPicker && (
               <div
                 ref={emojiPickerRef}
@@ -451,13 +453,16 @@ const RepostModal: React.FC<RepostModalProps> = ({
                   overflow: 'hidden',
                   background: '#fff',
                   border: '1px solid #e0e0e0',
+                  marginLeft: 0,
                   alignSelf: 'flex-start',
+                  width: 340,
+                  zIndex: 2
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
                 <EmojiPicker
                   onEmojiClick={handleEmojiSelect}
-                  width={Math.min(340, modalWidth - 80)}
+                  width={340}
                   height={360}
                   previewConfig={{ showPreview: false }}
                   skinTonesDisabled
