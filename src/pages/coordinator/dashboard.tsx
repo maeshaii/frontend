@@ -168,25 +168,16 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    // Get coordinator username from localStorage
+    // Get coordinator info from localStorage
     const user = localStorage.getItem('user');
     if (user) {
       const userData = JSON.parse(user);
-      // Use username instead of full name for coordinator
+      // Set username and program from profile, not by username pattern
       const username = userData.username || userData.name || '';
       setCoordinatorUsername(username);
-      
-      // Set program based on coordinator username
-      if (username === 'ITCOORDINATOR') {
-        setProgram('BSIT');
-      } else if (username === 'CTCOORDINATOR') {
-        setProgram('BIT-CT');
-      } else if (username === 'ISCOORDINATOR') {
-        setProgram('BSIS');
-      } else {
-        // Default fallback
-        setProgram('BSIT');
-      }
+      // Pull actual program from the stored user data
+      // Fallback to 'BSIT' if not specified
+      setProgram(userData.course || 'BSIT');
     }
   }, []);
 

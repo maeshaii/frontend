@@ -43,7 +43,12 @@ const Settings: React.FC = () => {
           fetchTrackerResponses(),
         ]);
         if (alumniData && alumniData.alumni) {
-          setAlumni(alumniData.alumni);
+          // Map 'program' field from API to 'course' for frontend compatibility
+          const mappedAlumni = alumniData.alumni.map((alum: any) => ({
+            ...alum,
+            course: alum.program || alum.course || '', // Use program field from API, fallback to course if exists
+          }));
+          setAlumni(mappedAlumni);
         } else {
           console.warn('No alumni data received or invalid format');
           setAlumni([]);

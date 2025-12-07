@@ -871,7 +871,7 @@ getPosts()
   };
 
 
-  const handleRequestReward = async (rewardId: number) => {
+  const handleRequestReward = (rewardId: number) => {
     if (claimingReward !== null) return;
     
     const reward = inventoryItems.find(item => item.id === rewardId);
@@ -906,7 +906,10 @@ getPosts()
       return;
     }
 
-    // Show confirmation modal instead of browser confirm
+    // Close the rewards modal and show confirmation modal immediately
+    setShowRewardsModal(false);
+    
+    // Set pending reward request and show modal immediately
     setPendingRewardRequest({
       id: rewardId,
       name: reward.name,
@@ -916,6 +919,7 @@ getPosts()
     // Reset gcash fields when opening modal
     setGcashNumber('');
     setGcashName('');
+    // Show the confirm modal immediately
     setShowConfirmRequestModal(true);
   };
 
@@ -1364,6 +1368,13 @@ getPosts()
       return filtered.length === prev.length ? prev : filtered;
     });
   }, [userRewardRequests]);
+
+  // Automatically show modal when pendingRewardRequest is set
+  useEffect(() => {
+    if (pendingRewardRequest && !showConfirmRequestModal) {
+      setShowConfirmRequestModal(true);
+    }
+  }, [pendingRewardRequest, showConfirmRequestModal]);
 
   useEffect(() => {
     if (!selectedRewardDetail) return;
@@ -5201,7 +5212,10 @@ getPosts()
                         </div>
                         
                         <button
-                          onClick={() => handleRequestReward(item.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRequestReward(item.id);
+                          }}
                           disabled={!canRequest || isClaiming}
                           style={{
                             padding: '8px 16px',
@@ -6188,7 +6202,7 @@ getPosts()
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1001,
+            zIndex: 2000,
             padding: '20px'
           }}
           onClick={() => {

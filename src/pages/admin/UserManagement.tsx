@@ -690,7 +690,7 @@ const UserManagement: React.FC = () => {
           gender: '',
           account_type: 'alumni',
           acc_password: '',
-        acc_password_confirm: '',
+          acc_password_confirm: '',
           course: '',
           section: '',
           year_graduated: '',
@@ -702,13 +702,11 @@ const UserManagement: React.FC = () => {
         });
         // Refresh users list
         await fetchUsers();
-        // Clear success message after 5 seconds
-        setTimeout(() => {
-          setSuccess('');
-          setShowPasswordDisplay(false);
-          setShowCreateModal(false);
-          setAccountTypeSelected(false);
-        }, 5000);
+        // Immediately close modal after success
+        setShowCreateModal(false);
+        setSuccess('');
+        setShowPasswordDisplay(false);
+        setAccountTypeSelected(false);
       } else {
         const errorMessage = response.data.message || 'Failed to create user';
         const formatted = errorMessage

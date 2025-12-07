@@ -684,7 +684,7 @@ const AlumniData: React.FC = () => {
                     'Program Name': modalAlumni.program || modalAlumni.Program_Name || modalAlumni.course || getTrackerAnswerByLabel('program'),
                     'Status': modalAlumni.employment_status || modalAlumni.status || modalAlumni.Status || modalAlumni.user_status || getTrackerAnswerByLabel('status'),
                     'Employment Type': modalAlumni.employment_type || modalAlumni.q_employment_type || modalAlumni.Employment_Type || getTrackerAnswerByLabel('employment type'),
-                    'Company': modalAlumni.company_name_current || modalAlumni['Company name current'] || modalAlumni.company || getTrackerAnswerByLabel('company') || getTrackerAnswerByLabel('employer') || getTrackerAnswerByLabel('current company'),
+                    'Company': modalAlumni.company_name_current || modalAlumni.q_company_name || '',
                     'Position': modalAlumni.position_current || modalAlumni.q_current_position || modalAlumni['Position current'] || getTrackerAnswerByLabel('current position'),
                     'Sector': modalAlumni.sector_current || modalAlumni.q_sector_current || modalAlumni['Sector current'] || getTrackerAnswerByLabel('sector'),
                     'Scope': modalAlumni.scope_current || modalAlumni['Scope current'] || getTrackerAnswerByLabel('scope'),
@@ -699,8 +699,8 @@ const AlumniData: React.FC = () => {
                       // Preserve original capitalization
                       return value;
                     })(),
-                    'Date Started': modalAlumni.q_study_start_date || modalAlumni.date_started || modalAlumni['Date started'] || getTrackerAnswerByLabel('date started'),
-                    'School Name': modalAlumni.q_institution_name || modalAlumni.school_name || modalAlumni['School name'] || modalAlumni.institution || modalAlumni.university || getTrackerAnswerByLabel('school') || getTrackerAnswerByLabel('institution') || getTrackerAnswerByLabel('university'),
+                    'Date Started': modalAlumni.q_study_start_date || '',
+                    'School Name': modalAlumni.q_institution_name || '',
                     'Post graduate degree': modalAlumni.q_post_graduate_degree || modalAlumni['Post graduate degree'] || getTrackerAnswerByLabel('post graduate') || getTrackerAnswerByLabel('postgraduate') || getTrackerAnswerByLabel('please specify post graduate'),
                     'Units obtain': (() => {
                       const units = modalAlumni.q_units_obtained || modalAlumni['Units obtain'] || modalAlumni['Total number of units obtain'] || getTrackerAnswerByLabel('units obtain') || getTrackerAnswerByLabel('total number of units');
