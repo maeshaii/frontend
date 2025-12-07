@@ -1046,21 +1046,23 @@ const Settings: React.FC = () => {
                       disabled={!isEditingPersonal}
                     />
                     
-                    <FormControl variant="outlined" fullWidth>
-                      <InputLabel>Civil Status</InputLabel>
-                      <Select
-                        value={formData.civil_status}
-                        onChange={(e) => handleInputChange('civil_status', e.target.value)}
-                        label="Civil Status"
-                        disabled={!isEditingPersonal}
-                      >
-                        {civilStatusOptions.map((status) => (
-                          <MenuItem key={status} value={status}>
-                            {status}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                    {!isAdmin && !isPeso && (
+                      <FormControl variant="outlined" fullWidth>
+                        <InputLabel>Civil Status</InputLabel>
+                        <Select
+                          value={formData.civil_status}
+                          onChange={(e) => handleInputChange('civil_status', e.target.value)}
+                          label="Civil Status"
+                          disabled={!isEditingPersonal}
+                        >
+                          {civilStatusOptions.map((status) => (
+                            <MenuItem key={status} value={status}>
+                              {status}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    )}
                     
                     <TextField
                       label="Contact Number"
@@ -1079,25 +1081,29 @@ const Settings: React.FC = () => {
                       disabled={!isEditingPersonal}
                     />
                     
-                    <TextField
-                      label="Address"
-                      value={formData.address}
-                      onChange={(e) => handleInputChange('address', e.target.value)}
-                      variant="outlined"
-                      multiline
-                      rows={3}
-                      disabled={!isEditingPersonal}
-                    />
-                    
-                    <TextField
-                      label="Home Address"
-                      value={formData.home_address}
-                      onChange={(e) => handleInputChange('home_address', e.target.value)}
-                      variant="outlined"
-                      multiline
-                      rows={3}
-                      disabled={!isEditingPersonal}
-                    />
+                    {!isAdmin && !isPeso && (
+                      <>
+                        <TextField
+                          label="Address"
+                          value={formData.address}
+                          onChange={(e) => handleInputChange('address', e.target.value)}
+                          variant="outlined"
+                          multiline
+                          rows={3}
+                          disabled={!isEditingPersonal}
+                        />
+                        
+                        <TextField
+                          label="Home Address"
+                          value={formData.home_address}
+                          onChange={(e) => handleInputChange('home_address', e.target.value)}
+                          variant="outlined"
+                          multiline
+                          rows={3}
+                          disabled={!isEditingPersonal}
+                        />
+                      </>
+                    )}
                     
                     <TextField
                       label="Social Media"

@@ -447,7 +447,7 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
                   }}
                   required
                   ref={textareaRef}
-                  maxLength={1000}
+                  maxLength={5000}
                 />
 
                 {/* Character Count and Emoji Button Container */}
@@ -521,7 +521,7 @@ const PostCreate: React.FC<PostCreateProps> = ({ onPosted, onCancel, postType, u
                     whiteSpace: 'nowrap',
                     pointerEvents: 'none',
                   }}>
-                    {postContent.length}/1000
+                    {postContent.length}/5000
                   </div>
                 </div>
               </div>

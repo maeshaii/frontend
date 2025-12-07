@@ -236,26 +236,28 @@ const Reply: React.FC<ReplyProps> = ({
         const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
         
         // Check reply author
-        const replyAuthorName = `${reply.user.f_name} ${reply.user.m_name || ''} ${reply.user.l_name}`.trim();
+        const replyAuthorNameParts = [reply.user.f_name, reply.user.m_name, reply.user.l_name].filter(part => part && part.trim());
+        const replyAuthorName = replyAuthorNameParts.join(' ').trim();
         const normalizedReplyAuthor = replyAuthorName.toLowerCase().replace(/\s+/g, '');
         if (normalizedMention === normalizedReplyAuthor) {
           return { matched: true, user: reply.user, matchedName: replyAuthorName };
         }
         
-        // Check if mention starts with reply author name (partial match)
-        if (normalizedMention.startsWith(normalizedReplyAuthor)) {
+        // Check if the full name starts with the mention (partial match)
+        if (normalizedReplyAuthor.startsWith(normalizedMention)) {
           return { matched: true, user: reply.user, matchedName: replyAuthorName };
         }
         
         // Check following users
         for (const user of followingUsers) {
-          const userName = `${user.f_name} ${user.m_name || ''} ${user.l_name}`.trim();
+          const userNameParts = [user.f_name, user.m_name, user.l_name].filter(part => part && part.trim());
+          const userName = userNameParts.join(' ').trim();
           const normalizedUserName = userName.toLowerCase().replace(/\s+/g, '');
           if (normalizedMention === normalizedUserName) {
             return { matched: true, user, matchedName: userName };
           }
-          // Check partial match
-          if (normalizedMention.startsWith(normalizedUserName)) {
+          // Check if the full name starts with the mention (partial match)
+          if (normalizedUserName.startsWith(normalizedMention)) {
             return { matched: true, user, matchedName: userName };
           }
         }
@@ -274,216 +276,103 @@ const Reply: React.FC<ReplyProps> = ({
           result.push(part.substring(lastIndex, match.index));
         }
         
-        const mentionText = match[1]; // Don't trim yet, we need the original spacing
+        let mentionText = match[1]; // Don't trim yet, we need the original spacing
         if (mentionText) {
+          // First, clean up any duplication in the mention text itself
+          // This handles cases where the stored mention text already has duplication
+          const mentionParts = mentionText.trim().split(/\s+/).filter(Boolean);
+          if (mentionParts.length >= 4) {
+            // Check if middle name and last name are duplicated in the mention text
+            const firstPart = mentionParts[0];
+            const secondPart = mentionParts[1];
+            const thirdPart = mentionParts[2];
+            
+            // Pattern: First Middle Last Middle Last
+            if (secondPart === mentionParts[mentionParts.length - 2] && thirdPart === mentionParts[mentionParts.length - 1]) {
+              // Duplication detected in mention text - use only first 3 parts
+              mentionText = [firstPart, secondPart, thirdPart].join(' ');
+            }
+          }
+          
+          const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
           const matchResult = checkMentionMatch(mentionText);
           
           if (matchResult.matched && matchResult.user && matchResult.matchedName) {
-            const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
-            const normalizedMatchedName = matchResult.matchedName.toLowerCase().replace(/\s+/g, '');
-            const isExactMatch = normalizedMention === normalizedMatchedName;
-            const startsWithName = normalizedMention.startsWith(normalizedMatchedName);
+          const matchedUserName = matchResult.matchedName;
+          const normalizedMatchedName = matchedUserName.toLowerCase().replace(/\s+/g, '');
+          
+          // Always use matchedUserName to prevent duplication issues
+          // The matchedUserName is constructed correctly from database fields (f_name, m_name, l_name)
+          // The mention text might already contain duplication, so we trust the matchedUserName
+          let displayName = matchedUserName;
+          
+          // Additional check: if displayName contains duplicated name parts, clean it up
+          // This handles edge cases where the database itself might have duplication
+          const nameParts = matchedUserName.split(' ').filter(Boolean);
+          
+          // Check for duplication: if middle name and last name are duplicated together
+          if (nameParts.length >= 3) {
+            const firstName = nameParts[0];
+            const middleName = nameParts[1];
+            const lastName = nameParts[nameParts.length - 1];
             
-            if (isExactMatch) {
-              // Exact match - highlight the entire mention
-              const matchedUser = matchResult.user;
-              result.push(
-                <button
-                  key={`${index}-mention-${match.index}`}
-                  onClick={() => {
-                    const userId = matchedUser.user_id || matchedUser.id;
-                    if (userId) {
-                      window.location.href = getProfilePath(userId);
-                    } else {
-                      handleUserSearch(mentionText);
-                    }
-                  }}
-                  style={{ 
-                    color: '#007bff', 
-                    fontWeight: '600',
-                    background: 'none',
-                    border: 'none',
-                    padding: '0',
-                    cursor: 'pointer',
-                    textDecoration: 'none'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.textDecoration = 'underline';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.textDecoration = 'none';
-                  }}
-                >
-                  @{mentionText}
-                </button>
-              );
-            } else if (startsWithName) {
-              // Partial match - find where the user's name ends in the mention text
-              const mentionWords = mentionText.split(/\s+/);
-              const nameWords = matchResult.matchedName.split(/\s+/);
+            // Check if the name has the pattern: First Middle Last Middle Last
+            const expectedPattern = `${firstName} ${middleName} ${lastName}`;
+            const duplicatePattern = `${middleName} ${lastName}`;
+            
+            if (matchedUserName.includes(duplicatePattern) && matchedUserName.split(duplicatePattern).length > 2) {
+              // Duplication detected - use just the first occurrence
+              displayName = expectedPattern;
+            }
+          }
+            const matchedUser = matchResult.user;
+            result.push(
+              <button
+                key={`${index}-mention-${match.index}`}
+                onClick={() => {
+                  const userId = matchedUser.user_id || matchedUser.id;
+                  if (userId) {
+                    window.location.href = getProfilePath(userId);
+                  } else {
+                    handleUserSearch(displayName);
+                  }
+                }}
+                style={{ 
+                  color: '#007bff', 
+                  fontWeight: '600',
+                  background: 'none',
+                  border: 'none',
+                  padding: '0',
+                  cursor: 'pointer',
+                  textDecoration: 'none'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                @{displayName}
+              </button>
+            );
+            
+            // Check if there's duplicate text after the mention that should be skipped
+            // This handles cases where the stored text has duplication like "@John Michael Smith Michael Smith"
+            if (nameParts.length >= 3) {
+              const middleName = nameParts[1];
+              const lastName = nameParts[nameParts.length - 1];
+              const duplicatePattern = ` ${middleName} ${lastName}`;
+              const textAfterMention = part.substring(mentionRegex.lastIndex);
               
-              let matchedWordCount = 0;
-              for (let i = 0; i < Math.min(mentionWords.length, nameWords.length); i++) {
-                if (mentionWords[i].toLowerCase() === nameWords[i].toLowerCase()) {
-                  matchedWordCount++;
-                } else {
-                  break;
+              // Check if the text immediately after the mention matches the duplicate pattern
+              if (textAfterMention.trim().startsWith(duplicatePattern.trim())) {
+                // Skip the duplicate text by advancing lastIndex past it
+                const duplicateMatch = textAfterMention.match(new RegExp(`^\\s*${duplicatePattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+                if (duplicateMatch) {
+                  mentionRegex.lastIndex += duplicateMatch[0].length;
                 }
               }
-              
-              if (matchedWordCount > 0 && matchedWordCount <= mentionWords.length) {
-                // Build a regex pattern to match the exact name at the start of mentionText
-                // Escape special regex characters in the name
-                const escapedName = matchResult.matchedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                // Create a pattern that matches the name followed by optional whitespace and more text
-                const namePattern = new RegExp(`^(${escapedName})(\\s+.*)?$`, 'i');
-                const nameMatch = mentionText.match(namePattern);
-                
-                if (nameMatch && nameMatch[1]) {
-                  // Found exact match of the name at the start
-                  const matchedPart = nameMatch[1];
-                  const remainingPart = mentionText.substring(matchedPart.length);
-                  const matchedUser = matchResult.user;
-                  
-                  result.push(
-                    <button
-                      key={`${index}-mention-${match.index}`}
-                      onClick={() => {
-                        const userId = matchedUser.user_id || matchedUser.id;
-                        if (userId) {
-                          window.location.href = getProfilePath(userId);
-                        } else {
-                          handleUserSearch(matchedPart.trim());
-                        }
-                      }}
-                      style={{ 
-                        color: '#007bff', 
-                        fontWeight: '600',
-                        background: 'none',
-                        border: 'none',
-                        padding: '0',
-                        cursor: 'pointer',
-                        textDecoration: 'none'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.textDecoration = 'underline';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.textDecoration = 'none';
-                      }}
-                    >
-                      @{matchedPart}
-                    </button>
-                  );
-                  
-                  // Add remaining text as normal text
-                  if (remainingPart.trim()) {
-                    result.push(remainingPart);
-                  }
-                } else {
-                  // Fallback: use word-based matching
-                  const matchedWords = mentionWords.slice(0, matchedWordCount);
-                  // Find the position where these words end in the original text
-                  let searchPos = 0;
-                  for (let i = 0; i < matchedWords.length; i++) {
-                    const wordPos = mentionText.indexOf(matchedWords[i], searchPos);
-                    if (wordPos !== -1) {
-                      searchPos = wordPos + matchedWords[i].length;
-                    } else {
-                      break;
-                    }
-                  }
-                  
-                  const matchedPart = mentionText.substring(0, searchPos);
-                  const remainingPart = mentionText.substring(searchPos);
-                  const matchedUser = matchResult.user;
-                  
-                  result.push(
-                    <button
-                      key={`${index}-mention-${match.index}`}
-                      onClick={() => {
-                        const userId = matchedUser.user_id || matchedUser.id;
-                        if (userId) {
-                          window.location.href = getProfilePath(userId);
-                        } else {
-                          handleUserSearch(matchedPart.trim());
-                        }
-                      }}
-                      style={{ 
-                        color: '#007bff', 
-                        fontWeight: '600',
-                        background: 'none',
-                        border: 'none',
-                        padding: '0',
-                        cursor: 'pointer',
-                        textDecoration: 'none'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.textDecoration = 'underline';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.textDecoration = 'none';
-                      }}
-                    >
-                      @{matchedPart}
-                    </button>
-                  );
-                  
-                  if (remainingPart.trim()) {
-                    result.push(remainingPart);
-                  }
-                }
-              } else {
-                // No match found - but still highlight in blue and make clickable
-                result.push(
-                  <button
-                    key={`${index}-mention-${match.index}`}
-                    onClick={() => handleUserSearch(mentionText)}
-                    style={{ 
-                      color: '#007bff', 
-                      fontWeight: '600',
-                      background: 'none',
-                      border: 'none',
-                      padding: '0',
-                      cursor: 'pointer',
-                      textDecoration: 'none'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.textDecoration = 'underline';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.textDecoration = 'none';
-                    }}
-                  >
-                    @{mentionText}
-                  </button>
-                );
-              }
-            } else {
-              // No match found - but still highlight in blue and make clickable
-              result.push(
-                <button
-                  key={`${index}-mention-${match.index}`}
-                  onClick={() => handleUserSearch(mentionText)}
-                  style={{ 
-                    color: '#007bff', 
-                    fontWeight: '600',
-                    background: 'none',
-                    border: 'none',
-                    padding: '0',
-                    cursor: 'pointer',
-                    textDecoration: 'none'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.textDecoration = 'underline';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.textDecoration = 'none';
-                  }}
-                >
-                  @{mentionText}
-                </button>
-              );
             }
           } else {
             // No match found - but still highlight in blue and make clickable
@@ -850,6 +739,7 @@ const Reply: React.FC<ReplyProps> = ({
                   value={replyContent}
                   onChange={(e) => setReplyContent(e.target.value)}
                   placeholder={`Reply to ${userName}...`}
+                  maxLength={5000}
                   style={{
                     width: '100%',
                     minHeight: '32px',

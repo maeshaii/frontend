@@ -100,6 +100,7 @@ const ReplyInput: React.FC<ReplyInputProps> = ({
           placeholder="Write a reply..."
           onSubmit={handleSubmit}
           disabled={isSubmitting}
+          maxLength={5000}
           style={{
             minHeight: '32px',
             maxHeight: '120px',

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import ctulogo from '../images/ctulogo.png';
 import { getProfilePicUrl, getImageUrl } from '../utils/profilePicUtils';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
+import SeeMoreText from './SeeMoreText';
 interface RepostModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -41,7 +42,7 @@ interface RepostModalProps {
   formatTime: (iso?: string | null) => string;
 }
 
-const MAX_CAPTION_LENGTH = 1000;
+const MAX_CAPTION_LENGTH = 5000;
 
 // Helper function to extract images from post (similar to PostCard and RepostCard)
 // Handles regular posts, forum posts, and donation posts
@@ -579,7 +580,10 @@ const RepostModal: React.FC<RepostModalProps> = ({
               </div>
             </div>
 
-            <div
+            <SeeMoreText
+              text={originalPost.post_content}
+              maxLength={500}
+              className="repost-original-content"
               style={{
                 fontSize: 14,
                 color: '#1f2937',
@@ -590,10 +594,7 @@ const RepostModal: React.FC<RepostModalProps> = ({
                 overflowY: 'auto',
                 overflowWrap: 'break-word',
               }}
-              className="repost-original-content"
-            >
-              {originalPost.post_content}
-            </div>
+            />
 
             {/* Images display - supports both single and multiple images */}
             {originalImages.length > 0 && (

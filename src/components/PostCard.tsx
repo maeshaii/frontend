@@ -30,6 +30,7 @@ import { faThumbsUp as faThumbsUpReg, faComment as faCommentReg } from '@fortawe
 import { IoSend } from 'react-icons/io5';
 import ConfirmModal from './ConfirmModal';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
+import SeeMoreText from './SeeMoreText';
 import './postFooterActions.css';
 
 interface RepostItem {
@@ -616,24 +617,34 @@ const PostCard: React.FC<PostCardProps> = ({
   };
 
   // Helper function to check if a mention matches a known user
-  const checkMentionMatch = (mentionText: string): { matched: boolean; user?: any } => {
+  const checkMentionMatch = (mentionText: string): { matched: boolean; user?: any; matchedName?: string } => {
     const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
     
     // Check post author
     if (post.user) {
-      const postAuthorName = `${post.user.f_name} ${post.user.m_name || ''} ${post.user.l_name}`.trim();
+      const postAuthorNameParts = [post.user.f_name, post.user.m_name, post.user.l_name].filter(part => part && part.trim());
+      const postAuthorName = postAuthorNameParts.join(' ').trim();
       const normalizedPostAuthor = postAuthorName.toLowerCase().replace(/\s+/g, '');
       if (normalizedMention === normalizedPostAuthor) {
-        return { matched: true, user: post.user };
+        return { matched: true, user: post.user, matchedName: postAuthorName };
+      }
+      // Check if the full name starts with the mention (partial match)
+      if (normalizedPostAuthor.startsWith(normalizedMention)) {
+        return { matched: true, user: post.user, matchedName: postAuthorName };
       }
     }
     
     // Check following users
     for (const user of followingUsers) {
-      const userName = `${user.f_name} ${user.m_name || ''} ${user.l_name}`.trim();
+      const userNameParts = [user.f_name, user.m_name, user.l_name].filter(part => part && part.trim());
+      const userName = userNameParts.join(' ').trim();
       const normalizedUserName = userName.toLowerCase().replace(/\s+/g, '');
       if (normalizedMention === normalizedUserName) {
-        return { matched: true, user };
+        return { matched: true, user, matchedName: userName };
+      }
+      // Check if the full name starts with the mention (partial match)
+      if (normalizedUserName.startsWith(normalizedMention)) {
+        return { matched: true, user, matchedName: userName };
       }
     }
     
@@ -659,201 +670,107 @@ const PostCard: React.FC<PostCardProps> = ({
         result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{textSegment.substring(lastIndex, match.index)}</span>);
       }
       
-      const mentionText = match[1]; // Don't trim yet, we need the original spacing
+      let mentionText = match[1]; // Don't trim yet, we need the original spacing
       if (mentionText) {
+        // First, clean up any duplication in the mention text itself
+        // This handles cases where the stored mention text already has duplication
+        const mentionParts = mentionText.trim().split(/\s+/).filter(Boolean);
+        if (mentionParts.length >= 4) {
+          // Check if middle name and last name are duplicated in the mention text
+          const firstPart = mentionParts[0];
+          const secondPart = mentionParts[1];
+          const thirdPart = mentionParts[2];
+          const fourthPart = mentionParts[3];
+          
+          // Pattern: First Middle Last Middle Last
+          if (secondPart === mentionParts[mentionParts.length - 2] && thirdPart === mentionParts[mentionParts.length - 1]) {
+            // Duplication detected in mention text - use only first 3 parts
+            mentionText = [firstPart, secondPart, thirdPart].join(' ');
+          }
+        }
+        
         const normalizedMention = mentionText.toLowerCase().replace(/\s+/g, '');
         const matchResult = checkMentionMatch(mentionText);
         
-        if (matchResult.matched && matchResult.user) {
-          const matchedUserName = `${matchResult.user.f_name} ${matchResult.user.m_name || ''} ${matchResult.user.l_name}`.trim();
+        if (matchResult.matched && matchResult.user && matchResult.matchedName) {
+          const matchedUserName = matchResult.matchedName;
           const normalizedMatchedName = matchedUserName.toLowerCase().replace(/\s+/g, '');
-          const isExactMatch = normalizedMention === normalizedMatchedName;
-          const startsWithName = normalizedMention.startsWith(normalizedMatchedName);
           
-          if (isExactMatch) {
-            // Exact match - highlight the entire mention
-            const matchedUser = matchResult.user;
-            result.push(
-              <button
-                key={`${keyPrefix}-mention-${keyCounter++}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const userId = matchedUser.user_id || matchedUser.id;
-                  if (userId) {
-                    window.location.href = getProfilePath(userId);
-                  } else {
-                    handleUserSearch(mentionText);
-                  }
-                }}
-                style={{ 
-                  color: '#007bff', 
-                  fontWeight: '600',
-                  background: 'none',
-                  border: 'none',
-                  padding: '0',
-                  cursor: 'pointer',
-                  textDecoration: 'none'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.textDecoration = 'underline';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.textDecoration = 'none';
-                }}
-              >
-                @{mentionText}
-              </button>
-            );
-          } else if (startsWithName) {
-            // Partial match - find where the user's name ends in the mention text
-            const mentionWords = mentionText.split(/\s+/);
-            const nameWords = matchedUserName.split(/\s+/);
+          // Always use matchedUserName to prevent duplication issues
+          // The matchedUserName is constructed correctly from database fields (f_name, m_name, l_name)
+          // The mention text might already contain duplication, so we trust the matchedUserName
+          let displayName = matchedUserName;
+          
+          // Additional check: if displayName contains duplicated name parts, clean it up
+          // This handles edge cases where the database itself might have duplication
+          const nameParts = matchedUserName.split(' ').filter(Boolean);
+          
+          // Check for duplication: if middle name and last name are duplicated together
+          if (nameParts.length >= 3) {
+            const firstName = nameParts[0];
+            const middleName = nameParts[1];
+            const lastName = nameParts[nameParts.length - 1];
             
-            let matchedWordCount = 0;
-            for (let i = 0; i < Math.min(mentionWords.length, nameWords.length); i++) {
-              if (mentionWords[i].toLowerCase() === nameWords[i].toLowerCase()) {
-                matchedWordCount++;
-              } else {
-                break;
+            // Check if the name has the pattern: First Middle Last Middle Last
+            const expectedPattern = `${firstName} ${middleName} ${lastName}`;
+            const duplicatePattern = `${middleName} ${lastName}`;
+            
+            if (matchedUserName.includes(duplicatePattern) && matchedUserName.split(duplicatePattern).length > 2) {
+              // Duplication detected - use just the first occurrence
+              displayName = expectedPattern;
+            }
+          }
+          const matchedUser = matchResult.user;
+          result.push(
+            <button
+              key={`${keyPrefix}-mention-${keyCounter++}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                const userId = matchedUser.user_id || matchedUser.id;
+                if (userId) {
+                  window.location.href = getProfilePath(userId);
+                } else {
+                  handleUserSearch(displayName);
+                }
+              }}
+              style={{ 
+                color: '#007bff', 
+                fontWeight: '600',
+                background: 'none',
+                border: 'none',
+                padding: '0',
+                cursor: 'pointer',
+                textDecoration: 'none'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.textDecoration = 'underline';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.textDecoration = 'none';
+              }}
+            >
+              @{displayName}
+            </button>
+          );
+          
+          // Check if there's duplicate text after the mention that should be skipped
+          // This handles cases where the stored text has duplication like "@John Michael Smith Michael Smith"
+          // Reuse nameParts from displayName (which may have been cleaned up)
+          const displayNameParts = displayName.split(' ').filter(Boolean);
+          if (displayNameParts.length >= 3) {
+            const middleName = displayNameParts[1];
+            const lastName = displayNameParts[displayNameParts.length - 1];
+            const duplicatePattern = ` ${middleName} ${lastName}`;
+            const textAfterMention = textSegment.substring(mentionRegex.lastIndex);
+            
+            // Check if the text immediately after the mention matches the duplicate pattern
+            if (textAfterMention.trim().startsWith(duplicatePattern.trim())) {
+              // Skip the duplicate text by advancing lastIndex past it
+              const duplicateMatch = textAfterMention.match(new RegExp(`^\\s*${duplicatePattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+              if (duplicateMatch) {
+                mentionRegex.lastIndex += duplicateMatch[0].length;
               }
             }
-            
-            if (matchedWordCount > 0 && matchedWordCount <= mentionWords.length) {
-              // Build a regex pattern to match the exact name at the start of mentionText
-              // Escape special regex characters in the name
-              const escapedName = matchedUserName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              // Create a pattern that matches the name followed by optional whitespace and more text
-              const namePattern = new RegExp(`^(${escapedName})(\\s+.*)?$`, 'i');
-              const nameMatch = mentionText.match(namePattern);
-              
-              if (nameMatch && nameMatch[1]) {
-                // Found exact match of the name at the start
-                const matchedPart = nameMatch[1];
-                const remainingPart = mentionText.substring(matchedPart.length);
-                const matchedUser = matchResult.user;
-                
-                result.push(
-                  <button
-                    key={`${keyPrefix}-mention-${keyCounter++}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const userId = matchedUser.user_id || matchedUser.id;
-                      if (userId) {
-                        window.location.href = getProfilePath(userId);
-                      } else {
-                        handleUserSearch(matchedPart.trim());
-                      }
-                    }}
-                    style={{ 
-                      color: '#007bff', 
-                      fontWeight: '600',
-                      background: 'none',
-                      border: 'none',
-                      padding: '0',
-                      cursor: 'pointer',
-                      textDecoration: 'none'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.textDecoration = 'underline';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.textDecoration = 'none';
-                    }}
-                  >
-                    @{matchedPart}
-                  </button>
-                );
-                
-                // Add remaining text as normal text
-                if (remainingPart.trim()) {
-                  result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{remainingPart}</span>);
-                }
-              } else {
-                // Fallback: use word-based matching
-                const matchedWords = mentionWords.slice(0, matchedWordCount);
-                // Find the position where these words end in the original text
-                let searchPos = 0;
-                for (let i = 0; i < matchedWords.length; i++) {
-                  const wordPos = mentionText.indexOf(matchedWords[i], searchPos);
-                  if (wordPos !== -1) {
-                    searchPos = wordPos + matchedWords[i].length;
-                  } else {
-                    break;
-                  }
-                }
-                
-                const matchedPart = mentionText.substring(0, searchPos);
-                const remainingPart = mentionText.substring(searchPos);
-                const matchedUser = matchResult.user;
-                
-                result.push(
-                  <button
-                    key={`${keyPrefix}-mention-${keyCounter++}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const userId = matchedUser.user_id || matchedUser.id;
-                      if (userId) {
-                        window.location.href = getProfilePath(userId);
-                      } else {
-                        handleUserSearch(matchedPart.trim());
-                      }
-                    }}
-                    style={{ 
-                      color: '#007bff', 
-                      fontWeight: '600',
-                      background: 'none',
-                      border: 'none',
-                      padding: '0',
-                      cursor: 'pointer',
-                      textDecoration: 'none'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.textDecoration = 'underline';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.textDecoration = 'none';
-                    }}
-                  >
-                    @{matchedPart}
-                  </button>
-                );
-                
-                if (remainingPart.trim()) {
-                  result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>{remainingPart}</span>);
-                }
-              }
-            } else {
-              // No match found - render as normal text
-              result.push(<span key={`${keyPrefix}-text-${keyCounter++}`}>@{mentionText}</span>);
-            }
-          } else {
-            // No match found - but still highlight in blue and make clickable
-            result.push(
-              <button
-                key={`${keyPrefix}-mention-${keyCounter++}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleUserSearch(mentionText);
-                }}
-                style={{ 
-                  color: '#007bff', 
-                  fontWeight: '600',
-                  background: 'none',
-                  border: 'none',
-                  padding: '0',
-                  cursor: 'pointer',
-                  textDecoration: 'none'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.textDecoration = 'underline';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.textDecoration = 'none';
-                }}
-              >
-                @{mentionText}
-              </button>
-            );
           }
         } else {
           // No match found - but still highlight in blue and make clickable
@@ -1891,6 +1808,7 @@ const PostCard: React.FC<PostCardProps> = ({
                     overflowX: 'hidden',
                   }}
                   placeholder="Add a caption..."
+                  maxLength={5000}
                 />
                 <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                   <button
@@ -1962,9 +1880,12 @@ const PostCard: React.FC<PostCardProps> = ({
           </div>
             ) : (
               repostData.repost_caption && (
-                <div className="profile-repost-caption">
-                  {renderTextWithLinks(repostData.repost_caption)}
-                </div>
+                <SeeMoreText
+                  text={repostData.repost_caption}
+                  maxLength={500}
+                  renderText={(text) => renderTextWithLinks(text)}
+                  className="profile-repost-caption"
+                />
               )
             )}
 
@@ -2101,9 +2022,13 @@ const PostCard: React.FC<PostCardProps> = ({
 
               {/* Original post content */}
               {repostData.original_post.post_content && (
-                  <div className="profile-repost-original-content">
-                  {renderTextWithLinks(repostData.original_post.post_content)}
-                </div>
+                <SeeMoreText
+                  text={repostData.original_post.post_content}
+                  maxLength={500}
+                  renderText={(text) => renderTextWithLinks(text)}
+                  className="profile-repost-original-content"
+                  buttonBelow={true}
+                />
               )}
 
               {/* Original post images */}
@@ -2456,6 +2381,7 @@ const PostCard: React.FC<PostCardProps> = ({
                       padding: '10px 28px 10px 16px',
                       fontSize: '14px'
                     }}
+                    maxLength={5000}
                   />
                 </div>
                 <button 
@@ -2961,7 +2887,10 @@ const PostCard: React.FC<PostCardProps> = ({
           </div>
         </div>
       ) : (
-        <div 
+          <SeeMoreText
+            text={post.post_content}
+            maxLength={500}
+            renderText={(text) => renderTextWithLinks(text)}
             className="post-content"
             style={{
               wordWrap: 'break-word',
@@ -2974,9 +2903,8 @@ const PostCard: React.FC<PostCardProps> = ({
               color: '#333',
               marginBottom: '8px'
             }}
-          >
-            {renderTextWithLinks(post.post_content)}
-          </div>
+            buttonBelow={true}
+          />
       )}
 
       {/* Multiple Images Display */}
@@ -3194,9 +3122,13 @@ const PostCard: React.FC<PostCardProps> = ({
 
           {/* Original donation content */}
           {originalEmbedded.post_content && (
-            <div className="profile-repost-original-content">
-              {renderTextWithLinks(originalEmbedded.post_content)}
-            </div>
+            <SeeMoreText
+              text={originalEmbedded.post_content}
+              maxLength={500}
+              renderText={(text) => renderTextWithLinks(text)}
+              className="profile-repost-original-content"
+              buttonBelow={true}
+            />
           )}
 
           {/* Original donation image preview */}
@@ -3349,6 +3281,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 padding: '10px 0px 10px 5px',
                 fontSize: '14px'
               }}
+              maxLength={5000}
             />
             {/* Emoji Button */}
             <button

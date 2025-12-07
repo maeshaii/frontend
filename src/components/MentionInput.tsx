@@ -11,6 +11,7 @@ interface MentionInputProps {
   onSubmit?: () => void;
   disabled?: boolean;
   style?: React.CSSProperties;
+  maxLength?: number;
 }
 
 interface User {
@@ -28,7 +29,8 @@ const MentionInput: React.FC<MentionInputProps> = ({
   placeholder = "Write a reply...",
   onSubmit,
   disabled = false,
-  style = {}
+  style = {},
+  maxLength
 }) => {
   const [following, setFollowing] = useState<User[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -212,6 +214,7 @@ const MentionInput: React.FC<MentionInputProps> = ({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
+        maxLength={maxLength}
         style={{
           width: '100%',
           minHeight: '60px',
