@@ -227,6 +227,14 @@ const TrackerResponsesPage: React.FC = () => {
   const totalRewardsGiven = trackerRewardHistory.length;
   const uniquePrograms = new Set(trackerResponses.filter(r => r.program).map(r => r.program)).size;
 
+  // Create a set of user IDs who have already received tracker rewards
+  const usersWithRewards = new Set(trackerRewardHistory.map(entry => entry.user_id));
+
+  // Helper function to check if a user has already received a tracker reward
+  const hasReceivedReward = (userId: number): boolean => {
+    return usersWithRewards.has(userId);
+  };
+
   const styles = {
     container: {
       display: 'flex',
@@ -529,18 +537,33 @@ const TrackerResponsesPage: React.FC = () => {
                                 )}
                               </td>
                               <td style={{ ...styles.tableCell, textAlign: 'center' }}>
-                                <button
-                                  onClick={() => handleAssignReward(resp)}
-                                  style={styles.actionButton}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.backgroundColor = '#2d5a8f';
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.backgroundColor = '#1e3a5f';
-                                  }}
-                                >
-                                  Assign Reward
-                                </button>
+                                {hasReceivedReward(resp.user_id) ? (
+                                  <span style={{
+                                    padding: '8px 16px',
+                                    background: '#e5e7eb',
+                                    color: '#6b7280',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    fontSize: '13px',
+                                    fontWeight: '600',
+                                    display: 'inline-block'
+                                  }}>
+                                    Already Rewarded
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => handleAssignReward(resp)}
+                                    style={styles.actionButton}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.backgroundColor = '#2d5a8f';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.backgroundColor = '#1e3a5f';
+                                    }}
+                                  >
+                                    Assign Reward
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           ))
@@ -724,15 +747,13 @@ const TrackerResponsesPage: React.FC = () => {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {inventoryItems.map((item) => {
-                      const pointsMatch = item.value?.match(/(\d+)/);
-                      const requiredPoints = pointsMatch ? parseInt(pointsMatch[1]) : 0;
-                      const canAfford = (selectedUser.total_points || 0) >= requiredPoints;
+                      const isAvailable = item.quantity > 0;
 
                       return (
                         <div
                           key={item.id}
                           onClick={() => {
-                            if (canAfford && item.quantity > 0) {
+                            if (isAvailable) {
                               setSelectedReward(item.id);
                             }
                           }}
@@ -740,9 +761,9 @@ const TrackerResponsesPage: React.FC = () => {
                             padding: '16px',
                             border: selectedReward === item.id ? '2px solid #1e3a5f' : '1px solid #e5e7eb',
                             borderRadius: '8px',
-                            cursor: canAfford && item.quantity > 0 ? 'pointer' : 'not-allowed',
+                            cursor: isAvailable ? 'pointer' : 'not-allowed',
                             backgroundColor: selectedReward === item.id ? '#f0f7ff' : 'white',
-                            opacity: canAfford && item.quantity > 0 ? 1 : 0.5
+                            opacity: isAvailable ? 1 : 0.5
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

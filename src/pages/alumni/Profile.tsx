@@ -5554,7 +5554,23 @@ getPosts()
                                 }}
                               >
                                 <td style={{ padding: '8px', fontWeight: '600', color: '#1e293b', fontSize: '14px' }}>
-                                  {req.reward_name}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <span>{req.reward_name}</span>
+                                    {req.notes && req.notes.toLowerCase().includes('tracker') && (
+                                      <span style={{
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        fontSize: '10px',
+                                        fontWeight: '600',
+                                        background: '#dbeafe',
+                                        color: '#1e40af',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.5px'
+                                      }}>
+                                        Tracker Reward
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td style={{ padding: '8px', color: '#64748b', fontSize: '13px' }}>
                                   {req.reward_type}
@@ -5889,7 +5905,7 @@ getPosts()
                       );
                     })()}
 
-                      {/* Instructions Section */}
+                      {/* Instructions/Notes Section */}
                       {req.notes && (
                         <div style={{ 
                           marginBottom: '20px',
@@ -5906,7 +5922,7 @@ getPosts()
                             <HiOutlineInformationCircle size={20} color="#1e40af" style={{ marginTop: '2px', flexShrink: 0 }} />
                             <div style={{ flex: 1 }}>
                               <div style={{ fontWeight: '600', color: '#1e40af', fontSize: '14px', marginBottom: '8px' }}>
-                                Instructions
+                                {req.notes.toLowerCase().includes('tracker') ? 'Reward Information' : 'Instructions'}
                               </div>
                               <div style={{ lineHeight: '1.6', color: '#1e3a8a', fontSize: '14px' }}>
                                 {req.notes}

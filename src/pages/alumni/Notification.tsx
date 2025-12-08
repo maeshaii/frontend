@@ -55,6 +55,11 @@ function getNotificationIcon(notif: any): { icon: any } | null {
   const type = (notif.type || '').toLowerCase();
   const subject = notif.subject || '';
   
+  // Always show '@' icon for mention notifications, even if they say 'reply' or 'repost' or 'commented'
+  if (type === 'mention') {
+    return { icon: faAt };
+  }
+
   // Use the pre-detected notification source (check for markers in content)
   const isAdminNotification = message.includes('<!--ADMIN_NOTIFICATION-->') || 
                               (notif.isAdminNotification !== undefined ? notif.isAdminNotification : false);
@@ -120,11 +125,6 @@ function getNotificationIcon(notif: any): { icon: any } | null {
   }
   if (type === 'donation' || message.toLowerCase().includes('donation')) {
     return { icon: faDollarSign };
-  }
-
-  // Format mention notifications
-  if (type === 'mention' || message.toLowerCase().includes('mentioned')) {
-    return { icon: faAt };
   }
 
   // Format reward notifications
@@ -720,9 +720,81 @@ const NotificationPage: React.FC = () => {
             return;
           }
           
-          // For mention notifications, prioritize original post IDs over comment/reply IDs
+          // For mention notifications, prioritize comment/reply IDs to redirect to the specific comment/reply
           if (notificationType === 'mention') {
-            if (originalPostId) {
+            // Prioritize comment_id and reply_id for mentions (like comment notifications)
+            if (commentId || replyId) {
+              // Need to resolve comment/reply to post first
+              const idToResolve = replyId || commentId;
+              try {
+                const response = await getPostFromComment(parseInt(idToResolve!));
+                if (response.success && response.post_id) {
+                  const resolvedPostId = response.post_id.toString();
+                  const resolvedPostType = response.post_type;
+                  
+                  // Check if this is a repost
+                  if (resolvedPostType === 'repost') {
+                    localStorage.setItem('pendingRepostView', resolvedPostId);
+                    storeRepostHighlightIds(commentId, replyId);
+                    suppressTrackerReminderForRedirect();
+                    
+                    // Redirect to dashboard
+                    const currentPath = window.location.pathname;
+                    if (currentPath.startsWith('/peso')) {
+                      suppressTrackerReminderForRedirect();
+                      window.location.href = `/peso/dashboard/${resolvedPostId}`;
+                    } else if (currentPath.startsWith('/ccict')) {
+                      suppressTrackerReminderForRedirect();
+                      window.location.href = `/ccict/dashboard/${resolvedPostId}`;
+                    } else {
+                      suppressTrackerReminderForRedirect();
+                      window.location.href = `/dashboard/${resolvedPostId}`;
+                    }
+                    return;
+                  }
+                  // Check if this is a forum or donation post
+                  else if (forumIdMatch) {
+                    localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
+                    storePostHighlightIds(commentId, replyId); // Store comment/reply IDs for highlighting
+                    suppressTrackerReminderForRedirect();
+                    navigate('/forum');
+                    return;
+                  } else if (donationIdMatch) {
+                    localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
+                    storePostHighlightIds(commentId, replyId); // Store comment/reply IDs for highlighting
+                    suppressTrackerReminderForRedirect();
+                    navigate('/donation');
+                    return;
+                  } else {
+                    // Regular post - store post and highlight comment/reply
+                    localStorage.setItem('pendingPostView', resolvedPostId);
+                    storePostHighlightIds(commentId, replyId); // Store comment/reply IDs for highlighting
+                    
+                    // Redirect to dashboard with resolved post ID
+                    const currentPath = window.location.pathname;
+                    if (currentPath.startsWith('/peso')) {
+                      suppressTrackerReminderForRedirect();
+                      window.location.href = `/peso/dashboard/${resolvedPostId}`;
+                    } else if (currentPath.startsWith('/ccict')) {
+                      suppressTrackerReminderForRedirect();
+                      window.location.href = `/ccict/dashboard/${resolvedPostId}`;
+                    } else {
+                      suppressTrackerReminderForRedirect();
+                      window.location.href = `/dashboard/${resolvedPostId}`;
+                    }
+                    return;
+                  }
+                } else {
+                  alert('Could not find the post for this mention.');
+                  return;
+                }
+              } catch (error) {
+                console.error('Error resolving comment/reply to post:', error);
+                alert('Error loading the post. Please try again.');
+                return;
+              }
+            } else if (originalPostId) {
+              // Fallback: if no comment/reply ID, use post ID (for mentions in posts/reposts)
               // Check if it's a forum or donation mention
               if (forumIdMatch) {
                 localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
@@ -735,7 +807,7 @@ const NotificationPage: React.FC = () => {
                 navigate('/donation');
                 return;
               } else {
-                // Regular post mention
+                // Regular post mention (in post content, not comment)
                 localStorage.setItem('pendingPostView', originalPostId);
                 storePostHighlightIds(commentId, replyId);
               
@@ -753,132 +825,8 @@ const NotificationPage: React.FC = () => {
                 }
                 return;
               }
-            } else if (commentId) {
-              // Need to resolve comment to post first
-              try {
-                const response = await getPostFromComment(parseInt(commentId));
-                if (response.success && response.post_id) {
-                  const resolvedPostId = response.post_id.toString();
-                  const resolvedPostType = response.post_type;
-                  
-                  // Check if this is a repost
-                  if (resolvedPostType === 'repost') {
-                    localStorage.setItem('pendingRepostView', resolvedPostId);
-                    storeRepostHighlightIds(commentId, replyId);
-                    suppressTrackerReminderForRedirect();
-                    
-                    // Redirect to dashboard
-                    const currentPath = window.location.pathname;
-                    if (currentPath.startsWith('/peso')) {
-                      suppressTrackerReminderForRedirect();
-                      window.location.href = `/peso/dashboard/${resolvedPostId}`;
-                    } else if (currentPath.startsWith('/ccict')) {
-                      suppressTrackerReminderForRedirect();
-                      window.location.href = `/ccict/dashboard/${resolvedPostId}`;
-                    } else {
-                      suppressTrackerReminderForRedirect();
-                      window.location.href = `/dashboard/${resolvedPostId}`;
-                    }
-                    return;
-                  }
-                  // Check if this is a forum or donation post
-                  else if (forumIdMatch) {
-                    localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
-                    suppressTrackerReminderForRedirect();
-                    navigate('/forum');
-                  } else if (donationIdMatch) {
-                    localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
-                    suppressTrackerReminderForRedirect();
-                    navigate('/donation');
-                  } else {
-                    // Regular post
-                    localStorage.setItem('pendingPostView', resolvedPostId);
-                    
-                    // Redirect to dashboard with resolved post ID
-                    const currentPath = window.location.pathname;
-                    if (currentPath.startsWith('/peso')) {
-                      suppressTrackerReminderForRedirect();
-                      window.location.href = `/peso/dashboard/${resolvedPostId}`;
-                    } else if (currentPath.startsWith('/ccict')) {
-                      suppressTrackerReminderForRedirect();
-                      window.location.href = `/ccict/dashboard/${resolvedPostId}`;
-                    } else {
-                      suppressTrackerReminderForRedirect();
-                      window.location.href = `/dashboard/${resolvedPostId}`;
-                    }
-                  }
-                } else {
-                  alert('Could not find the post for this mention.');
-                }
-              } catch (error) {
-                console.error('Error resolving comment to post:', error);
-                alert('Error loading the post. Please try again.');
-              }
-              return;
-            } else if (replyId) {
-              // Need to resolve reply to post first
-              try {
-                const response = await getPostFromComment(parseInt(replyId));
-                if (response.success && response.post_id) {
-                  const resolvedPostId = response.post_id.toString();
-                  const resolvedPostType = response.post_type;
-                  
-                  // Check if this is a repost
-                  if (resolvedPostType === 'repost') {
-                    localStorage.setItem('pendingRepostView', resolvedPostId);
-                    storeRepostHighlightIds(commentId, replyId);
-                    suppressTrackerReminderForRedirect();
-                    
-                    // Redirect to dashboard
-                    const currentPath = window.location.pathname;
-                    if (currentPath.startsWith('/peso')) {
-                      suppressTrackerReminderForRedirect();
-                      window.location.href = `/peso/dashboard/${resolvedPostId}`;
-                    } else if (currentPath.startsWith('/ccict')) {
-                      suppressTrackerReminderForRedirect();
-                      window.location.href = `/ccict/dashboard/${resolvedPostId}`;
-                    } else {
-                      suppressTrackerReminderForRedirect();
-                      window.location.href = `/dashboard/${resolvedPostId}`;
-                    }
-                    return;
-                  }
-                  // Check if this is a forum or donation post
-                  else if (forumIdMatch) {
-                    localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
-                    suppressTrackerReminderForRedirect();
-                    navigate('/forum');
-                  } else if (donationIdMatch) {
-                    localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
-                    suppressTrackerReminderForRedirect();
-                    navigate('/donation');
-                  } else {
-                    // Regular post
-                    localStorage.setItem('pendingPostView', resolvedPostId);
-                    storePostHighlightIds(commentId, replyId);
-                    
-                    // Redirect to dashboard with resolved post ID
-                    const currentPath = window.location.pathname;
-                    if (currentPath.startsWith('/peso')) {
-                      suppressTrackerReminderForRedirect();
-                      window.location.href = `/peso/dashboard/${resolvedPostId}`;
-                    } else if (currentPath.startsWith('/ccict')) {
-                      suppressTrackerReminderForRedirect();
-                      window.location.href = `/ccict/dashboard/${resolvedPostId}`;
-                    } else {
-                      suppressTrackerReminderForRedirect();
-                      window.location.href = `/dashboard/${resolvedPostId}`;
-                    }
-                  }
-                } else {
-                  alert('Could not find the post for this mention.');
-                }
-              } catch (error) {
-                console.error('Error resolving reply to post:', error);
-                alert('Error loading the post. Please try again.');
-              }
-              return;
             }
+            // Note: repostId is handled in the commentId/replyId block above when resolvedPostType === 'repost'
           }
           
           // For other notification types (like, comment, reply), check if it's forum/donation first
