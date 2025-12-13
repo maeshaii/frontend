@@ -387,27 +387,44 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
         });
       
       // Check employment update reminder (for alumni who have submitted tracker)
-      // FOR TESTING: Shows after 2 minutes. FOR PRODUCTION: Change to 6 months (180 days)
+      // Only shows if: 1) API returns should_show_reminder=true, 2) User hasn't dismissed it
       if (currentUserId && (userObj.account_type?.user || userObj.account_type?.alumni)) {
         checkEmploymentReminder(currentUserId)
           .then((data) => {
             console.log('🔍 Employment update reminder check:', data);
             const shouldShow = !!data?.should_show_reminder;
+            
             if (!shouldShow) {
-              console.log('ℹ️ Employment reminder not shown by API (fallback will show). Reason:', data?.reason);
+              console.log('ℹ️ Employment reminder not shown by API. Reason:', data?.reason || 'unknown');
+              return; // Don't show modal if API says no
             }
 
+            // Check if user has dismissed this reminder
             try {
-              localStorage.removeItem('employmentUpdateReminderDismissedUntil');
-            } catch (_) {}
+              const dismissedUntil = localStorage.getItem('employmentUpdateReminderDismissedUntil');
+              if (dismissedUntil) {
+                const dismissedDate = new Date(dismissedUntil);
+                const now = new Date();
+                if (now < dismissedDate) {
+                  console.log('ℹ️ Employment reminder dismissed until:', dismissedUntil);
+                  return; // Still within dismissal period
+                } else {
+                  // Dismissal period expired, remove it
+                  localStorage.removeItem('employmentUpdateReminderDismissedUntil');
+                }
+              }
+            } catch (_) {
+              // If localStorage access fails, continue anyway
+            }
 
-            // Always show (user request) even if API said no; delay to avoid clashing with tracker modal
+            // Only show if API says yes and user hasn't dismissed it
+            // Delay to avoid clashing with tracker modal
             setTimeout(() => setShowEmploymentUpdateModal(true), 3000);
           })
           .catch((error) => {
             console.error('Error checking employment update reminder:', error);
-            // On error, still show once to avoid blocking the user
-            setTimeout(() => setShowEmploymentUpdateModal(true), 3000);
+            // On error, don't show modal - it's better to not show than to show incorrectly
+            // The API check ensures we only show for users who have submitted tracker with employment data
           });
       }
     }
