@@ -324,7 +324,8 @@ export class TypingIndicator {
 
   sendTyping(isTyping: boolean) {
     this.ws.send({
-      type: isTyping ? 'typing' : 'stop_typing',
+      type: 'typing',
+      is_typing: isTyping,
       conversation_id: this.conversationId,
       timestamp: new Date().toISOString()
     });

@@ -668,6 +668,12 @@ export const fetchEmploymentHistoryRespondents = async () => {
   return response.data;
 };
 
+// Check if alumni should see the employment update reminder modal
+export const checkEmploymentReminder = async (userId: number) => {
+  const response = await api.get(`alumni/employment-reminder/${userId}/`);
+  return response.data;
+};
+
 // Fetch tracker responses by batch year
 export const fetchTrackerResponsesByBatchYear = async (batchYear: string) => {
   const response = await api.get(`tracker/list-responses/?batch_year=${batchYear}`);
@@ -1103,8 +1109,13 @@ export const uploadAttachment = async (file: File): Promise<{
 }> => {
   const formData = new FormData();
   formData.append('file', file);
+  
+  // DO NOT set Content-Type manually - let the browser set it with the boundary parameter
+  // Setting it manually causes the boundary to be missing, resulting in 400 Bad Request
   const { data } = await api.post('messaging/attachments/', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: {
+      // Let axios/browser set Content-Type automatically with boundary
+    },
   });
   return data;
 };
@@ -1564,6 +1575,15 @@ export const approveRewardRequest = async (requestId: number, voucherCode?: stri
     });
     return response.data;
   }
+};
+
+// Update GCash info for existing reward request (for tracker rewards)
+export const updateRewardRequestGcash = async (requestId: number, gcashNumber: string, gcashName: string) => {
+  const response = await api.post(`rewards/requests/${requestId}/update-gcash/`, {
+    gcash_number: gcashNumber,
+    gcash_name: gcashName
+  });
+  return response.data;
 };
 
 // Claim reward request (user claims after admin approval)

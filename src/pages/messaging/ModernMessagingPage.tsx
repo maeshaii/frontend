@@ -68,7 +68,16 @@ const ModernMessagingPage: React.FC = () => {
       
       setConversations(validConversations);
       
-      // Auto-select first conversation on desktop (only if valid)
+      // Clear selected conversation if it no longer exists in the list
+      setSelectedConversation(prev => {
+        if (prev && !validConversations.some(c => c.conversation_id === prev.conversation_id)) {
+          logger.info('🔵 [LOAD] Selected conversation no longer exists, clearing selection');
+          return null;
+        }
+        return prev;
+      });
+      
+      // Auto-select first conversation on desktop (only if valid and no selection)
       if (!isMobile && validConversations && validConversations.length > 0 && !selectedConversation) {
         setSelectedConversation(validConversations[0]);
       }
@@ -134,8 +143,14 @@ const ModernMessagingPage: React.FC = () => {
         current_conversations_count: conversations.length
       });
       
-      // Clear selection and reload conversations
-      setSelectedConversation(null);
+      // Clear selection only if the deleted conversation is currently selected
+      setSelectedConversation(prev => {
+        if (prev?.conversation_id === conversationId) {
+          logger.info('🔵 [WEB EVENT] Clearing selected conversation (matches deleted conversation)');
+          return null;
+        }
+        return prev;
+      });
       
       // Reload conversations directly
       try {
@@ -175,6 +190,16 @@ const ModernMessagingPage: React.FC = () => {
         });
         
         setConversations(validConversations);
+        
+        // Clear selected conversation if it no longer exists in the list
+        setSelectedConversation(prev => {
+          if (prev && !validConversations.some(c => c.conversation_id === prev.conversation_id)) {
+            logger.info('🔵 [WEB EVENT] Selected conversation no longer exists, clearing selection');
+            return null;
+          }
+          return prev;
+        });
+        
         logger.info('🔵 [WEB EVENT] Conversations reloaded and state updated');
       } catch (error) {
         logger.error('🔵 [WEB EVENT] ERROR - Failed to reload conversations after deletion:', error);

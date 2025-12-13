@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
-import { fetchTrackerResponses, fetchEmploymentHistoryRespondents, fetchAlumniDetails, getInventoryItems, giveReward, getUserPoints, getRewardHistory, getEngagementPointsSettings } from '../../../services/api';
+import { fetchTrackerResponses, fetchEmploymentHistoryRespondents, fetchAlumniDetails, getInventoryItems, giveReward, getUserPoints, getRewardHistory, getEngagementPointsSettings, getRewardRequests } from '../../../services/api';
 import { HiOutlineGift, HiOutlineHeart, HiOutlineChatBubbleLeft, HiOutlineArrowPath, HiOutlineArrowUturnLeft, HiOutlineCamera, HiOutlineDocumentText, HiOutlineClipboardDocumentList } from 'react-icons/hi2';
 
 interface TrackerResponse {
@@ -59,6 +59,7 @@ const TrackerResponsesPage: React.FC = () => {
   const [trackerRewardHistory, setTrackerRewardHistory] = useState<TrackerRewardHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [tableFilter, setTableFilter] = useState<'responses' | 'history'>('responses');
+  const [trackerRewardRequests, setTrackerRewardRequests] = useState<any[]>([]);
   const [pointsSettings, setPointsSettings] = useState({
     enabled: true,
     like: 1,
@@ -73,7 +74,30 @@ const TrackerResponsesPage: React.FC = () => {
   useEffect(() => {
     fetchTrackerResponsesWithDetails();
     fetchTrackerRewardHistory();
+    fetchTrackerRewardRequests();
   }, []);
+
+  const fetchTrackerRewardRequests = async () => {
+    try {
+      const response = await getRewardRequests();
+      if (response && response.success && response.requests) {
+        // Filter for tracker rewards (points_cost = 0 and notes mention tracker)
+        const trackerRequests = response.requests.filter((req: any) => 
+          req.points_cost === 0 && 
+          req.notes && 
+          req.notes.toLowerCase().includes('tracker') &&
+          req.status !== 'rejected' && 
+          req.status !== 'cancelled'
+        );
+        setTrackerRewardRequests(trackerRequests);
+      } else {
+        setTrackerRewardRequests([]);
+      }
+    } catch (error) {
+      console.error('Error fetching tracker reward requests:', error);
+      setTrackerRewardRequests([]);
+    }
+  };
 
   const fetchTrackerRewardHistory = async () => {
     setHistoryLoading(true);
@@ -227,12 +251,15 @@ const TrackerResponsesPage: React.FC = () => {
   const totalRewardsGiven = trackerRewardHistory.length;
   const uniquePrograms = new Set(trackerResponses.filter(r => r.program).map(r => r.program)).size;
 
-  // Create a set of user IDs who have already received tracker rewards
+  // Create a set of user IDs who have already received tracker rewards (from history)
   const usersWithRewards = new Set(trackerRewardHistory.map(entry => entry.user_id));
+  
+  // Create a set of user IDs who have pending/active tracker reward requests
+  const usersWithPendingRewards = new Set(trackerRewardRequests.map(req => req.user_id));
 
-  // Helper function to check if a user has already received a tracker reward
+  // Helper function to check if a user has already received or been assigned a tracker reward
   const hasReceivedReward = (userId: number): boolean => {
-    return usersWithRewards.has(userId);
+    return usersWithRewards.has(userId) || usersWithPendingRewards.has(userId);
   };
 
   const styles = {
@@ -830,9 +857,10 @@ const TrackerResponsesPage: React.FC = () => {
                         setSelectedReward(null);
                         setSelectedUser(null);
                         
-                        // Refresh the responses list and history
+                        // Refresh the responses list, history, and reward requests
                         fetchTrackerResponsesWithDetails();
                         fetchTrackerRewardHistory();
+                        fetchTrackerRewardRequests();
                       } else {
                         alert(`❌ Failed to give reward: ${response.message}`);
                       }

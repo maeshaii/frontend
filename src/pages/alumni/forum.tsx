@@ -104,6 +104,9 @@ const ForumPage: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const isRefreshingRef = useRef(false);
+  const [highlightForumPostId, setHighlightForumPostId] = useState<string | null>(null);
+  const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
+  const [highlightReplyId, setHighlightReplyId] = useState<string | null>(null);
 
   // Get current user info
   const userObj = JSON.parse(localStorage.getItem('user') || '{}');
@@ -374,8 +377,20 @@ const ForumPage: React.FC = () => {
     
     // Check for regular forum post view
     const pendingForumPostId = localStorage.getItem('pendingForumPostView');
+    const pendingForumCommentId = localStorage.getItem('pendingForumCommentId');
+    const pendingForumReplyId = localStorage.getItem('pendingForumReplyId');
     if (pendingForumPostId) {
       localStorage.removeItem('pendingForumPostView');
+      if (pendingForumCommentId) {
+        localStorage.removeItem('pendingForumCommentId');
+        setHighlightForumPostId(pendingForumPostId);
+        setHighlightCommentId(pendingForumCommentId);
+      }
+      if (pendingForumReplyId) {
+        localStorage.removeItem('pendingForumReplyId');
+        setHighlightForumPostId(pendingForumPostId);
+        setHighlightReplyId(pendingForumReplyId);
+      }
       // Wait a bit for the component to fully mount
       setTimeout(() => {
         handleViewForumPostById(pendingForumPostId);
@@ -1090,6 +1105,8 @@ const ForumPage: React.FC = () => {
                       key={item.post_id}
                       post={item}
                       currentUserId={currentUserId}
+                    highlightCommentId={highlightForumPostId === String(item.post_id) ? highlightCommentId || undefined : undefined}
+                    highlightReplyId={highlightForumPostId === String(item.post_id) ? highlightReplyId || undefined : undefined}
                       isOwn={isOwn}
                       displayName={displayName}
                       displayAvatar={displayAvatar}
@@ -1555,6 +1572,8 @@ const ForumPage: React.FC = () => {
               <PostCard
                 post={originalPostModalData}
                 currentUserId={currentUserId}
+                highlightCommentId={highlightForumPostId === String(originalPostModalData?.post_id) ? highlightCommentId || undefined : undefined}
+                highlightReplyId={highlightForumPostId === String(originalPostModalData?.post_id) ? highlightReplyId || undefined : undefined}
                 isOwn={currentUserId === originalPostModalData.user?.user_id}
                 displayName={originalPostModalData.user?.name || `${originalPostModalData.user?.f_name || ''} ${originalPostModalData.user?.m_name || ''} ${originalPostModalData.user?.l_name || ''}`.trim() || 'Unknown User'}
                 displayAvatar={getProfilePicUrl(originalPostModalData.user?.profile_pic)}

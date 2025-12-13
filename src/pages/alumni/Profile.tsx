@@ -4,7 +4,7 @@ import AlumniTopBar from './AlumniTopBar';
 import ctulogo from '../../images/ctulogo.png';
 import './profile.css';
 import { fetchFollowers, followUser, unfollowUser, checkFollowStatus, api, createConversation } from '../../services/api';
-import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment, getUserPoints, getInventoryItems, requestReward, getRewardRequests, claimRewardRequest, getEngagementPointsSettings, cancelRewardRequest, fetchTrackerResponsesByUser } from '../../services/api';
+import { getPosts, likePost, unlikePost, commentOnPost, repostPost, editPost, deletePost, editComment, deleteComment, getUserPoints, getInventoryItems, requestReward, getRewardRequests, claimRewardRequest, getEngagementPointsSettings, cancelRewardRequest, fetchTrackerResponsesByUser, updateRewardRequestGcash } from '../../services/api';
 import PostCreate from './PostCreate';
 import PostCard from '../../components/PostCard';
 import RepostCard from '../../components/RepostCard';
@@ -254,6 +254,9 @@ const AlumniProfile: React.FC = () => {
   const [pendingRewardRequest, setPendingRewardRequest] = useState<{id: number; name: string; value: string; type?: string} | null>(null);
   const [gcashNumber, setGcashNumber] = useState('');
   const [gcashName, setGcashName] = useState('');
+  const [updatingGcash, setUpdatingGcash] = useState(false);
+  const [trackerGcashNumber, setTrackerGcashNumber] = useState('');
+  const [trackerGcashName, setTrackerGcashName] = useState('');
   const [rewardDialog, setRewardDialog] = useState<RewardDialogState | null>(null);
   const [employmentData, setEmploymentData] = useState<any>(null);
   const [employmentLoading, setEmploymentLoading] = useState(false);
@@ -1375,6 +1378,25 @@ getPosts()
       setShowConfirmRequestModal(true);
     }
   }, [pendingRewardRequest, showConfirmRequestModal]);
+
+  // Reset tracker GCash fields when reward detail changes
+  // Only set if GCash details don't exist (to allow user input)
+  useEffect(() => {
+    if (selectedRewardDetail) {
+      // Only clear local state if GCash details are not yet provided
+      if (!selectedRewardDetail.gcash_number || !selectedRewardDetail.gcash_name) {
+        // Don't set from selectedRewardDetail if it's empty - let user fill it
+        if (!trackerGcashNumber && !trackerGcashName) {
+          setTrackerGcashNumber('');
+          setTrackerGcashName('');
+        }
+      } else {
+        // If GCash details exist, clear local state to prevent showing input fields
+        setTrackerGcashNumber('');
+        setTrackerGcashName('');
+      }
+    }
+  }, [selectedRewardDetail]);
 
   useEffect(() => {
     if (!selectedRewardDetail) return;
@@ -6073,6 +6095,278 @@ getPosts()
                           <span style={{ color: '#0c4a6e', fontSize: '14px', fontWeight: '500' }}>
                             Reward code will be revealed once you claim this reward.
                           </span>
+                        </div>
+                      )}
+                      
+                      {/* GCash Input for Tracker Rewards - Only show if GCash details are NOT yet provided */}
+                      {isGcash && 
+                       req.status === 'pending' && 
+                       !req.gcash_number && 
+                       !req.gcash_name && 
+                       req.notes && 
+                       req.notes.toLowerCase().includes('tracker') && (
+                        <div style={{ 
+                          marginBottom: '20px',
+                          padding: '20px', 
+                          background: '#fef9c3',
+                          borderRadius: '12px',
+                          border: '1px solid #facc15'
+                        }}>
+                          <div style={{ 
+                            fontWeight: '600', 
+                            color: '#854d0e', 
+                            fontSize: '14px', 
+                            marginBottom: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                          }}>
+                            <span>📱</span>
+                            <span>Provide GCash Information</span>
+                          </div>
+                          <div style={{ marginBottom: '16px' }}>
+                            <label style={{ 
+                              display: 'block', 
+                              fontSize: '13px', 
+                              fontWeight: '600', 
+                              color: '#854d0e', 
+                              marginBottom: '8px' 
+                            }}>
+                              GCash Number <span style={{ color: '#ef4444' }}>*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={trackerGcashNumber}
+                              onChange={(e) => {
+                                const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 11);
+                                setTrackerGcashNumber(digitsOnly);
+                              }}
+                              placeholder="09123456789"
+                              style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                borderRadius: '8px',
+                                border: '1px solid #facc15',
+                                fontSize: '14px',
+                                outline: 'none',
+                                transition: 'border-color 0.2s'
+                              }}
+                              onFocus={(e) => e.target.style.borderColor = '#eab308'}
+                              onBlur={(e) => e.target.style.borderColor = '#facc15'}
+                            />
+                            <div style={{ fontSize: '11px', color: '#854d0e', marginTop: '4px' }}>
+                              Enter the 11-digit mobile number linked to your verified GCash account.
+                            </div>
+                          </div>
+                          <div style={{ marginBottom: '16px' }}>
+                            <label style={{ 
+                              display: 'block', 
+                              fontSize: '13px', 
+                              fontWeight: '600', 
+                              color: '#854d0e', 
+                              marginBottom: '8px' 
+                            }}>
+                              GCash Account Name <span style={{ color: '#ef4444' }}>*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={trackerGcashName}
+                              onChange={(e) => {
+                                const withoutDigits = e.target.value.replace(/\d/g, '');
+                                setTrackerGcashName(withoutDigits);
+                              }}
+                              placeholder="Juan Dela Cruz"
+                              style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                borderRadius: '8px',
+                                border: '1px solid #facc15',
+                                fontSize: '14px',
+                                outline: 'none',
+                                transition: 'border-color 0.2s'
+                              }}
+                              onFocus={(e) => e.target.style.borderColor = '#eab308'}
+                              onBlur={(e) => e.target.style.borderColor = '#facc15'}
+                            />
+                            <div style={{ fontSize: '11px', color: '#854d0e', marginTop: '4px' }}>
+                              Make sure the name matches the verified owner of the GCash account.
+                            </div>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              const trimmedNumber = trackerGcashNumber.trim();
+                              if (!trimmedNumber) {
+                                alert('Please enter your GCash number');
+                                return;
+                              }
+                              if (!/^\d{11}$/.test(trimmedNumber)) {
+                                alert('GCash number must be exactly 11 digits.');
+                                return;
+                              }
+                              if (!trackerGcashName.trim()) {
+                                alert('Please enter your GCash name');
+                                return;
+                              }
+                              
+                              setUpdatingGcash(true);
+                              try {
+                                const response = await updateRewardRequestGcash(
+                                  req.request_id,
+                                  trimmedNumber,
+                                  trackerGcashName.trim()
+                                );
+                                if (response.success) {
+                                  toast.success('GCash information submitted successfully! Status is now pending. Admin will process your reward.');
+                                  // Clear local state immediately to hide input fields
+                                  setTrackerGcashNumber('');
+                                  setTrackerGcashName('');
+                                  // Immediately update selectedRewardDetail with the submitted GCash details
+                                  // This ensures the input fields disappear right away
+                                  const updatedDetail = {
+                                    ...req,
+                                    gcash_number: trimmedNumber,
+                                    gcash_name: trackerGcashName.trim(),
+                                    status: 'pending' as const
+                                  };
+                                  // Force immediate update
+                                  setSelectedRewardDetail(updatedDetail);
+                                  // Refresh all reward requests in the background
+                                  fetchUserRewardRequests();
+                                  // Also refresh from API to get latest data
+                                  setTimeout(async () => {
+                                    const requestsResponse = await getRewardRequests();
+                                    if (requestsResponse.success && requestsResponse.requests) {
+                                      const updated = requestsResponse.requests.find((r: any) => r.request_id === req.request_id);
+                                      if (updated && updated.gcash_number && updated.gcash_name) {
+                                        setSelectedRewardDetail(updated);
+                                      }
+                                    }
+                                  }, 500);
+                                } else {
+                                  alert(response.message || 'Failed to submit GCash information');
+                                }
+                              } catch (error: any) {
+                                console.error('Error updating GCash info:', error);
+                                alert(error.response?.data?.message || 'Failed to submit GCash information');
+                              } finally {
+                                setUpdatingGcash(false);
+                              }
+                            }}
+                            disabled={updatingGcash}
+                            style={{
+                              width: '100%',
+                              padding: '12px 20px',
+                              borderRadius: '8px',
+                              border: 'none',
+                              background: '#eab308',
+                              color: '#854d0e',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              cursor: updatingGcash ? 'not-allowed' : 'pointer',
+                              opacity: updatingGcash ? 0.6 : 1,
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!updatingGcash) {
+                                e.currentTarget.style.background = '#facc15';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!updatingGcash) {
+                                e.currentTarget.style.background = '#eab308';
+                              }
+                            }}
+                          >
+                            {updatingGcash ? 'Submitting...' : 'Submit GCash Information'}
+                          </button>
+                        </div>
+                      )}
+                      
+                      {/* Show GCash info if already provided (read-only) - only show when status is 'pending' (after submission) */}
+                      {isGcash && req.status === 'pending' && req.gcash_number && req.gcash_name && req.notes && req.notes.toLowerCase().includes('tracker') && (
+                        <div style={{ 
+                          marginBottom: '20px',
+                          padding: '20px', 
+                          background: '#fef9c3',
+                          borderRadius: '12px',
+                          border: '1px solid #facc15'
+                        }}>
+                          <div style={{ 
+                            fontWeight: '600', 
+                            color: '#854d0e', 
+                            fontSize: '14px', 
+                            marginBottom: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                          }}>
+                            <span>📱</span>
+                            <span>GCash Information</span>
+                          </div>
+                          <div style={{ marginBottom: '16px' }}>
+                            <label style={{ 
+                              display: 'block', 
+                              fontSize: '13px', 
+                              fontWeight: '600', 
+                              color: '#854d0e', 
+                              marginBottom: '8px' 
+                            }}>
+                              GCash Number
+                            </label>
+                            <input
+                              type="text"
+                              value={req.gcash_number}
+                              readOnly
+                              disabled
+                              style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                borderRadius: '8px',
+                                border: '1px solid #facc15',
+                                fontSize: '14px',
+                                backgroundColor: '#fef3c7',
+                                color: '#854d0e',
+                                cursor: 'not-allowed'
+                              }}
+                            />
+                          </div>
+                          <div style={{ marginBottom: '16px' }}>
+                            <label style={{ 
+                              display: 'block', 
+                              fontSize: '13px', 
+                              fontWeight: '600', 
+                              color: '#854d0e', 
+                              marginBottom: '8px' 
+                            }}>
+                              GCash Account Name
+                            </label>
+                            <input
+                              type="text"
+                              value={req.gcash_name}
+                              readOnly
+                              disabled
+                              style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                borderRadius: '8px',
+                                border: '1px solid #facc15',
+                                fontSize: '14px',
+                                backgroundColor: '#fef3c7',
+                                color: '#854d0e',
+                                cursor: 'not-allowed'
+                              }}
+                            />
+                          </div>
+                          <div style={{ 
+                            padding: '12px', 
+                            background: '#fef3c7', 
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            color: '#854d0e',
+                            textAlign: 'center'
+                          }}>
+                            ✓ GCash information submitted. Waiting for admin approval.
+                          </div>
                         </div>
                       )}
                       

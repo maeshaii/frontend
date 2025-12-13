@@ -99,6 +99,9 @@ const DonationPage: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const isRefreshingRef = useRef(false);
+  const [highlightDonationPostId, setHighlightDonationPostId] = useState<string | null>(null);
+  const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
+  const [highlightReplyId, setHighlightReplyId] = useState<string | null>(null);
 
   // Get current user info
   const userObj = JSON.parse(localStorage.getItem('user') || '{}');
@@ -472,11 +475,23 @@ const DonationPage: React.FC = () => {
       return;
     }
     const pendingDonationPostId = localStorage.getItem('pendingDonationPostView');
+    const pendingDonationCommentId = localStorage.getItem('pendingDonationCommentId');
+    const pendingDonationReplyId = localStorage.getItem('pendingDonationReplyId');
     console.log('🔍 Raw localStorage value:', pendingDonationPostId);
     if (pendingDonationPostId) {
       console.log('🔍 Found pending donation post view:', pendingDonationPostId);
       console.log('🔍 handleViewDonationPostById function exists?', typeof handleViewDonationPostById === 'function');
       localStorage.removeItem('pendingDonationPostView');
+      if (pendingDonationCommentId) {
+        localStorage.removeItem('pendingDonationCommentId');
+        setHighlightDonationPostId(pendingDonationPostId);
+        setHighlightCommentId(pendingDonationCommentId);
+      }
+      if (pendingDonationReplyId) {
+        localStorage.removeItem('pendingDonationReplyId');
+        setHighlightDonationPostId(pendingDonationPostId);
+        setHighlightReplyId(pendingDonationReplyId);
+      }
       // Wait a bit for the component to fully mount
       setTimeout(() => {
         console.log('🔍 Calling handleViewDonationPostById with ID:', pendingDonationPostId);
@@ -910,6 +925,8 @@ const DonationPage: React.FC = () => {
                     key={item.donation_id}
                     post={item}
                     currentUserId={currentUserId}
+                    highlightCommentId={highlightDonationPostId === String(item.donation_id || item.post_id) ? highlightCommentId || undefined : undefined}
+                    highlightReplyId={highlightDonationPostId === String(item.donation_id || item.post_id) ? highlightReplyId || undefined : undefined}
                     isOwn={isOwn}
                     displayName={displayName}
                     displayAvatar={displayAvatar}
@@ -1243,6 +1260,8 @@ const DonationPage: React.FC = () => {
                   user: originalDonationModalData.user
                 }}
                 currentUserId={currentUserId}
+                highlightCommentId={highlightDonationPostId === String(originalDonationModalData?.donation_id || originalDonationModalData?.post_id) ? highlightCommentId || undefined : undefined}
+                highlightReplyId={highlightDonationPostId === String(originalDonationModalData?.donation_id || originalDonationModalData?.post_id) ? highlightReplyId || undefined : undefined}
                 isOwn={currentUserId === originalDonationModalData.user?.user_id}
                 displayName={originalDonationModalData.user?.name || `${originalDonationModalData.user?.f_name || ''} ${originalDonationModalData.user?.m_name || ''} ${originalDonationModalData.user?.l_name || ''}`.trim() || 'Unknown User'}
                 displayAvatar={getProfilePicUrl(originalDonationModalData.user?.profile_pic)}

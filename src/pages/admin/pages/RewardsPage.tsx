@@ -463,8 +463,31 @@ const RewardsPage: React.FC = () => {
       selectedRequest.reward_type.toLowerCase().includes('gcash') ||
       selectedRequest.reward_type.toLowerCase().includes('gift card') ||
       selectedRequest.reward_type.toLowerCase().includes('coupon');
-
-    if (isGcashReward && !gcashReceipt) {
+    
+    // Check if this is a tracker reward
+    const isTrackerReward = selectedRequest.points_cost === 0 && 
+                           selectedRequest.notes && 
+                           selectedRequest.notes.toLowerCase().includes('tracker');
+    
+    // For tracker GCash rewards, check if GCash details are provided
+    if (isGcashReward && isTrackerReward) {
+      if (!selectedRequest.gcash_number || !selectedRequest.gcash_name) {
+        setStatusModal({
+          title: 'GCash Details Required',
+          message: 'The user must provide their GCash number and name before you can approve this reward request.',
+          variant: 'error'
+        });
+        return;
+      }
+      if (!gcashReceipt) {
+        setStatusModal({
+          title: 'GCash Receipt Required',
+          message: 'Please upload a GCash receipt image before approving this reward request.',
+          variant: 'error'
+        });
+        return;
+      }
+    } else if (isGcashReward && !gcashReceipt) {
       setStatusModal({
         title: 'GCash Receipt Required',
         message: 'Please upload a GCash receipt image before approving this reward request.',
@@ -1011,7 +1034,7 @@ const RewardsPage: React.FC = () => {
                   <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'white' }}>
                     {trackerFormResponsesCount}
                   </div>
-                  <div style={styles.inventorySubtitle}>updated employment</div>
+                  
                 </>
               ) : (
                 <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.9)' }}>No employment updates</div>
@@ -2942,98 +2965,136 @@ const RewardsPage: React.FC = () => {
                 selectedRequest.reward_type.toLowerCase().includes('gift card') || 
                 selectedRequest.reward_type.toLowerCase().includes('coupon')) && (
                 <div style={{ marginBottom: '20px' }}>
-                  <label style={{ 
-                  display: 'block', 
-                  fontSize: '13px', 
-                  fontWeight: '500', 
-                  color: '#374151', 
-                  marginBottom: '8px'
-                }}>
-                  Gcash Receipt <span style={{ color: '#ef4444' }}>*</span>{' '}
-                  <span style={{ fontWeight: '400', color: '#94a3b8' }}>(Image only)</span>
-                </label>
-                  <div style={{
-                    border: '2px dashed #e2e8f0',
-                    borderRadius: '8px',
-                    padding: '20px',
-                    textAlign: 'center',
-                    backgroundColor: '#f8fafc',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = '#1e3a5f';
-                    e.currentTarget.style.backgroundColor = '#f1f5f9';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = '#e2e8f0';
-                    e.currentTarget.style.backgroundColor = '#f8fafc';
-                  }}
-                  onClick={() => document.getElementById('gcash-receipt-upload')?.click()}>
-                    <input
-                      id="gcash-receipt-upload"
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setGcashReceipt(file);
-                        }
-                      }}
-                      style={{ display: 'none' }}
-                    />
-                    {gcashReceipt ? (
-                      <div>
-                        <div style={{ fontSize: '14px', color: '#1e3a5f', fontWeight: '500', marginBottom: '4px' }}>
-                          📄 {gcashReceipt.name}
+                  {/* Check if this is a tracker reward */}
+                  {(() => {
+                    const isTrackerReward = !!(selectedRequest.points_cost === 0 && 
+                                           selectedRequest.notes && 
+                                           selectedRequest.notes.toLowerCase().includes('tracker'));
+                    const hasGcashDetails = !!(selectedRequest.gcash_number && selectedRequest.gcash_name);
+                    const isDisabled = isTrackerReward && !hasGcashDetails;
+                    
+                    return (
+                      <>
+                        {isTrackerReward && !hasGcashDetails && (
+                          <div style={{
+                            marginBottom: '16px',
+                            padding: '12px 16px',
+                            background: '#fef3c7',
+                            border: '1px solid #fbbf24',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            color: '#92400e'
+                          }}>
+                            <div style={{ fontWeight: '600', marginBottom: '4px' }}>⏳ Waiting for User</div>
+                            <div>This is a tracker reward. The user must provide their GCash number and name before you can upload the receipt and approve.</div>
+                          </div>
+                        )}
+                        
+                        <label style={{ 
+                          display: 'block', 
+                          fontSize: '13px', 
+                          fontWeight: '500', 
+                          color: isDisabled ? '#9ca3af' : '#374151', 
+                          marginBottom: '8px'
+                        }}>
+                          Gcash Receipt <span style={{ color: '#ef4444' }}>*</span>{' '}
+                          <span style={{ fontWeight: '400', color: '#94a3b8' }}>(Image only)</span>
+                        </label>
+                        <div style={{
+                          border: '2px dashed #e2e8f0',
+                          borderRadius: '8px',
+                          padding: '20px',
+                          textAlign: 'center',
+                          backgroundColor: isDisabled ? '#f3f4f6' : '#f8fafc',
+                          cursor: isDisabled ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.15s',
+                          opacity: isDisabled ? 0.6 : 1
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isDisabled) {
+                            e.currentTarget.style.borderColor = '#1e3a5f';
+                            e.currentTarget.style.backgroundColor = '#f1f5f9';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isDisabled) {
+                            e.currentTarget.style.borderColor = '#e2e8f0';
+                            e.currentTarget.style.backgroundColor = '#f8fafc';
+                          }
+                        }}
+                        onClick={() => {
+                          if (!isDisabled) {
+                            document.getElementById('gcash-receipt-upload')?.click();
+                          }
+                        }}>
+                          <input
+                            id="gcash-receipt-upload"
+                            type="file"
+                            accept="image/*"
+                            disabled={isDisabled}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setGcashReceipt(file);
+                              }
+                            }}
+                            style={{ display: 'none' }}
+                          />
+                          {gcashReceipt ? (
+                            <div>
+                              <div style={{ fontSize: '14px', color: '#1e3a5f', fontWeight: '500', marginBottom: '4px' }}>
+                                📄 {gcashReceipt.name}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#64748b' }}>
+                                {(gcashReceipt.size / 1024).toFixed(2)} KB
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setGcashReceipt(null);
+                                }}
+                                style={{
+                                  marginTop: '8px',
+                                  padding: '4px 12px',
+                                  fontSize: '12px',
+                                  color: '#ef4444',
+                                  background: 'transparent',
+                                  border: '1px solid #ef4444',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ) : (
+                            <div>
+                              <div style={{ fontSize: '32px', marginBottom: '8px' }}>📁</div>
+                              <div style={{ fontSize: '14px', color: isDisabled ? '#9ca3af' : '#374151', fontWeight: '500', marginBottom: '4px' }}>
+                                {isDisabled ? 'Waiting for user to provide GCash details' : 'Click to upload receipt image'}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                                PNG, JPG or JPEG
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>
-                          {(gcashReceipt.size / 1024).toFixed(2)} KB
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setGcashReceipt(null);
-                          }}
-                          style={{
-                            marginTop: '8px',
-                            padding: '4px 12px',
-                            fontSize: '12px',
-                            color: '#ef4444',
-                            background: 'transparent',
-                            border: '1px solid #ef4444',
-                            borderRadius: '4px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ) : (
-                      <div>
-                        <div style={{ fontSize: '32px', marginBottom: '8px' }}>📁</div>
-                        <div style={{ fontSize: '14px', color: '#374151', fontWeight: '500', marginBottom: '4px' }}>
-                          Click to upload receipt image
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                          PNG, JPG or JPEG
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {selectedRequest.gcash_number && (
-                    <div style={{
-                      marginTop: '12px',
-                      padding: '12px',
-                      background: '#f0f9ff',
-                      borderRadius: '6px',
-                      fontSize: '13px'
-                    }}>
-                      <div style={{ fontWeight: '600', color: '#0c4a6e', marginBottom: '4px' }}>User's Gcash Details:</div>
-                      <div style={{ color: '#0369a1' }}>📱 {selectedRequest.gcash_number}</div>
-                      <div style={{ color: '#0369a1' }}>👤 {selectedRequest.gcash_name}</div>
-                    </div>
-                  )}
+                        {selectedRequest.gcash_number && selectedRequest.gcash_name && (
+                          <div style={{
+                            marginTop: '12px',
+                            padding: '12px',
+                            background: '#f0f9ff',
+                            borderRadius: '6px',
+                            fontSize: '13px'
+                          }}>
+                            <div style={{ fontWeight: '600', color: '#0c4a6e', marginBottom: '4px' }}>User's Gcash Details:</div>
+                            <div style={{ color: '#0369a1' }}>📱 {selectedRequest.gcash_number}</div>
+                            <div style={{ color: '#0369a1' }}>👤 {selectedRequest.gcash_name}</div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -3125,11 +3186,33 @@ const RewardsPage: React.FC = () => {
                 </button>
                 <button
                   onClick={handleApproveRequest}
-                  disabled={approving || !instructions.trim()}
+                  disabled={(() => {
+                    if (approving || !instructions.trim()) return true;
+                    // For tracker GCash rewards, check if GCash details are provided
+                    const isGcashReward = selectedRequest.reward_type.toLowerCase().includes('gcash') ||
+                                        selectedRequest.reward_type.toLowerCase().includes('gift card') ||
+                                        selectedRequest.reward_type.toLowerCase().includes('coupon');
+                    const isTrackerReward = selectedRequest.points_cost === 0 && 
+                                           selectedRequest.notes && 
+                                           selectedRequest.notes.toLowerCase().includes('tracker');
+                    if (isGcashReward && isTrackerReward) {
+                      return !selectedRequest.gcash_number || !selectedRequest.gcash_name || !gcashReceipt;
+                    }
+                    if (isGcashReward) {
+                      return !gcashReceipt;
+                    }
+                    return false;
+                  })()}
                   style={{
                     flex: 1,
                     padding: '12px 20px',
-                    background: (approving || !instructions.trim()) 
+                    background: (approving || !instructions.trim() || 
+                      (selectedRequest.reward_type.toLowerCase().includes('gcash') && 
+                       selectedRequest.points_cost === 0 && 
+                       selectedRequest.notes && 
+                       selectedRequest.notes.toLowerCase().includes('tracker') &&
+                       (!selectedRequest.gcash_number || !selectedRequest.gcash_name || !gcashReceipt)) ||
+                      (selectedRequest.reward_type.toLowerCase().includes('gcash') && !gcashReceipt))
                       ? '#cbd5e1' 
                       : '#1e3a5f',
                     color: 'white',

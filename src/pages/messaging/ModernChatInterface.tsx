@@ -14,8 +14,7 @@ import {
   deleteConversation,
   api
 } from '../../services/api';
-import { ConversationWebSocket, WsEvent } from '../../services/websocketHelper';
-import { TypingIndicator } from '../../services/typingIndicator';
+import { ConversationWebSocket, WsEvent, TypingIndicator } from '../../services/websocketHelper';
 import { getConversationWsUrl } from '../../services/api';
 import { getFileIcon, getFileTypeDisplayName, formatFileSize, isImageFile, isVideoFile, isAudioFile, canPreview, FileCategory } from '../../utils/fileUtils';
 import { deduplicateMessages, addMessageWithDeduplication, replaceTempMessage, removeTempMessage, isDuplicateMessage, sortMessagesBySequence, detectSequenceGaps, UiMessage } from '../../utils/messageUtils';
@@ -468,28 +467,9 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
       const ws = new ConversationWebSocket(wsUrl);
       wsRef.current = ws;
     
-      // Initialize typing indicator (no longer creates separate WebSocket)
-      const typingIndicator = new TypingIndicator({
-        conversationId: Number(conversation.conversation_id),
-        userId: currentUser?.user_id || 0,
-        userName: currentUser?.full_name || 'Unknown',
-        onTypingStart: (userId, userName) => {
-          setTypingUsers(prev => new Set([...prev, userId]));
-        },
-        onTypingStop: (userId) => {
-          setTypingUsers(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(userId);
-            return newSet;
-          });
-        },
-        onError: (error) => {
-          // Silently handle - no separate WebSocket needed
-        }
-      });
+      // Initialize typing indicator using the ConversationWebSocket instance
+      const typingIndicator = new TypingIndicator(ws, Number(conversation.conversation_id));
       typingIndicatorRef.current = typingIndicator;
-      
-      // Note: Typing indicator no longer connects separately
 
       const statusCallback = (status: any) => {
         console.log('🔌 [WebSocket] Status changed:', status);
@@ -582,6 +562,11 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
             }, 200);
             break;
           case 'typing':
+            // Filter out current user - don't show typing indicator for yourself
+            if (event.user_id && event.user_id === myId) {
+              // Ignore typing events from current user
+              break;
+            }
             setTypingUsers((prev) => {
               const newSet = new Set(prev);
               if (event.is_typing) {
@@ -865,7 +850,8 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
 
   const handleEmojiClick = (emojiData: EmojiClickData) => {
     setInputValue(prev => prev + emojiData.emoji);
-    setShowEmojiPicker(false);
+    // Don't close picker - allow user to select multiple emojis
+    // User can close by clicking outside or the emoji button again
     // Focus back on the input
     if (inputRef.current) {
       inputRef.current.focus();
@@ -969,20 +955,29 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
       setShowDeleteConfirmation(false);
       setShowConversationMenu(false);
       
+      // Trigger conversation list refresh via custom event BEFORE navigation
+      // This ensures the parent component clears selectedConversation state
+      window.dispatchEvent(new CustomEvent('conversationDeleted', { 
+        detail: { 
+          conversation_id: conversationId,
+          fully_deleted: fullyDeleted
+        } 
+      }));
+      
+      logger.info('🔵 [WEB DELETE] Dispatched conversationDeleted event, navigating away');
+      
       // Always navigate away since the user deleted it (even if it still exists for others)
-      if (onBack) {
-        onBack();
-      } else {
-        // Navigate to correct route (/messages not /messaging)
-        navigate('/messages', { replace: true });
-      }
+      // Use a small delay to ensure event is processed first
+      setTimeout(() => {
+        if (onBack) {
+          onBack();
+        } else {
+          // Navigate to correct route (/messages not /messaging)
+          navigate('/messages', { replace: true });
+        }
+      }, 100);
       
       logger.info('🔵 [WEB DELETE] END - Deletion complete, navigated away');
-      
-      // Trigger conversation list refresh via custom event instead of reload
-      window.dispatchEvent(new CustomEvent('conversationDeleted', { 
-        detail: { conversation_id: conversation.conversation_id } 
-      }));
     } catch (error) {
       logger.error('Failed to delete conversation:', error);
       alert('Failed to delete conversation. Please try again.');
@@ -1617,16 +1612,19 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
                                   ) : (
                                     <div className="message-text">
                                       {renderTextWithLinks(message.content, { color: isOwn ? '#ffffff' : '#050505' })}
-                                      {message.is_edited && (
-                                        <span style={{
-                                          fontSize: '11px',
-                                          color: isOwn ? 'rgba(255,255,255,0.6)' : '#888',
-                                          fontStyle: 'italic',
-                                          marginLeft: '8px'
-                                        }}>
-                                          (edited)
-                                        </span>
-                                      )}
+                                    </div>
+                                  )}
+                                  
+                                  {/* Edited Indicator - Below message text */}
+                                  {message.is_edited && (
+                                    <div style={{
+                                      fontSize: '11px',
+                                      color: isOwn ? 'rgba(255,255,255,0.6)' : '#888',
+                                      fontStyle: 'italic',
+                                      marginTop: '4px',
+                                      paddingLeft: '4px'
+                                    }}>
+                                      (edited)
                                     </div>
                                   )}
                                   
@@ -2211,24 +2209,34 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
               })}
 
               {/* Typing Indicator */}
-              {typingUsers.size > 0 && (
-                <div className="typing-indicator">
-                  <div className="typing-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
+              {(() => {
+                // Filter out current user from typing users
+                const myId = currentUser?.user_id ?? (currentUser as any)?.id;
+                const otherTypingUsers = Array.from(typingUsers).filter(userId => userId !== myId);
+                
+                if (otherTypingUsers.length === 0) {
+                  return null;
+                }
+                
+                return (
+                  <div className="typing-indicator">
+                    <div className="typing-dots">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                    <span className="typing-text">
+                      {otherTypingUsers.map(userId => {
+                        // Check if it's the other participant
+                        if (conversation.other_participant?.user_id === userId) {
+                          return conversation.other_participant.name;
+                        }
+                        return 'Someone';
+                      }).join(', ')} {otherTypingUsers.length === 1 ? 'is' : 'are'} typing...
+                    </span>
                   </div>
-                  <span className="typing-text">
-                    {Array.from(typingUsers).map(userId => {
-                      // Check if it's the other participant
-                      if (conversation.other_participant?.user_id === userId) {
-                        return conversation.other_participant.name;
-                      }
-                      return 'Someone';
-                    }).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
-                  </span>
-                </div>
-              )}
+                );
+              })()}
               
               <div ref={messagesEndRef} />
             </div>
@@ -2455,9 +2463,20 @@ const ModernChatInterface: React.FC<ModernChatInterfaceProps> = ({ conversation,
         setTimeout(() => {
           requestAnimationFrame(scrollToBottom);
         }, 200);
-            } catch (err) {
+            } catch (err: any) {
               console.error('Attachment send failed:', err);
-              alert('Failed to upload attachment. Please try again.');
+              
+              // Extract error message from response
+              let errorMessage = 'Failed to upload attachment. Please try again.';
+              if (err?.response?.data?.error) {
+                errorMessage = err.response.data.error;
+              } else if (err?.response?.data?.detail) {
+                errorMessage = err.response.data.detail;
+              } else if (err?.message) {
+                errorMessage = err.message;
+              }
+              
+              alert(errorMessage);
             } finally {
               if (inputEl) inputEl.value = '';
             }

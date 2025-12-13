@@ -687,8 +687,10 @@ const RepostCard: React.FC<RepostCardProps> = ({
   const loadReplies = useCallback(async (commentId: number) => {
     try {
       const response = await getCommentReplies(commentId);
-      if (response && response.replies) {
-        setCommentReplies(prev => ({ ...prev, [commentId]: response.replies }));
+      const replies = response?.replies || [];
+      setCommentReplies(prev => ({ ...prev, [commentId]: replies }));
+      if (replies.length > 0) {
+        setShowReplies(prev => ({ ...prev, [commentId]: true }));
       }
     } catch (error) {
       console.error('Error loading replies:', error);
@@ -730,22 +732,19 @@ const RepostCard: React.FC<RepostCardProps> = ({
     }
   }, [highlightReplyId, comments, commentReplies, loadReplies, scrollIntoViewSmooth, startHighlightTimer]);
 
-  // Auto-load replies for comments that have replies_count > 0
+  // Auto-load replies for all comments once (ensures existing replies show without extra clicks)
   useEffect(() => {
     if (comments && comments.length > 0) {
       (async () => {
         for (const comment of comments) {
-          if (comment.replies_count && comment.replies_count > 0) {
-            // Only load if not already loaded
-            if (!commentReplies[comment.comment_id]) {
-              await loadReplies(comment.comment_id);
-            }
-            // Replies remain collapsed by default - user must click "View more replies" to expand
+          if (!commentReplies[comment.comment_id] && !requestedReplyLoadsRef.current.has(comment.comment_id)) {
+            requestedReplyLoadsRef.current.add(comment.comment_id);
+            await loadReplies(comment.comment_id);
           }
         }
       })();
     }
-  }, [comments, loadReplies]);
+  }, [comments, commentReplies, loadReplies]);
 
   const getProfilePath = (userId: number) => {
     const path = window.location.pathname;
@@ -842,7 +841,7 @@ const RepostCard: React.FC<RepostCardProps> = ({
     // CRITICAL: Added word boundary lookahead (?=\s|$|[.,!?;:]) to prevent over-matching
     // This ensures mentions stop at whitespace, end of string, or punctuation
     // Using non-greedy *? to match the shortest possible mention text
-    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*?)(?=\s|$|[.,!?;:])/g;
+    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)(?=\s|$|[.,!?;:])/g;
     const result: React.ReactNode[] = [];
     let lastIndex = 0;
     let match;
@@ -1006,85 +1005,70 @@ const RepostCard: React.FC<RepostCardProps> = ({
     return result;
   };
 
-  const renderTextWithLinks = (text: string | undefined | null) => {
+  const renderTextWithLinks = (text: string) => {
     if (!text) return null;
-    
-    // Enhanced URL regex that matches:
-    // - http:// or https:// URLs
-    // - www. URLs
-    // - plain domains (like fb.com, example.com, etc.)
-    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,})([^\s]*)?)/gi;
-    // CRITICAL: Added word boundary lookahead (?=\s|$|[.,!?;:]) to prevent over-matching
-    // This ensures mentions stop at whitespace, end of string, or punctuation
-    // Using non-greedy *? to match the shortest possible mention text
-    const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*?)(?=\s|$|[.,!?;:])/g;
-    // Note: We intentionally do NOT auto-detect regular names anymore to avoid
-    // over-highlighting common words. Only URLs and @mentions are interactive.
-    
-    const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let match;
-    let key = 0;
-    
-    // Reset regex for global search
-    urlRegex.lastIndex = 0;
-    
-    // First, find all URLs
-    while ((match = urlRegex.exec(text)) !== null) {
-      // Add text before the URL
-      if (match.index > lastIndex) {
-        const textBefore = text.substring(lastIndex, match.index);
-        // Process mentions in the text before URL
-        const mentionParts = processMentionsInText(textBefore, `before-url-${key}`);
-        parts.push(...mentionParts);
+
+    // Split text for mention processing
+    const parts = [text];
+
+    return parts.map((part, index) => {
+      let match;
+      let lastIndex = 0;
+      let result: React.ReactNode[] = [];
+      const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)(?=\s|$|[.,!?;:])/g;
+      mentionRegex.lastIndex = 0;
+      while ((match = mentionRegex.exec(part)) !== null) {
+        // Add any text before this match
+        if (match.index > lastIndex) {
+          result.push(<span key={`mentionpre-${index}-${match.index}`}>{part.substring(lastIndex, match.index)}</span>);
+        }
+        let mentionText = match[1];
+        // Deduplicate if needed:
+        if (mentionText) {
+          const mentionParts = mentionText.trim().split(/\s+/).filter(Boolean);
+          if (mentionParts.length >= 4) {
+            const firstPart = mentionParts[0];
+            const middlePart = mentionParts[1];
+            const lastPart = mentionParts[2];
+            if (
+              mentionParts.length === 5 &&
+              mentionParts[3] === middlePart &&
+              mentionParts[4] === lastPart
+            ) {
+              mentionText = [firstPart, middlePart, lastPart].join(' ');
+            }
+          }
+        }
+        // Highlight the entire mentionText
+        result.push(
+          <button
+            key={`mentionbtn-${index}-${match.index}`}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const matchResult = checkMentionMatch(mentionText);
+              const matchedUser = matchResult.matched ? matchResult.user : null;
+              const userId = matchedUser?.user_id || matchedUser?.id;
+
+              if (userId) {
+                window.location.href = getProfilePath(userId);
+              } else {
+                void handleUserSearch(mentionText);
+              }
+            }}
+            style={{ color: '#007bff', fontWeight: 600, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'none' }}
+          >
+            @{mentionText}
+          </button>
+        );
+        lastIndex = mentionRegex.lastIndex;
       }
-      
-      // Create clickable link
-      let url = match[0];
-      
-      // Add protocol if missing
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        url = 'https://' + url;
+      // Add any remaining text
+      if (lastIndex < part.length) {
+        result.push(<span key={`mentionpost-${index}`}>{part.substring(lastIndex)}</span>);
       }
-      
-      parts.push(
-        <a
-          key={`link-${key++}`}
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            color: '#174f84',
-            textDecoration: 'underline',
-            cursor: 'pointer',
-            wordBreak: 'break-all'
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            window.open(url, '_blank', 'noopener,noreferrer');
-          }}
-        >
-          {match[0]}
-        </a>
-      );
-      
-      lastIndex = urlRegex.lastIndex;
-    }
-    
-    // Add remaining text after the last URL
-    if (lastIndex < text.length) {
-      const remainingText = text.substring(lastIndex);
-      // Process mentions in remaining text
-      const mentionParts = processMentionsInText(remainingText, `remaining-${key}`);
-      parts.push(...mentionParts);
-    }
-    
-    // If no URLs or mentions found, return the original text
-    if (parts.length === 0) {
-      return text;
-    }
-    
-    return parts;
+      return result.length === 0 ? part : result;
+    });
   };
 
   const handleEditRepost = () => {

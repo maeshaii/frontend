@@ -9,7 +9,7 @@ import EmploymentUpdateReminderModal from '../../components/EmploymentUpdateRemi
 import ctulogo from '../../images/ctulogo.png';
 import '../alumni/dashboard.css';
 import '../alumni/profile.css';
-import { getPosts, followUser, getAdminPesoUsers, api, getDonationRequests } from '../../services/api';
+import { getPosts, followUser, getAdminPesoUsers, api, getDonationRequests, checkEmploymentReminder } from '../../services/api';
 import { trackerApi } from '../../services/trackerApi';
 import RepostNotificationModal from '../../components/RepostNotificationModal';
 import RepostModal from '../../components/RepostModal';
@@ -389,35 +389,25 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
       // Check employment update reminder (for alumni who have submitted tracker)
       // FOR TESTING: Shows after 2 minutes. FOR PRODUCTION: Change to 6 months (180 days)
       if (currentUserId && (userObj.account_type?.user || userObj.account_type?.alumni)) {
-        const accessToken = localStorage.getItem('accessToken');
-        fetch(`http://127.0.0.1:8000/api/alumni/employment-reminder/${currentUserId}/`, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        })
-          .then(response => response.json())
-          .then(data => {
+        checkEmploymentReminder(currentUserId)
+          .then((data) => {
             console.log('🔍 Employment update reminder check:', data);
-            if (data.should_show_reminder) {
-              // Check if user dismissed this reminder
-              const dismissedUntil = localStorage.getItem('employmentUpdateReminderDismissedUntil');
-              if (dismissedUntil) {
-                const dismissedDate = new Date(dismissedUntil);
-                if (dismissedDate > new Date()) {
-                  console.log('🔍 Employment reminder dismissed until:', dismissedDate);
-                  return; // Still dismissed
-                }
-              }
-              
-              // Show modal after a short delay (don't conflict with tracker modal)
-              setTimeout(() => {
-                setShowEmploymentUpdateModal(true);
-              }, 3000);
+            const shouldShow = !!data?.should_show_reminder;
+            if (!shouldShow) {
+              console.log('ℹ️ Employment reminder not shown by API (fallback will show). Reason:', data?.reason);
             }
+
+            try {
+              localStorage.removeItem('employmentUpdateReminderDismissedUntil');
+            } catch (_) {}
+
+            // Always show (user request) even if API said no; delay to avoid clashing with tracker modal
+            setTimeout(() => setShowEmploymentUpdateModal(true), 3000);
           })
           .catch((error) => {
             console.error('Error checking employment update reminder:', error);
+            // On error, still show once to avoid blocking the user
+            setTimeout(() => setShowEmploymentUpdateModal(true), 3000);
           });
       }
     }
@@ -2852,20 +2842,18 @@ const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({ userType, userId })
           }
         }}
         onMaybeLater={() => {
+          // Match tracker modal behavior: simply close, no long-term suppression
+          try {
+            localStorage.removeItem('employmentUpdateReminderDismissedUntil');
+          } catch (_) {}
           setShowEmploymentUpdateModal(false);
-          // Dismiss for 7 days (for testing, you can change this)
-          const dismissedUntil = new Date();
-          dismissedUntil.setDate(dismissedUntil.getDate() + 7);
-          localStorage.setItem('employmentUpdateReminderDismissedUntil', dismissedUntil.toISOString());
-          console.log('🔍 Employment reminder dismissed until:', dismissedUntil);
         }}
         onNoChanges={() => {
+          // Also allow future prompts; just close
+          try {
+            localStorage.removeItem('employmentUpdateReminderDismissedUntil');
+          } catch (_) {}
           setShowEmploymentUpdateModal(false);
-          // Dismiss permanently (user confirmed no changes needed)
-          const dismissedUntil = new Date();
-          dismissedUntil.setDate(dismissedUntil.getDate() + 180); // 6 months
-          localStorage.setItem('employmentUpdateReminderDismissedUntil', dismissedUntil.toISOString());
-          console.log('✅ User confirmed no changes - reminder dismissed for 6 months');
         }}
       />
       

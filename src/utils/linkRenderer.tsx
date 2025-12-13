@@ -1,4 +1,44 @@
 import React from 'react';
+import { searchAlumni } from '../services/api';
+
+// Build correct profile path based on current location and user account type
+const getProfilePath = (userId: number, accountType?: any) => {
+  const path = typeof window !== 'undefined' ? window.location.pathname : '';
+
+  if (accountType?.peso || path.startsWith('/peso')) {
+    return `/peso/profile/${userId}`;
+  }
+  if (accountType?.admin || path.startsWith('/ccict')) {
+    return `/ccict/profile/${userId}`;
+  }
+  if (path.startsWith('/ojt')) {
+    return `/ojt/profile/${userId}`;
+  }
+
+  return `/profile/${userId}`;
+};
+
+// Lookup a mention and navigate to the matched profile
+const handleMentionClick = async (mentionText: string) => {
+  const cleaned = mentionText?.trim();
+  if (!cleaned) return;
+
+  try {
+    const response = await searchAlumni(cleaned);
+    const user = response?.results?.[0];
+    const userId = user?.id ?? (user as any)?.user_id;
+
+    if (userId) {
+      window.location.href = getProfilePath(userId, user.account_type);
+      return;
+    }
+
+    alert(`No user found with name "${cleaned}"`);
+  } catch (error) {
+    console.error('Error handling mention click:', error);
+    alert('Unable to open profile right now. Please try again.');
+  }
+};
 
 /**
  * Detects URLs and mentions (@username) in text and renders them appropriately
@@ -23,7 +63,7 @@ export const renderTextWithLinks = (text: string, linkStyle?: React.CSSPropertie
   // This prevents text after the mention from being highlighted in blue
   // Example: "@Stephanie Mari sdsadass" matches only "@Stephanie Mari" (stops at space before "sdsadass")
   // Using non-greedy *? to match the shortest possible mention text
-  const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*?)(?=\s|$|[.,!?;:])/g;
+  const mentionRegex = /@([A-Za-z0-9_.]+(?:\s+[A-Za-z0-9_.]+)*)(?=\s|$|[.,!?;:])/g;
   
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
@@ -113,10 +153,10 @@ export const renderTextWithLinks = (text: string, linkStyle?: React.CSSPropertie
       mentionParts.push(
         <button
           key={`mention-${key++}`}
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
-            // Navigate to user profile or search
-            // For now, just prevent default behavior
+            void handleMentionClick(mentionText);
           }}
           style={{
             color: '#007bff',

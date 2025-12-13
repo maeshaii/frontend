@@ -167,6 +167,32 @@ export default function Dashboard() {
     setImportTemplateType(null);
   };
 
+  // Extract program from coordinator's first name
+  // Example: "BSIT Coordinator" -> "BSIT", "BSIS Coordinator" -> "BSIS"
+  const extractProgramFromName = (firstName: string): string => {
+    if (!firstName) return 'BSIT'; // Default fallback
+    
+    const upperFirstName = firstName.toUpperCase();
+    
+    // Check for common program abbreviations
+    // Order matters - check longer patterns first (e.g., BIT-CT before BIT)
+    if (upperFirstName.includes('BIT-CT') || upperFirstName.includes('BITCT')) {
+      return 'BIT-CT';
+    }
+    if (upperFirstName.includes('BSIT')) {
+      return 'BSIT';
+    }
+    if (upperFirstName.includes('BSIS')) {
+      return 'BSIS';
+    }
+    if (upperFirstName.includes('BIT')) {
+      return 'BIT';
+    }
+    
+    // Default fallback
+    return 'BSIT';
+  };
+
   useEffect(() => {
     // Get coordinator info from localStorage
     const user = localStorage.getItem('user');
@@ -175,9 +201,12 @@ export default function Dashboard() {
       // Set username and program from profile, not by username pattern
       const username = userData.username || userData.name || '';
       setCoordinatorUsername(username);
-      // Pull actual program from the stored user data
-      // Fallback to 'BSIT' if not specified
-      setProgram(userData.course || 'BSIT');
+      
+      // Extract program from coordinator's first name
+      // Example: "BSIT Coordinator" -> "BSIT"
+      const firstName = userData.f_name || '';
+      const extractedProgram = extractProgramFromName(firstName);
+      setProgram(extractedProgram);
     }
   }, []);
 

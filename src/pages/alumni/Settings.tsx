@@ -5,6 +5,7 @@ import { Box, Paper, Typography, TextField, Button, Select, MenuItem, FormContro
 import PasswordVisibilityIcon from '../../components/PasswordVisibilityIcon';
 import { validatePassword as validatePasswordStrength } from '../../utils/passwordValidator';
 import { trackerApi } from '../../services/trackerApi';
+import { api } from '../../services/api';
 
 interface UserData {
   user_id: number;
@@ -352,16 +353,9 @@ const Settings: React.FC = () => {
 
   const fetchEmploymentData = async (userId: number) => {
     try {
-      const accessToken = localStorage.getItem('accessToken');
-      const response = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${userId}/`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const { data } = await api.get(`alumni/employment/${userId}/`);
       
-      if (response.ok) {
-        const data = await response.json();
+      if (data) {
         
         console.log('📊 RAW EMPLOYMENT API RESPONSE:', JSON.stringify(data, null, 2));
         
@@ -459,6 +453,13 @@ const Settings: React.FC = () => {
           // Use strict boolean checking to ensure we only show data when explicitly true
           const hasTrackerData = data.has_tracker_data === true;
           const hasPartIIIData = data.has_part_iii_data === true;
+          const hasAnyEmploymentFields = Boolean(
+            (data.employment_type && data.employment_type.trim() !== '') ||
+            (data.current_employment_status && data.current_employment_status.trim() !== '') ||
+            (data.current_company_name && data.current_company_name.trim() !== '') ||
+            (data.current_position && data.current_position.trim() !== '') ||
+            (data.employment_supporting_doc && data.employment_supporting_doc !== '')
+          );
           
           console.log('🔍 Alumni Employment Check:');
           console.log('  - has_tracker_data from API:', data.has_tracker_data);
@@ -468,9 +469,9 @@ const Settings: React.FC = () => {
           console.log('  - employment_type:', data.employment_type);
           console.log('  - current_company_name:', data.current_company_name);
           
-          // CRITICAL: Only show Part III data if has_part_iii_data is explicitly true
-          // If it's false, null, undefined, show the "Please answer tracker" prompt
-          setHasJobInDB(hasPartIIIData);
+          // If Part III flag is true, or we already have employment fields populated, consider it present
+          // This avoids hiding data when the backend flag isn't set but data exists.
+          setHasJobInDB(hasPartIIIData || hasAnyEmploymentFields || hasTrackerData);
           
           // If user has Part III data in DB, start in view mode (not editing)
           if (hasPartIIIData === true) {
@@ -525,52 +526,35 @@ const Settings: React.FC = () => {
       
       const user = JSON.parse(userStr);
       const userId = user.user_id || user.id;
-      const accessToken = localStorage.getItem('accessToken');
-      
-      const response = await fetch(`http://127.0.0.1:8000/api/alumni/profile/${userId}/`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify(formData)
-      });
+      await api.put(`alumni/profile/${userId}/`, formData);
 
-      if (response.ok) {
-        alert('Profile updated successfully!');
-        
-        // Update localStorage with new data
-        const updatedUserData = {
-          ...user,
-          f_name: formData.f_name,
-          m_name: formData.m_name,
-          l_name: formData.l_name,
-          civil_status: formData.civil_status,
-          contact_number: formData.contact_number,
-          email: formData.email,
-          address: formData.address,
-          home_address: formData.home_address,
-          social_media: formData.social_media
-        };
-        
-        // Update localStorage
-        localStorage.setItem('user', JSON.stringify(updatedUserData));
-        console.log('Updated localStorage user data:', updatedUserData);
-        
-        // Refresh the form data
-        fetchUserData();
-        
-        // Trigger a custom event to notify other components
-        window.dispatchEvent(new CustomEvent('userDataUpdated', { 
-          detail: updatedUserData 
-        }));
-        
-      } else {
-        alert('Failed to update profile');
-      }
-    } catch (error) {
+      alert('Profile updated successfully!');
+      
+      const updatedUserData = {
+        ...user,
+        f_name: formData.f_name,
+        m_name: formData.m_name,
+        l_name: formData.l_name,
+        civil_status: formData.civil_status,
+        contact_number: formData.contact_number,
+        email: formData.email,
+        address: formData.address,
+        home_address: formData.home_address,
+        social_media: formData.social_media
+      };
+      
+      localStorage.setItem('user', JSON.stringify(updatedUserData));
+      console.log('Updated localStorage user data:', updatedUserData);
+      
+      fetchUserData();
+      
+      window.dispatchEvent(new CustomEvent('userDataUpdated', { 
+        detail: updatedUserData 
+      }));
+      
+    } catch (error: any) {
       console.error('Error updating profile:', error);
-      alert('Error updating profile');
+      alert(error?.response?.data?.message || 'Error updating profile');
     } finally {
       setSaving(false);
     }
@@ -601,35 +585,19 @@ const Settings: React.FC = () => {
         
         const user = JSON.parse(userStr);
         const userId = user.user_id || user.id;
-        const accessToken = localStorage.getItem('accessToken');
-        
-        // Get the unemployment question ID
-        const unemploymentQuestion = unemploymentQuestions[0];
-        const unemploymentReasons = unemploymentResponses[unemploymentQuestion.id] || [];
-        
-        // Save unemployment reasons to TrackerData via the employment API
-        const response = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${userId}/`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({
-            // Mark as unemployed
-            unemployment_reason: unemploymentReasons,
-            q_unemployment_reason: unemploymentReasons
-          })
-        });
-        
-        if (response.ok) {
-          alert('Unemployment information saved successfully!');
-          setIsEditingEmployment(false);
-        } else {
-          alert('Failed to save unemployment information');
-        }
-      } catch (error) {
-        console.error('Error saving unemployment information:', error);
-        alert('Error saving unemployment information');
+      const unemploymentQuestion = unemploymentQuestions[0];
+      const unemploymentReasons = unemploymentResponses[unemploymentQuestion.id] || [];
+      
+      await api.put(`alumni/employment/${userId}/`, {
+        unemployment_reason: unemploymentReasons,
+        q_unemployment_reason: unemploymentReasons
+      });
+      
+      alert('Unemployment information saved successfully!');
+      setIsEditingEmployment(false);
+    } catch (error: any) {
+      console.error('Error saving unemployment information:', error);
+      alert(error?.response?.data?.error || 'Error saving unemployment information');
       }
       return;
     }
@@ -654,8 +622,6 @@ const Settings: React.FC = () => {
       const hasAwardsFile = employmentData.awards_file instanceof File;
       const hasEmploymentFile = employmentData.employment_file instanceof File;
       const hasFile = hasAwardsFile || hasEmploymentFile;
-      
-      let response;
       
       if (hasFile) {
         // Use FormData for file upload
@@ -682,13 +648,10 @@ const Settings: React.FC = () => {
           formData.append('employment_supporting_doc', employmentData.employment_file);
         }
         
-        response = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${userId}/`, {
-          method: 'PUT',
+        await api.put(`alumni/employment/${userId}/`, formData, {
           headers: {
-            'Authorization': `Bearer ${accessToken}`
-            // Don't set Content-Type - browser will set it automatically with boundary for FormData
-          },
-          body: formData
+            'Content-Type': 'multipart/form-data'
+          }
         });
       } else {
         // Use JSON for regular updates without file
@@ -704,28 +667,17 @@ const Settings: React.FC = () => {
           received_awards: employmentData.received_awards
         };
         
-        response = await fetch(`http://127.0.0.1:8000/api/alumni/employment/${userId}/`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dataToSend)
-      });
+        await api.put(`alumni/employment/${userId}/`, dataToSend);
       }
 
-      if (response.ok) {
-        alert('Employment details updated successfully! ✓');
-        setIsEditingEmployment(false);
-        // Refresh employment data
-        await fetchEmploymentData(userId);
-      } else {
-        const errorData = await response.json();
-        alert(`Failed to update employment details: ${errorData.error || 'Unknown error'}`);
-      }
-    } catch (error) {
+      alert('Employment details updated successfully! ✓');
+      setIsEditingEmployment(false);
+      // Refresh employment data
+      await fetchEmploymentData(userId);
+    } catch (error: any) {
       console.error('Error updating employment details:', error);
-      alert('Error updating employment details');
+      const errorMessage = error?.response?.data?.error || error?.message || 'Error updating employment details';
+      alert(errorMessage);
     } finally {
       setSaving(false);
     }

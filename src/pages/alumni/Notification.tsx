@@ -209,6 +209,34 @@ const NotificationPage: React.FC = () => {
     }
   };
 
+  const storeForumHighlightIds = (commentId?: string | null, replyId?: string | null) => {
+    if (commentId) {
+      localStorage.setItem('pendingForumCommentId', commentId);
+    } else {
+      localStorage.removeItem('pendingForumCommentId');
+    }
+
+    if (replyId) {
+      localStorage.setItem('pendingForumReplyId', replyId);
+    } else {
+      localStorage.removeItem('pendingForumReplyId');
+    }
+  };
+
+  const storeDonationHighlightIds = (commentId?: string | null, replyId?: string | null) => {
+    if (commentId) {
+      localStorage.setItem('pendingDonationCommentId', commentId);
+    } else {
+      localStorage.removeItem('pendingDonationCommentId');
+    }
+
+    if (replyId) {
+      localStorage.setItem('pendingDonationReplyId', replyId);
+    } else {
+      localStorage.removeItem('pendingDonationReplyId');
+    }
+  };
+
   const suppressTrackerReminderForRedirect = () => {
     try {
       localStorage.setItem('suppressTrackerModal', 'true');
@@ -710,11 +738,13 @@ const NotificationPage: React.FC = () => {
           // This catches ALL types of notifications (like, comment, mention, etc.)
           if (forumIdMatch) {
             localStorage.setItem('pendingForumPostView', forumIdMatch[1]); // Use forum_id directly
+            storeForumHighlightIds(commentId, replyId);
             suppressTrackerReminderForRedirect();
             navigate('/forum');
             return;
           } else if (donationIdMatch) {
             localStorage.setItem('pendingDonationPostView', donationIdMatch[1]); // Use donation_id directly
+            storeDonationHighlightIds(commentId, replyId);
             suppressTrackerReminderForRedirect();
             navigate('/donation');
             return;
