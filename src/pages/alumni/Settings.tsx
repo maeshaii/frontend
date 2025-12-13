@@ -451,8 +451,9 @@ const Settings: React.FC = () => {
         } else {
           // For Alumni accounts: check if they have Part III tracker data
           // Use strict boolean checking to ensure we only show data when explicitly true
-          const hasTrackerData = data.has_tracker_data === true;
           const hasPartIIIData = data.has_part_iii_data === true;
+          // Fallback: check if actual employment fields are populated (in case backend flag isn't set but data exists)
+          // This is a safety check, but backend should always return correct has_part_iii_data
           const hasAnyEmploymentFields = Boolean(
             (data.employment_type && data.employment_type.trim() !== '') ||
             (data.current_employment_status && data.current_employment_status.trim() !== '') ||
@@ -462,16 +463,17 @@ const Settings: React.FC = () => {
           );
           
           console.log('🔍 Alumni Employment Check:');
-          console.log('  - has_tracker_data from API:', data.has_tracker_data);
           console.log('  - has_part_iii_data from API:', data.has_part_iii_data);
-          console.log('  - hasTrackerData (computed):', hasTrackerData);
           console.log('  - hasPartIIIData (computed):', hasPartIIIData);
+          console.log('  - hasAnyEmploymentFields (fallback):', hasAnyEmploymentFields);
           console.log('  - employment_type:', data.employment_type);
           console.log('  - current_company_name:', data.current_company_name);
           
-          // If Part III flag is true, or we already have employment fields populated, consider it present
-          // This avoids hiding data when the backend flag isn't set but data exists.
-          setHasJobInDB(hasPartIIIData || hasAnyEmploymentFields || hasTrackerData);
+          // Only show Employment Details if Part III data actually exists (actual fields filled in tracker)
+          // DO NOT use has_tracker_data because that only checks if TrackerData record exists,
+          // not whether the user has actually filled in employment information
+          // Backend's has_part_iii_data already checks for actual field values, so rely on that
+          setHasJobInDB(hasPartIIIData || hasAnyEmploymentFields);
           
           // If user has Part III data in DB, start in view mode (not editing)
           if (hasPartIIIData === true) {
@@ -485,7 +487,7 @@ const Settings: React.FC = () => {
             setPursueFurtherStudy(false);
           }
           
-          console.log('  - Final hasJobInDB value:', hasPartIIIData === true);
+          console.log('  - Final hasJobInDB value:', hasPartIIIData || hasAnyEmploymentFields);
           console.log('  - Debug info:', data.debug || 'No debug info');
         }
         
