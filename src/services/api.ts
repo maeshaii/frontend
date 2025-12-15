@@ -448,28 +448,153 @@ export const fetchAlumniEmploymentStats = async (year = 'ALL', program = 'ALL') 
 };
 
 // Generate specific type of statistics (QPRO, CHED, SUC, AACUP)
-export const generateSpecificStats = async (year = 'ALL', program = 'ALL', statsType = 'ALL') => {
+// Supports multi-select: years, programs, and statsTypes can be arrays or single values
+export const generateSpecificStats = async (
+  years: string | string[] = 'ALL', 
+  programs: string | string[] = 'ALL', 
+  statsTypes: string | string[] = 'ALL'
+) => {
   try {
+    // Convert arrays to comma-separated strings for URL params
+    const yearParam = Array.isArray(years) ? years.join(',') : years;
+    const programParam = Array.isArray(programs) ? programs.join(',') : programs;
+    const typeParam = Array.isArray(statsTypes) ? statsTypes.join(',') : statsTypes;
+    
     const response = await api.get(
-      `statistics/generate/?year=${year}&program=${program}&type=${statsType}`
+      `statistics/generate/?year=${yearParam}&program=${programParam}&type=${typeParam}`
     );
     return response.data;
   } catch (error: any) {
     // Fallback to regular employment stats if specific endpoint doesn't exist
     console.warn('Specific stats endpoint not available, falling back to employment stats');
-    return await fetchAlumniEmploymentStats(year, program);
+    const yearParam = Array.isArray(years) ? years[0] || 'ALL' : years;
+    const programParam = Array.isArray(programs) ? programs[0] || 'ALL' : programs;
+    return await fetchAlumniEmploymentStats(yearParam, programParam);
   }
 };
 
 // Export detailed alumni data for specific statistics types
-export const exportDetailedAlumniData = async (year = 'ALL', program = 'ALL', statsType = 'ALL') => {
+// Supports multi-select: years, programs, and statsTypes can be arrays or single values
+export const exportDetailedAlumniData = async (
+  years: string | string[] = 'ALL', 
+  programs: string | string[] = 'ALL', 
+  statsTypes: string | string[] = 'ALL'
+) => {
   try {
+    // Convert arrays to comma-separated strings for URL params
+    const yearParam = Array.isArray(years) ? years.join(',') : years;
+    const programParam = Array.isArray(programs) ? programs.join(',') : programs;
+    const typeParam = Array.isArray(statsTypes) ? statsTypes.join(',') : statsTypes;
+    
     const response = await api.get(
-      `statistics/export-detailed/?year=${year}&program=${program}&type=${statsType}`
+      `statistics/export-detailed/?year=${yearParam}&program=${programParam}&type=${typeParam}`
     );
     return response.data;
   } catch (error) {
     console.error('Error fetching detailed alumni data:', error);
+    throw error;
+  }
+};
+
+// Fetch QPRO chart statistics grouped by year for visualization
+// Returns E (Employed), UE (Unemployed), NT (Not Tracked), GT (Graduate Tracing Rate %)
+export const fetchChartStatisticsByYear = async (
+  years: string | string[] = 'ALL',
+  programs: string | string[] = 'ALL'
+) => {
+  try {
+    const yearParam = Array.isArray(years) ? years.join(',') : years;
+    const programParam = Array.isArray(programs) ? programs.join(',') : programs;
+    
+    const response = await api.get(
+      `statistics/chart-by-year/?year=${yearParam}&program=${programParam}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching chart statistics:', error);
+    throw error;
+  }
+};
+
+// Fetch CHED chart statistics grouped by year for visualization
+// Returns PFS (Pursuing Further Study), JA (Job Alignment), SE (Self-Employed)
+export const fetchCHEDChartStatisticsByYear = async (
+  years: string | string[] = 'ALL',
+  programs: string | string[] = 'ALL'
+) => {
+  try {
+    const yearParam = Array.isArray(years) ? years.join(',') : years;
+    const programParam = Array.isArray(programs) ? programs.join(',') : programs;
+    
+    const response = await api.get(
+      `statistics/ched-chart-by-year/?year=${yearParam}&program=${programParam}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching CHED chart statistics:', error);
+    throw error;
+  }
+};
+
+// Fetch SUC chart statistics grouped by year for visualization
+// Returns HP (High Position), GOV (Government), PVT (Private), LOC (Local), INTL (International)
+export const fetchSUCChartStatisticsByYear = async (
+  years: string | string[] = 'ALL',
+  programs: string | string[] = 'ALL'
+) => {
+  try {
+    const yearParam = Array.isArray(years) ? years.join(',') : years;
+    const programParam = Array.isArray(programs) ? programs.join(',') : programs;
+    
+    const response = await api.get(
+      `statistics/suc-chart-by-year/?year=${yearParam}&program=${programParam}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching SUC chart statistics:', error);
+    throw error;
+  }
+};
+
+// Fetch AACUP chart statistics grouped by year for visualization
+// Returns EMP (Employed), ABS (Absorbed), HP (High Position), SE (Self-Employed), AWD (Awards)
+export const fetchAACUPChartStatisticsByYear = async (
+  years: string | string[] = 'ALL',
+  programs: string | string[] = 'ALL'
+) => {
+  try {
+    const yearParam = Array.isArray(years) ? years.join(',') : years;
+    const programParam = Array.isArray(programs) ? programs.join(',') : programs;
+    
+    const response = await api.get(
+      `statistics/aacup-chart-by-year/?year=${yearParam}&program=${programParam}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching AACUP chart statistics:', error);
+    throw error;
+  }
+};
+
+// Generate AI-powered summary for statistics using Groq API (Llama 3.1 70B)
+export const generateAISummary = async (
+  statsType: string,
+  statsData: any,
+  chartData: any[] = [],
+  yearFilter: string = 'ALL',
+  programFilter: string = 'ALL'
+) => {
+  try {
+    const response = await api.post('statistics/ai-summary/', {
+      stats_type: statsType,
+      stats_data: statsData,
+      chart_data: chartData,
+      year_filter: yearFilter,
+      program_filter: programFilter
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error generating AI summary:', error);
     throw error;
   }
 };

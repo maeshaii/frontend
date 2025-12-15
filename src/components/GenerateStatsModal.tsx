@@ -4,6 +4,11 @@ import {
   fetchAlumniEmploymentStats,
   generateSpecificStats,
   exportDetailedAlumniData,
+  fetchChartStatisticsByYear,
+  fetchCHEDChartStatisticsByYear,
+  fetchSUCChartStatisticsByYear,
+  fetchAACUPChartStatisticsByYear,
+  generateAISummary,
 } from '../services/api';
 import { api } from '../services/api';
 import { useAvailableYears } from '../hooks/useStats';
@@ -21,6 +26,10 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ComposedChart,
+  Line,
+  ReferenceLine,
+  LabelList,
 } from 'recharts';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
@@ -40,9 +49,16 @@ interface Props {
 }
 
 const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
-  const [selectedYear, setSelectedYear] = useState('ALL');
-  const [selectedProgram, setSelectedProgram] = useState('ALL');
-  const [selectedType, setSelectedType] = useState<StatsType>('ALL');
+  // Multi-select state: arrays for years, programs, and stats types
+  const [selectedYears, setSelectedYears] = useState<string[]>(['ALL']);
+  const [selectedPrograms, setSelectedPrograms] = useState<string[]>(['ALL']);
+  const [selectedTypes, setSelectedTypes] = useState<StatsType[]>(['ALL']);
+  
+  // Dropdown open state for multi-select
+  const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
+  const [programDropdownOpen, setProgramDropdownOpen] = useState(false);
+  const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  
   const [availableYears, setAvailableYears] = useState<{ year: number; count: number }[]>([]);
   const [loading, setLoading] = useState(false);
   const [generatedStats, setGeneratedStats] = useState<any>(null);
@@ -53,8 +69,27 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   const [currentChartSection, setCurrentChartSection] = useState<string>('');
   const [reportSettings, setReportSettings] = useState<any>(null);
   
+  // Chart data for year-grouped statistics (per type)
+  const [yearChartData, setYearChartData] = useState<any[]>([]);         // QPRO chart data
+  const [chedChartData, setChedChartData] = useState<any[]>([]);         // CHED chart data
+  const [sucChartData, setSucChartData] = useState<any[]>([]);           // SUC chart data
+  const [aacupChartData, setAacupChartData] = useState<any[]>([]);       // AACUP chart data
+  const [chartLoading, setChartLoading] = useState(false);
+  
+  // AI Summary state for each statistics type
+  const [aiSummaries, setAiSummaries] = useState<Record<string, string>>({});
+  const [aiSummaryLoading, setAiSummaryLoading] = useState<Record<string, boolean>>({});
+  
+  // Refs for dropdown click outside handling
+  const yearDropdownRef = useRef<HTMLDivElement>(null);
+  const programDropdownRef = useRef<HTMLDivElement>(null);
+  const typeDropdownRef = useRef<HTMLDivElement>(null);
+  
   // Track if filters changed and need to regenerate before exporting
   const [needsRegenerate, setNeedsRegenerate] = useState(true);
+  
+  // Track if AI summaries are ready for export
+  const [aiSummariesReady, setAiSummariesReady] = useState(false);
   
   // Toast notification state
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({
@@ -307,12 +342,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   // PDF FOOTER FUNCTION
   // ========================================
   // Utility function to add institutional footer to PDF
-  const addInstitutionalFooterToPDF = async (doc: jsPDF, pageWidth: number, pageHeight: number) => {
+  // Returns the final Y position after adding the footer
+  const addInstitutionalFooterToPDF = async (doc: jsPDF, pageWidth: number, pageHeight: number): Promise<number> => {
     try {
       const settings = reportSettings || {};
       
       // Check if footer is enabled
-      if (settings.footer_enabled === false) return;
+      if (settings.footer_enabled === false) return (doc as any).lastAutoTable?.finalY || 150;
       
       // Get the position of the last autoTable to determine where to place footer
       const lastTableY = (doc as any).lastAutoTable?.finalY || 150;
@@ -457,8 +493,12 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       doc.setFont('helvetica', 'normal');
       doc.text(footerText1, pageWidth / 2, currentY, { align: 'center' });
       doc.text(footerText2, pageWidth / 2, currentY + 5, { align: 'center' });
+      
+      // Return the final Y position after adding footer
+      return currentY + 15;
     } catch (error) {
       console.error('Error adding institutional footer to PDF:', error);
+      return (doc as any).lastAutoTable?.finalY || 150;
     }
   };
 
@@ -853,6 +893,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   // Refs for chart containers
   const barChartRef = useRef<HTMLDivElement>(null);
   const pieChartRef = useRef<HTMLDivElement>(null);
+  const employmentChartRef = useRef<HTMLDivElement>(null);      // QPRO chart
+  const chedChartRef = useRef<HTMLDivElement>(null);            // CHED chart
+  const sucChartRef = useRef<HTMLDivElement>(null);             // SUC chart
+  const aacupChartRef = useRef<HTMLDivElement>(null);           // AACUP chart
 
   const courseOptions = ['ALL', 'BSIT', 'BSIS', 'BIT-CT'];
   const typeOptions = [
@@ -863,6 +907,137 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     { value: 'AACUP', label: 'AACUP Statistics' },
     { value: 'HIGH_POSITION', label: 'High Position Statistics' },
   ];
+
+  // Click outside handler to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (yearDropdownRef.current && !yearDropdownRef.current.contains(event.target as Node)) {
+        setYearDropdownOpen(false);
+      }
+      if (programDropdownRef.current && !programDropdownRef.current.contains(event.target as Node)) {
+        setProgramDropdownOpen(false);
+      }
+      if (typeDropdownRef.current && !typeDropdownRef.current.contains(event.target as Node)) {
+        setTypeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Multi-select toggle handlers
+  const toggleYearSelection = (year: string) => {
+    setNeedsRegenerate(true);
+    if (year === 'ALL') {
+      setSelectedYears(['ALL']);
+    } else {
+      setSelectedYears(prev => {
+        const withoutAll = prev.filter(y => y !== 'ALL');
+        if (withoutAll.includes(year)) {
+          const newSelection = withoutAll.filter(y => y !== year);
+          return newSelection.length === 0 ? ['ALL'] : newSelection;
+        } else {
+          return [...withoutAll, year];
+        }
+      });
+    }
+  };
+
+  const toggleProgramSelection = (program: string) => {
+    setNeedsRegenerate(true);
+    if (program === 'ALL') {
+      setSelectedPrograms(['ALL']);
+    } else {
+      setSelectedPrograms(prev => {
+        const withoutAll = prev.filter(p => p !== 'ALL');
+        if (withoutAll.includes(program)) {
+          const newSelection = withoutAll.filter(p => p !== program);
+          return newSelection.length === 0 ? ['ALL'] : newSelection;
+        } else {
+          return [...withoutAll, program];
+        }
+      });
+    }
+  };
+
+  const toggleTypeSelection = (type: StatsType) => {
+    setNeedsRegenerate(true);
+    if (type === 'ALL') {
+      setSelectedTypes(['ALL']);
+    } else {
+      setSelectedTypes(prev => {
+        const withoutAll = prev.filter(t => t !== 'ALL');
+        if (withoutAll.includes(type)) {
+          const newSelection = withoutAll.filter(t => t !== type);
+          return newSelection.length === 0 ? ['ALL'] : newSelection;
+        } else {
+          return [...withoutAll, type] as StatsType[];
+        }
+      });
+    }
+  };
+
+  // Helper to get display text for multi-select
+  const getYearsDisplayText = () => {
+    if (selectedYears.includes('ALL')) return 'All Years';
+    if (selectedYears.length === 1) return selectedYears[0];
+    if (selectedYears.length === availableYears.length) return 'All Years';
+    return `${selectedYears.length} years selected`;
+  };
+
+  const getProgramsDisplayText = () => {
+    if (selectedPrograms.includes('ALL')) return 'All Programs';
+    if (selectedPrograms.length === 1) return selectedPrograms[0];
+    if (selectedPrograms.length === courseOptions.length - 1) return 'All Programs';
+    return `${selectedPrograms.length} programs selected`;
+  };
+
+  const getTypesDisplayText = () => {
+    if (selectedTypes.includes('ALL')) return 'All Statistics';
+    if (selectedTypes.length === 1) {
+      const found = typeOptions.find(t => t.value === selectedTypes[0]);
+      return found ? found.label : selectedTypes[0];
+    }
+    if (selectedTypes.length === typeOptions.length - 1) return 'All Statistics';
+    return `${selectedTypes.length} reports selected`;
+  };
+
+  // Helper to get effective values for API calls (convert multi-select to API format)
+  const getEffectiveYears = () => {
+    if (selectedYears.includes('ALL') || selectedYears.length === availableYears.length) {
+      return 'ALL';
+    }
+    return selectedYears;
+  };
+
+  const getEffectivePrograms = () => {
+    if (selectedPrograms.includes('ALL') || selectedPrograms.length === courseOptions.length - 1) {
+      return 'ALL';
+    }
+    return selectedPrograms;
+  };
+
+  const getEffectiveTypes = (): StatsType | StatsType[] => {
+    if (selectedTypes.includes('ALL') || selectedTypes.length === typeOptions.length - 1) {
+      return 'ALL';
+    }
+    return selectedTypes;
+  };
+
+  // Helper to get string representation for display/export (backward compatible with old selectedYear/selectedProgram usage)
+  const getSelectedYearDisplay = (): string => {
+    const effective = getEffectiveYears();
+    if (effective === 'ALL') return 'ALL';
+    if (Array.isArray(effective)) return effective.join(', ');
+    return effective;
+  };
+
+  const getSelectedProgramDisplay = (): string => {
+    const effective = getEffectivePrograms();
+    if (effective === 'ALL') return 'ALL';
+    if (Array.isArray(effective)) return effective.join(', ');
+    return effective;
+  };
 
   // Color schemes for charts
   const chartColors = {
@@ -900,71 +1075,130 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     setAllStats(null);
     setDetailedData(null);
     setDetailedLoading({});
+    // Reset all chart data
+    setYearChartData([]);
+    setChedChartData([]);
+    setSucChartData([]);
+    setAacupChartData([]);
+    // Clear AI summaries and reset generation session
+    setAiSummaries({});
+    setAiSummariesReady(false);
+    aiGenerationSessionRef.current = null;
+    
+    // Get effective values for API calls
+    const effectiveYears = getEffectiveYears();
+    const effectivePrograms = getEffectivePrograms();
+    const effectiveTypes = getEffectiveTypes();
+    
+    // Determine which types to fetch
+    const typesToFetch: StatsType[] = effectiveTypes === 'ALL' 
+      ? ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']
+      : Array.isArray(effectiveTypes) ? effectiveTypes : [effectiveTypes];
+    
     try {
-      if (selectedType === 'ALL') {
-        // Fetch all four types in parallel
-        const [qpro, ched, suc, aacup, highPosition] = await Promise.all([
+      // Fetch chart data for each selected type (runs in parallel)
+      const chartPromises: Promise<void>[] = [];
+      
+      // QPRO chart (always fetch if QPRO is selected)
+      if (typesToFetch.includes('QPRO') || effectiveTypes === 'ALL') {
+        chartPromises.push(
+          fetchChartStatisticsByYear(effectiveYears, effectivePrograms)
+            .then((res) => {
+              if (res?.success && res?.chart_data) {
+                setYearChartData(res.chart_data);
+              }
+            })
+            .catch((err) => console.error('Error fetching QPRO chart data:', err))
+        );
+      }
+      
+      // CHED chart
+      if (typesToFetch.includes('CHED') || effectiveTypes === 'ALL') {
+        chartPromises.push(
+          fetchCHEDChartStatisticsByYear(effectiveYears, effectivePrograms)
+            .then((res) => {
+              if (res?.success && res?.chart_data) {
+                setChedChartData(res.chart_data);
+              }
+            })
+            .catch((err) => console.error('Error fetching CHED chart data:', err))
+        );
+      }
+      
+      // SUC chart
+      if (typesToFetch.includes('SUC') || effectiveTypes === 'ALL') {
+        chartPromises.push(
+          fetchSUCChartStatisticsByYear(effectiveYears, effectivePrograms)
+            .then((res) => {
+              if (res?.success && res?.chart_data) {
+                setSucChartData(res.chart_data);
+              }
+            })
+            .catch((err) => console.error('Error fetching SUC chart data:', err))
+        );
+      }
+      
+      // AACUP chart
+      if (typesToFetch.includes('AACUP') || effectiveTypes === 'ALL') {
+        chartPromises.push(
+          fetchAACUPChartStatisticsByYear(effectiveYears, effectivePrograms)
+            .then((res) => {
+              if (res?.success && res?.chart_data) {
+                setAacupChartData(res.chart_data);
+              }
+            })
+            .catch((err) => console.error('Error fetching AACUP chart data:', err))
+        );
+      }
+      
+      // Wait for all chart data to start loading
+      const chartPromise = Promise.all(chartPromises);
+      
+      if (typesToFetch.length > 1 || effectiveTypes === 'ALL') {
+        // Fetch multiple types in parallel
+        const statsPromises = typesToFetch.map(type =>
           queryClient.fetchQuery({
             queryKey: [
               'stats',
               'generate',
-              { year: selectedYear, course: selectedProgram, type: 'QPRO' },
+              { years: effectiveYears, programs: effectivePrograms, type },
             ],
-            queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, 'QPRO'),
-          }) as Promise<AnyStats>,
-          queryClient.fetchQuery({
-            queryKey: [
-              'stats',
-              'generate',
-              { year: selectedYear, course: selectedProgram, type: 'CHED' },
-            ],
-            queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, 'CHED'),
-          }) as Promise<AnyStats>,
-          queryClient.fetchQuery({
-            queryKey: [
-              'stats',
-              'generate',
-              { year: selectedYear, course: selectedProgram, type: 'SUC' },
-            ],
-            queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, 'SUC'),
-          }) as Promise<AnyStats>,
-          queryClient.fetchQuery({
-            queryKey: [
-              'stats',
-              'generate',
-              { year: selectedYear, course: selectedProgram, type: 'AACUP' },
-            ],
-            queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, 'AACUP'),
-          }) as Promise<AnyStats>,
-          queryClient.fetchQuery({
-            queryKey: [
-              'stats',
-              'generate',
-              { year: selectedYear, course: selectedProgram, type: 'HIGH_POSITION' },
-            ],
-            queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, 'HIGH_POSITION'),
-          }) as Promise<AnyStats>,
-        ]);
-        setAllStats({ QPRO: qpro, CHED: ched, SUC: suc, AACUP: aacup, HIGH_POSITION: highPosition });
-        setGeneratedStats(null);
-        if (onGenerate) onGenerate({ QPRO: qpro, CHED: ched, SUC: suc, AACUP: aacup, HIGH_POSITION: highPosition });
+            queryFn: async () => generateSpecificStats(effectiveYears, effectivePrograms, type),
+          }) as Promise<AnyStats>
+        );
         
-        // Show success toast for all statistics
-        const totalAlumni = qpro?.total_alumni || 0;
+        const results = await Promise.all(statsPromises);
+        
+        // Build allStats object from results
+        const allStatsObj: Record<string, AnyStats> = {};
+        typesToFetch.forEach((type, index) => {
+          allStatsObj[type] = results[index];
+        });
+        
+        setAllStats(allStatsObj);
+        setGeneratedStats(null);
+        if (onGenerate) onGenerate(allStatsObj);
+        
+        // Show success toast
+        const totalAlumni = results[0]?.total_alumni || 0;
+        const typesLabel = effectiveTypes === 'ALL' ? 'all' : `${typesToFetch.length}`;
         showToast(
-          `Successfully generated all statistics for ${totalAlumni} alumni.`
+          `Successfully generated ${typesLabel} statistics for ${totalAlumni} alumni.`
         );
         
         // Enable export buttons after successful generation
         setNeedsRegenerate(false);
         
-        // Fetch detailed data for all
-        (['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION'] as StatsType[]).forEach(async (type) => {
+        // Wait for chart data to finish loading
+        await chartPromise;
+        
+        // Fetch detailed data for all selected types
+        typesToFetch.forEach(async (type) => {
           setDetailedLoading((prev) => ({ ...prev, [type]: true }));
           try {
             const res = await queryClient.fetchQuery({
-              queryKey: ['stats', 'detailed', { year: selectedYear, course: selectedProgram, type }],
-              queryFn: async () => exportDetailedAlumniData(selectedYear, selectedProgram, type),
+              queryKey: ['stats', 'detailed', { years: effectiveYears, programs: effectivePrograms, type }],
+              queryFn: async () => exportDetailedAlumniData(effectiveYears, effectivePrograms, type),
             });
             setDetailedData((prev) => ({
               ...(prev || {}),
@@ -975,40 +1209,45 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           }
         });
       } else {
+        // Single type selected
+        const singleType = typesToFetch[0];
         const stats = (await queryClient.fetchQuery({
           queryKey: [
             'stats',
             'generate',
-            { year: selectedYear, course: selectedProgram, type: selectedType },
+            { years: effectiveYears, programs: effectivePrograms, type: singleType },
           ],
-          queryFn: async () => generateSpecificStats(selectedYear, selectedProgram, selectedType),
+          queryFn: async () => generateSpecificStats(effectiveYears, effectivePrograms, singleType),
         })) as AnyStats;
         setGeneratedStats(stats);
         setAllStats(null);
         if (onGenerate) onGenerate(stats);
         // Show a proper success message for single type
         showToast(
-          `Successfully generated ${stats?.type || selectedType || 'statistics'} statistics for ${stats?.total_alumni || 'selected'} alumni.`
+          `Successfully generated ${stats?.type || singleType || 'statistics'} statistics for ${stats?.total_alumni || 'selected'} alumni.`
         );
         
         // Enable export buttons after successful generation
         setNeedsRegenerate(false);
         
+        // Wait for chart data to finish loading
+        await chartPromise;
+        
         // Fetch detailed data for the selected type
-        setDetailedLoading({ [selectedType]: true });
+        setDetailedLoading({ [singleType]: true });
         try {
           const res = await queryClient.fetchQuery({
             queryKey: [
               'stats',
               'detailed',
-              { year: selectedYear, course: selectedProgram, type: selectedType },
+              { years: effectiveYears, programs: effectivePrograms, type: singleType },
             ],
             queryFn: async () =>
-              exportDetailedAlumniData(selectedYear, selectedProgram, selectedType),
+              exportDetailedAlumniData(effectiveYears, effectivePrograms, singleType),
           });
-          setDetailedData({ [selectedType]: (res as any)?.detailed_data || [] });
+          setDetailedData({ [singleType]: (res as any)?.detailed_data || [] });
         } finally {
-          setDetailedLoading({ [selectedType]: false });
+          setDetailedLoading({ [singleType]: false });
         }
       }
     } catch (error) {
@@ -1019,8 +1258,136 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     }
   };
 
+  // Generate AI summaries for all generated statistics types
+  const generateAISummaries = async (
+    statsData: Record<string, any> | null,
+    singleStats: any | null,
+    chartDataMap: Record<string, any[]>
+  ) => {
+    const yearDisplay = getSelectedYearDisplay();
+    const programDisplay = getSelectedProgramDisplay();
+    
+    // Determine which types to generate summaries for
+    // Only generate for types that have charts (QPRO, CHED, SUC, AACUP)
+    const chartTypes = ['QPRO', 'CHED', 'SUC', 'AACUP'];
+    let typesToSummarize: string[] = [];
+    
+    if (statsData) {
+      typesToSummarize = Object.keys(statsData)
+        .filter(type => statsData[type] != null && chartTypes.includes(type));
+    } else if (singleStats && chartTypes.includes(singleStats.type)) {
+      typesToSummarize = [singleStats.type];
+    }
+    
+    console.log('Types to summarize:', typesToSummarize);
+    
+    // If no types need AI summaries (e.g., only HIGH_POSITION selected), mark as ready immediately
+    if (typesToSummarize.length === 0) {
+      console.log('No chart types to summarize, marking AI summaries as ready');
+      setAiSummariesReady(true);
+      return;
+    }
+    
+    // Generate summaries for each type in parallel
+    const summaryPromises = typesToSummarize.map(async (type) => {
+      const stats = statsData ? statsData[type] : singleStats;
+      const chartData = chartDataMap[type] || [];
+      
+      setAiSummaryLoading(prev => ({ ...prev, [type]: true }));
+      
+      try {
+        console.log(`Generating AI summary for ${type}...`);
+        const result = await generateAISummary(
+          type,
+          stats,
+          chartData,
+          yearDisplay,
+          programDisplay
+        );
+        
+        if (result.success && result.summary) {
+          console.log(`AI summary for ${type} received:`, result.summary.substring(0, 50) + '...');
+          setAiSummaries(prev => ({ ...prev, [type]: result.summary }));
+        } else {
+          console.log(`AI summary for ${type} failed:`, result);
+        }
+      } catch (error) {
+        console.error(`Error generating AI summary for ${type}:`, error);
+      } finally {
+        setAiSummaryLoading(prev => ({ ...prev, [type]: false }));
+      }
+    });
+    
+    // Wait for all summaries to complete
+    await Promise.all(summaryPromises);
+    
+    // Mark AI summaries as ready for export
+    console.log('All AI summaries generated, marking as ready');
+    setAiSummariesReady(true);
+  };
+
+  // Ref to track the current generation session to avoid duplicate calls
+  const aiGenerationSessionRef = useRef<string | null>(null);
+  
+  // Effect to generate AI summaries when stats AND chart data are available
+  useEffect(() => {
+    if (!allStats && !generatedStats) {
+      return;
+    }
+    
+    // Check if we have the relevant chart data loaded
+    const hasChartData = yearChartData.length > 0 || chedChartData.length > 0 || 
+                         sucChartData.length > 0 || aacupChartData.length > 0;
+    
+    // Only generate summaries if chart data is available
+    if (!hasChartData) {
+      console.log('Waiting for chart data to load before generating AI summaries...');
+      return;
+    }
+    
+    // Create a unique session ID based on current stats
+    const sessionId = JSON.stringify({
+      allStatsKeys: allStats ? Object.keys(allStats).sort() : null,
+      singleType: generatedStats?.type || null,
+      chartCounts: {
+        QPRO: yearChartData.length,
+        CHED: chedChartData.length,
+        SUC: sucChartData.length,
+        AACUP: aacupChartData.length
+      }
+    });
+    
+    // Skip if we've already started generating for this session
+    if (aiGenerationSessionRef.current === sessionId) {
+      console.log('AI summaries already being generated for this session, skipping...');
+      return;
+    }
+    
+    aiGenerationSessionRef.current = sessionId;
+    
+    const chartDataMap: Record<string, any[]> = {
+      'QPRO': yearChartData,
+      'CHED': chedChartData,
+      'SUC': sucChartData,
+      'AACUP': aacupChartData,
+    };
+    
+    console.log('Starting AI summary generation for types:', allStats ? Object.keys(allStats) : [generatedStats?.type]);
+    console.log('Chart data available:', {
+      QPRO: yearChartData.length,
+      CHED: chedChartData.length,
+      SUC: sucChartData.length,
+      AACUP: aacupChartData.length
+    });
+    
+    // Generate new summaries (don't clear - let them accumulate)
+    generateAISummaries(allStats, generatedStats, chartDataMap);
+    
+  }, [allStats, generatedStats, yearChartData, chedChartData, sucChartData, aacupChartData]);
+
   const handleClose = () => {
     setGeneratedStats(null);
+    setAiSummaries({});
     onClose();
   };
 
@@ -1676,12 +2043,219 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     return images;
   };
 
+  // Capture the Employment Tracing Chart (QPRO) as an image for exports
+  const captureEmploymentChart = async (): Promise<string | null> => {
+    if (!employmentChartRef.current || yearChartData.length === 0) {
+      return null;
+    }
+    
+    try {
+      const canvas = await html2canvas(employmentChartRef.current, {
+        background: '#ffffff',
+        useCORS: true,
+        allowTaint: true,
+        scale: 2,
+      } as any);
+      return canvas.toDataURL('image/png');
+    } catch (error) {
+      console.error('Error capturing employment chart:', error);
+      return null;
+    }
+  };
+
+  // Capture the CHED Chart as an image for exports
+  const captureCHEDChart = async (): Promise<string | null> => {
+    if (!chedChartRef.current || chedChartData.length === 0) {
+      return null;
+    }
+    
+    try {
+      const canvas = await html2canvas(chedChartRef.current, {
+        background: '#ffffff',
+        useCORS: true,
+        allowTaint: true,
+        scale: 2,
+      } as any);
+      return canvas.toDataURL('image/png');
+    } catch (error) {
+      console.error('Error capturing CHED chart:', error);
+      return null;
+    }
+  };
+
+  // Capture the SUC Chart as an image for exports
+  const captureSUCChart = async (): Promise<string | null> => {
+    if (!sucChartRef.current || sucChartData.length === 0) {
+      return null;
+    }
+    
+    try {
+      const canvas = await html2canvas(sucChartRef.current, {
+        background: '#ffffff',
+        useCORS: true,
+        allowTaint: true,
+        scale: 2,
+      } as any);
+      return canvas.toDataURL('image/png');
+    } catch (error) {
+      console.error('Error capturing SUC chart:', error);
+      return null;
+    }
+  };
+
+  // Capture the AACUP Chart as an image for exports
+  const captureAACUPChart = async (): Promise<string | null> => {
+    if (!aacupChartRef.current || aacupChartData.length === 0) {
+      return null;
+    }
+    
+    try {
+      const canvas = await html2canvas(aacupChartRef.current, {
+        background: '#ffffff',
+        useCORS: true,
+        allowTaint: true,
+        scale: 2,
+      } as any);
+      return canvas.toDataURL('image/png');
+    } catch (error) {
+      console.error('Error capturing AACUP chart:', error);
+      return null;
+    }
+  };
+
+  // Capture chart by type
+  const captureChartByType = async (type: string): Promise<string | null> => {
+    switch (type) {
+      case 'QPRO':
+        return captureEmploymentChart();
+      case 'CHED':
+        return captureCHEDChart();
+      case 'SUC':
+        return captureSUCChart();
+      case 'AACUP':
+        return captureAACUPChart();
+      default:
+        return captureEmploymentChart(); // Default to QPRO chart
+    }
+  };
+
+  // Add Chart to Excel Sheet (generic function for all chart types)
+  const addChartToExcel = async (
+    workbook: ExcelJS.Workbook, 
+    sheet: ExcelJS.Worksheet, 
+    startRow: number, 
+    chartType: string,
+    chartTitle: string
+  ): Promise<number> => {
+    const chartImage = await captureChartByType(chartType);
+    if (!chartImage) {
+      return startRow;
+    }
+    
+    let r = startRow;
+    
+    // Add chart title
+    sheet.getCell(`A${r}`).value = `=== ${chartTitle} ===`;
+    sheet.getCell(`A${r}`).font = { bold: true, size: 12 };
+    sheet.mergeCells(`A${r}:H${r}`);
+    r += 2;
+    
+    // Add the chart image
+    try {
+      const imageId = workbook.addImage({
+        base64: chartImage.split(',')[1],
+        extension: 'png',
+      });
+      
+      sheet.addImage(imageId, {
+        tl: { col: 0, row: r - 1 },
+        ext: { width: 700, height: 350 },
+      });
+      
+      r += 20;
+    } catch (error) {
+      console.error(`Error adding ${chartType} chart to Excel:`, error);
+    }
+    
+    // Add AI Summary if available
+    const summary = aiSummaries[chartType];
+    if (summary) {
+      // Add AI Analysis header
+      sheet.getCell(`A${r}`).value = '🤖 AI Analysis';
+      sheet.getCell(`A${r}`).font = { bold: true, size: 11, color: { argb: 'FF1D4E89' } };
+      sheet.getCell(`A${r}`).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF8F9FA' }
+      };
+      sheet.mergeCells(`A${r}:H${r}`);
+      r++;
+      
+      // Add summary text
+      sheet.getCell(`A${r}`).value = summary;
+      sheet.getCell(`A${r}`).font = { size: 10, color: { argb: 'FF495057' } };
+      sheet.getCell(`A${r}`).alignment = { wrapText: true, vertical: 'top' };
+      sheet.mergeCells(`A${r}:H${r}`);
+      sheet.getRow(r).height = 60; // Set height for wrapped text
+      r += 2;
+    }
+    
+    return r;
+  };
+
+  // Add Employment Chart to Excel Sheet (QPRO - backward compatibility)
+  const addEmploymentChartToExcel = async (workbook: ExcelJS.Workbook, sheet: ExcelJS.Worksheet, startRow: number): Promise<number> => {
+    if (yearChartData.length === 0) {
+      return startRow;
+    }
+    return addChartToExcel(workbook, sheet, startRow, 'QPRO', 'EMPLOYMENT TRACING CHART');
+  };
+
+  // Add all relevant charts to Excel based on selected types
+  const addAllChartsToExcel = async (
+    workbook: ExcelJS.Workbook, 
+    sheet: ExcelJS.Worksheet, 
+    startRow: number,
+    selectedTypes: string[]
+  ): Promise<number> => {
+    let r = startRow;
+    
+    // Add QPRO chart if selected
+    if (selectedTypes.includes('QPRO') && yearChartData.length > 0) {
+      r = await addChartToExcel(workbook, sheet, r, 'QPRO', 'QPRO EMPLOYMENT TRACING CHART');
+      r += 2;
+    }
+    
+    // Add CHED chart if selected
+    if (selectedTypes.includes('CHED') && chedChartData.length > 0) {
+      r = await addChartToExcel(workbook, sheet, r, 'CHED', 'CHED STATISTICS CHART');
+      r += 2;
+    }
+    
+    // Add SUC chart if selected
+    if (selectedTypes.includes('SUC') && sucChartData.length > 0) {
+      r = await addChartToExcel(workbook, sheet, r, 'SUC', 'SUC STATISTICS CHART');
+      r += 2;
+    }
+    
+    // Add AACUP chart if selected
+    if (selectedTypes.includes('AACUP') && aacupChartData.length > 0) {
+      r = await addChartToExcel(workbook, sheet, r, 'AACUP', 'AACUP STATISTICS CHART');
+      r += 2;
+    }
+    
+    return r;
+  };
+
   // PDF Export Utility Function
   const exportToPDF = async (
     statsByType: Record<string, any>,
     detailedDataByType: Record<string, any[]>,
     exportType: string
   ) => {
+    console.log('exportToPDF called - aiSummaries state:', JSON.stringify(aiSummaries));
+    console.log('exportToPDF - statsByType:', Object.keys(statsByType));
+    
     const doc = new jsPDF('landscape', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -1707,12 +2281,118 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     doc.setFont('helvetica', 'normal');
     doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, yPosition);
     yPosition += 6;
-    doc.text(`Year Filter: ${selectedYear || 'ALL'}`, 20, yPosition);
+    doc.text(`Year Filter: ${getSelectedYearDisplay() || 'ALL'}`, 20, yPosition);
     yPosition += 6;
-    doc.text(`Program Filter: ${selectedProgram || 'ALL'}`, 20, yPosition);
+    doc.text(`Program Filter: ${getSelectedProgramDisplay() || 'ALL'}`, 20, yPosition);
     yPosition += 6;
     doc.text(`Report Type: ${exportType}`, 20, yPosition);
     yPosition += 12;
+
+    // Capture all chart images (will be added after footer)
+    const employmentChartImage = await captureEmploymentChart();
+    const chedChartImage = await captureCHEDChart();
+    const sucChartImage = await captureSUCChart();
+    const aacupChartImage = await captureAACUPChart();
+    
+    // Helper function to add a chart to PDF
+    const addChartToPDF = (chartImage: string | null, chartTitle: string, hasData: boolean) => {
+      if (!chartImage || !hasData) return;
+      
+      const chartWidth = pageWidth - 40;
+      const chartHeight = 80;
+      
+      // Check if chart + AI summary can fit on current page (estimate ~50 for AI summary)
+      if (yPosition + chartHeight + 70 > pageHeight - 20) {
+        doc.addPage();
+        yPosition = 20;
+      }
+      
+      yPosition += 5;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(chartTitle, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 6;
+      doc.addImage(chartImage, 'PNG', 20, yPosition, chartWidth, chartHeight);
+      yPosition += chartHeight + 8; // Reduced spacing after chart
+    };
+    
+    // Helper function to add Employment Tracing Chart after footer (QPRO)
+    const addEmploymentChartAfterFooter = () => {
+      addChartToPDF(employmentChartImage, 'QPRO Employment Tracing Chart', yearChartData.length > 0);
+    };
+    
+    // Helper function to add CHED Chart after footer
+    const addCHEDChartAfterFooter = () => {
+      addChartToPDF(chedChartImage, 'CHED Statistics Chart', chedChartData.length > 0);
+    };
+    
+    // Helper function to add SUC Chart after footer
+    const addSUCChartAfterFooter = () => {
+      addChartToPDF(sucChartImage, 'SUC Statistics Chart', sucChartData.length > 0);
+    };
+    
+    // Helper function to add AACUP Chart after footer
+    const addAACUPChartAfterFooter = () => {
+      addChartToPDF(aacupChartImage, 'AACUP Statistics Chart', aacupChartData.length > 0);
+    };
+    
+    // Helper function to add all charts for multiple types export
+    const addAllChartsAfterFooter = (selectedTypes: string[]) => {
+      if (selectedTypes.includes('QPRO')) {
+        addEmploymentChartAfterFooter();
+        addAISummaryToPDF('QPRO');
+      }
+      if (selectedTypes.includes('CHED')) {
+        addCHEDChartAfterFooter();
+        addAISummaryToPDF('CHED');
+      }
+      if (selectedTypes.includes('SUC')) {
+        addSUCChartAfterFooter();
+        addAISummaryToPDF('SUC');
+      }
+      if (selectedTypes.includes('AACUP')) {
+        addAACUPChartAfterFooter();
+        addAISummaryToPDF('AACUP');
+      }
+    };
+    
+    // Helper function to add AI summary to PDF - directly after chart without page break
+    const addAISummaryToPDF = (type: string) => {
+      const summary = aiSummaries[type];
+      console.log(`Adding AI Summary for ${type}:`, summary ? 'Found' : 'Not found', aiSummaries);
+      if (!summary) return;
+      
+      // Calculate the actual height needed for the summary
+      doc.setFontSize(9);
+      const splitSummary = doc.splitTextToSize(summary, pageWidth - 50);
+      const summaryHeight = splitSummary.length * 4 + 25; // header + text + padding
+      
+      // Only add new page if absolutely necessary (not enough space for summary)
+      if (yPosition + summaryHeight > pageHeight - 15) {
+        doc.addPage();
+        yPosition = 20;
+      }
+      
+      // Add AI Analysis header with background
+      doc.setFillColor(248, 249, 250);
+      doc.roundedRect(20, yPosition, pageWidth - 40, summaryHeight, 3, 3, 'F');
+      
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(29, 78, 137);
+      doc.text('AI Analysis', 25, yPosition + 8);
+      yPosition += 14;
+      
+      // Add summary text
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(73, 80, 87);
+      doc.setFontSize(9);
+      doc.text(splitSummary, 25, yPosition);
+      yPosition += splitSummary.length * 4 + 15;
+      
+      // Reset text color
+      doc.setTextColor(0, 0, 0);
+    };
 
     // Helper function to add a new page if needed
     const checkPageBreak = (needed: number) => {
@@ -1809,7 +2489,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       yPosition = (doc as any).lastAutoTable.finalY + 10;
       
       // Add institutional footer after summary
-      await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      yPosition = await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      
+      // Add Employment Tracing Chart after footer
+      addEmploymentChartAfterFooter();
+      
+      // Add AI Summary after chart
+      addAISummaryToPDF('QPRO');
 
       // Detailed data
       const detailedData = detailedDataByType['QPRO'] || [];
@@ -1875,7 +2561,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       yPosition = (doc as any).lastAutoTable.finalY + 10;
       
       // Add institutional footer after summary
-      await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      yPosition = await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      
+      // Add CHED Chart after footer
+      addCHEDChartAfterFooter();
+      
+      // Add AI Summary after chart
+      addAISummaryToPDF('CHED');
 
       // Detailed data for CHED
       const detailedData = detailedDataByType['CHED'] || [];
@@ -1940,7 +2632,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       yPosition = (doc as any).lastAutoTable.finalY + 10;
       
       // Add institutional footer after summary
-      await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      yPosition = await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      
+      // Add AACUP Chart after footer
+      addAACUPChartAfterFooter();
+      
+      // Add AI Summary after chart
+      addAISummaryToPDF('AACUP');
 
       // Detailed data for AACUP
       const detailedData = detailedDataByType['AACUP'] || [];
@@ -2007,7 +2705,13 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       yPosition = (doc as any).lastAutoTable.finalY + 10;
       
       // Add institutional footer after summary
-      await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      yPosition = await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      
+      // Add SUC Chart after footer
+      addSUCChartAfterFooter();
+      
+      // Add AI Summary after chart
+      addAISummaryToPDF('SUC');
 
       // Detailed data for SUC
       const detailedData = detailedDataByType['SUC'] || [];
@@ -2068,7 +2772,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       yPosition = (doc as any).lastAutoTable.finalY + 10;
       
       // Add institutional footer after summary
-      await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      yPosition = await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      
+      // Add Employment Tracing Chart after footer
+      addEmploymentChartAfterFooter();
       
       // Add new page for detailed data
       doc.addPage();
@@ -2140,15 +2847,21 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             6: { cellWidth: 20 }, // Position_Current
           },
         });
-    } else if (exportType === 'ALL') {
-      // PHASE 1: Summary for all types
+    } else {
+      // Handle multiple types or ALL - only export types that exist in statsByType
+      const typesToExportPDF = Object.keys(statsByType).filter(type => statsByType[type] != null);
+      
+      // PHASE 1: Summary for selected types
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text('Complete Statistics Summary - All Types', 20, yPosition);
+      const headerText = typesToExportPDF.length === 5 
+        ? 'Complete Statistics Summary - All Types' 
+        : `Statistics Summary - ${typesToExportPDF.join(', ')}`;
+      doc.text(headerText, 20, yPosition);
       yPosition += 10;
 
-      // First loop: Add ONLY summaries for all types
-      for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
+      // First loop: Add ONLY summaries for selected types
+      for (const type of typesToExportPDF) {
         const stats = statsByType[type];
         if (!stats) continue;
 
@@ -2279,19 +2992,25 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       }
 
       // PHASE 2: Add footer BEFORE all detailed data
-      await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      yPosition = await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
+      
+      // Add all relevant charts after footer
+      addAllChartsAfterFooter(typesToExportPDF);
       
       // Add new page for detailed data
       doc.addPage();
       yPosition = 20;
 
-      // PHASE 3: Add detailed alumni data for ALL types
+      // PHASE 3: Add detailed alumni data for selected types only
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text('Detailed Alumni Data - All Types', 20, yPosition);
+      const detailHeaderText = typesToExportPDF.length === 5 
+        ? 'Detailed Alumni Data - All Types' 
+        : `Detailed Alumni Data - ${typesToExportPDF.join(', ')}`;
+      doc.text(detailHeaderText, 20, yPosition);
       yPosition += 10;
 
-      for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
+      for (const type of typesToExportPDF) {
         let detailedData = detailedDataByType[type] || [];
         if (detailedData.length === 0) continue;
         
@@ -2365,7 +3084,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     // No need to add footer here again for single type exports
 
     // Save PDF
-    const filename = `Alumni_Statistics_${exportType}_${selectedYear}_${selectedProgram}.pdf`;
+    const filename = `Alumni_Statistics_${exportType}_${getSelectedYearDisplay()}_${getSelectedProgramDisplay()}.pdf`;
     doc.save(filename);
   };
 
@@ -2624,14 +3343,14 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         new Paragraph({
           children: [
             new TextRun({ text: 'Year Filter: ', bold: true }),
-            new TextRun({ text: selectedYear || 'ALL' }),
+            new TextRun({ text: getSelectedYearDisplay() || 'ALL' }),
           ],
           spacing: { after: 100 },
         }),
         new Paragraph({
           children: [
             new TextRun({ text: 'Program Filter: ', bold: true }),
-            new TextRun({ text: selectedProgram || 'ALL' }),
+            new TextRun({ text: getSelectedProgramDisplay() || 'ALL' }),
           ],
           spacing: { after: 100 },
         }),
@@ -2643,6 +3362,112 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           spacing: { after: 400 },
         })
     );
+
+    // Capture all chart images (will be added after footer)
+    console.log(`[Word Export] Capturing charts... AI Summaries available: ${JSON.stringify(Object.keys(aiSummaries))}`);
+    const employmentChartImageWord = await captureEmploymentChart();
+    const chedChartImageWord = await captureCHEDChart();
+    const sucChartImageWord = await captureSUCChart();
+    const aacupChartImageWord = await captureAACUPChart();
+    console.log(`[Word Export] Chart captures: QPRO=${!!employmentChartImageWord}, CHED=${!!chedChartImageWord}, SUC=${!!sucChartImageWord}, AACUP=${!!aacupChartImageWord}`);
+    
+    // Generic helper function to create chart elements with AI summary
+    const createChartElements = (chartImage: string | null, chartTitle: string, hasData: boolean, statsType?: string): (Paragraph | Table)[] => {
+      const chartElements: (Paragraph | Table)[] = [];
+      console.log(`[Word Export] createChartElements for ${statsType}: chartImage=${!!chartImage}, hasData=${hasData}, aiSummary=${!!aiSummaries[statsType || '']}`);
+      if (chartImage && hasData) {
+        chartElements.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: chartTitle,
+                bold: true,
+                size: 24,
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 400, after: 200 },
+          }),
+          new Paragraph({
+            children: [
+              new ImageRun({
+                data: chartImage.split(',')[1],
+                type: 'png',
+                transformation: {
+                  width: 600,
+                  height: 300,
+                },
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 200 },
+          })
+        );
+        
+        // Add AI Summary if available
+        const summary = statsType ? aiSummaries[statsType] : null;
+        console.log(`[Word Export] AI Summary for ${statsType}: ${summary ? summary.substring(0, 50) + '...' : 'NOT FOUND'}`);
+        if (summary) {
+          chartElements.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: 'AI Analysis',
+                  bold: true,
+                  size: 20,
+                  color: '1D4E89',
+                }),
+              ],
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: summary,
+                  size: 18,
+                  color: '495057',
+                }),
+              ],
+              spacing: { after: 400 },
+            })
+          );
+        }
+      }
+      return chartElements;
+    };
+    
+    // Helper function to add QPRO Employment Tracing Chart
+    const getEmploymentChartElements = (): (Paragraph | Table)[] => {
+      return createChartElements(employmentChartImageWord, 'QPRO Employment Tracing Chart', yearChartData.length > 0, 'QPRO');
+    };
+    
+    // Helper function to add CHED Chart
+    const getCHEDChartElements = (): (Paragraph | Table)[] => {
+      console.log(`[Word Export] getCHEDChartElements: chedChartImageWord=${!!chedChartImageWord}, chedChartData.length=${chedChartData.length}, aiSummaries['CHED']=${!!aiSummaries['CHED']}`);
+      return createChartElements(chedChartImageWord, 'CHED Statistics Chart', chedChartData.length > 0, 'CHED');
+    };
+    
+    // Helper function to add SUC Chart
+    const getSUCChartElements = (): (Paragraph | Table)[] => {
+      return createChartElements(sucChartImageWord, 'SUC Statistics Chart', sucChartData.length > 0, 'SUC');
+    };
+    
+    // Helper function to add AACUP Chart
+    const getAACUPChartElements = (): (Paragraph | Table)[] => {
+      return createChartElements(aacupChartImageWord, 'AACUP Statistics Chart', aacupChartData.length > 0, 'AACUP');
+    };
+    
+    // Helper function to get all chart elements for multiple types
+    const getAllChartElements = (selectedTypes: string[]): (Paragraph | Table)[] => {
+      console.log(`[Word Export] getAllChartElements called with types: ${selectedTypes.join(', ')}`);
+      console.log(`[Word Export] Current aiSummaries state:`, Object.keys(aiSummaries));
+      const elements: (Paragraph | Table)[] = [];
+      if (selectedTypes.includes('QPRO')) elements.push(...getEmploymentChartElements());
+      if (selectedTypes.includes('CHED')) elements.push(...getCHEDChartElements());
+      if (selectedTypes.includes('SUC')) elements.push(...getSUCChartElements());
+      if (selectedTypes.includes('AACUP')) elements.push(...getAACUPChartElements());
+      return elements;
+    };
 
     // Helper function to create summary table
     const createSummaryTable = (title: string, data: string[][]): (Paragraph | Table)[] => {
@@ -3301,6 +4126,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // Add footer BEFORE detailed alumni data
       children.push(...await addWordFooter());
       
+      // Add Employment Tracing Chart after footer
+      children.push(...getEmploymentChartElements());
+      
       // Add detailed alumni data
       const detailedData = detailedDataByType['QPRO'] || [];
       children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
@@ -3317,6 +4145,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       
       // Add footer BEFORE detailed alumni data
       children.push(...await addWordFooter());
+      
+      // Add CHED Chart after footer
+      children.push(...getCHEDChartElements());
       
       // Add detailed alumni data
       const detailedData = detailedDataByType['CHED'] || [];
@@ -3337,6 +4168,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // Add footer BEFORE detailed alumni data
       children.push(...await addWordFooter());
       
+      // Add AACUP Chart after footer
+      children.push(...getAACUPChartElements());
+      
       // Add detailed alumni data
       const detailedData = detailedDataByType['AACUP'] || [];
       children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
@@ -3355,6 +4189,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // Add footer BEFORE detailed alumni data
       children.push(...await addWordFooter());
       
+      // Add SUC Chart after footer
+      children.push(...getSUCChartElements());
+      
       // Add detailed alumni data
       const detailedData = detailedDataByType['SUC'] || [];
       children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
@@ -3369,6 +4206,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       
       // Add footer BEFORE detailed alumni data
       children.push(...await addWordFooter());
+      
+      // Add Employment Tracing Chart after footer
+      children.push(...getEmploymentChartElements());
       
       // Add detailed alumni data
       let detailedData = detailedDataByType['HIGH_POSITION'] || [];
@@ -3470,9 +4310,12 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           ],
         })
       );
-    } else if (exportType === 'ALL') {
-      // PHASE 1: Summary for all types (summaries ONLY)
-      for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
+    } else {
+      // Handle multiple types or ALL - only export types that exist in statsByType
+      const typesToExportWord = Object.keys(statsByType).filter(type => statsByType[type] != null);
+      
+      // PHASE 1: Summary for selected types (summaries ONLY)
+      for (const type of typesToExportWord) {
         const stats = statsByType[type];
         if (!stats) continue;
 
@@ -3700,8 +4543,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // PHASE 2: Add footer BEFORE all detailed data
       children.push(...await addWordFooter());
 
-      // PHASE 3: Add detailed alumni data for ALL types
-      for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
+      // Add all relevant charts after footer
+      children.push(...getAllChartElements(typesToExportWord));
+
+      // PHASE 3: Add detailed alumni data for selected types only
+      for (const type of typesToExportWord) {
         let detailedData = detailedDataByType[type] || [];
         if (detailedData.length === 0) continue;
         
@@ -3812,7 +4658,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
 
     // Generate and save
     const blob = await Packer.toBlob(doc);
-    const filename = `Alumni_Statistics_${exportType}_${selectedYear}_${selectedProgram}.docx`;
+    const filename = `Alumni_Statistics_${exportType}_${getSelectedYearDisplay()}_${getSelectedProgramDisplay()}.docx`;
     saveAs(blob, filename);
   };
 
@@ -3823,10 +4669,14 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // Get detailed alumni data for export
       let detailedDataByType: Record<string, any[]> = {};
       let statsByType: Record<string, any> = {};
-      if (allStats) {
-        // For ALL, fetch for each type
-        for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
-          const res = await exportDetailedAlumniData(selectedYear, selectedProgram, type);
+      
+      // Determine which types to export based on what was actually generated
+      const typesToExport = allStats ? Object.keys(allStats).filter(type => allStats[type] != null) : [];
+      
+      if (allStats && typesToExport.length > 0) {
+        // Only export types that were actually generated (selected by user)
+        for (const type of typesToExport) {
+          const res = await exportDetailedAlumniData(getEffectiveYears(), getEffectivePrograms(), type);
           detailedDataByType[type] = res.detailed_data || [];
           
           // Use stats from allStats if available, otherwise use stats from the API response
@@ -3854,26 +4704,32 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           
           statsByType[type] = stats;
         }
-      } else {
+      } else if (generatedStats) {
         const res = await exportDetailedAlumniData(
-          selectedYear,
-          selectedProgram,
+          getEffectiveYears(),
+          getEffectivePrograms(),
           generatedStats.type
         );
         detailedDataByType[generatedStats.type] = res.detailed_data || [];
         statsByType[generatedStats.type] = generatedStats;
       }
 
-      // Determine export type name
-      const exportType = allStats ? 'ALL' : (generatedStats?.type || 'ALL');
+      // Determine export type name based on what was actually selected
+      const exportType = allStats 
+        ? (typesToExport.length === 5 ? 'ALL' : typesToExport.join('_'))
+        : (generatedStats?.type || 'ALL');
 
       // Route to appropriate export function based on format
       if (format === 'pdf') {
+        console.log('Exporting PDF with aiSummaries:', aiSummaries);
         await exportToPDF(statsByType, detailedDataByType, exportType);
         setExporting(false);
         showToast('PDF exported successfully!');
         return;
       } else if (format === 'word') {
+        console.log('[Word Export] Starting Word export...');
+        console.log('[Word Export] aiSummaries state:', JSON.stringify(aiSummaries));
+        console.log('[Word Export] Chart data lengths: QPRO=' + yearChartData.length + ', CHED=' + chedChartData.length + ', SUC=' + sucChartData.length + ', AACUP=' + aacupChartData.length);
         await exportToWord(statsByType, detailedDataByType, exportType);
         setExporting(false);
         showToast('Word document exported successfully!');
@@ -3894,10 +4750,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = getSelectedYearDisplay() || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL';
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = getSelectedProgramDisplay() || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
@@ -4031,6 +4887,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         // Add institutional footer BEFORE detailed data
         r = await addInstitutionalFooterToExcel(workbook, sheet, r);
         r += 2; // Add spacing after footer
+        
+        // Add Employment Tracing Chart after footer
+        r = await addEmploymentChartToExcel(workbook, sheet, r);
+        r += 2;
 
         sheet.getCell(`A${r}`).value = 'QPRO Detailed Alumni Data'; r++;
         const headerRow = sheet.addRow(qproHeaders);
@@ -4053,7 +4913,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `QPRO_Complete_Report_${selectedYear}_${selectedProgram}.xlsx`;
+        link.download = `QPRO_Complete_Report_${getSelectedYearDisplay()}_${getSelectedProgramDisplay()}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -4072,10 +4932,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = getSelectedYearDisplay() || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL';
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = getSelectedProgramDisplay() || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
@@ -4119,6 +4979,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r = await addInstitutionalFooterToExcel(workbook, sheet, r);
         r += 2; // Add spacing after footer
 
+        // Add CHED Chart after footer
+        r = await addChartToExcel(workbook, sheet, r, 'CHED', 'CHED STATISTICS CHART');
+        r += 2;
+
         // Detailed
         sheet.getCell(`A${r}`).value = 'CHED Detailed Alumni Data'; r++;
         const headerRow = sheet.addRow(qproHeaders);
@@ -4141,7 +5005,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `CHED_Complete_Report_${selectedYear}_${selectedProgram}.xlsx`;
+        link.download = `CHED_Complete_Report_${getSelectedYearDisplay()}_${getSelectedProgramDisplay()}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -4160,10 +5024,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = getSelectedYearDisplay() || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL';
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = getSelectedProgramDisplay() || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
@@ -4212,6 +5076,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r = await addInstitutionalFooterToExcel(workbook, sheet, r);
         r += 2; // Add spacing after footer
 
+        // Add AACUP Chart after footer
+        r = await addChartToExcel(workbook, sheet, r, 'AACUP', 'AACUP STATISTICS CHART');
+        r += 2;
+
         // Detailed
         sheet.getCell(`A${r}`).value = 'AACUP Detailed Alumni Data'; r++;
         const headerRow = sheet.addRow(qproHeaders);
@@ -4234,7 +5102,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `AACUP_Complete_Report_${selectedYear}_${selectedProgram}.xlsx`;
+        link.download = `AACUP_Complete_Report_${getSelectedYearDisplay()}_${getSelectedProgramDisplay()}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -4253,10 +5121,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = getSelectedYearDisplay() || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL';
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = getSelectedProgramDisplay() || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
@@ -4282,6 +5150,14 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r += 1;
         r++; // spacing before detailed section
 
+        // Add institutional footer BEFORE detailed data
+        r = await addInstitutionalFooterToExcel(workbook, sheet, r);
+        r += 2; // Add spacing after footer
+
+        // Add Employment Tracing Chart after footer
+        r = await addEmploymentChartToExcel(workbook, sheet, r);
+        r += 2;
+
         // Detailed: only high-position alumni with limited columns
         // Always show detailed data section for consistency
         const headersHP = ['Program','Last_Name','First_Name','Middle_Name','Company_Name_Current','Position_Current'];
@@ -4297,10 +5173,6 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           };
         });
         r++;
-
-        // Add institutional footer BEFORE detailed data
-        r = await addInstitutionalFooterToExcel(workbook, sheet, r);
-        r += 2; // Add spacing after footer
 
         const rows: any[] = [];
         if (generatedStats.high_position_data && Array.isArray(generatedStats.high_position_data)) {
@@ -4383,7 +5255,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `HIGH_POSITION_Complete_Report_${selectedYear}_${selectedProgram}.xlsx`;
+        link.download = `HIGH_POSITION_Complete_Report_${getSelectedYearDisplay()}_${getSelectedProgramDisplay()}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -4402,10 +5274,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         sheet.getCell(`A${r}`).value = 'Generated Date'; sheet.getCell(`B${r}`).value = new Date().toLocaleDateString();
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = selectedYear || 'ALL';
+        sheet.getCell(`A${r}`).value = 'Year Filter'; sheet.getCell(`B${r}`).value = getSelectedYearDisplay() || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r++;
-        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = selectedProgram || 'ALL';
+        sheet.getCell(`A${r}`).value = 'Program Filter'; sheet.getCell(`B${r}`).value = getSelectedProgramDisplay() || 'ALL';
         sheet.getCell(`A${r}`).font = { bold: true };
         r += 2;
         sheet.getCell(`A${r}`).value = '=== SUMMARY STATISTICS ==='; r++;
@@ -4457,6 +5329,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         r = await addInstitutionalFooterToExcel(workbook, sheet, r);
         r += 2; // Add spacing after footer
 
+        // Add SUC Chart after footer
+        r = await addChartToExcel(workbook, sheet, r, 'SUC', 'SUC STATISTICS CHART');
+        r += 2;
+
         // Detailed
         sheet.getCell(`A${r}`).value = 'SUC Detailed Alumni Data'; r++;
         const headerRow = sheet.addRow(qproHeaders);
@@ -4479,7 +5355,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `SUC_Complete_Report_${selectedYear}_${selectedProgram}.xlsx`;
+        link.download = `SUC_Complete_Report_${getSelectedYearDisplay()}_${getSelectedProgramDisplay()}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -4500,16 +5376,17 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         worksheet.getCell(`A${rowIdx}`).font = { bold: true };
         rowIdx++;
         worksheet.getCell(`A${rowIdx}`).value = `Year Filter`;
-        worksheet.getCell(`B${rowIdx}`).value = selectedYear || 'All';
+        worksheet.getCell(`B${rowIdx}`).value = getSelectedYearDisplay() || 'All';
         worksheet.getCell(`A${rowIdx}`).font = { bold: true };
         rowIdx++;
         worksheet.getCell(`A${rowIdx}`).value = `Program Filter`;
-        worksheet.getCell(`B${rowIdx}`).value = selectedProgram || 'All';
+        worksheet.getCell(`B${rowIdx}`).value = getSelectedProgramDisplay() || 'All';
         worksheet.getCell(`A${rowIdx}`).font = { bold: true };
         rowIdx += 2;
         
-        // PHASE 1: Add ONLY summaries for all types
-        for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
+        // PHASE 1: Add ONLY summaries for selected types (only types that exist in statsByType)
+        const typesToExportExcel = Object.keys(statsByType).filter(type => statsByType[type] != null);
+        for (const type of typesToExportExcel) {
           const stats = statsByType[type];
           if (!stats) {
             console.warn(`No stats found for type: ${type}`);
@@ -4828,13 +5705,21 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         rowIdx = await addInstitutionalFooterToExcel(workbook, worksheet, rowIdx);
         rowIdx += 2; // Add spacing after footer
         
-        // PHASE 3: Add detailed data for ALL types
-        worksheet.getCell(`A${rowIdx}`).value = '=== DETAILED ALUMNI DATA - ALL TYPES ===';
+        // Add all relevant charts after footer
+        rowIdx = await addAllChartsToExcel(workbook, worksheet, rowIdx, typesToExportExcel);
+        rowIdx += 2;
+        
+        // PHASE 3: Add detailed data for selected types only
+        const headerText = typesToExportExcel.length === 5 
+          ? '=== DETAILED ALUMNI DATA - ALL TYPES ===' 
+          : `=== DETAILED ALUMNI DATA - ${typesToExportExcel.join(', ')} ===`;
+        worksheet.getCell(`A${rowIdx}`).value = headerText;
         worksheet.getCell(`A${rowIdx}`).font = { bold: true, size: 12 };
         rowIdx += 2;
         
-        for (const type of ['QPRO', 'CHED', 'SUC', 'AACUP', 'HIGH_POSITION']) {
+        for (const type of typesToExportExcel) {
           const stats = statsByType[type];
+          if (!stats) continue;
           // Skip all chart images in ALL export
           // Build tailored detailed tables per type
           const rows = detailedDataByType[type] as any[];
@@ -4890,11 +5775,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             hpDetailSheet.getCell(`A${hpDetailRowIdx}`).font = { bold: true };
             hpDetailRowIdx++;
             hpDetailSheet.getCell(`A${hpDetailRowIdx}`).value = 'Year Filter';
-            hpDetailSheet.getCell(`B${hpDetailRowIdx}`).value = selectedYear || 'ALL';
+            hpDetailSheet.getCell(`B${hpDetailRowIdx}`).value = getSelectedYearDisplay() || 'ALL';
             hpDetailSheet.getCell(`A${hpDetailRowIdx}`).font = { bold: true };
             hpDetailRowIdx++;
             hpDetailSheet.getCell(`A${hpDetailRowIdx}`).value = 'Program Filter';
-            hpDetailSheet.getCell(`B${hpDetailRowIdx}`).value = selectedProgram || 'ALL';
+            hpDetailSheet.getCell(`B${hpDetailRowIdx}`).value = getSelectedProgramDisplay() || 'ALL';
             hpDetailSheet.getCell(`A${hpDetailRowIdx}`).font = { bold: true };
             hpDetailRowIdx += 2;
             
@@ -4974,11 +5859,11 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
               detailRowIdx++;
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Year Filter';
-              detailSheet.getCell(`B${detailRowIdx}`).value = selectedYear || 'ALL';
+              detailSheet.getCell(`B${detailRowIdx}`).value = getSelectedYearDisplay() || 'ALL';
               detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
               detailRowIdx++;
               detailSheet.getCell(`A${detailRowIdx}`).value = 'Program Filter';
-              detailSheet.getCell(`B${detailRowIdx}`).value = selectedProgram || 'ALL';
+              detailSheet.getCell(`B${detailRowIdx}`).value = getSelectedProgramDisplay() || 'ALL';
               detailSheet.getCell(`A${detailRowIdx}`).font = { bold: true };
               detailRowIdx += 2;
             
@@ -5333,7 +6218,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `${allStats ? 'All' : generatedStats?.type || 'All'}_Complete_Report_${selectedYear}_${selectedProgram}.xlsx`;
+      link.download = `${allStats ? 'All' : generatedStats?.type || 'All'}_Complete_Report_${getSelectedYearDisplay()}_${getSelectedProgramDisplay()}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -5491,68 +6376,156 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   return (
     <div style={modalOverlay} onClick={handleClose}>
       <div style={modalContent} onClick={(e) => e.stopPropagation()}>
+        {/* Fixed Header Section - doesn't scroll */}
+        <div style={{ padding: '30px 30px 20px 30px', position: 'relative', flexShrink: 0, overflow: 'visible' }}>
         <button style={closeButton} onClick={handleClose}>
           &times;
         </button>
         <h2 style={modalTitle}>Generate Statistics</h2>
 
-        <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-          <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', gap: 16, marginBottom: 20, position: 'relative', zIndex: 100 }}>
+            {/* Multi-select Year Dropdown */}
+            <div style={{ flex: 1, position: 'relative', zIndex: 9999 }} ref={yearDropdownRef}>
             <label style={label}>Year:</label>
-            <select
-              value={selectedYear}
-              onChange={(e) => {
-                setSelectedYear(e.target.value);
-                setNeedsRegenerate(true);
+            <div
+              onClick={() => setYearDropdownOpen(!yearDropdownOpen)}
+              style={{
+                ...dropdown,
+                cursor: 'pointer',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                userSelect: 'none',
               }}
-              style={dropdown}
             >
-              <option value="ALL">All Years</option>
+              <span>{getYearsDisplayText()}</span>
+              <span style={{ marginLeft: 8, fontSize: 10 }}>{yearDropdownOpen ? '▲' : '▼'}</span>
+            </div>
+            {yearDropdownOpen && (
+              <div style={multiSelectDropdown}>
+                <div
+                  style={multiSelectOption(selectedYears.includes('ALL'))}
+                  onClick={() => toggleYearSelection('ALL')}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedYears.includes('ALL')}
+                    onChange={() => {}}
+                    style={{ marginRight: 8 }}
+                  />
+                  All Years
+                </div>
               {availableYears.map((year) => (
-                <option key={year.year} value={year.year}>
+                  <div
+                    key={year.year}
+                    style={multiSelectOption(selectedYears.includes(String(year.year)))}
+                    onClick={() => toggleYearSelection(String(year.year))}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedYears.includes(String(year.year))}
+                      onChange={() => {}}
+                      style={{ marginRight: 8 }}
+                    />
                   {year.year} ({year.count} alumni)
-                </option>
+                  </div>
               ))}
-            </select>
           </div>
-          <div style={{ flex: 1 }}>
+            )}
+          </div>
+          
+          {/* Spacer between Year and Program */}
+          <div style={{ width: 24 }} />
+          
+          {/* Multi-select Program Dropdown */}
+          <div style={{ flex: 1, position: 'relative', zIndex: 9999 }} ref={programDropdownRef}>
             <label style={label}>Program:</label>
-            <select
-              value={selectedProgram}
-              onChange={(e) => {
-                setSelectedProgram(e.target.value);
-                setNeedsRegenerate(true);
+            <div
+              onClick={() => setProgramDropdownOpen(!programDropdownOpen)}
+              style={{
+                ...dropdown,
+                cursor: 'pointer',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                userSelect: 'none',
               }}
-              style={dropdown}
             >
+              <span>{getProgramsDisplayText()}</span>
+              <span style={{ marginLeft: 8, fontSize: 10 }}>{programDropdownOpen ? '▲' : '▼'}</span>
+            </div>
+            {programDropdownOpen && (
+              <div style={multiSelectDropdown}>
               {courseOptions.map((course) => (
-                <option key={course} value={course}>
+                  <div
+                    key={course}
+                    style={multiSelectOption(
+                      course === 'ALL' ? selectedPrograms.includes('ALL') : selectedPrograms.includes(course)
+                    )}
+                    onClick={() => toggleProgramSelection(course)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={course === 'ALL' ? selectedPrograms.includes('ALL') : selectedPrograms.includes(course)}
+                      onChange={() => {}}
+                      style={{ marginRight: 8 }}
+                    />
                   {course === 'ALL' ? 'All Programs' : course}
-                </option>
+                  </div>
               ))}
-            </select>
+              </div>
+            )}
           </div>
         </div>
 
-        <div style={{ marginBottom: 6 }}>
+        <div style={{ marginBottom: 8, marginTop: 8 }}>
           <label style={{ ...label, marginBottom: 0 }}>Statistics Report:</label>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-          <div style={{ flex: 1 }}>
-            <select
-              value={selectedType}
-              onChange={(e) => {
-                setSelectedType(e.target.value as StatsType);
-                setNeedsRegenerate(true);
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, position: 'relative', zIndex: 50 }}>
+          {/* Multi-select Statistics Type Dropdown */}
+          <div style={{ flex: '0 0 200px', position: 'relative', zIndex: 9999, marginRight: 20 }} ref={typeDropdownRef}>
+            <div
+              onClick={() => setTypeDropdownOpen(!typeDropdownOpen)}
+              style={{
+                ...dropdown,
+                width: '100%',
+                cursor: 'pointer',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                userSelect: 'none',
               }}
-              style={{ ...dropdown, width: '100%' }}
             >
+              <span>{getTypesDisplayText()}</span>
+              <span style={{ marginLeft: 8, fontSize: 10 }}>{typeDropdownOpen ? '▲' : '▼'}</span>
+            </div>
+            {typeDropdownOpen && (
+              <div style={multiSelectDropdown}>
               {typeOptions.map((type) => (
-                <option key={type.value} value={type.value}>
+                  <div
+                    key={type.value}
+                    style={multiSelectOption(
+                      type.value === 'ALL' 
+                        ? selectedTypes.includes('ALL') 
+                        : selectedTypes.includes(type.value as StatsType)
+                    )}
+                    onClick={() => toggleTypeSelection(type.value as StatsType)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        type.value === 'ALL' 
+                          ? selectedTypes.includes('ALL') 
+                          : selectedTypes.includes(type.value as StatsType)
+                      }
+                      onChange={() => {}}
+                      style={{ marginRight: 8 }}
+                    />
                   {type.label}
-                </option>
+                  </div>
               ))}
-            </select>
+              </div>
+            )}
           </div>
           <button
             style={{
@@ -5563,38 +6536,38 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               cursor: (exporting || loading || needsRegenerate) ? 'not-allowed' : 'pointer'
             }}
             onClick={() => handleExportCompleteData('excel')}
-            disabled={exporting || loading || needsRegenerate}
-            title={needsRegenerate ? 'Please click Generate first' : 'Export data to Excel format'}
+            disabled={exporting || loading || needsRegenerate || !aiSummariesReady}
+            title={needsRegenerate ? 'Please click Generate first' : !aiSummariesReady ? 'Waiting for AI Analysis to complete...' : 'Export data to Excel format'}
           >
-            {exporting ? '⏳ Exporting...' : '📊 Export Excel'}
+            {exporting ? '⏳ Exporting...' : !aiSummariesReady && !needsRegenerate ? '⏳ AI Loading...' : '📊 Export Excel'}
           </button>
           <button
             style={{
               ...exportButton, 
               backgroundColor: '#dc3545', 
               marginRight: '8px',
-              opacity: (exporting || loading || needsRegenerate) ? 0.5 : 1,
-              cursor: (exporting || loading || needsRegenerate) ? 'not-allowed' : 'pointer'
+              opacity: (exporting || loading || needsRegenerate || !aiSummariesReady) ? 0.5 : 1,
+              cursor: (exporting || loading || needsRegenerate || !aiSummariesReady) ? 'not-allowed' : 'pointer'
             }}
             onClick={() => handleExportCompleteData('pdf')}
-            disabled={exporting || loading || needsRegenerate}
-            title={needsRegenerate ? 'Please click Generate first' : 'Export data to PDF format'}
+            disabled={exporting || loading || needsRegenerate || !aiSummariesReady}
+            title={needsRegenerate ? 'Please click Generate first' : !aiSummariesReady ? 'Waiting for AI Analysis to complete...' : 'Export data to PDF format'}
           >
-            {exporting ? '⏳ Exporting...' : '📄 Export PDF'}
+            {exporting ? '⏳ Exporting...' : !aiSummariesReady && !needsRegenerate ? '⏳ AI Loading...' : '📄 Export PDF'}
           </button>
           <button
             style={{
               ...exportButton, 
               backgroundColor: '#0d6efd', 
               marginRight: '8px',
-              opacity: (exporting || loading || needsRegenerate) ? 0.5 : 1,
-              cursor: (exporting || loading || needsRegenerate) ? 'not-allowed' : 'pointer'
+              opacity: (exporting || loading || needsRegenerate || !aiSummariesReady) ? 0.5 : 1,
+              cursor: (exporting || loading || needsRegenerate || !aiSummariesReady) ? 'not-allowed' : 'pointer'
             }}
             onClick={() => handleExportCompleteData('word')}
-            disabled={exporting || loading || needsRegenerate}
-            title={needsRegenerate ? 'Please click Generate first' : 'Export data to Word format'}
+            disabled={exporting || loading || needsRegenerate || !aiSummariesReady}
+            title={needsRegenerate ? 'Please click Generate first' : !aiSummariesReady ? 'Waiting for AI Analysis to complete...' : 'Export data to Word format'}
           >
-            {exporting ? '⏳ Exporting...' : '📝 Export Word'}
+            {exporting ? '⏳ Exporting...' : !aiSummariesReady && !needsRegenerate ? '⏳ AI Loading...' : '📝 Export Word'}
           </button>
           <button
             style={generateButton}
@@ -5604,7 +6577,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             Generate
           </button>
         </div>
+        </div>
 
+        {/* Scrollable Content Section - for generated stats */}
+        <div style={{ padding: '0 30px 30px 30px', overflowY: 'auto', flex: 1 }}>
         {allStats && (
           <div style={{
             display: 'grid',
@@ -5620,6 +6596,585 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           </div>
         )}
         {generatedStats && !allStats && renderSummarySection(generatedStats.type, generatedStats)}
+
+        {/* QPRO Employment Tracing Chart - Visible in Modal */}
+        {yearChartData.length > 0 && (allStats?.QPRO || generatedStats?.type === 'QPRO') && (
+          <div 
+            ref={employmentChartRef}
+            style={{
+              marginTop: 24,
+              marginBottom: 24,
+              padding: 20,
+              background: '#ffffff',
+              borderRadius: 8,
+              border: '1px solid #e9ecef',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            }}
+          >
+            <h3 style={{ 
+              color: '#1D4E89', 
+              marginBottom: 16, 
+              textAlign: 'center',
+              fontSize: 16,
+              fontWeight: 600,
+            }}>
+              CTU Employment Tracing - {getSelectedProgramDisplay() === 'ALL' ? 'All Programs' : getSelectedProgramDisplay()}
+            </h3>
+            <ResponsiveContainer width="100%" height={350}>
+              <ComposedChart
+                data={yearChartData.map(d => ({
+                  ...d,
+                  // Add display values with minimum height for visibility
+                  E_display: d.E === 0 ? 0.15 : d.E,
+                  UE_display: d.UE === 0 ? 0.15 : d.UE,
+                  NT_display: d.NT === 0 ? 0.15 : d.NT,
+                  // Keep original values for tooltip and labels
+                  E_original: d.E,
+                  UE_original: d.UE,
+                  NT_original: d.NT,
+                }))}
+                margin={{ top: 35, right: 60, left: 20, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                <XAxis 
+                  dataKey="year" 
+                  tick={{ fontSize: 12, fill: '#666' }}
+                  axisLine={{ stroke: '#ccc' }}
+                />
+                <YAxis 
+                  yAxisId="left"
+                  tick={{ fontSize: 12, fill: '#666' }}
+                  axisLine={{ stroke: '#ccc' }}
+                  label={{ 
+                    value: 'Count', 
+                    angle: -90, 
+                    position: 'insideLeft',
+                    style: { textAnchor: 'middle', fill: '#666', fontSize: 12 }
+                  }}
+                />
+                <YAxis 
+                  yAxisId="right" 
+                  orientation="right"
+                  domain={[0, 100]}
+                  tick={{ fontSize: 12, fill: '#666' }}
+                  axisLine={{ stroke: '#ccc' }}
+                  label={{ 
+                    value: 'Rate %', 
+                    angle: 90, 
+                    position: 'insideRight',
+                    style: { textAnchor: 'middle', fill: '#666', fontSize: 12 }
+                  }}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'rgba(255,255,255,0.95)', 
+                    border: '1px solid #ccc',
+                    borderRadius: 8,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                  }}
+                  formatter={(value: any, name: string, props: any) => {
+                    if (name === 'GT') return [`${value}%`, 'Tracking Rate'];
+                    // Use original values for tooltip display
+                    const labels: Record<string, string> = {
+                      'E_display': 'Employed',
+                      'UE_display': 'Unemployed', 
+                      'NT_display': 'Not Tracked'
+                    };
+                    const originalKeys: Record<string, string> = {
+                      'E_display': 'E_original',
+                      'UE_display': 'UE_original',
+                      'NT_display': 'NT_original'
+                    };
+                    const originalValue = props.payload[originalKeys[name]] ?? value;
+                    return [originalValue, labels[name] || name];
+                  }}
+                />
+                <Legend 
+                  wrapperStyle={{ paddingTop: 10 }}
+                  formatter={(value: string) => {
+                    const labels: Record<string, string> = {
+                      'E_display': 'E (Employed)',
+                      'UE_display': 'UE (Unemployed)',
+                      'NT_display': 'NT (Not Tracked)',
+                      'GT': 'GT (Tracking Rate %)'
+                    };
+                    return labels[value] || value;
+                  }}
+                />
+                <Bar 
+                  yAxisId="left" 
+                  dataKey="E_display" 
+                  name="E_display"
+                  fill="#00CED1" 
+                  radius={[4, 4, 0, 0]}
+                  barSize={30}
+                >
+                  <LabelList 
+                    dataKey="E_original" 
+                    position="top" 
+                    style={{ fontSize: 11, fontWeight: 'bold', fill: '#00CED1' }}
+                  />
+                </Bar>
+                <Bar 
+                  yAxisId="left" 
+                  dataKey="UE_display" 
+                  name="UE_display"
+                  fill="#FF1493" 
+                  radius={[4, 4, 0, 0]}
+                  barSize={30}
+                >
+                  <LabelList 
+                    dataKey="UE_original" 
+                    position="top" 
+                    style={{ fontSize: 11, fontWeight: 'bold', fill: '#FF1493' }}
+                  />
+                </Bar>
+                <Bar 
+                  yAxisId="left" 
+                  dataKey="NT_display" 
+                  name="NT_display"
+                  fill="#008B8B" 
+                  radius={[4, 4, 0, 0]}
+                  barSize={30}
+                >
+                  <LabelList 
+                    dataKey="NT_original" 
+                    position="top" 
+                    style={{ fontSize: 11, fontWeight: 'bold', fill: '#008B8B' }}
+                  />
+                </Bar>
+                <Line 
+                  yAxisId="right"
+                  type="monotone" 
+                  dataKey="GT" 
+                  name="GT"
+                  stroke="#FFD700" 
+                  strokeWidth={3}
+                  dot={{ fill: '#FFD700', strokeWidth: 2, r: 6 }}
+                  activeDot={{ r: 8, strokeWidth: 2 }}
+                  label={({ x, y, value, index }: any) => {
+                    const year = yearChartData[index]?.year || '';
+                    const dataPoint = yearChartData[index];
+                    
+                    // Calculate dynamic offset based on whether bars are tall or short
+                    // If GT line is near the top (high %), position label above
+                    // If GT line is near the bottom (low %), position label to the side
+                    const gtValue = value as number;
+                    
+                    let labelX: number;
+                    let labelY: number;
+                    
+                    if (gtValue >= 50) {
+                      // High tracking rate - position label above and to the right
+                      labelX = (x as number) + 50;
+                      labelY = (y as number) - 20;
+                    } else if (gtValue >= 20) {
+                      // Medium tracking rate - position to the upper right
+                      labelX = (x as number) + 55;
+                      labelY = (y as number) - 10;
+                    } else {
+                      // Low tracking rate - check if bars are tall
+                      const maxBarValue = Math.max(
+                        dataPoint?.E || 0,
+                        dataPoint?.UE || 0,
+                        dataPoint?.NT || 0
+                      );
+                      if (maxBarValue > 0) {
+                        // Bars exist, position to the right side
+                        labelX = (x as number) + 60;
+                        labelY = (y as number);
+                      } else {
+                        // No significant bars, position above
+                        labelX = (x as number) + 50;
+                        labelY = (y as number) - 15;
+                      }
+                    }
+                    
+                    return (
+                      <g>
+                        <rect
+                          x={labelX - 40}
+                          y={labelY - 10}
+                          width={80}
+                          height={18}
+                          fill="#FFD700"
+                          rx={3}
+                          ry={3}
+                        />
+                        <text
+                          x={labelX}
+                          y={labelY + 3}
+                          textAnchor="middle"
+                          fill="#8B0000"
+                          fontSize={11}
+                          fontWeight="bold"
+                        >
+                          {`${year}, ${value}%`}
+                        </text>
+                      </g>
+                    );
+                  }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        
+        {/* AI Summary for QPRO - Outside chart container */}
+        {yearChartData.length > 0 && (allStats?.QPRO || generatedStats?.type === 'QPRO') && (
+          <div style={{
+            marginTop: 16,
+            marginBottom: 24,
+            padding: 16,
+            background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+            borderRadius: 8,
+            border: '1px solid #dee2e6',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 16, marginRight: 8 }}>🤖</span>
+              <strong style={{ color: '#1D4E89', fontSize: 13 }}>AI Analysis</strong>
+            </div>
+            {aiSummaryLoading['QPRO'] ? (
+              <div style={{ color: '#666', fontSize: 13, fontStyle: 'italic' }}>
+                Generating AI summary...
+              </div>
+            ) : aiSummaries['QPRO'] ? (
+              <p style={{ 
+                color: '#495057', 
+                fontSize: 13, 
+                lineHeight: 1.6, 
+                margin: 0,
+                textAlign: 'justify'
+              }}>
+                {aiSummaries['QPRO']}
+              </p>
+            ) : (
+              <div style={{ color: '#999', fontSize: 13, fontStyle: 'italic' }}>
+                AI summary will appear here once generated...
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* CHED Statistics Chart */}
+        {chedChartData.length > 0 && (allStats?.CHED || generatedStats?.type === 'CHED') && (
+          <div 
+            ref={chedChartRef}
+            style={{
+              marginTop: 24,
+              marginBottom: 24,
+              padding: 20,
+              background: '#ffffff',
+              borderRadius: 8,
+              border: '1px solid #e9ecef',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            }}
+          >
+            <h3 style={{ 
+              color: '#1D4E89', 
+              marginBottom: 16, 
+              textAlign: 'center',
+              fontSize: 16,
+              fontWeight: 600,
+            }}>
+              CHED Statistics Chart - {getSelectedProgramDisplay() === 'ALL' ? 'All Programs' : getSelectedProgramDisplay()}
+            </h3>
+            <ResponsiveContainer width="100%" height={350}>
+              <ComposedChart
+                data={chedChartData.map(d => ({
+                  ...d,
+                  PFS_display: d.PFS === 0 ? 0.15 : d.PFS,
+                  JA_display: d.JA === 0 ? 0.15 : d.JA,
+                  SE_display: d.SE === 0 ? 0.15 : d.SE,
+                  PFS_original: d.PFS,
+                  JA_original: d.JA,
+                  SE_original: d.SE,
+                }))}
+                margin={{ top: 35, right: 30, left: 20, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#666' }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 12, fill: '#666' }} label={{ value: 'Count', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#666', fontSize: 12 } }} />
+                <Tooltip 
+                  formatter={(value: any, name: string, props: any) => {
+                    const labels: Record<string, string> = { 'PFS_display': 'Pursuing Further Study', 'JA_display': 'Job Alignment', 'SE_display': 'Self-Employed' };
+                    const originalKeys: Record<string, string> = { 'PFS_display': 'PFS_original', 'JA_display': 'JA_original', 'SE_display': 'SE_original' };
+                    return [props.payload[originalKeys[name]] ?? value, labels[name] || name];
+                  }}
+                />
+                <Legend formatter={(value: string) => {
+                  const labels: Record<string, string> = { 'PFS_display': 'PFS (Pursuing Further Study)', 'JA_display': 'JA (Job Alignment)', 'SE_display': 'SE (Self-Employed)' };
+                  return labels[value] || value;
+                }} />
+                <Bar yAxisId="left" dataKey="PFS_display" name="PFS_display" fill="#9B59B6" radius={[4, 4, 0, 0]} barSize={30}>
+                  <LabelList dataKey="PFS_original" position="top" style={{ fontSize: 11, fontWeight: 'bold', fill: '#9B59B6' }} />
+                </Bar>
+                <Bar yAxisId="left" dataKey="JA_display" name="JA_display" fill="#3498DB" radius={[4, 4, 0, 0]} barSize={30}>
+                  <LabelList dataKey="JA_original" position="top" style={{ fontSize: 11, fontWeight: 'bold', fill: '#3498DB' }} />
+                </Bar>
+                <Bar yAxisId="left" dataKey="SE_display" name="SE_display" fill="#E67E22" radius={[4, 4, 0, 0]} barSize={30}>
+                  <LabelList dataKey="SE_original" position="top" style={{ fontSize: 11, fontWeight: 'bold', fill: '#E67E22' }} />
+                </Bar>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        
+        {/* AI Summary for CHED - Outside chart container */}
+        {chedChartData.length > 0 && (allStats?.CHED || generatedStats?.type === 'CHED') && (
+          <div style={{
+            marginTop: 16,
+            marginBottom: 24,
+            padding: 16,
+            background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+            borderRadius: 8,
+            border: '1px solid #dee2e6',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 16, marginRight: 8 }}>🤖</span>
+              <strong style={{ color: '#1D4E89', fontSize: 13 }}>AI Analysis</strong>
+            </div>
+            {aiSummaryLoading['CHED'] ? (
+              <div style={{ color: '#666', fontSize: 13, fontStyle: 'italic' }}>
+                Generating AI summary...
+              </div>
+            ) : aiSummaries['CHED'] ? (
+              <p style={{ 
+                color: '#495057', 
+                fontSize: 13, 
+                lineHeight: 1.6, 
+                margin: 0,
+                textAlign: 'justify'
+              }}>
+                {aiSummaries['CHED']}
+              </p>
+            ) : (
+              <div style={{ color: '#999', fontSize: 13, fontStyle: 'italic' }}>
+                AI summary will appear here once generated...
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SUC Statistics Chart */}
+        {sucChartData.length > 0 && (allStats?.SUC || generatedStats?.type === 'SUC') && (
+          <div 
+            ref={sucChartRef}
+            style={{
+              marginTop: 24,
+              marginBottom: 24,
+              padding: 20,
+              background: '#ffffff',
+              borderRadius: 8,
+              border: '1px solid #e9ecef',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            }}
+          >
+            <h3 style={{ 
+              color: '#1D4E89', 
+              marginBottom: 16, 
+              textAlign: 'center',
+              fontSize: 16,
+              fontWeight: 600,
+            }}>
+              SUC Statistics Chart - {getSelectedProgramDisplay() === 'ALL' ? 'All Programs' : getSelectedProgramDisplay()}
+            </h3>
+            <ResponsiveContainer width="100%" height={350}>
+              <ComposedChart
+                data={sucChartData.map(d => ({
+                  ...d,
+                  HP_display: d.HP === 0 ? 0.15 : d.HP,
+                  GOV_display: d.GOV === 0 ? 0.15 : d.GOV,
+                  PVT_display: d.PVT === 0 ? 0.15 : d.PVT,
+                  LOC_display: d.LOC === 0 ? 0.15 : d.LOC,
+                  INTL_display: d.INTL === 0 ? 0.15 : d.INTL,
+                  HP_original: d.HP,
+                  GOV_original: d.GOV,
+                  PVT_original: d.PVT,
+                  LOC_original: d.LOC,
+                  INTL_original: d.INTL,
+                }))}
+                margin={{ top: 35, right: 30, left: 20, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#666' }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 12, fill: '#666' }} label={{ value: 'Count', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#666', fontSize: 12 } }} />
+                <Tooltip 
+                  formatter={(value: any, name: string, props: any) => {
+                    const labels: Record<string, string> = { 'HP_display': 'High Position', 'GOV_display': 'Government', 'PVT_display': 'Private', 'LOC_display': 'Local', 'INTL_display': 'International' };
+                    const originalKeys: Record<string, string> = { 'HP_display': 'HP_original', 'GOV_display': 'GOV_original', 'PVT_display': 'PVT_original', 'LOC_display': 'LOC_original', 'INTL_display': 'INTL_original' };
+                    return [props.payload[originalKeys[name]] ?? value, labels[name] || name];
+                  }}
+                />
+                <Legend formatter={(value: string) => {
+                  const labels: Record<string, string> = { 'HP_display': 'HP (High Position)', 'GOV_display': 'GOV (Government)', 'PVT_display': 'PVT (Private)', 'LOC_display': 'LOC (Local)', 'INTL_display': 'INTL (International)' };
+                  return labels[value] || value;
+                }} />
+                <Bar yAxisId="left" dataKey="HP_display" name="HP_display" fill="#E74C3C" radius={[4, 4, 0, 0]} barSize={20}>
+                  <LabelList dataKey="HP_original" position="top" style={{ fontSize: 10, fontWeight: 'bold', fill: '#E74C3C' }} />
+                </Bar>
+                <Bar yAxisId="left" dataKey="GOV_display" name="GOV_display" fill="#2ECC71" radius={[4, 4, 0, 0]} barSize={20}>
+                  <LabelList dataKey="GOV_original" position="top" style={{ fontSize: 10, fontWeight: 'bold', fill: '#2ECC71' }} />
+                </Bar>
+                <Bar yAxisId="left" dataKey="PVT_display" name="PVT_display" fill="#3498DB" radius={[4, 4, 0, 0]} barSize={20}>
+                  <LabelList dataKey="PVT_original" position="top" style={{ fontSize: 10, fontWeight: 'bold', fill: '#3498DB' }} />
+                </Bar>
+                <Bar yAxisId="left" dataKey="LOC_display" name="LOC_display" fill="#F39C12" radius={[4, 4, 0, 0]} barSize={20}>
+                  <LabelList dataKey="LOC_original" position="top" style={{ fontSize: 10, fontWeight: 'bold', fill: '#F39C12' }} />
+                </Bar>
+                <Bar yAxisId="left" dataKey="INTL_display" name="INTL_display" fill="#9B59B6" radius={[4, 4, 0, 0]} barSize={20}>
+                  <LabelList dataKey="INTL_original" position="top" style={{ fontSize: 10, fontWeight: 'bold', fill: '#9B59B6' }} />
+                </Bar>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        
+        {/* AI Summary for SUC - Outside chart container */}
+        {sucChartData.length > 0 && (allStats?.SUC || generatedStats?.type === 'SUC') && (
+          <div style={{
+            marginTop: 16,
+            marginBottom: 24,
+            padding: 16,
+            background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+            borderRadius: 8,
+            border: '1px solid #dee2e6',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 16, marginRight: 8 }}>🤖</span>
+              <strong style={{ color: '#1D4E89', fontSize: 13 }}>AI Analysis</strong>
+            </div>
+            {aiSummaryLoading['SUC'] ? (
+              <div style={{ color: '#666', fontSize: 13, fontStyle: 'italic' }}>
+                Generating AI summary...
+              </div>
+            ) : aiSummaries['SUC'] ? (
+              <p style={{ 
+                color: '#495057', 
+                fontSize: 13, 
+                lineHeight: 1.6, 
+                margin: 0,
+                textAlign: 'justify'
+              }}>
+                {aiSummaries['SUC']}
+              </p>
+            ) : (
+              <div style={{ color: '#999', fontSize: 13, fontStyle: 'italic' }}>
+                AI summary will appear here once generated...
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* AACUP Statistics Chart */}
+        {aacupChartData.length > 0 && (allStats?.AACUP || generatedStats?.type === 'AACUP') && (
+          <div 
+            ref={aacupChartRef}
+            style={{
+              marginTop: 24,
+              marginBottom: 24,
+              padding: 20,
+              background: '#ffffff',
+              borderRadius: 8,
+              border: '1px solid #e9ecef',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            }}
+          >
+            <h3 style={{ 
+              color: '#1D4E89', 
+              marginBottom: 16, 
+              textAlign: 'center',
+              fontSize: 16,
+              fontWeight: 600,
+            }}>
+              AACUP Statistics Chart - {getSelectedProgramDisplay() === 'ALL' ? 'All Programs' : getSelectedProgramDisplay()}
+            </h3>
+            <ResponsiveContainer width="100%" height={350}>
+              <ComposedChart
+                data={aacupChartData.map(d => ({
+                  ...d,
+                  EMP_display: d.EMP === 0 ? 0.15 : d.EMP,
+                  ABS_display: d.ABS === 0 ? 0.15 : d.ABS,
+                  HP_display: d.HP === 0 ? 0.15 : d.HP,
+                  SE_display: d.SE === 0 ? 0.15 : d.SE,
+                  AWD_display: d.AWD === 0 ? 0.15 : d.AWD,
+                  EMP_original: d.EMP,
+                  ABS_original: d.ABS,
+                  HP_original: d.HP,
+                  SE_original: d.SE,
+                  AWD_original: d.AWD,
+                }))}
+                margin={{ top: 35, right: 30, left: 20, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#666' }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 12, fill: '#666' }} label={{ value: 'Count', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#666', fontSize: 12 } }} />
+                <Tooltip 
+                  formatter={(value: any, name: string, props: any) => {
+                    const labels: Record<string, string> = { 'EMP_display': 'Employed', 'ABS_display': 'Absorbed', 'HP_display': 'High Position', 'SE_display': 'Self-Employed', 'AWD_display': 'Awards Received' };
+                    const originalKeys: Record<string, string> = { 'EMP_display': 'EMP_original', 'ABS_display': 'ABS_original', 'HP_display': 'HP_original', 'SE_display': 'SE_original', 'AWD_display': 'AWD_original' };
+                    return [props.payload[originalKeys[name]] ?? value, labels[name] || name];
+                  }}
+                />
+                <Legend formatter={(value: string) => {
+                  const labels: Record<string, string> = { 'EMP_display': 'EMP (Employed)', 'ABS_display': 'ABS (Absorbed)', 'HP_display': 'HP (High Position)', 'SE_display': 'SE (Self-Employed)', 'AWD_display': 'AWD (Awards Received)' };
+                  return labels[value] || value;
+                }} />
+                <Bar yAxisId="left" dataKey="EMP_display" name="EMP_display" fill="#00CED1" radius={[4, 4, 0, 0]} barSize={20}>
+                  <LabelList dataKey="EMP_original" position="top" style={{ fontSize: 10, fontWeight: 'bold', fill: '#00CED1' }} />
+                </Bar>
+                <Bar yAxisId="left" dataKey="ABS_display" name="ABS_display" fill="#2ECC71" radius={[4, 4, 0, 0]} barSize={20}>
+                  <LabelList dataKey="ABS_original" position="top" style={{ fontSize: 10, fontWeight: 'bold', fill: '#2ECC71' }} />
+                </Bar>
+                <Bar yAxisId="left" dataKey="HP_display" name="HP_display" fill="#E74C3C" radius={[4, 4, 0, 0]} barSize={20}>
+                  <LabelList dataKey="HP_original" position="top" style={{ fontSize: 10, fontWeight: 'bold', fill: '#E74C3C' }} />
+                </Bar>
+                <Bar yAxisId="left" dataKey="SE_display" name="SE_display" fill="#F39C12" radius={[4, 4, 0, 0]} barSize={20}>
+                  <LabelList dataKey="SE_original" position="top" style={{ fontSize: 10, fontWeight: 'bold', fill: '#F39C12' }} />
+                </Bar>
+                <Bar yAxisId="left" dataKey="AWD_display" name="AWD_display" fill="#9B59B6" radius={[4, 4, 0, 0]} barSize={20}>
+                  <LabelList dataKey="AWD_original" position="top" style={{ fontSize: 10, fontWeight: 'bold', fill: '#9B59B6' }} />
+                </Bar>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        
+        {/* AI Summary for AACUP - Outside chart container */}
+        {aacupChartData.length > 0 && (allStats?.AACUP || generatedStats?.type === 'AACUP') && (
+          <div style={{
+            marginTop: 16,
+            marginBottom: 24,
+            padding: 16,
+            background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+            borderRadius: 8,
+            border: '1px solid #dee2e6',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 16, marginRight: 8 }}>🤖</span>
+              <strong style={{ color: '#1D4E89', fontSize: 13 }}>AI Analysis</strong>
+            </div>
+            {aiSummaryLoading['AACUP'] ? (
+              <div style={{ color: '#666', fontSize: 13, fontStyle: 'italic' }}>
+                Generating AI summary...
+              </div>
+            ) : aiSummaries['AACUP'] ? (
+              <p style={{ 
+                color: '#495057', 
+                fontSize: 13, 
+                lineHeight: 1.6, 
+                margin: 0,
+                textAlign: 'justify'
+              }}>
+                {aiSummaries['AACUP']}
+              </p>
+            ) : (
+              <div style={{ color: '#999', fontSize: 13, fontStyle: 'italic' }}>
+                AI summary will appear here once generated...
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Hidden chart containers for image generation */}
         {chartData && (
@@ -5671,6 +7226,7 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Toast Notification */}
@@ -5719,14 +7275,14 @@ const modalOverlay: React.CSSProperties = {
 
 const modalContent: React.CSSProperties = {
   backgroundColor: 'white',
-  padding: '30px',
   borderRadius: '15px',
   minWidth: '600px',
   maxWidth: '900px',
   position: 'relative',
   boxShadow: '0 4px 24px rgba(0,0,0,0.15)',
-  maxHeight: '80vh', // Add this line
-  overflowY: 'auto', // Add this line
+  maxHeight: '85vh',
+  display: 'flex',
+  flexDirection: 'column',
 };
 
 const closeButton: React.CSSProperties = {
@@ -5880,5 +7436,31 @@ const generateButton: React.CSSProperties = {
 };
 
 const td = { padding: 8, border: '1px solid #dee2e6', textAlign: 'center' as const };
+
+// Multi-select dropdown styles
+const multiSelectDropdown: React.CSSProperties = {
+  position: 'absolute',
+  top: '100%',
+  left: 0,
+  right: 0,
+  backgroundColor: 'white',
+  border: '1px solid #ddd',
+  borderRadius: '8px',
+  boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+  zIndex: 9999,
+  marginTop: '4px',
+  minWidth: '200px',
+};
+
+const multiSelectOption = (isSelected: boolean): React.CSSProperties => ({
+  padding: '10px 12px',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  backgroundColor: isSelected ? '#e8f4fd' : 'white',
+  borderBottom: '1px solid #f0f0f0',
+  transition: 'background-color 0.15s ease',
+  fontSize: '14px',
+});
 
 export default GenerateStatsModal;
