@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Sidebar from '../global/sidebar';
-import { fetchOJTByYear, approveCoordinatorRequest, fetchCoordinatorRequestsCount } from '../../../services/api';
+import { fetchAlumniByYear } from '../../../services/api';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { broadcastCoordinatorRequestCount } from '../utils/requestBadge';
 import { toast } from '../../../utils/toast';
@@ -9,24 +9,22 @@ const RequestDetailsPage: React.FC = () => {
   const { year } = useParams<{ year: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const [ojtRows, setOjtRows] = useState<any[]>([]);
+  const [alumniRows, setAlumniRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
-  const [showApproveModal, setShowApproveModal] = useState(false);
-  const [approving, setApproving] = useState(false);
   
   // Get course filter from URL parameters
   const urlParams = new URLSearchParams(location.search);
   const selectedCourse = urlParams.get('course') || 'ALL';
 
   const filteredRows = useMemo(() => {
-    let filtered = ojtRows;
+    let filtered = alumniRows;
     
     // Filter by course
     if (selectedCourse !== 'ALL') {
       filtered = filtered.filter((r) => {
-        const course = (r.course || '').toLowerCase();
+        const course = (r.program || r.course || '').toLowerCase();
         return course.includes(selectedCourse.toLowerCase());
       });
     }
@@ -35,26 +33,37 @@ const RequestDetailsPage: React.FC = () => {
     const q = (search || '').toLowerCase().trim();
     if (q) {
       filtered = filtered.filter((r) => {
-        const first = (r.first_name || (r.name ? r.name.split(' ')[0] : '') || '').toLowerCase();
-        const last = (r.last_name || (r.name ? r.name.split(' ').slice(-1)[0] : '') || '').toLowerCase();
-        const company = (r.company || '').toLowerCase();
-        const ctu = String(r.ctu_id || r.id || '').toLowerCase();
-        return first.includes(q) || last.includes(q) || company.includes(q) || ctu.includes(q);
+        const first = (r.first_name || r.f_name || (r.name ? r.name.split(' ')[0] : '') || '').toLowerCase();
+        const last = (r.last_name || r.l_name || (r.name ? r.name.split(' ').slice(-1)[0] : '') || '').toLowerCase();
+        const ctu = String(r.ctu_id || r.id || r.acc_username || '').toLowerCase();
+        return first.includes(q) || last.includes(q) || ctu.includes(q);
       });
     }
     
     return filtered;
-  }, [ojtRows, search, selectedCourse]);
+  }, [alumniRows, search, selectedCourse]);
 
   useEffect(() => {
-    const loadOJTData = async () => {
+    const loadAlumniData = async () => {
       if (year) {
         try {
-          const data = await fetchOJTByYear(year);
-          setOjtRows(Array.isArray(data?.ojt_data) ? data.ojt_data : []);
+          // Fetch newly converted alumni for this year (converted in last 7 days)
+          const data = await fetchAlumniByYear(year);
+          // Filter to only show recently converted alumni (last 7 days)
+          const recentAlumni = Array.isArray(data?.alumni) ? data.alumni.filter((alum: any) => {
+            // Check if user was updated recently (within last 7 days)
+            if (alum.updated_at) {
+              const updatedDate = new Date(alum.updated_at);
+              const sevenDaysAgo = new Date();
+              sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+              return updatedDate >= sevenDaysAgo;
+            }
+            return true; // Include if no updated_at field
+          }) : [];
+          setAlumniRows(recentAlumni);
         } catch (error) {
-          console.error('Error loading OJT data:', error);
-          setOjtRows([]);
+          console.error('Error loading alumni data:', error);
+          setAlumniRows([]);
         } finally {
           setLoading(false);
         }
@@ -64,15 +73,14 @@ const RequestDetailsPage: React.FC = () => {
     };
 
     // Initial load
-    loadOJTData();
+    loadAlumniData();
 
-    // Set up real-time polling to refresh data every 10 seconds
-    // This ensures admin sees new data sent from coordinators immediately
+    // Refresh data every 30 seconds to see new conversions
     const pollInterval = setInterval(() => {
       if (year) {
-        loadOJTData();
+        loadAlumniData();
       }
-    }, 10000); // Poll every 10 seconds
+    }, 30000); // Poll every 30 seconds
 
     // Cleanup interval on unmount or when dependencies change
     return () => {
@@ -80,86 +88,7 @@ const RequestDetailsPage: React.FC = () => {
     };
   }, [year]);
 
-  const downloadPasswords = (passwords: any[]) => {
-    // Create CSV content
-    const csvContent = [
-      'Username,Password,Name',
-      ...passwords.map(p => `${p.username},${p.password},"${p.name}"`)
-    ].join('\n');
-    
-    // Create and download file
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `alumni_passwords_${year}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleApprove = async () => {
-    if (!year) return;
-    setShowApproveModal(true);
-  };
-
-  const confirmApprove = async () => {
-    if (!year) return;
-    
-    setApproving(true);
-    try {
-      const res = await approveCoordinatorRequest(parseInt(year));
-      if (res?.success) {
-        toast.success(`Successfully approved ${res.approved} students from Class of ${year}!`);
-        
-        // Download passwords file if available
-        if (res.passwords && res.passwords.length > 0) {
-          downloadPasswords(res.passwords);
-          toast.success(`Password file downloaded successfully! ${res.passwords.length} alumni accounts created.`);
-        }
-        
-        try {
-          const updatedCountResponse = await fetchCoordinatorRequestsCount();
-          const updatedCount = Number(updatedCountResponse?.count) || 0;
-          broadcastCoordinatorRequestCount(updatedCount);
-        } catch (err) {
-          console.warn('Failed to refresh coordinator request count after approval:', err);
-          broadcastCoordinatorRequestCount(0);
-        }
-
-        setShowApproveModal(false);
-        // Navigate back to requests list - the card should now be gone since status changed to "Approved"
-        // Force a page reload to ensure fresh data
-        window.location.href = '/requests';
-      } else {
-        toast.error('Approval failed. Please try again.');
-        setShowApproveModal(false);
-      }
-    } catch (error) {
-      console.error('Approval error:', error);
-      toast.error('Approval failed. Please try again.');
-      setShowApproveModal(false);
-    } finally {
-      setApproving(false);
-    }
-  };
-
-  const completedRows = filteredRows.filter((r) => 
-    (r.ojt_status || 'Ongoing') === 'Completed' && !r.is_alumni
-  );
-
-  // Debug logging
-  console.log('🔍 Admin Debug - All filtered rows:', filteredRows.map(r => ({
-    name: r.name,
-    ojt_status: r.ojt_status,
-    is_alumni: r.is_alumni
-  })));
-  console.log('🔍 Admin Debug - Completed rows for approval:', completedRows.map(r => ({
-    name: r.name,
-    ojt_status: r.ojt_status,
-    is_alumni: r.is_alumni
-  })));
+  // All filtered rows are newly converted alumni (no approval needed)
 
   // Refined, neat styling
   const styles = {
@@ -305,9 +234,9 @@ const RequestDetailsPage: React.FC = () => {
       <Sidebar />
       <div className="admin-content-page" style={styles.pageContainer}>
         <div style={styles.header}>
-          <h2 style={styles.title}>Class of {year} - OJT Details</h2>
+          <h2 style={styles.title}>Class of {year} - New Alumni</h2>
           <div style={styles.subtitle}>
-            Review and approve completed OJT students
+            View recently converted alumni (automatically converted from completed OJT students)
           </div>
         </div>
 
@@ -317,7 +246,7 @@ const RequestDetailsPage: React.FC = () => {
           </div>
           <input
             type="text"
-            placeholder="Search by name, company, or CTU ID..."
+            placeholder="Search by name or CTU ID..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={styles.searchInput}
@@ -358,12 +287,12 @@ const RequestDetailsPage: React.FC = () => {
                 <tr>
                   <th style={styles.th}>Last Name</th>
                   <th style={styles.th}>First Name</th>
-                  <th style={styles.th}>Company</th>
-                  <th style={{ ...styles.th, textAlign: 'center' }}>OJT Status</th>
+                  <th style={styles.th}>Course</th>
+                  <th style={{ ...styles.th, textAlign: 'center' }}>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {completedRows.length === 0 ? (
+                {filteredRows.length === 0 ? (
                   <tr>
                     <td colSpan={4} style={{ 
                       textAlign: 'center', 
@@ -372,19 +301,19 @@ const RequestDetailsPage: React.FC = () => {
                       fontSize: '14px',
                       backgroundColor: 'white'
                     }}>
-                      No completed OJT data found for this year.
+                      No newly converted alumni found for this year.
                     </td>
                   </tr>
                 ) : (
-                   completedRows.map((ojt, idx) => (
+                   filteredRows.map((alum, idx) => (
                      <tr
-                       key={ojt.id}
+                       key={alum.id || alum.user_id}
                        style={{ 
                          ...(idx % 2 === 1 ? styles.rowEven : { backgroundColor: 'white' }), 
                          cursor: 'pointer',
                          transition: 'background-color 0.15s ease',
                        }}
-                       onClick={() => setSelectedStudent(ojt)}
+                       onClick={() => setSelectedStudent(alum)}
                        onMouseEnter={(e) => {
                          e.currentTarget.style.backgroundColor = '#f1f5f9';
                        }}
@@ -392,26 +321,26 @@ const RequestDetailsPage: React.FC = () => {
                          e.currentTarget.style.backgroundColor = idx % 2 === 1 ? '#fafbfc' : 'white';
                        }}
                      >
-                       <td style={{...styles.td, borderBottom: idx === completedRows.length - 1 ? 'none' : '1px solid #f1f5f9'}}>
-                         {ojt.last_name || (ojt.name ? ojt.name.split(' ').slice(-1)[0] : '')}
+                       <td style={{...styles.td, borderBottom: idx === filteredRows.length - 1 ? 'none' : '1px solid #f1f5f9'}}>
+                         {alum.last_name || alum.l_name || (alum.name ? alum.name.split(' ').slice(-1)[0] : '')}
                        </td>
-                       <td style={{...styles.td, borderBottom: idx === completedRows.length - 1 ? 'none' : '1px solid #f1f5f9'}}>
-                         {ojt.first_name || (ojt.name ? ojt.name.split(' ')[0] : '')}
+                       <td style={{...styles.td, borderBottom: idx === filteredRows.length - 1 ? 'none' : '1px solid #f1f5f9'}}>
+                         {alum.first_name || alum.f_name || (alum.name ? alum.name.split(' ')[0] : '')}
                        </td>
-                       <td style={{...styles.td, borderBottom: idx === completedRows.length - 1 ? 'none' : '1px solid #f1f5f9'}}>
-                         {ojt.company || ''}
+                       <td style={{...styles.td, borderBottom: idx === filteredRows.length - 1 ? 'none' : '1px solid #f1f5f9'}}>
+                         {alum.program || alum.course || 'N/A'}
                        </td>
-                       <td style={{...styles.status, borderBottom: idx === completedRows.length - 1 ? 'none' : '1px solid #f1f5f9'}}>
+                       <td style={{...styles.status, borderBottom: idx === filteredRows.length - 1 ? 'none' : '1px solid #f1f5f9'}}>
                          <span style={{
                            display: 'inline-block',
                            padding: '6px 12px',
-                           backgroundColor: '#d1fae5',
-                           color: '#059669',
+                           backgroundColor: '#dbeafe',
+                           color: '#1e40af',
                            borderRadius: '6px',
                            fontSize: '12px',
                            fontWeight: 600,
                          }}>
-                           Completed
+                           Alumni
                          </span>
                        </td>
                      </tr>
@@ -435,144 +364,14 @@ const RequestDetailsPage: React.FC = () => {
           >
             ← Back
           </button>
-          <button
-            onClick={handleApprove}
-            disabled={completedRows.length === 0}
-            style={completedRows.length > 0 ? styles.approveButton : styles.approveButtonDisabled}
-            onMouseEnter={(e) => {
-              if (completedRows.length > 0) {
-                e.currentTarget.style.background = '#4c5ee8';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(90, 109, 254, 0.3)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (completedRows.length > 0) {
-                e.currentTarget.style.background = '#5A6DFE';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(90, 109, 254, 0.2)';
-              }
-            }}
-          >
-            Approve ({completedRows.length})
-          </button>
         </div>
-
-        {/* Approval Confirmation Modal */}
-        {showApproveModal && (
-          <div 
-            style={{ 
-              position: 'fixed', 
-              inset: 0, 
-              background: 'rgba(0,0,0,0.5)', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              zIndex: 1000,
-              padding: '20px'
-            }}
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !approving) {
-                setShowApproveModal(false);
-              }
-            }}
-          >
-            <div 
-              style={{ 
-                background: 'white', 
-                width: '500px', 
-                maxWidth: '95%', 
-                borderRadius: '12px', 
-                padding: '28px', 
-                boxShadow: '0 20px 60px rgba(0,0,0,0.15)'
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div style={{ marginBottom: '20px' }}>
-                <h3 style={{ fontSize: '20px', fontWeight: 700, margin: 0, color: '#1f2937', marginBottom: '12px' }}>
-                  Confirm Approval
-                </h3>
-                <div style={{ height: 1, background: '#e5e7eb', marginBottom: '16px' }}></div>
-                <p style={{ fontSize: '15px', lineHeight: 1.6, color: '#4b5563', margin: 0 }}>
-                  Are you sure you want to approve all completed OJT students for <strong>Class of {year}</strong>?
-                </p>
-              </div>
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
-                <button
-                  onClick={() => {
-                    if (!approving) {
-                      setShowApproveModal(false);
-                    }
-                  }}
-                  disabled={approving}
-                  style={{
-                    padding: '10px 20px',
-                    borderRadius: '8px',
-                    border: '1px solid #d1d5db',
-                    background: '#f9fafb',
-                    color: '#374151',
-                    cursor: approving ? 'not-allowed' : 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    transition: 'all 0.2s',
-                    opacity: approving ? 0.6 : 1
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!approving) {
-                      e.currentTarget.style.background = '#f3f4f6';
-                      e.currentTarget.style.borderColor = '#9ca3af';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!approving) {
-                      e.currentTarget.style.background = '#f9fafb';
-                      e.currentTarget.style.borderColor = '#d1d5db';
-                    }
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmApprove}
-                  disabled={approving}
-                  style={{
-                    padding: '10px 20px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: approving ? '#9ca3af' : '#5A6DFE',
-                    color: 'white',
-                    cursor: approving ? 'not-allowed' : 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    transition: 'all 0.2s',
-                    boxShadow: approving ? 'none' : '0 2px 4px rgba(90, 109, 254, 0.2)'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!approving) {
-                      e.currentTarget.style.background = '#4f63e2';
-                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(90, 109, 254, 0.3)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!approving) {
-                      e.currentTarget.style.background = '#5A6DFE';
-                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(90, 109, 254, 0.2)';
-                    }
-                  }}
-                >
-                  {approving ? 'Approving...' : 'Confirm & Approve'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Student Details Modal */}
         {selectedStudent && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
             <div style={{ background: 'white', width: '560px', maxWidth: '96%', borderRadius: '14px', padding: '22px 24px', boxShadow: '0 20px 40px rgba(0,0,0,0.25)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '12px', margin: 0 }}>OJT Details</h3>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '12px', margin: 0 }}>Alumni Details</h3>
                 <button 
                   onClick={() => setSelectedStudent(null)} 
                   style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#f3f4f6', cursor: 'pointer' }}

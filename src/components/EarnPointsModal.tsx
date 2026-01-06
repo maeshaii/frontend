@@ -41,6 +41,27 @@ const EarnPointsModal: React.FC<EarnPointsModalProps> = ({ isOpen, onClose }) =>
       const response = await getPointsTasks();
       if (response.success) {
         setTasks(response.tasks || []);
+        
+        // If points were awarded, refresh points display
+        if (response.points_awarded && response.points_awarded > 0) {
+          // Dispatch event to refresh points in profile
+          const userStr = localStorage.getItem('user');
+          if (userStr) {
+            try {
+              const currentUser = JSON.parse(userStr);
+              if (currentUser && currentUser.id) {
+                window.dispatchEvent(new CustomEvent('pointsUpdated', { 
+                  detail: { 
+                    userId: currentUser.id,
+                    points: null // Will trigger refresh
+                  } 
+                }));
+              }
+            } catch (e) {
+              console.error('Error parsing user data:', e);
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching points tasks:', error);
@@ -85,6 +106,27 @@ const EarnPointsModal: React.FC<EarnPointsModalProps> = ({ isOpen, onClose }) =>
     // Examples: "Make 10 posts" -> "Make posts", "Comment on 5 posts" -> "Comment on posts"
     return title.replace(/\d+/g, '').replace(/\s+/g, ' ').trim();
   };
+
+const SHORT_DESCRIPTIONS: Record<string, string> = {
+  milestone_post: 'Make a post',
+  milestone_share: 'Share a post',
+  milestone_like: 'Like a post',
+  milestone_comment: 'Comment on a post',
+  milestone_follow: 'Follow someone',
+  milestone_image_post: 'Post with an image'
+};
+
+const getShortTaskCopy = (task: PointsTask) => {
+  // Normalize task_type so milestone variants like milestone_post_10 map to milestone_post
+  const normalizedType = task.task_type.replace(/\d+/g, '').replace(/_+$/g, '').trim();
+  const shortTitle = removeNumbersFromTitle(task.title);
+  const shortDescription =
+    task.is_completed
+      ? 'Completed'
+      : SHORT_DESCRIPTIONS[normalizedType] || SHORT_DESCRIPTIONS[task.task_type] || task.description;
+
+  return { shortTitle, shortDescription };
+};
 
 
   if (!isOpen) return null;
@@ -192,102 +234,106 @@ const EarnPointsModal: React.FC<EarnPointsModalProps> = ({ isOpen, onClose }) =>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {tasks.map((task) => (
-                <div
-                  key={task.task_id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '12px',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                    backgroundColor: task.is_completed ? '#f9fafb' : 'white'
-                  }}
-                >
-                  {/* Icon */}
+              {tasks.map((task) => {
+                const { shortTitle, shortDescription } = getShortTaskCopy(task);
+
+                return (
                   <div
+                    key={task.task_id}
                     style={{
-                      width: '48px',
-                      height: '48px',
-                      borderRadius: '50%',
-                      backgroundColor: task.is_completed ? '#d1d5db' : '#fef3c7',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      color: task.is_completed ? '#6b7280' : '#f59e0b',
-                      flexShrink: 0
+                      gap: '12px',
+                      padding: '12px',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      backgroundColor: task.is_completed ? '#f9fafb' : 'white'
                     }}
                   >
-                    {getIcon(task.icon_name)}
-                  </div>
-
-                  {/* Task Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {/* Icon */}
                     <div
                       style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '50%',
+                        backgroundColor: task.is_completed ? '#d1d5db' : '#fef3c7',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '8px',
-                        marginBottom: '4px'
+                        justifyContent: 'center',
+                        color: task.is_completed ? '#6b7280' : '#f59e0b',
+                        flexShrink: 0
                       }}
                     >
+                      {getIcon(task.icon_name)}
+                    </div>
+
+                    {/* Task Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         style={{
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          color: '#111827',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis'
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '8px',
+                          marginBottom: '4px'
                         }}
                       >
-                        {removeNumbersFromTitle(task.title)}
+                        <div
+                          style={{
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            color: '#111827',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                        >
+                          {shortTitle}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            color: task.is_completed ? '#047857' : '#c2410c',
+                            backgroundColor: task.is_completed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(249, 115, 22, 0.16)',
+                            padding: '4px 8px',
+                            borderRadius: '999px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0
+                          }}
+                        >
+                          <span role="img" aria-label="points">
+                            {task.is_completed ? '✅' : '🪙'}
+                          </span>
+                          <span>{task.points_display || `${task.points} pts`}</span>
+                        </div>
                       </div>
                       <div
                         style={{
                           fontSize: '12px',
-                          fontWeight: '600',
-                          color: task.is_completed ? '#047857' : '#c2410c',
-                          backgroundColor: task.is_completed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(249, 115, 22, 0.16)',
-                          padding: '4px 8px',
-                          borderRadius: '999px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          whiteSpace: 'nowrap',
-                          flexShrink: 0
+                          color: '#6b7280',
+                          marginBottom: task.progress ? '4px' : '0'
                         }}
                       >
-                        <span role="img" aria-label="points">
-                          {task.is_completed ? '✅' : '🪙'}
-                        </span>
-                        <span>{task.points_display || `${task.points} pts`}</span>
+                        {shortDescription}
                       </div>
+                      {task.progress && (
+                        <div
+                          style={{
+                            fontSize: '11px',
+                            color: '#9ca3af',
+                            marginTop: '2px'
+                          }}
+                        >
+                          Progress: {task.progress.current}/{task.progress.required}
+                        </div>
+                      )}
                     </div>
-                    <div
-                      style={{
-                        fontSize: '12px',
-                        color: '#6b7280',
-                        marginBottom: task.progress ? '4px' : '0'
-                      }}
-                    >
-                      {task.description}
-                    </div>
-                    {task.progress && (
-                      <div
-                        style={{
-                          fontSize: '11px',
-                          color: '#9ca3af',
-                          marginTop: '2px'
-                        }}
-                      >
-                        Progress: {task.progress.current}/{task.progress.required}
-                      </div>
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

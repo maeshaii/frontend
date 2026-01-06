@@ -1,27 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './statistics.css';
-import { fetchOJTCompanyStatistics, fetchStudentsByCompany } from '../../services/api';
+import { fetchOJTStatistics, fetchOJTByYear } from '../../services/api';
+import { FaUsers, FaDownload, FaArrowLeft } from 'react-icons/fa';
+
+interface YearData {
+  year: number;
+  section?: string;
+  count: number;
+  status_breakdown?: {
+    completed: number;
+    ongoing: number;
+    incomplete: number;
+    not_started: number;
+  };
+}
+
+interface BatchData {
+  year: number;
+  sectionCount: number;
+  totalStudents: number;
+  totalIncomplete: number;
+  totalCompleted: number;
+  totalOngoing: number;
+  totalNotStarted: number;
+  companyCount: number;
+}
 
 interface CompanyData {
   company_name: string;
   count: number;
-}
-
-interface StudentData {
-  ctu_id: string;
-  first_name: string;
-  last_name: string;
-  company: string;
-  company_address?: string;
-  company_email?: string;
-  company_contact?: string;
-  contact_person?: string;
-  position?: string;
-  status: string;
-}
-
-interface CompanyProfile {
-  company_name: string;
   company_address?: string;
   company_email?: string;
   company_contact?: string;
@@ -30,17 +37,28 @@ interface CompanyProfile {
 }
 
 export default function Statistics() {
-  const [companies, setCompanies] = useState<CompanyData[]>([]);
+  const [ojtYears, setOjtYears] = useState<YearData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [totalCompanies, setTotalCompanies] = useState(0);
-  const [totalStudents, setTotalStudents] = useState(0);
   const [coordinatorUsername, setCoordinatorUsername] = useState('');
-  const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null);
-  const [companyStudents, setCompanyStudents] = useState<StudentData[]>([]);
-  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
-  const [loadingStudents, setLoadingStudents] = useState(false);
-  const [showModal, setShowModal] = useState(false);
+  const [batches, setBatches] = useState<BatchData[]>([]);
+  const [totalBatches, setTotalBatches] = useState(0);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
+  const [batchCompanies, setBatchCompanies] = useState<CompanyData[]>([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedExportBatch, setSelectedExportBatch] = useState<number | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null);
+  const excelJSRef = useRef<any>(null);
+
+  const getExcelJS = async () => {
+    if (!excelJSRef.current) {
+      const module = await import('exceljs');
+      excelJSRef.current = module.default || module;
+    }
+    return excelJSRef.current;
+  };
 
   useEffect(() => {
     // Get coordinator username from localStorage
@@ -53,257 +71,284 @@ export default function Statistics() {
   }, []);
 
   useEffect(() => {
-    const loadCompanyStatistics = async () => {
+    const loadBatchStatistics = async () => {
       if (!coordinatorUsername) return;
       
-    setLoading(true);
-    try {
-        const response = await fetchOJTCompanyStatistics(coordinatorUsername);
+      setLoading(true);
+      try {
+        const response = await fetchOJTStatistics(coordinatorUsername);
         if (response.success) {
-          setCompanies(response.companies || []);
-          setTotalCompanies(response.total_companies || 0);
-          setTotalStudents(response.total_students || 0);
+          const yearsData = response.years || [];
+          setOjtYears(yearsData);
+          
+          // Group data by batch (year)
+          const batchGroups = yearsData.reduce((acc: Record<number, YearData[]>, yearData: YearData) => {
+            const batchYear = yearData.year;
+            if (!acc[batchYear]) {
+              acc[batchYear] = [];
+            }
+            acc[batchYear].push(yearData);
+            return acc;
+          }, {});
+
+          // Calculate batch-level statistics
+          const batchStatsPromises = Object.entries(batchGroups).map(async ([year, sections]) => {
+            const sectionsArray = sections as YearData[];
+            const batchYear = parseInt(year);
+            const uniqueSections = new Set(sectionsArray.map((s: YearData) => s.section).filter(Boolean));
+            const sectionCount = uniqueSections.size;
+            
+            const totalStudents = sectionsArray.reduce((sum: number, section: YearData) => sum + (section.count || 0), 0);
+            const totalIncomplete = sectionsArray.reduce((sum: number, section: YearData) => {
+              return sum + (section.status_breakdown?.incomplete || 0);
+            }, 0);
+            const totalCompleted = sectionsArray.reduce((sum: number, section: YearData) => {
+              return sum + (section.status_breakdown?.completed || 0);
+            }, 0);
+            const totalOngoing = sectionsArray.reduce((sum: number, section: YearData) => {
+              return sum + (section.status_breakdown?.ongoing || 0);
+            }, 0);
+            const totalNotStarted = sectionsArray.reduce((sum: number, section: YearData) => {
+              return sum + (section.status_breakdown?.not_started || 0);
+            }, 0);
+
+            // Fetch students to count companies
+            let companyCount = 0;
+            try {
+              const companyResponse = await fetchOJTByYear(batchYear.toString(), coordinatorUsername);
+              console.log(`🔍 Batch ${batchYear} API Response:`, companyResponse);
+              
+              // Handle both response structures: ojt_data (from API) or students (legacy)
+              const studentsData = companyResponse.ojt_data || companyResponse.students || [];
+              
+              if (companyResponse.success && studentsData.length > 0) {
+                const companySet = new Set<string>();
+                studentsData.forEach((student: any) => {
+                  // Check various possible field names for company
+                  const companyName = student.company || student.company_name || student.companyName || '';
+                  if (companyName && companyName.trim() !== '' && companyName.trim().toLowerCase() !== 'null') {
+                    companySet.add(companyName.trim());
+                  }
+                });
+                companyCount = companySet.size;
+                console.log(`✅ Batch ${batchYear} - Found ${companyCount} companies from ${studentsData.length} students`);
+              } else {
+                console.log(`⚠️ Batch ${batchYear} - No students data found or empty response`);
+              }
+            } catch (error) {
+              console.error(`❌ Error fetching companies for batch ${batchYear}:`, error);
+            }
+
+            return {
+              year: batchYear,
+              sectionCount,
+              totalStudents,
+              totalIncomplete,
+              totalCompleted,
+              totalOngoing,
+              totalNotStarted,
+              companyCount
+            };
+          });
+
+          const batchStats = await Promise.all(batchStatsPromises);
+
+          setBatches(batchStats);
+          setTotalBatches(batchStats.length);
+          setTotalStudents(batchStats.reduce((sum, batch) => sum + batch.totalStudents, 0));
+        }
+      } catch (error) {
+        console.error('Error loading batch statistics:', error);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-        console.error('Error loading company statistics:', error);
-    } finally {
-      setLoading(false);
-    }
     };
 
     if (coordinatorUsername) {
-      loadCompanyStatistics();
+      loadBatchStatistics();
     }
   }, [coordinatorUsername]);
 
-  const handleCompanyClick = async (company: CompanyData) => {
-    setSelectedCompany(company);
-    setShowModal(true);
-    setLoadingStudents(true);
+  const handleBatchClick = async (batchYear: number) => {
+    setSelectedBatch(batchYear);
+    setLoadingCompanies(true);
     
     try {
-      const response = await fetchStudentsByCompany(company.company_name, coordinatorUsername);
-      console.log('🔍 Full Company data response:', JSON.stringify(response, null, 2)); // Debug log
-      console.log('🔍 Response keys:', Object.keys(response || {})); // Debug: show what keys exist
-      console.log('🔍 company_profile exists?', 'company_profile' in (response || {})); // Debug: check if key exists
-      console.log('🔍 company_profile value:', response?.company_profile); // Debug: show value
+      const response = await fetchOJTByYear(batchYear.toString(), coordinatorUsername);
+      console.log(`🔍 Loading companies for batch ${batchYear}:`, response);
       
-      if (response.success) {
-        setCompanyStudents(response.students || []);
+      // Handle both response structures: ojt_data (from API) or students (legacy)
+      const studentsData = response.ojt_data || response.students || [];
+      
+      if (response.success && studentsData.length > 0) {
+        // Group students by company and store full company details
+        const companyMap = new Map<string, CompanyData>();
         
-        // Always try to use company_profile from API first
-        let profileToUse = null;
+        studentsData.forEach((student: any) => {
+          // Check various possible field names for company
+          const companyName = student.company || student.company_name || student.companyName || '';
+          if (companyName && companyName.trim() !== '' && companyName.trim().toLowerCase() !== 'null') {
+            const trimmedName = companyName.trim();
+            
+            if (!companyMap.has(trimmedName)) {
+              // First occurrence - store full details
+              companyMap.set(trimmedName, {
+                company_name: trimmedName,
+                count: 1,
+                company_address: student.company_address || '',
+                company_email: student.company_email || '',
+                company_contact: student.company_contact || '',
+                contact_person: student.contact_person || '',
+                position: student.position || ''
+              });
+            } else {
+              // Increment count
+              const existing = companyMap.get(trimmedName)!;
+              existing.count += 1;
+            }
+          }
+        });
         
-        if (response.company_profile && response.company_profile !== null) {
-          console.log('✅ Found company_profile in response:', response.company_profile);
-          profileToUse = response.company_profile;
-          // Ensure all fields are strings, not None
-          profileToUse = {
-            company_name: profileToUse.company_name || company.company_name,
-            company_address: profileToUse.company_address || '',
-            company_email: profileToUse.company_email || '',
-            company_contact: profileToUse.company_contact || '',
-            contact_person: profileToUse.contact_person || '',
-            position: profileToUse.position || ''
-          };
-        } else if (response.students && response.students.length > 0) {
-          // Fallback: use first student's company info if available
-          console.log('⚠️ No company_profile in response, using first student info');
-          profileToUse = {
-            company_name: response.students[0].company || company.company_name,
-            company_address: response.students[0].company_address || '',
-            company_email: response.students[0].company_email || '',
-            company_contact: response.students[0].company_contact || '',
-            contact_person: response.students[0].contact_person || '',
-            position: response.students[0].position || ''
-          };
-        } else {
-          // Empty profile as last resort
-          console.log('❌ No company profile or students, using empty profile');
-          profileToUse = {
-            company_name: company.company_name,
-            company_address: '',
-            company_email: '',
-            company_contact: '',
-            contact_person: '',
-            position: ''
-          };
-        }
+        console.log(`✅ Found ${companyMap.size} unique companies from ${studentsData.length} students`);
+        console.log(`📊 Company breakdown:`, Array.from(companyMap.entries()));
         
-        console.log('📝 Final profile being set:', profileToUse);
-        setCompanyProfile(profileToUse);
+        // Convert to array and sort (only include companies with names)
+        const companies: CompanyData[] = Array.from(companyMap.values())
+          .sort((a, b) => a.company_name.localeCompare(b.company_name));
+        
+        setBatchCompanies(companies);
+      } else {
+        console.log(`⚠️ No students data found for batch ${batchYear}`);
+        setBatchCompanies([]);
       }
     } catch (error) {
-      console.error('Error loading company students:', error);
-      setCompanyStudents([]);
-      setCompanyProfile({
-        company_name: company.company_name,
-        company_address: '',
-        company_email: '',
-        company_contact: '',
-        contact_person: '',
-        position: ''
-      });
+      console.error('❌ Error loading batch companies:', error);
+      setBatchCompanies([]);
     } finally {
-      setLoadingStudents(false);
+      setLoadingCompanies(false);
     }
   };
 
-  const closeModal = () => {
-    setShowModal(false);
-    setSelectedCompany(null);
-    setCompanyStudents([]);
-    setCompanyProfile(null);
+  const handleExportClick = () => {
+    setShowExportModal(true);
   };
 
-  const exportAllCompanyDetails = async () => {
-    if (companies.length === 0) {
-      alert('No companies to export');
+  const handleExport = async () => {
+    if (!selectedExportBatch) {
+      alert('Please select a batch to export.');
       return;
     }
 
     setExporting(true);
+    setShowExportModal(false);
+    
     try {
-      // Import ExcelJS dynamically
-      const ExcelJS = (await import('exceljs')).default;
-      const FileSaver = (await import('file-saver')).default;
+      // Fetch full company data for the selected batch
+      const response = await fetchOJTByYear(selectedExportBatch.toString(), coordinatorUsername);
+      const studentsData = response.ojt_data || response.students || [];
+      
+      if (!response.success || studentsData.length === 0) {
+        alert('No data found for the selected batch.');
+        setExporting(false);
+        return;
+      }
 
-      // Create a new workbook
+      // Group companies and collect full details (unique companies)
+      const companyMap = new Map<string, CompanyData>();
+      
+      studentsData.forEach((student: any) => {
+        const companyName = student.company || student.company_name || student.companyName || '';
+        if (companyName && companyName.trim() !== '' && companyName.trim().toLowerCase() !== 'null') {
+          const trimmedName = companyName.trim();
+          
+          if (!companyMap.has(trimmedName)) {
+            // Store first occurrence with full details
+            companyMap.set(trimmedName, {
+              company_name: trimmedName,
+              count: 1,
+              company_address: student.company_address || '',
+              company_email: student.company_email || '',
+              company_contact: student.company_contact || '',
+              contact_person: student.contact_person || '',
+              position: student.position || ''
+            });
+          } else {
+            // Increment count
+            const existing = companyMap.get(trimmedName)!;
+            existing.count += 1;
+          }
+        }
+      });
+
+      const companies: CompanyData[] = Array.from(companyMap.values())
+        .sort((a, b) => a.company_name.localeCompare(b.company_name));
+
+      // Create Excel file
+      const ExcelJS = await getExcelJS();
       const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Company Details');
-
-      // Define headers (only company details)
-      const headers = [
+      const worksheet = workbook.addWorksheet('Companies');
+      
+      // Add headers
+      worksheet.addRow([
         'Company Name',
         'Company Address',
         'Company Email',
         'Company Contact',
         'Contact Person',
         'Position'
-      ];
-
-      // Add headers
-      worksheet.addRow(headers);
-
-      // Style the header row
+      ]);
+      
       const headerRow = worksheet.getRow(1);
-      headerRow.font = { bold: true, size: 12 };
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FF3B82F6' }
+        fgColor: { argb: 'FF174F84' }
       };
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-      headerRow.height = 25;
+      headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
 
-      // Set column widths
-      worksheet.columns = [
-        { width: 30 }, // Company Name
-        { width: 40 }, // Company Address
-        { width: 25 }, // Company Email
-        { width: 20 }, // Company Contact
-        { width: 25 }, // Contact Person
-        { width: 20 }  // Position
-      ];
-
-      // Iterate through all companies and fetch their details
-      let totalRows = 0;
-      for (let i = 0; i < companies.length; i++) {
-        const company = companies[i];
-        
-        try {
-          // Fetch students and company profile for this company
-          const response = await fetchStudentsByCompany(company.company_name, coordinatorUsername);
-          
-          if (response.success) {
-            const students = response.students || [];
-            const profile = response.company_profile || {
-              company_name: company.company_name,
-              company_address: '',
-              company_email: '',
-              company_contact: '',
-              contact_person: '',
-              position: ''
-            };
-
-            // Add company row (one row per company)
-            worksheet.addRow([
-              profile.company_name || company.company_name,
-              profile.company_address || '',
-              profile.company_email || '',
-              profile.company_contact || '',
-              profile.contact_person || '',
-              profile.position || ''
-            ]);
-            totalRows++;
-          }
-        } catch (error) {
-          console.error(`Error fetching details for company ${company.company_name}:`, error);
-          // Still add the company name even if details fetch fails
-          worksheet.addRow([
-            company.company_name,
-            '',
-            '',
-            '',
-            '',
-            ''
-          ]);
-          totalRows++;
-        }
-
-        // Add small delay to avoid overwhelming the API
-        if (i < companies.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
-
-      // Style all data rows
-      for (let i = 2; i <= totalRows + 1; i++) {
-        const row = worksheet.getRow(i);
-        row.alignment = { vertical: 'middle', horizontal: 'left' };
-        row.height = 20;
-        
-        // Alternate row colors for better readability
-        if (i % 2 === 0) {
-          row.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFF8FAFC' }
-          };
-        }
-      }
-
-      // Add borders to all cells
-      for (let i = 1; i <= totalRows + 1; i++) {
-        const row = worksheet.getRow(i);
-        row.eachCell((cell) => {
-          cell.border = {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' }
-          };
-        });
-      }
-
-      // Generate filename with timestamp
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_');
-      const filename = `Company_Details_Export_${timestamp}.xlsx`;
-
-      // Generate Excel file buffer
-      const buffer = await workbook.xlsx.writeBuffer();
-
-      // Create blob and download
-      const blob = new Blob([buffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      // Add data rows
+      companies.forEach((company) => {
+        worksheet.addRow([
+          company.company_name || '',
+          company.company_address || '',
+          company.company_email || '',
+          company.company_contact || '',
+          company.contact_person || '',
+          company.position || ''
+        ]);
       });
+
+      // Auto-size columns
+      worksheet.columns.forEach((column: any) => {
+        if (column.number === 1) column.width = 30; // Company Name
+        else if (column.number === 2) column.width = 40; // Company Address
+        else if (column.number === 3) column.width = 30; // Company Email
+        else if (column.number === 4) column.width = 20; // Company Contact
+        else if (column.number === 5) column.width = 25; // Contact Person
+        else if (column.number === 6) column.width = 25; // Position
+      });
+
+      // Set header row height
+      headerRow.height = 30;
+
+      // Download the file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `Batch_${selectedExportBatch - 1}-${selectedExportBatch}_Companies.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
       
-      FileSaver.saveAs(blob, filename);
-      
-      alert(`Successfully exported ${totalRows} rows of company details!`);
+      setSelectedExportBatch(null);
     } catch (error) {
-      console.error('Error exporting company details:', error);
-      alert('Failed to export company details. Please try again.');
+      console.error('Error exporting data:', error);
+      alert('Error exporting data. Please try again.');
     } finally {
       setExporting(false);
     }
@@ -312,9 +357,9 @@ export default function Statistics() {
   if (loading) {
     return (
       <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
         height: '100vh',
         backgroundColor: '#f8fafc'
       }}>
@@ -341,7 +386,7 @@ export default function Statistics() {
             margin: '0',
             fontWeight: '500'
           }}>
-            Loading company statistics...
+            Loading batch statistics...
           </p>
         </div>
       </div>
@@ -350,390 +395,705 @@ export default function Statistics() {
 
   return (
     <div style={{
+      flex: 1,
+      overflowY: 'auto',
       padding: '32px',
       backgroundColor: '#f8fafc',
-      minHeight: '100vh'
+      width: '100%',
+      boxSizing: 'border-box',
+      height: '100%'
     }}>
+      <style>{`
+        /* Hide scrollbars like the import side (dashboard) */
+        div::-webkit-scrollbar {
+          display: none !important;
+          width: 0 !important;
+          height: 0 !important;
+        }
+        div {
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+        }
+      `}</style>
       {/* Header Section */}
-      <div style={{
-        marginBottom: '32px'
-      }}>
-        <h1 style={{
-          margin: '0 0 8px 0',
-          fontSize: '32px',
-          fontWeight: '800',
-          color: '#0f172a',
-          letterSpacing: '-0.025em'
-        }}>
-          Companies Directory
-        </h1>
-        <p style={{
-          margin: 0,
-          fontSize: '16px',
-          color: '#64748b',
-          fontWeight: '400'
-        }}>
-          Manage and view company information and OJT student assignments
-        </p>
-      </div>
-
-      {/* Statistics Cards */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-        gap: '24px',
-        marginBottom: '32px'
-      }}>
-        {/* Companies Card */}
+      {!selectedBatch && (
         <div style={{
-          backgroundColor: 'white',
-          borderRadius: '16px',
-          padding: '24px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
-          border: '1px solid #e2e8f0',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          <div style={{
-            position: 'absolute',
-            top: '-20px',
-            right: '-20px',
-            width: '120px',
-            height: '120px',
-            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%)',
-            borderRadius: '50%'
-          }}></div>
-          <div>
-            <div style={{
-              fontSize: '13px',
-              color: '#64748b',
-              fontWeight: '600',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              marginBottom: '8px'
-            }}>
-              Total Companies
-            </div>
-            <div style={{
-              fontSize: '32px',
-              fontWeight: '800',
-              color: '#1e293b',
-              lineHeight: '1'
-            }}>
-              {totalCompanies}
-            </div>
-          </div>
-        </div>
-
-        {/* Students Card */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '16px',
-          padding: '24px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
-          border: '1px solid #e2e8f0',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          <div style={{
-            position: 'absolute',
-            top: '-20px',
-            right: '-20px',
-            width: '120px',
-            height: '120px',
-            background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%)',
-            borderRadius: '50%'
-          }}></div>
-          <div>
-            <div style={{
-              fontSize: '13px',
-              color: '#64748b',
-              fontWeight: '600',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              marginBottom: '8px'
-            }}>
-              Total Students
-            </div>
-            <div style={{
-              fontSize: '32px',
-              fontWeight: '800',
-              color: '#1e293b',
-              lineHeight: '1'
-            }}>
-              {totalStudents}
-            </div>
-          </div>
-        </div>
-
-        {/* Export Button Card */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '16px',
-          padding: '24px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
-          border: '1px solid #e2e8f0',
+          marginBottom: '32px',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'space-between',
+          alignItems: 'flex-start'
         }}>
+          <div>
+            <h1 style={{
+              margin: '0 0 8px 0',
+              fontSize: '32px',
+              fontWeight: '800',
+              color: '#0f172a',
+              letterSpacing: '-0.025em'
+            }}>
+              Batch Statistics
+            </h1>
+            <p style={{
+              margin: 0,
+              fontSize: '16px',
+              color: '#64748b',
+              fontWeight: '400'
+            }}>
+              View OJT statistics grouped by batch
+            </p>
+          </div>
           <button
-            onClick={exportAllCompanyDetails}
-            disabled={exporting || companies.length === 0}
+            onClick={handleExportClick}
+            disabled={exporting || batches.length === 0}
             style={{
-              padding: '14px 28px',
-              background: exporting || companies.length === 0 
-                ? 'linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%)'
-                : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+              backgroundColor: exporting ? '#94a3b8' : '#174f84',
               color: 'white',
               border: 'none',
               borderRadius: '12px',
-              fontSize: '15px',
-              fontWeight: '700',
-              cursor: exporting || companies.length === 0 ? 'not-allowed' : 'pointer',
-              transition: 'all 0.3s ease',
-              boxShadow: exporting || companies.length === 0 
-                ? 'none' 
-                : '0 4px 6px rgba(59, 130, 246, 0.3), 0 2px 4px rgba(59, 130, 246, 0.2)',
-              opacity: exporting || companies.length === 0 ? 0.6 : 1,
+              padding: '12px 24px',
+              fontSize: '16px',
+              fontWeight: 600,
+              cursor: exporting || batches.length === 0 ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              width: '100%',
-              justifyContent: 'center'
+              transition: 'all 0.2s ease',
+              boxShadow: exporting || batches.length === 0 ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)',
+              opacity: exporting || batches.length === 0 ? 0.6 : 1
             }}
             onMouseEnter={(e) => {
-              if (!exporting && companies.length > 0) {
-                const target = e.currentTarget as HTMLButtonElement;
-                target.style.transform = 'translateY(-2px)';
-                target.style.boxShadow = '0 8px 12px rgba(59, 130, 246, 0.4), 0 4px 6px rgba(59, 130, 246, 0.3)';
+              if (!exporting && batches.length > 0) {
+                e.currentTarget.style.backgroundColor = '#0f3d6b';
+                e.currentTarget.style.transform = 'translateY(-2px)';
               }
             }}
             onMouseLeave={(e) => {
-              if (!exporting && companies.length > 0) {
-                const target = e.currentTarget as HTMLButtonElement;
-                target.style.transform = 'translateY(0)';
-                target.style.boxShadow = '0 4px 6px rgba(59, 130, 246, 0.3), 0 2px 4px rgba(59, 130, 246, 0.2)';
+              if (!exporting && batches.length > 0) {
+                e.currentTarget.style.backgroundColor = '#174f84';
+                e.currentTarget.style.transform = 'translateY(0)';
               }
             }}
           >
-            {exporting ? (
-              <span>Exporting...</span>
-            ) : (
-              <span>Export Company Details</span>
-            )}
+            <FaDownload style={{ fontSize: '16px' }} />
+            {exporting ? 'Exporting...' : 'Export'}
           </button>
         </div>
-      </div>
-      
-      {/* Companies Table Card */}
-      <div style={{
-        backgroundColor: 'white',
-        borderRadius: '16px',
-        padding: '0',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06)',
-        border: '1px solid #e2e8f0',
-        overflow: 'hidden'
-      }}>
-        {/* Table Header */}
-        <div style={{
-          padding: '24px 28px',
-          borderBottom: '2px solid #f1f5f9',
-          backgroundColor: '#fafbfc'
-        }}>
-          <h3 style={{
-            margin: 0,
-            fontSize: '18px',
-            fontWeight: '700',
-            color: '#1e293b'
-          }}>
-            Company List
-          </h3>
-          <p style={{
-            margin: '4px 0 0 0',
-            fontSize: '14px',
-            color: '#64748b'
-          }}>
-            Click on a company to view details
-          </p>
-        </div>
+      )}
 
-        <div style={{
-          padding: '28px'
-        }}>
-
-        {companies.length === 0 ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '60px 20px',
-            backgroundColor: '#f9fafb',
-            borderRadius: '12px',
-            border: '1px solid #e5e7eb'
-          }}>
-            <p style={{
-              fontSize: '16px',
-              color: '#6b7280',
-              margin: '0',
-              fontWeight: '500'
-            }}>
-              No company data found.
-            </p>
+      {/* Batch Cards or Company List */}
+      {selectedBatch ? (
+        <div>
+          {/* Back Button */}
+          <div style={{ marginBottom: '24px' }}>
+            <button
+              onClick={() => {
+                setSelectedBatch(null);
+                setBatchCompanies([]);
+              }}
+              style={{
+                backgroundColor: 'transparent',
+                color: '#1e293b',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '12px 24px',
+                fontSize: '16px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.2s ease',
+                boxShadow: 'none'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f1f5f9';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <FaArrowLeft />
+              Back
+            </button>
           </div>
-        ) : (
+          
+          {/* Company List */}
           <div style={{
-            maxHeight: '500px',
-            overflowY: 'auto',
-            overflowX: 'auto',
-            borderRadius: '12px',
-            border: '1px solid #e2e8f0'
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '0',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06)',
+            border: '1px solid #e2e8f0',
+            overflow: 'visible'
           }}>
-            <style>{`
-              div::-webkit-scrollbar {
-                width: 8px;
-                height: 8px;
-              }
-              div::-webkit-scrollbar-track {
-                background: #f1f5f9;
-                border-radius: 10px;
-              }
-              div::-webkit-scrollbar-thumb {
-                background: #cbd5e1;
-                border-radius: 10px;
-              }
-              div::-webkit-scrollbar-thumb:hover {
-                background: #94a3b8;
-              }
-            `}</style>
-            <table style={{
-              width: '100%',
-              borderCollapse: 'separate',
-              borderSpacing: '0'
+            <div style={{
+              padding: '24px 28px',
+              borderBottom: '2px solid #f1f5f9',
+              backgroundColor: '#fafbfc'
             }}>
-              <thead>
-                <tr style={{
-                  backgroundColor: '#f8fafc'
+              <h3 style={{
+                margin: 0,
+                fontSize: '18px',
+                fontWeight: '700',
+                color: '#1e293b'
+              }}>
+                Company List - CLASS OF {selectedBatch - 1}-{selectedBatch}
+              </h3>
+              <p style={{
+                margin: '4px 0 0 0',
+                fontSize: '14px',
+                color: '#64748b'
+              }}>
+                Companies in this batch
+              </p>
+            </div>
+
+            <div style={{
+              padding: '28px'
+            }}>
+              {loadingCompanies ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '60px 20px'
                 }}>
-                  <th style={{
-                    padding: '16px 20px',
-                    textAlign: 'left',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    color: '#475569',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    width: '80px',
-                    borderBottom: '2px solid #e2e8f0'
+                  <p style={{
+                    fontSize: '16px',
+                    color: '#64748b',
+                    margin: '0',
+                    fontWeight: '500'
                   }}>
-                    No.
-                  </th>
-                  <th style={{
-                    padding: '16px 20px',
-                    textAlign: 'left',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    color: '#475569',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    borderBottom: '2px solid #e2e8f0'
+                    Loading companies...
+                  </p>
+                </div>
+              ) : batchCompanies.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '60px 20px',
+                  backgroundColor: '#f9fafb',
+                  borderRadius: '12px',
+                  border: '1px solid #e5e7eb'
+                }}>
+                  <p style={{
+                    fontSize: '16px',
+                    color: '#6b7280',
+                    margin: '0',
+                    fontWeight: '500'
                   }}>
-                    Company Name
-                  </th>
-                  <th style={{
-                    padding: '16px 20px',
-                    textAlign: 'center',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    color: '#475569',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    width: '180px',
-                    borderBottom: '2px solid #e2e8f0'
+                    No companies found for this batch.
+                  </p>
+                </div>
+              ) : (
+                <div style={{
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0',
+                  width: '100%',
+                  overflow: 'visible',
+                  display: 'block'
+                }}>
+                  <table style={{
+                    width: '100%',
+                    borderCollapse: 'separate',
+                    borderSpacing: '0',
+                    display: 'table'
                   }}>
-                    OJT Students
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {companies.map((company, index) => (
-                  <tr
-                    key={index}
+                    <thead>
+                      <tr style={{
+                        backgroundColor: '#f8fafc'
+                      }}>
+                        <th style={{
+                          padding: '16px 20px',
+                          textAlign: 'left',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          color: '#475569',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          width: '80px',
+                          borderBottom: '2px solid #e2e8f0'
+                        }}>
+                          No.
+                        </th>
+                        <th style={{
+                          padding: '16px 20px',
+                          textAlign: 'left',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          color: '#475569',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          borderBottom: '2px solid #e2e8f0'
+                        }}>
+                          Company Name
+                        </th>
+                        <th style={{
+                          padding: '16px 20px',
+                          textAlign: 'center',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          color: '#475569',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          width: '180px',
+                          borderBottom: '2px solid #e2e8f0'
+                        }}>
+                          OJT Students
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {batchCompanies.map((company, index) => (
+                        <tr
+                          key={index}
+                          style={{
+                            borderBottom: index < batchCompanies.length - 1 ? '1px solid #f1f5f9' : 'none',
+                            transition: 'all 0.2s ease',
+                            backgroundColor: index % 2 === 0 ? 'white' : '#fafbfc',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => setSelectedCompany(company)}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#eff6ff';
+                            e.currentTarget.style.transform = 'scale(1.01)';
+                            e.currentTarget.style.boxShadow = '0 4px 6px rgba(59, 130, 246, 0.1)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'white' : '#fafbfc';
+                            e.currentTarget.style.transform = 'scale(1)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
+                        >
+                          <td style={{
+                            padding: '18px 20px',
+                            fontSize: '14px',
+                            color: '#64748b',
+                            fontWeight: '600'
+                          }}>
+                            <div style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              backgroundColor: '#f1f5f9',
+                              color: '#475569',
+                              fontWeight: '700'
+                            }}>
+                              {index + 1}
+                            </div>
+                          </td>
+                          <td style={{
+                            padding: '18px 20px',
+                            fontSize: '15px',
+                            color: '#1e293b',
+                            fontWeight: '600'
+                          }}>
+                            {company.company_name}
+                          </td>
+                          <td style={{
+                            padding: '18px 20px',
+                            textAlign: 'center'
+                          }}>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '8px 18px',
+                              background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+                              color: '#1e40af',
+                              borderRadius: '12px',
+                              fontSize: '14px',
+                              fontWeight: '700',
+                              boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)',
+                              minWidth: '60px'
+                            }}>
+                              {company.count}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Company Details Modal */}
+          {selectedCompany && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1000,
+                padding: '20px'
+              }}
+              onClick={() => setSelectedCompany(null)}
+            >
+              <div
+                style={{
+                  backgroundColor: 'white',
+                  borderRadius: '16px',
+                  padding: '0',
+                  maxWidth: '600px',
+                  width: '100%',
+                  maxHeight: '90vh',
+                  overflow: 'auto',
+                  boxShadow: '0 20px 40px rgba(0, 0, 0, 0.25)'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Modal Header */}
+                <div style={{
+                  padding: '24px 28px',
+                  borderBottom: '2px solid #f1f5f9',
+                  backgroundColor: '#fafbfc',
+                  borderRadius: '16px 16px 0 0',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <h3 style={{
+                      margin: 0,
+                      fontSize: '20px',
+                      fontWeight: '700',
+                      color: '#1e293b'
+                    }}>
+                      Company Details
+                    </h3>
+                    <p style={{
+                      margin: '4px 0 0 0',
+                      fontSize: '14px',
+                      color: '#64748b'
+                    }}>
+                      {selectedCompany.company_name}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedCompany(null)}
                     style={{
-                      borderBottom: index < companies.length - 1 ? '1px solid #f1f5f9' : 'none',
-                      transition: 'all 0.2s ease',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #d1d5db',
+                      background: '#f3f4f6',
                       cursor: 'pointer',
-                      backgroundColor: index % 2 === 0 ? 'white' : '#fafbfc'
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#475569',
+                      transition: 'all 0.2s ease'
                     }}
-                    onClick={() => handleCompanyClick(company)}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#eff6ff';
-                      e.currentTarget.style.transform = 'scale(1.01)';
-                      e.currentTarget.style.boxShadow = '0 4px 6px rgba(59, 130, 246, 0.1)';
+                      e.currentTarget.style.backgroundColor = '#e5e7eb';
+                      e.currentTarget.style.borderColor = '#9ca3af';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'white' : '#fafbfc';
-                      e.currentTarget.style.transform = 'scale(1)';
-                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.backgroundColor = '#f3f4f6';
+                      e.currentTarget.style.borderColor = '#d1d5db';
                     }}
                   >
-                    <td style={{
-                      padding: '18px 20px',
-                      fontSize: '14px',
-                      color: '#64748b',
-                      fontWeight: '600'
-                    }}>
-                      <div style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '8px',
-                        backgroundColor: '#f1f5f9',
-                        color: '#475569',
-                        fontWeight: '700'
-                      }}>
-                        {index + 1}
-                      </div>
-                    </td>
-                    <td style={{
-                      padding: '18px 20px',
-                      fontSize: '15px',
-                      color: '#1e293b',
-                      fontWeight: '600'
-                    }}>
-                      {company.company_name}
-                    </td>
-                    <td style={{
-                      padding: '18px 20px',
-                      textAlign: 'center'
-                    }}>
+                    Close
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div style={{
+                  padding: '28px'
+                }}>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '140px 1fr',
+                    rowGap: '16px',
+                    columnGap: '20px',
+                    fontSize: '14px',
+                    lineHeight: '1.6'
+                  }}>
+                    <div style={{ color: '#6b7280', fontWeight: '600' }}>Company Name:</div>
+                    <div style={{ color: '#111827', fontWeight: '500' }}>{selectedCompany.company_name || 'N/A'}</div>
+
+                    {selectedCompany.company_address && (
+                      <>
+                        <div style={{ color: '#6b7280', fontWeight: '600' }}>Address:</div>
+                        <div style={{ color: '#111827', fontWeight: '500' }}>{selectedCompany.company_address}</div>
+                      </>
+                    )}
+
+                    {selectedCompany.company_email && (
+                      <>
+                        <div style={{ color: '#6b7280', fontWeight: '600' }}>Email:</div>
+                        <div style={{ color: '#111827', fontWeight: '500' }}>
+                          <a
+                            href={`mailto:${selectedCompany.company_email}`}
+                            style={{
+                              color: '#3b82f6',
+                              textDecoration: 'none'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.textDecoration = 'underline';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.textDecoration = 'none';
+                            }}
+                          >
+                            {selectedCompany.company_email}
+                          </a>
+                        </div>
+                      </>
+                    )}
+
+                    {selectedCompany.company_contact && (
+                      <>
+                        <div style={{ color: '#6b7280', fontWeight: '600' }}>Contact:</div>
+                        <div style={{ color: '#111827', fontWeight: '500' }}>
+                          <a
+                            href={`tel:${selectedCompany.company_contact}`}
+                            style={{
+                              color: '#3b82f6',
+                              textDecoration: 'none'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.textDecoration = 'underline';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.textDecoration = 'none';
+                            }}
+                          >
+                            {selectedCompany.company_contact}
+                          </a>
+                        </div>
+                      </>
+                    )}
+
+                    {selectedCompany.contact_person && (
+                      <>
+                        <div style={{ color: '#6b7280', fontWeight: '600' }}>Contact Person:</div>
+                        <div style={{ color: '#111827', fontWeight: '500' }}>{selectedCompany.contact_person}</div>
+                      </>
+                    )}
+
+                    {selectedCompany.position && (
+                      <>
+                        <div style={{ color: '#6b7280', fontWeight: '600' }}>Position:</div>
+                        <div style={{ color: '#111827', fontWeight: '500' }}>{selectedCompany.position}</div>
+                      </>
+                    )}
+
+                    <div style={{ color: '#6b7280', fontWeight: '600' }}>OJT Students:</div>
+                    <div style={{ color: '#111827', fontWeight: '500' }}>
                       <span style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        padding: '8px 18px',
+                        padding: '6px 14px',
                         background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
                         color: '#1e40af',
-                        borderRadius: '12px',
+                        borderRadius: '8px',
                         fontSize: '14px',
                         fontWeight: '700',
-                        boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)',
-                        minWidth: '60px'
+                        boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)'
                       }}>
-                        {company.count}
+                        {selectedCompany.count} {selectedCompany.count === 1 ? 'Student' : 'Students'}
                       </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      ) : (
+        <div>
+          {batches.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '60px 20px',
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              border: '1px solid #e5e7eb',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+            }}>
+              <p style={{
+                fontSize: '16px',
+                color: '#6b7280',
+                margin: '0',
+                fontWeight: '500'
+              }}>
+                No batch data found.
+              </p>
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
+              gap: '28px',
+              marginBottom: '32px',
+              overflow: 'visible',
+              maxHeight: 'none',
+              width: '100%',
+              boxSizing: 'border-box'
+            }}>
+              {batches.map((batch) => {
+                const batchLabel = `CLASS OF ${batch.year}-${batch.year + 1}`;
+                
+                return (
+                  <div
+                    key={`batch-${batch.year}`}
+                    style={{
+                      backgroundColor: 'white',
+                      borderRadius: '20px',
+                      padding: '28px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                      border: '1px solid rgba(226, 232, 240, 0.8)',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '20px',
+                      position: 'relative',
+                      overflow: 'visible',
+                      cursor: 'pointer',
+                      minHeight: '180px'
+                    }}
+                    onClick={() => handleBatchClick(batch.year)}
+                    onMouseEnter={(e) => {
+                      const target = e.currentTarget as HTMLDivElement;
+                      target.style.transform = 'translateY(-6px) scale(1.02)';
+                      target.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
+                      target.style.borderColor = 'rgba(29, 78, 216, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      const target = e.currentTarget as HTMLDivElement;
+                      target.style.transform = 'translateY(0) scale(1)';
+                      target.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                      target.style.borderColor = 'rgba(226, 232, 240, 0.8)';
+                    }}
+                  >
+                    {/* Header Section with Icon and Title */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '18px'
+                    }}>
+                      <div style={{
+                        width: '64px',
+                        height: '64px',
+                        borderRadius: '18px',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ffffff',
+                        fontSize: '28px',
+                        boxShadow: '0 10px 15px -3px rgba(102, 126, 234, 0.3), 0 4px 6px -2px rgba(102, 126, 234, 0.2)',
+                        flexShrink: 0
+                      }}>
+                        <FaUsers />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <h3 style={{ 
+                          margin: 0, 
+                          fontSize: '22px', 
+                          fontWeight: 800, 
+                          color: '#1e293b',
+                          letterSpacing: '-0.025em',
+                          lineHeight: '1.2',
+                          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                          marginBottom: '4px'
+                        }}>
+                          {batchLabel}
+                        </h3>
+                        <p style={{
+                          margin: 0,
+                          fontSize: '13px',
+                          color: '#94a3b8',
+                          fontWeight: 500,
+                          letterSpacing: '0.01em'
+                        }}>
+                          Batch Year {batch.year}
+                        </p>
+                      </div>
+                    </div>
 
-      {/* Company Details Modal */}
-      {showModal && selectedCompany && (
+                    {/* Stats Section */}
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px',
+                      paddingTop: '8px',
+                      borderTop: '1px solid #f1f5f9'
+                    }}>
+                      {/* Students Count */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        backgroundColor: '#f8fafc',
+                        borderRadius: '12px',
+                        border: '1px solid #e2e8f0'
+                      }}>
+                        <span style={{
+                          fontSize: '14px',
+                          color: '#475569',
+                          fontWeight: 600
+                        }}>
+                          Students
+                        </span>
+                        <span style={{
+                          fontSize: '18px',
+                          color: '#1e293b',
+                          fontWeight: 700,
+                          fontFamily: "'Inter', sans-serif"
+                        }}>
+                          {batch.totalStudents}
+                        </span>
+                      </div>
+
+                      {/* Companies Count */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        backgroundColor: '#f8fafc',
+                        borderRadius: '12px',
+                        border: '1px solid #e2e8f0'
+                      }}>
+                        <span style={{
+                          fontSize: '14px',
+                          color: '#475569',
+                          fontWeight: 600
+                        }}>
+                          Companies
+                        </span>
+                        <span style={{
+                          fontSize: '18px',
+                          color: '#1e293b',
+                          fontWeight: 700,
+                          fontFamily: "'Inter', sans-serif"
+                        }}>
+                          {batch.companyCount}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
         <div
           style={{
             position: 'fixed',
@@ -743,149 +1103,130 @@ export default function Statistics() {
             bottom: 0,
             backgroundColor: 'rgba(0, 0, 0, 0.5)',
             display: 'flex',
-            alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1000,
-            padding: '20px'
+            alignItems: 'center',
+            zIndex: 1000
           }}
-          onClick={closeModal}
+          onClick={() => setShowExportModal(false)}
         >
           <div
             style={{
               backgroundColor: 'white',
               borderRadius: '16px',
               padding: '32px',
-              maxWidth: '900px',
-              width: '100%',
-              maxHeight: '90vh',
-              overflowY: 'auto',
+              width: '90%',
+              maxWidth: '500px',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-              <div>
-                <h2 style={{
-                  margin: '0 0 8px 0',
-                  fontSize: '24px',
-                  fontWeight: '700',
-                  color: '#1e293b'
-                }}>
-                  {selectedCompany.company_name}
-                </h2>
-                <p style={{
-                  margin: 0,
-                  fontSize: '14px',
-                  color: '#64748b'
-                }}>
-                  Company Profile & OJT Students
-                </p>
-              </div>
-              <button
-                onClick={closeModal}
+            <h2 style={{
+              margin: '0 0 24px 0',
+              fontSize: '24px',
+              fontWeight: 700,
+              color: '#1e293b'
+            }}>
+              Export Company Data
+            </h2>
+            
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontSize: '14px',
+                fontWeight: 600,
+                color: '#475569'
+              }}>
+                Select Batch
+              </label>
+              <select
+                value={selectedExportBatch || ''}
+                onChange={(e) => setSelectedExportBatch(e.target.value ? parseInt(e.target.value) : null)}
                 style={{
-                  backgroundColor: '#f1f5f9',
-                  border: 'none',
+                  width: '100%',
+                  padding: '12px 16px',
+                  fontSize: '16px',
                   borderRadius: '8px',
-                  width: '36px',
-                  height: '36px',
+                  border: '1px solid #e2e8f0',
+                  backgroundColor: 'white',
+                  color: '#1e293b',
                   cursor: 'pointer',
-                  fontSize: '18px',
+                  outline: 'none'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#174f84'}
+                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+              >
+                <option value="">-- Select a batch --</option>
+                {batches.map((batch) => {
+                  const batchLabel = `CLASS OF ${batch.year}-${batch.year + 1}`;
+                  return (
+                    <option key={batch.year} value={batch.year}>
+                      {batchLabel} ({batch.totalStudents} Students, {batch.companyCount} Companies)
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => {
+                  setShowExportModal(false);
+                  setSelectedExportBatch(null);
+                }}
+                style={{
+                  padding: '12px 24px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  backgroundColor: 'white',
                   color: '#64748b',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s'
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#e2e8f0';
-                  e.currentTarget.style.color = '#1e293b';
+                  e.currentTarget.style.backgroundColor = '#f1f5f9';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f1f5f9';
-                  e.currentTarget.style.color = '#64748b';
+                  e.currentTarget.style.backgroundColor = 'white';
                 }}
               >
-                ✕
+                Cancel
+              </button>
+              <button
+                onClick={handleExport}
+                disabled={!selectedExportBatch || exporting}
+                style={{
+                  padding: '12px 24px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: selectedExportBatch && !exporting ? '#174f84' : '#94a3b8',
+                  color: 'white',
+                  cursor: selectedExportBatch && !exporting ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.2s ease',
+                  opacity: selectedExportBatch && !exporting ? 1 : 0.6
+                }}
+                onMouseEnter={(e) => {
+                  if (selectedExportBatch && !exporting) {
+                    e.currentTarget.style.backgroundColor = '#0f3d6b';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (selectedExportBatch && !exporting) {
+                    e.currentTarget.style.backgroundColor = '#174f84';
+                  }
+                }}
+              >
+                {exporting ? 'Exporting...' : 'Export'}
               </button>
             </div>
-
-            {/* Company Info Summary */}
-            <div style={{
-              backgroundColor: '#f8fafc',
-              borderRadius: '12px',
-              padding: '20px',
-              marginBottom: '24px',
-              display: 'flex',
-              gap: '32px'
-            }}>
-              <div>
-                <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Total Students</div>
-                <div style={{ fontSize: '32px', fontWeight: '700', color: '#3b82f6' }}>{selectedCompany.count}</div>
-              </div>
-              {companyProfile && companyProfile.company_address && (
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Address</div>
-                  <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyProfile.company_address}</div>
-                </div>
-              )}
-            </div>
-
-            {/* Company Contact Info - Always display if profile exists with any info, even if no students */}
-            {companyProfile && (
-              <div style={{
-                backgroundColor: '#eff6ff',
-                borderRadius: '12px',
-                padding: '20px',
-                marginBottom: '24px'
-              }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#1e293b' }}>
-                  Contact Information
-                  {(!companyProfile.company_address && !companyProfile.company_email && !companyProfile.company_contact && !companyProfile.contact_person) && (
-                    <span style={{ fontSize: '12px', color: '#ef4444', marginLeft: '10px' }}>
-                      (No contact info available)
-                    </span>
-                  )}
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                  {companyProfile.company_address && (
-                    <div style={{ gridColumn: 'span 2' }}>
-                      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Address</div>
-                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyProfile.company_address}</div>
-                    </div>
-                  )}
-                  {companyProfile.company_email && (
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Email</div>
-                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyProfile.company_email}</div>
-                    </div>
-                  )}
-                  {companyProfile.company_contact && (
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Phone</div>
-                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>{companyProfile.company_contact}</div>
-                    </div>
-                  )}
-                  {companyProfile.contact_person && (
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Contact Person</div>
-                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>
-                        {companyProfile.contact_person}
-                        {companyProfile.position && ` (${companyProfile.position})`}
-                      </div>
-                    </div>
-                  )}
-                  {/* Show message if no contact info */}
-                  {!companyProfile.company_address && !companyProfile.company_email && !companyProfile.company_contact && !companyProfile.contact_person && (
-                    <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '20px', color: '#64748b' }}>
-                      No contact information available for this company
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
           </div>
         </div>
       )}

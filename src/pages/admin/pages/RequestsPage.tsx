@@ -1,84 +1,80 @@
 import React, { useEffect, useState } from 'react';
 import Sidebar from '../global/sidebar';
-import { fetchCoordinatorRequestsList } from '../../../services/api';
+import { fetchNewUsersList } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
 import { FaGraduationCap, FaUsers } from 'react-icons/fa';
 import { broadcastCoordinatorRequestCount } from '../utils/requestBadge';
+import { toast } from '../../../utils/toast';
 
 const RequestsPage: React.FC = () => {
-  const [items, setItems] = useState<{ batch_year: number; course: string; count: number }[]>([]);
-  const [selectedCourse, setSelectedCourse] = useState<string>('ALL');
+  const [items, setItems] = useState<{ batch_year: number; count: number }[]>([]);
   const [selectedBatch, setSelectedBatch] = useState<string>('ALL');
   const navigate = useNavigate();
 
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetchCoordinatorRequestsList();
+        const res = await fetchNewUsersList();
         console.log('🔍 RequestsPage - API Response:', res);
         const rows: any[] = Array.isArray(res?.items) ? res.items : [];
         console.log('🔍 RequestsPage - Raw rows:', rows);
-        // Process items with course information
+        // Process items - now grouped by year only (no course separation)
         const processedItems = rows
           .map(row => ({
             batch_year: Number(row?.batch_year) || 0,
-            course: row?.course || '',
             count: Number(row?.count) || 0
           }))
           .filter(item => Number.isFinite(item.batch_year))
           .sort((a, b) => b.batch_year - a.batch_year);
         console.log('🔍 RequestsPage - Processed items:', processedItems);
-        setItems(processedItems);
-        const totalPending = processedItems.reduce((sum, item) => sum + (item.count || 0), 0);
-        broadcastCoordinatorRequestCount(totalPending);
+
+        // If user already acknowledged up to total, hide cards
+        let ack = 0;
+        try {
+          ack = Number(localStorage.getItem('ackNewUsersCount')) || 0;
+        } catch {
+          ack = 0;
+        }
+        const total = processedItems.reduce((sum, item) => sum + (item.count || 0), 0);
+        if (total <= ack) {
+          setItems([]);
+        } else {
+          setItems(processedItems);
+        }
       } catch (e) {
         console.error('🔍 RequestsPage - Error:', e);
         setItems([]);
-        broadcastCoordinatorRequestCount(0);
       }
     };
     load();
   }, []);
 
-
-  const openDetails = (year: number, course: string) => {
-    // If course is 'ALL', don't filter by course - show all courses for that batch
-    const courseParam = (course === 'ALL' || selectedCourse === 'ALL') ? '' : `?course=${selectedCourse}`;
-    navigate(`/admin/requests/${year}${courseParam}`);
+  // Manual acknowledge button (e.g., if user wants to clear badge)
+  const acknowledgeAll = () => {
+    const total = items.reduce((sum, item) => sum + (item.count || 0), 0);
+    try {
+      localStorage.setItem('ackNewUsersCount', String(total));
+    } catch {}
+    broadcastCoordinatorRequestCount(0);
+    // Hide cards after marking all as seen
+    setItems([]);
+    // Show success message
+    toast.success(`All ${total} new user${total === 1 ? '' : 's'} marked as seen!`);
   };
 
-  // Always show common courses in dropdown, plus any additional courses from data
-  const coursesFromData = Array.from(new Set(items.map(item => item.course).filter(course => course))).sort();
-  const commonCourses = ['BSIT', 'BSIS', 'BIT-CT'];
-  const allCourses = Array.from(new Set([...commonCourses, ...coursesFromData])).sort();
-  const availableCourses = allCourses;
+
+  const openDetails = (year: number) => {
+    navigate(`/admin/requests/${year}`);
+  };
   
   // Get available batch years from data
   const availableBatches = Array.from(new Set(items.map(item => item.batch_year))).sort((a, b) => b - a);
   
-  // Filter items based on selected course and batch
+  // Filter items based on selected batch
   const filteredItems = items.filter(item => {
-    const courseMatch = selectedCourse === 'ALL' || item.course === selectedCourse;
     const batchMatch = selectedBatch === 'ALL' || item.batch_year.toString() === selectedBatch;
-    return courseMatch && batchMatch;
+    return batchMatch;
   });
-
-  // Group items by batch_year to combine multiple courses into one card
-  const groupedByBatch = filteredItems.reduce((acc, item) => {
-    const year = item.batch_year;
-    if (!acc[year]) {
-      acc[year] = {
-        batch_year: year,
-        courses: [] as Array<{ course: string; count: number }>,
-        totalCount: 0
-      };
-    }
-    acc[year].courses.push({ course: item.course, count: item.count });
-    acc[year].totalCount += item.count;
-    return acc;
-  }, {} as Record<number, { batch_year: number; courses: Array<{ course: string; count: number }>; totalCount: number }>);
-
-  const groupedItems = Object.values(groupedByBatch).sort((a, b) => b.batch_year - a.batch_year);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8fafc' }}>
@@ -93,113 +89,40 @@ const RequestsPage: React.FC = () => {
             fontWeight: '800',
             letterSpacing: '-0.025em'
           }}>
-            OJT Submissions
+            New Users
           </h1>
           <p style={{ 
             margin: '8px 0 0 0', 
             color: '#64748b',
             fontSize: '15px'
           }}>
-            Review and manage coordinator OJT student submissions
+            View recently converted alumni from coordinator submissions
           </p>
-        </div>
-        
-        {/* Filters Section */}
-        <div style={{ 
-          backgroundColor: 'white',
-          borderRadius: '16px',
-          padding: '24px 28px',
-          marginBottom: '28px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-          border: '1px solid #e2e8f0'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <label style={{ 
-                fontWeight: '600', 
-                color: '#475569',
+          <div style={{ marginTop: '12px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={acknowledgeAll}
+              style={{
+                padding: '10px 14px',
+                borderRadius: '10px',
+                border: '1px solid #dbeafe',
+                backgroundColor: '#eff6ff',
+                color: '#1d4ed8',
+                fontWeight: 600,
                 fontSize: '14px',
-                minWidth: '110px'
-              }}>
-                Filter by Course:
-              </label>
-              <select
-                value={selectedCourse}
-                onChange={(e) => setSelectedCourse(e.target.value)}
-                style={{ 
-                  padding: '10px 16px',
-                  border: '2px solid #e2e8f0',
-                  borderRadius: '10px',
-                  minWidth: '160px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  color: '#1e293b',
-                  backgroundColor: 'white',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'all 0.2s ease'
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = '#3b82f6';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = '#e2e8f0';
-                  e.target.style.boxShadow = 'none';
-                }}
-              >
-                <option value="ALL">All Courses</option>
-                {availableCourses.map(course => (
-                  <option key={course} value={course}>{course}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <label style={{ 
-                fontWeight: '600', 
-                color: '#475569',
-                fontSize: '14px',
-                minWidth: '105px'
-              }}>
-                Filter by Batch:
-              </label>
-              <select
-                value={selectedBatch}
-                onChange={(e) => setSelectedBatch(e.target.value)}
-                style={{ 
-                  padding: '10px 16px',
-                  border: '2px solid #e2e8f0',
-                  borderRadius: '10px',
-                  minWidth: '160px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  color: '#1e293b',
-                  backgroundColor: 'white',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'all 0.2s ease'
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = '#3b82f6';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = '#e2e8f0';
-                  e.target.style.boxShadow = 'none';
-                }}
-              >
-                <option value="ALL">All Batches</option>
-                {availableBatches.map(batch => (
-                  <option key={batch} value={batch.toString()}>{batch}</option>
-                ))}
-              </select>
-            </div>
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dbeafe'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#eff6ff'; }}
+            >
+              Mark All as Seen
+            </button>
           </div>
         </div>
         
         {/* Results Summary */}
-        {groupedItems.length > 0 && (
+        {filteredItems.length > 0 && (
           <div style={{ 
             marginBottom: '24px',
             display: 'flex',
@@ -211,12 +134,11 @@ const RequestsPage: React.FC = () => {
               fontSize: '14px',
               fontWeight: '500'
             }}>
-              Showing {groupedItems.length} {groupedItems.length === 1 ? 'result' : 'results'}
+              Showing {filteredItems.length} {filteredItems.length === 1 ? 'result' : 'results'}
             </span>
-            {(selectedCourse !== 'ALL' || selectedBatch !== 'ALL') && (
+            {selectedBatch !== 'ALL' && (
               <button
                 onClick={() => {
-                  setSelectedCourse('ALL');
                   setSelectedBatch('ALL');
                 }}
                 style={{
@@ -244,7 +166,7 @@ const RequestsPage: React.FC = () => {
         )}
         
         {/* Cards Grid */}
-        {groupedItems.length === 0 ? (
+        {filteredItems.length === 0 ? (
           <div style={{ 
             backgroundColor: 'white',
             borderRadius: '16px',
@@ -264,8 +186,8 @@ const RequestsPage: React.FC = () => {
               fontSize: '18px',
               fontWeight: '600'
             }}>
-              {selectedCourse === 'ALL' && selectedBatch === 'ALL' 
-                ? 'No OJT Submissions Yet' 
+              {selectedBatch === 'ALL' 
+                ? 'No New Users Yet' 
                 : 'No Results Found'}
             </h3>
             <p style={{ 
@@ -273,9 +195,9 @@ const RequestsPage: React.FC = () => {
               color: '#64748b',
               fontSize: '14px'
             }}>
-              {selectedCourse === 'ALL' && selectedBatch === 'ALL'
-                ? 'Coordinator submissions will appear here once they send completed OJT students.'
-                : `No submissions found for ${selectedCourse !== 'ALL' ? selectedCourse : 'all courses'}${selectedBatch !== 'ALL' ? ` in batch ${selectedBatch}` : ''}.`
+              {selectedBatch === 'ALL'
+                ? 'New users converted from OJT will appear here once coordinators send completed students.'
+                : `No new users found for batch ${selectedBatch}.`
               }
             </p>
           </div>
@@ -285,15 +207,11 @@ const RequestsPage: React.FC = () => {
             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
             gap: '24px'
           }}>
-            {groupedItems.map((group) => {
-              const studentLabel = `${group.totalCount} Student${group.totalCount === 1 ? '' : 's'}`;
-              const coursesText = group.courses.map(c => c.course).join(', ');
-              const primaryCourse = group.courses[0]?.course || 'N/A';
-              
+            {filteredItems.map((item) => {
               return (
                 <div
-                  key={`${group.batch_year}`}
-                  onClick={() => openDetails(group.batch_year, 'ALL')}
+                  key={`${item.batch_year}`}
+                  onClick={() => openDetails(item.batch_year)}
                   style={{ 
                     backgroundColor: 'white',
                     borderRadius: '18px',
@@ -337,13 +255,7 @@ const RequestsPage: React.FC = () => {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.015em' }}>
-                        CLASS OF {group.batch_year}
-                      </div>
-                      <div style={{ fontSize: '14px', fontWeight: 500, opacity: 0.9, marginTop: '4px' }}>
-                        {group.courses.length === 1 
-                          ? `Course: ${primaryCourse}`
-                          : `Courses: ${coursesText}`
-                        }
+                        CLASS OF {item.batch_year}
                       </div>
                     </div>
                   </div>
@@ -371,16 +283,12 @@ const RequestsPage: React.FC = () => {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontSize: '20px', fontWeight: 700, color: '#1E3A8A' }}>
-                          {studentLabel}
+                          {item.count} Student{item.count === 1 ? '' : 's'}
                         </span>
                         <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
-                          OJT Submissions
+                          New Users
                         </span>
                       </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', color: '#1e3a8a', fontWeight: 600, fontSize: '13px' }}>
-                      <span>Open details</span>
-                      <span style={{ marginLeft: 8, fontSize: '16px', transition: 'transform .2s ease' }}>→</span>
                     </div>
                   </div>
                 </div>

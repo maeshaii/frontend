@@ -302,11 +302,13 @@ const UserManagement: React.FC = () => {
     
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
+      toast.error('Passwords do not match');
       return;
     }
 
     if (!newPassword) {
       setError('Password is required');
+      toast.error('Password is required');
       return;
     }
 
@@ -571,10 +573,12 @@ const UserManagement: React.FC = () => {
     if (passwordRequired) {
       if (!formData.acc_password) {
         setError('Password is required for coordinator and peso accounts');
+        toast.error('Password is required for coordinator and peso accounts');
         return;
       }
       if (formData.acc_password !== formData.acc_password_confirm) {
         setError('Passwords do not match');
+        toast.error('Passwords do not match');
         return;
       }
     }
@@ -709,18 +713,30 @@ const UserManagement: React.FC = () => {
         setAccountTypeSelected(false);
       } else {
         const errorMessage = response.data.message || 'Failed to create user';
-        const formatted = errorMessage
+        let formatted = errorMessage
           .replace('Only one PESO account is allowed.', 'PESO account already exists.')
           .replace('Only one coordinator per program is allowed.', 'Coordinator already set for this program.');
+        
+        // Handle "A coordinator already exists for [PROGRAM]" format
+        if (errorMessage.includes('A coordinator already exists for')) {
+          formatted = errorMessage; // Keep the original message as it's already user-friendly
+        }
+        
         setError(formatted);
         toast.error(formatted);
       }
     } catch (error: any) {
       console.error('Error creating user:', error);
       const errorMessage = error.response?.data?.message || 'Failed to create user';
-      const formatted = errorMessage
+      let formatted = errorMessage
         .replace('Only one PESO account is allowed.', 'PESO account already exists.')
         .replace('Only one coordinator per program is allowed.', 'Coordinator already set for this program.');
+      
+      // Handle "A coordinator already exists for [PROGRAM]" format
+      if (errorMessage.includes('A coordinator already exists for')) {
+        formatted = errorMessage; // Keep the original message as it's already user-friendly
+      }
+      
       setError(formatted);
       toast.error(formatted);
     } finally {
