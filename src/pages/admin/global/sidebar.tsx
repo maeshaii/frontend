@@ -540,11 +540,11 @@ const Sidebar = () => {
   const links = [
     { to: '/dashboard', label: 'Dashboard' },
     { to: '/statistics', label: 'Statistics' },
+    { to: '/requests', label: 'New Users' },
     { to: '/user-management', label: 'User Management' },
     { to: '/ViewStats', label: 'Alumni Users', childRoutes: ['/AlumniData'] },
     { to: profileLink, label: 'Profile' },
     { to: '/tracker/questions', label: 'Tracker' },
-    { to: '/requests', label: 'Coordinator Requests' },
     { to: '/rewards', label: 'Reward Requests' },
     { to: '/report-settings', label: 'Header/Footer Settings' },
   ];

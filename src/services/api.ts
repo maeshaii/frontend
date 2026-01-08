@@ -60,6 +60,18 @@ api.interceptors.request.use(
 // Refresh token on 401 once
 let refreshing: Promise<any> | null = null;
 
+const getShortTaskTitle = (title?: string, taskType?: string) => {
+  const base = title || taskType || 'Task';
+  // Remove numbers/underscores so "Follow 10 users" or "milestone_follow_10" becomes "Follow users"
+  const cleaned = base
+    .replace(/[_-]+/g, ' ')
+    .replace(/\d+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return cleaned || 'Task';
+};
+
 api.interceptors.response.use(
   (response) => {
     if (process.env.NODE_ENV === 'development') {
@@ -109,16 +121,14 @@ api.interceptors.response.use(
         // Show toast notification for each completed task
         milestonesArray.forEach((milestone: any) => {
           try {
-            const taskTitle = milestone.title || milestone.task_type || 'Task';
+            const taskTitle = getShortTaskTitle(milestone.title, milestone.task_type);
             const points = milestone.points || 0;
+            const shortMessage = `✅ ${taskTitle}: +${points} pts`;
             
             console.log('🎉 [TOAST DEBUG] Showing toast for milestone:', { taskTitle, points, milestone });
-            console.log('🎉 [TOAST DEBUG] Calling toast.success with message:', `🎉 Task Completed: ${taskTitle}! You earned ${points} points.`);
+            console.log('🎉 [TOAST DEBUG] Calling toast.success with message:', shortMessage);
             
-            const toastId = toast.success(
-              `🎉 Task Completed: ${taskTitle}! You earned ${points} points.`,
-              6000
-            );
+            const toastId = toast.success(shortMessage, 6000);
             
             console.log('🎉 [TOAST DEBUG] Toast ID returned:', toastId);
             console.log('🎉 [TOAST DEBUG] Current toasts in manager:', toast.getToasts());
@@ -704,6 +714,19 @@ export const updateOJTStatus = async (userId: number, status: string) => {
   return response.data;
 };
 
+// Update OJT user information (including company profile)
+export const updateOJTUser = async (userId: number, data: any) => {
+  const response = await api.post(`ojt-users/update/${userId}/`, data);
+  return response.data;
+};
+
+// Get company suggestions based on previous entries (coordinator-specific)
+export const getCompanySuggestions = async (field: string, query: string = '', limit: number = 10, coordinator?: string) => {
+  const coordinatorParam = coordinator ? `&coordinator=${encodeURIComponent(coordinator)}` : '';
+  const response = await api.get(`ojt-users/company-suggestions/?field=${field}&query=${encodeURIComponent(query)}&limit=${limit}${coordinatorParam}`);
+  return response.data;
+};
+
 // Send completed OJT list to admin (returns count)
 export const sendCompletedOJTToAdmin = async (year?: number | string, userIds?: number[]) => {
   const response = await api.post('ojt/send-to-admin/', { year, user_ids: userIds || [] });
@@ -768,14 +791,26 @@ export const approveCoordinatorRequest = async (year: number | string) => {
   };
 };
 
-// Get coordinator requests count for admin dashboard
+// Get coordinator requests count for admin dashboard (DEPRECATED - use fetchNewUsersCount instead)
 export const fetchCoordinatorRequestsCount = async (year?: number | string) => {
   const path = year ? `ojt/coordinator-requests/?year=${year}` : 'ojt/coordinator-requests/';
   const response = await api.get(path);
   return response.data;
 };
 
-// List requested batches with counts for admin cards
+// Get new users count (recently converted alumni) for admin dashboard
+export const fetchNewUsersCount = async () => {
+  const response = await api.get('ojt/new-users-count/');
+  return response.data;
+};
+
+// List newly converted alumni (new users) grouped by year and course
+export const fetchNewUsersList = async () => {
+  const response = await api.get('ojt/new-users-list/');
+  return response.data;
+};
+
+// List requested batches with counts for admin cards (DEPRECATED - use fetchNewUsersList instead)
 export const fetchCoordinatorRequestsList = async () => {
   const response = await api.get('ojt/coordinator-requests/list/');
   return response.data;
@@ -1500,23 +1535,46 @@ export const deleteRecentSearch = async (searchId: number) => {
 
 // Get user's points
 export const getUserPoints = async (userId: number) => {
-  const response = await api.get(`engagement/leaderboard/?user_type=all&limit=1000`);
-  const leaderboard = response.data.leaderboard || [];
-  const userPoints = leaderboard.find((item: any) => item.user_id === userId);
-  return userPoints || {
-    total_points: 0,
-    rank: null,
-    points_breakdown: {
-      likes: { points: 0, count: 0 },
-      comments: { points: 0, count: 0 },
-      shares: { points: 0, count: 0 },
-      replies: { points: 0, count: 0 },
-      posts: { points: 0, count: 0 },
-      posts_with_photos: { points: 0, count: 0 },
-      tracker_form: { points: 0, count: 0 },
-      milestones: { points: 0, count: 0 }
+  try {
+    const response = await api.get(`engagement/user-points/?user_id=${userId}`);
+    if (response.data.success) {
+      return response.data;
     }
-  };
+    // Fallback to default if request fails
+    return {
+      user_id: userId,
+      total_points: 0,
+      rank: null,
+      points_breakdown: {
+        likes: { points: 0, count: 0 },
+        comments: { points: 0, count: 0 },
+        shares: { points: 0, count: 0 },
+        replies: { points: 0, count: 0 },
+        posts: { points: 0, count: 0 },
+        posts_with_photos: { points: 0, count: 0 },
+        tracker_form: { points: 0, count: 0 },
+        milestones: { points: 0, count: 0 }
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching user points:', error);
+    // Fallback to default on error
+    return {
+      user_id: userId,
+      total_points: 0,
+      rank: null,
+      points_breakdown: {
+        likes: { points: 0, count: 0 },
+        comments: { points: 0, count: 0 },
+        shares: { points: 0, count: 0 },
+        replies: { points: 0, count: 0 },
+        posts: { points: 0, count: 0 },
+        posts_with_photos: { points: 0, count: 0 },
+        tracker_form: { points: 0, count: 0 },
+        milestones: { points: 0, count: 0 }
+      }
+    };
+  }
 };
 
 // Get leaderboard

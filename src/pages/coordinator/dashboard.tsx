@@ -5,7 +5,7 @@ import Statistics from './statistics';
 import DetailsTable from './detailstable'; // ✅ Your new table component
 import { fetchOJTStatistics, importOJT, setSendDate, getSendDates, checkAllSentStatus, deleteSendDate } from '../../services/api';
 import whereNaYouLogo from '../../images/wny-logo.png';
-import { FaUpload, FaChartBar, FaSignOutAlt, FaDownload, FaCalendarAlt, FaUsers, FaBars, FaTimes } from 'react-icons/fa';
+import { FaUpload, FaChartBar, FaSignOutAlt, FaDownload, FaCalendarAlt, FaUsers, FaBars, FaTimes, FaArrowLeft } from 'react-icons/fa';
 import { toast } from '../../utils/toast';
 
 export default function Dashboard() {
@@ -13,12 +13,13 @@ export default function Dashboard() {
   const [showModal, setShowModal] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [selectedCard, setSelectedCard] = useState<{ year: number; section?: string } | null>(null);
+  const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [program, setProgram] = useState('BSIT');
   // Generate years from 2000 to 2025 (descending order)
   const availableYears = Array.from({ length: 26 }, (_, i) => 2025 - i);
-  const [ojtYears, setOjtYears] = useState<{ year: number; section?: string; count: number }[]>([]);
+  const [ojtYears, setOjtYears] = useState<{ year: number; section?: string; count: number; status_breakdown?: { completed: number; ongoing: number; incomplete: number; not_started: number } }[]>([]);
   const [loading, setLoading] = useState(true);
   const [importLoading, setImportLoading] = useState(false);
   const [coordinatorUsername, setCoordinatorUsername] = useState('');
@@ -33,6 +34,7 @@ export default function Dashboard() {
   const [importResult, setImportResult] = useState<any>(null);
   const [importError, setImportError] = useState<{ title?: string; message: string; hint?: string; details?: string[] } | null>(null);
   const [exportSection, setExportSection] = useState<string>('ALL');
+  const [exportBatchYear, setExportBatchYear] = useState<string>('');
   const [sendDate, setSendDateState] = useState('');
   const [existingSendDates, setExistingSendDates] = useState<any[]>([]);
   const [allDataSent, setAllDataSent] = useState(false);
@@ -40,7 +42,10 @@ export default function Dashboard() {
   const [importTemplateType, setImportTemplateType] = useState<'CREATE' | 'UPDATE' | null>(null);
   const [showFileRestrictionModal, setShowFileRestrictionModal] = useState(false);
   const [fileRestrictionMessage, setFileRestrictionMessage] = useState('');
+  const [showRemoveConfirmModal, setShowRemoveConfirmModal] = useState(false);
+  const [importBatchYear, setImportBatchYear] = useState<string>(''); // Batch year for import
   const excelJSRef = useRef<any>(null);
+  const shownToastBatchesRef = useRef<Set<number>>(new Set());
   
   // Responsive sidebar state - matching admin sidebar exactly
   const initialWidth = window.innerWidth;
@@ -193,6 +198,56 @@ export default function Dashboard() {
     return 'BSIT';
   };
 
+  // Validate sequential batch year selection
+  // Users must select batch years in sequential order (2026, then 2027, then 2028, etc.)
+  // Each batch year must have a send date set before the next batch year can be selected
+  const validateBatchYearSelection = (selectedYear: string): { isValid: boolean; missingBatch: number | null; errorMessage: string | null } => {
+    if (!selectedYear || selectedYear.trim() === '') {
+      return { isValid: false, missingBatch: null, errorMessage: 'Please select a batch year.' };
+    }
+
+    const selectedYearNum = parseInt(selectedYear, 10);
+    if (isNaN(selectedYearNum)) {
+      return { isValid: false, missingBatch: null, errorMessage: 'Invalid batch year selected.' };
+    }
+
+    // Get all batch years that have send dates set
+    const batchesWithSendDates = existingSendDates
+      .filter((sd: any) => sd.send_date != null)
+      .map((sd: any) => sd.batch_year)
+      .sort((a: number, b: number) => a - b); // Sort ascending
+
+    // If no batches have send dates, user can start from any year (no validation needed)
+    if (batchesWithSendDates.length === 0) {
+      return { isValid: true, missingBatch: null, errorMessage: null };
+    }
+
+    const earliestBatchWithSendDate = batchesWithSendDates[0];
+
+    // If selected year is before or equal to the earliest batch with send date, it's valid
+    if (selectedYearNum <= earliestBatchWithSendDate) {
+      return { isValid: true, missingBatch: null, errorMessage: null };
+    }
+
+    // Check all batch years from earliestBatchWithSendDate to selectedYearNum - 1
+    // Each must have a send date set (strict sequential ordering)
+    for (let year = earliestBatchWithSendDate; year < selectedYearNum; year++) {
+      const hasSendDate = existingSendDates.some((sd: any) => 
+        sd.batch_year === year && sd.send_date != null
+      );
+
+      if (!hasSendDate) {
+        return {
+          isValid: false,
+          missingBatch: year,
+          errorMessage: `Batch ${year} must have a send date set before importing batch ${selectedYearNum}.`
+        };
+      }
+    }
+
+    return { isValid: true, missingBatch: null, errorMessage: null };
+  };
+
   useEffect(() => {
     // Get coordinator info from localStorage
     const user = localStorage.getItem('user');
@@ -235,6 +290,79 @@ export default function Dashboard() {
       loadAvailableYears();
     }
   }, [coordinatorUsername]);
+
+  // Fetch send dates when coordinator or batch filter changes
+  useEffect(() => {
+    const loadSendDates = async () => {
+      if (coordinatorUsername) {
+        try {
+          const result = await getSendDates(coordinatorUsername);
+          if (result.success && result.scheduled_dates) {
+            setExistingSendDates(result.scheduled_dates);
+            
+            // Check for send dates within 7 days or passed and show toast (only once per batch per page load)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            result.scheduled_dates.forEach((sd: any) => {
+              if (sd.send_date && !shownToastBatchesRef.current.has(sd.batch_year)) {
+                const sendDate = new Date(sd.send_date);
+                sendDate.setHours(0, 0, 0, 0);
+                
+                const diffTime = sendDate.getTime() - today.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                const hasPassed = sendDate <= today;
+                
+                if (hasPassed) {
+                  toast.warning(`The send date for batch ${sd.batch_year} has passed (${sd.send_date}). Updates are no longer allowed.`);
+                  shownToastBatchesRef.current.add(sd.batch_year);
+                } else if (diffDays <= 7 && diffDays > 0) {
+                  toast.warning(`The send date for batch ${sd.batch_year} is approaching. Only ${diffDays} day${diffDays !== 1 ? 's' : ''} remaining (${sd.send_date}).`);
+                  shownToastBatchesRef.current.add(sd.batch_year);
+                }
+              }
+            });
+          } else {
+            setExistingSendDates([]);
+          }
+        } catch (error) {
+          console.error('Error fetching send dates:', error);
+          setExistingSendDates([]);
+        }
+      }
+    };
+
+    loadSendDates();
+  }, [coordinatorUsername, selectedBatchFilter]);
+
+  // Calculate current batch (most recent batch) and previous batch
+  const getCurrentAndPreviousBatch = () => {
+    const allBatches = Array.from(new Set(ojtYears.map(y => y.year).filter(y => y !== null && y !== undefined)))
+      .sort((a, b) => b - a); // Descending order (newest first)
+    
+    const currentBatch = allBatches.length > 0 ? allBatches[0] : null;
+    const previousBatch = allBatches.length > 1 ? allBatches[1] : null;
+    
+    return { currentBatch, previousBatch };
+  };
+  
+  const { currentBatch, previousBatch } = getCurrentAndPreviousBatch();
+  
+  // Check if previous batch's send date has passed
+  const previousBatchSendDatePassed = (() => {
+    if (!previousBatch) return false;
+    const prevBatchSendDate = existingSendDates.find((sd: any) => 
+      sd.batch_year === previousBatch && !sd.is_processed
+    );
+    if (!prevBatchSendDate) return false;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const sendDate = new Date(prevBatchSendDate.send_date);
+    sendDate.setHours(0, 0, 0, 0);
+    
+    return sendDate < today;
+  })();
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -309,6 +437,19 @@ export default function Dashboard() {
       toast.warning('Please select at least one file');
       return;
     }
+    
+    // Validate that batch year is selected (required field)
+    if (!importBatchYear || importBatchYear.trim() === '') {
+      toast.error('Please select a batch year. This field is required.');
+      return;
+    }
+
+    // Validate sequential batch year selection
+    const validation = validateBatchYearSelection(importBatchYear);
+    if (!validation.isValid) {
+      toast.error(validation.errorMessage || 'Invalid batch year selection.');
+      return;
+    }
 
     setImportLoading(true);
     try {
@@ -329,9 +470,11 @@ export default function Dashboard() {
         console.log(`Importing file ${i + 1}/${selectedFiles.length}: ${file.name}`);
         
         try {
-          // Year is auto-detected: from existing users or from Excel "Batch_Year" column
-          // Each file can have its own batch year and sections
-          const result = await importOJT(file, '', program, coordinatorUsername);
+          // Batch year is now REQUIRED - must be selected from dropdown
+          // This will override any Batch_Year column in Excel
+          const batchYearToSend = importBatchYear.trim();
+          console.log(`🔍 DEBUG: Sending batch_year to backend: "${batchYearToSend}" (from dropdown: "${importBatchYear}")`);
+          const result = await importOJT(file, batchYearToSend, program, coordinatorUsername);
           console.log(`Import result for ${file.name}:`, result);
           
           if (result.success) {
@@ -378,98 +521,14 @@ export default function Dashboard() {
               updated: 0
             });
 
-            const serverMessage = result.message || 'Import failed. Please review your template and try again.';
-            const normalizedMessage = serverMessage.toLowerCase();
-            let hint: string | undefined;
-            let details: string[] | undefined;
-            let errorTitle = 'Import blocked';
-            
-            // Check for CTU ID validation errors
-            if (normalizedMessage.includes('invalid ctu_id format') || 
-                normalizedMessage.includes('ctu_id must be exactly 7') ||
-                (normalizedMessage.includes('ctu_id') && (normalizedMessage.includes('7') || normalizedMessage.includes('digit') || normalizedMessage.includes('numeric') || normalizedMessage.includes('exactly')))) {
-              errorTitle = 'Invalid CTU ID Format';
-              hint = 'All CTU IDs must be exactly 7 numeric digits (e.g., 1234567).';
-              // Parse the error message to extract row details
-              const lines = serverMessage.split('\n');
-              const errorLines = lines.filter((line: string) => line.trim().startsWith('Row'));
-              
-              // Also check for single error messages that mention specific CTU IDs
-              const hasSpecificError = serverMessage.includes("but got") || serverMessage.includes("character(s)");
-              
-              if (errorLines.length > 0) {
-                details = [
-                  'The following rows have invalid CTU IDs:',
-                  ...errorLines.slice(0, 15).map((line: string) => `• ${line.trim()}`),
-                  ...(errorLines.length > 15 ? [`... and ${errorLines.length - 15} more error(s)`] : [])
-                ];
-              } else if (hasSpecificError) {
-                // Extract the specific error from the message
-                const errorMatch = serverMessage.match(/but got \d+ character\(s\): '([^']+)'/);
-                if (errorMatch) {
-                  details = [
-                    `Found invalid CTU ID: ${errorMatch[1]}`,
-                    'Please check all CTU IDs in your file.',
-                    'Each CTU ID must be exactly 7 numbers (no letters, no spaces).',
-                    'Example: 1234567 ✅',
-                    'Invalid: 123456 ❌ (too short)',
-                    'Invalid: 12345678 ❌ (too long)',
-                    'Invalid: 123456a ❌ (contains letter)'
-                  ];
-                } else {
-                  details = [
-                    serverMessage.split('\n')[0] || 'Invalid CTU ID format detected.',
-                    'Please check all CTU IDs in your file.',
-                    'Each CTU ID must be exactly 7 numbers (no letters, no spaces).',
-                    'Example: 1234567 ✅',
-                    'Invalid: 123456 ❌ (too short)',
-                    'Invalid: 12345678 ❌ (too long)',
-                    'Invalid: 123456a ❌ (contains letter)'
-                  ];
-                }
-              } else {
-                details = [
-                  'Please check all CTU IDs in your file.',
-                  'Each CTU ID must be exactly 7 numbers (no letters, no spaces).',
-                  'Example: 1234567 ✅',
-                  'Invalid: 123456 ❌ (too short)',
-                  'Invalid: 12345678 ❌ (too long)',
-                  'Invalid: 123456a ❌ (contains letter)'
-                ];
-              }
-              // Clear selected files since validation failed
-              clearSelectedFiles();
-            } else if (normalizedMessage.includes('second-import template')) {
-              hint = 'Add students first, then company info.';
-            } else if (normalizedMessage.includes('immediately after creating')) {
-              const recentIds = Array.isArray(result.recent_ctu_ids) ? result.recent_ctu_ids : [];
-              hint = 'Add company information after adding students.';
-              details = [
-                'Upload students first.',
-                'Wait a few minutes before adding company information.',
-                recentIds.length
-                  ? `These student IDs need time: ${recentIds.join(', ')}`
-                  : 'Add company information after students are created.',
-              ];
-            } else if (normalizedMessage.includes('mixed template')) {
-              hint = 'Add students and company information separately.';
-              details = [
-                'Upload students first.',
-                'Then add company details.',
-                'Do not combine both in one file.',
-              ];
-            }
-            setImportError({
-              title: errorTitle,
-              message: serverMessage,
-              hint,
-              details,
-            });
-            setShowImportErrorModal(true);
+            // Show specific error message from backend if available
+            const errorMessage = result.message || 'Import failed';
+            toast.error(errorMessage);
+            clearSelectedFiles();
             setImportLoading(false);
             return;
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Error importing ${file.name}:`, error);
           failedFiles.push(file.name);
           fileResults.push({
@@ -479,12 +538,9 @@ export default function Dashboard() {
             created: 0,
             updated: 0
           });
-          const errorMessage = (error as any)?.message || 'Import failed due to a network error.';
-          setImportError({
-            title: 'Import failed',
-            message: errorMessage,
-          });
-          setShowImportErrorModal(true);
+          // Show specific error message from backend if available
+          const errorMessage = error?.response?.data?.message || error?.message || 'Import failed';
+          toast.error(errorMessage);
           setImportLoading(false);
           return;
         }
@@ -523,12 +579,9 @@ export default function Dashboard() {
       await refreshOJTData();
     } catch (error: any) {
       console.error('OJT import error:', error);
-      const fallbackMessage = error?.response?.data?.message || error?.message || 'Import failed. Please try again.';
-      setImportError({
-        title: 'Import failed',
-        message: fallbackMessage,
-      });
-      setShowImportErrorModal(true);
+      // Show specific error message from backend if available
+      const errorMessage = error?.response?.data?.message || error?.message || 'Import failed';
+      toast.error(errorMessage);
     } finally {
       setImportLoading(false);
     }
@@ -575,6 +628,120 @@ export default function Dashboard() {
     }
   };
 
+  const handleRemoveSchedule = async () => {
+    setShowRemoveConfirmModal(false);
+    try {
+      // If "ALL" is selected, remove schedules for all batches
+      if (selectedBatchFilter === 'ALL') {
+        let successCount = 0;
+        let failCount = 0;
+        const errors: string[] = [];
+
+        // Get all unique years from existing UNPROCESSED send dates
+        const yearsToRemove = [...new Set(existingSendDates.filter(sd => !sd.is_processed).map(sd => sd.batch_year))];
+
+        for (const year of yearsToRemove) {
+          try {
+            const result = await deleteSendDate(coordinatorUsername, year);
+            if (result.success) {
+              successCount++;
+              console.log(`✅ Removed schedule for batch ${year}`);
+            } else {
+              failCount++;
+              errors.push(`Batch ${year}: ${result.message}`);
+            }
+          } catch (error: any) {
+            console.error(`Error removing schedule for year ${year}:`, error);
+            failCount++;
+            errors.push(`Batch ${year}: ${error.message || 'Unknown error'}`);
+          }
+        }
+
+        // Refresh the send dates list and status in real-time
+        try {
+          const result = await getSendDates(coordinatorUsername);
+          if (result.success && result.scheduled_dates) {
+            setExistingSendDates(result.scheduled_dates);
+          } else {
+            setExistingSendDates([]);
+          }
+          
+          // Refresh all sent status
+          const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
+          if (statusResult.success) {
+            setAllDataSent(statusResult.all_sent);
+            setCompletedCount(statusResult.total_completed || 0);
+          }
+        } catch (error) {
+          console.error('Error refreshing send dates:', error);
+          setExistingSendDates([]);
+        }
+
+        if (successCount > 0) {
+          const message = failCount > 0 
+            ? `Schedules Removed!\n\n✓ Removed: ${successCount}\n✗ Failed: ${failCount}\n\n${errors.slice(0, 3).join('\n')}`
+            : `All ${successCount} schedule(s) removed successfully!`;
+          toast.success(message);
+        } else {
+          toast.error(`Failed to remove schedules.\n\n${errors.slice(0, 3).join('\n')}`);
+        }
+      } else {
+        // Remove schedule for specific year
+        const batchYear = parseInt(selectedBatchFilter);
+        if (isNaN(batchYear)) {
+          toast.error('Invalid batch year selected');
+          return;
+        }
+
+        const result = await deleteSendDate(coordinatorUsername, batchYear);
+
+        // Refresh the send dates list and status after removal in real-time
+        try {
+          const refreshResult = await getSendDates(coordinatorUsername);
+          if (refreshResult.success && refreshResult.scheduled_dates) {
+            setExistingSendDates(refreshResult.scheduled_dates);
+          } else {
+            setExistingSendDates([]);
+          }
+          
+          // Refresh all sent status
+          const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
+          if (statusResult.success) {
+            setAllDataSent(statusResult.all_sent);
+            setCompletedCount(statusResult.total_completed || 0);
+          }
+        } catch (error) {
+          console.error('Error refreshing send dates:', error);
+          setExistingSendDates([]);
+        }
+
+        if (result.success) {
+          const message = result.deleted_count > 0
+            ? `Schedule removed successfully for batch ${selectedBatchFilter}!`
+            : `No active schedule found for batch ${selectedBatchFilter} (already removed or never existed)`;
+          toast.success(message);
+        } else {
+          toast.error(`Error: ${result.message}`);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error removing schedule:', error);
+      toast.error(`Failed to remove schedule: ${error.message || 'Please try again.'}`);
+      
+      // Still try to refresh the list
+      try {
+        const result = await getSendDates(coordinatorUsername);
+        if (result.success && result.scheduled_dates) {
+          setExistingSendDates(result.scheduled_dates);
+        } else {
+          setExistingSendDates([]);
+        }
+      } catch (refreshError) {
+        console.error('Error refreshing send dates:', refreshError);
+      }
+    }
+  };
+
   const downloadOJTTemplate = () => {
     // Template for FIRST IMPORT - Creating new students
     // Required: CTU_ID, First Name, Last Name, Gender, Section
@@ -605,13 +772,19 @@ export default function Dashboard() {
     window.URL.revokeObjectURL(url);
   };
 
-  const exportStudentsForUpdate = async (selectedSection: string = 'ALL') => {
+  const exportStudentsForUpdate = async (selectedBatchYear: string, selectedSection: string = 'ALL') => {
     try {
+      // Validate batch year is selected
+      if (!selectedBatchYear || selectedBatchYear.trim() === '') {
+        toast.error('Please select a batch year first.');
+        return;
+      }
+      
       setLoading(true);
       setShowExportModal(false); // Close modal after selection
       
-      // Build API URL with optional section filter
-      let apiUrl = `http://localhost:8000/api/ojt/students/?coordinator=${coordinatorUsername}`;
+      // Build API URL with batch year (required) and optional section filter
+      let apiUrl = `http://localhost:8000/api/ojt/students/?coordinator=${coordinatorUsername}&batch_year=${encodeURIComponent(selectedBatchYear)}`;
       if (selectedSection && selectedSection !== 'ALL') {
         apiUrl += `&section=${encodeURIComponent(selectedSection)}`;
       }
@@ -699,13 +872,13 @@ export default function Dashboard() {
           student.first_name || '',
           student.last_name || '',
           student.section || '',
-          '', // Empty Company
-          '', // Empty Company Address
-          '', // Empty Company Email
-          '', // Empty Company Contact
-          '', // Empty Contact Person
-          '', // Empty Position
-          student.status || 'Ongoing', // Default Status
+          student.company || '',           // Company
+          student.company_address || '',   // Company Address
+          student.company_email || '',     // Company Email
+          student.company_contact || '',   // Company Contact
+          student.contact_person || '',    // Contact Person
+          student.position || '',          // Position
+          student.status || 'Ongoing',     // Default Status
         ]);
       });
 
@@ -738,12 +911,13 @@ export default function Dashboard() {
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
-      const sectionSuffix = selectedSection && selectedSection !== 'ALL' ? `_${selectedSection}` : '_all_sections';
-      const filename = `ojt_students_update_${new Date().toISOString().split('T')[0]}${sectionSuffix}.xlsx`;
-      
-      FileSaver.saveAs(blob, filename);
+        const batchSuffix = selectedBatchYear ? `_batch_${selectedBatchYear}` : '';
+        const sectionSuffix = selectedSection && selectedSection !== 'ALL' ? `_${selectedSection}` : '_all_sections';
+        const filename = `ojt_students_update_${new Date().toISOString().split('T')[0]}${batchSuffix}${sectionSuffix}.xlsx`;
+        
+        FileSaver.saveAs(blob, filename);
 
-      toast.success(`✅ Exported ${students.length} student${students.length !== 1 ? 's' : ''}${selectedSection && selectedSection !== 'ALL' ? ` from section ${selectedSection}` : ' from all sections'}! Status column has dropdown (Ongoing/Completed). Open in Excel desktop app to use dropdown.`);
+        toast.success(`✅ Successfully exported ${students.length} student${students.length !== 1 ? 's' : ''}!`);
     } catch (error) {
       console.error('Export error:', error);
       toast.error('Failed to export students. Please try again.');
@@ -1280,38 +1454,19 @@ export default function Dashboard() {
         <div style={{ flex: 1, overflowY: 'auto' }}>
 
         {/* Modern Filters & Actions */}
-        {!showStats && !selectedCard && (
+        {!showStats && !selectedCard && !selectedBatch && (
           <div style={{
             backgroundColor: 'white',
             borderRadius: '16px',
             padding: '20px',
             marginBottom: '20px',
             boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-            border: '1px solid #e5e7eb'
+            border: '1px solid #e5e7eb',
+            marginLeft: '25px',  // space between sidebar and header card
+            position: 'sticky',   // keep header visible while sections scroll
+            top: 0,
+            zIndex: 5
           }}>
-            {/* Class Year Header - Shows newest batch */}
-            {ojtYears.length > 0 && (
-              <div style={{
-                marginBottom: '24px',
-                paddingBottom: '20px',
-                borderBottom: '2px solid #f1f5f9'
-              }}>
-                <h2 style={{
-                  margin: 0,
-                  fontSize: '24px',
-                  fontWeight: '800',
-                  color: '#1e293b',
-                  letterSpacing: '-0.025em'
-                }}>
-                  CLASS OF {(() => {
-                    // Get the newest/latest batch year from imported data
-                    const latestYear = Math.max(...ojtYears.map(y => y.year));
-                    return latestYear ? `${latestYear - 1}-${latestYear}` : '2025-2026';
-                  })()}
-                </h2>
-              </div>
-            )}
-            
             <div style={{ 
               display: 'flex', 
               alignItems: 'flex-start',
@@ -1350,7 +1505,7 @@ export default function Dashboard() {
                 </div>
               </div>
             
-              {/* Filter by Section */}
+              {/* Filter by Batch */}
               <div>
                 <label style={{ 
                   fontWeight: '600',
@@ -1359,16 +1514,19 @@ export default function Dashboard() {
                   display: 'block',
                   marginBottom: '8px'
                 }}>
-                  Filter by Section
+                  Filter by Batch
                 </label>
                 <select
-                  value={selectedSectionFilter}
-                  onChange={(e) => setSelectedSectionFilter(e.target.value)}
+                  value={selectedBatchFilter}
+                  onChange={(e) => {
+                    setSelectedBatchFilter(e.target.value);
+                    setSelectedSectionFilter('ALL'); // Reset section when batch changes
+                  }}
                   style={{ 
                     padding: '12px 16px',
                     border: '2px solid #e5e7eb',
                     borderRadius: '12px',
-                    minWidth: '180px',
+                    minWidth: '200px',
                     fontSize: '14px',
                     backgroundColor: 'white',
                     color: '#374151',
@@ -1386,10 +1544,14 @@ export default function Dashboard() {
                     e.target.style.boxShadow = 'none';
                   }}
                 >
-                  <option value="ALL">All Sections</option>
-                  {Array.from(new Set(ojtYears.map(y => y.section).filter(s => s))).sort().map(section => (
-                    <option key={section} value={section}>{section}</option>
-                  ))}
+                  <option value="ALL">All Batches</option>
+                  {Array.from(new Set(ojtYears.map(y => y.year).filter(y => y !== null && y !== undefined)))
+                    .sort((a, b) => b - a) // Descending order (newest first)
+                    .map((year) => (
+                      <option key={year} value={year.toString()}>
+                        {year} (CLASS OF {year}-{year + 1})
+                      </option>
+                    ))}
                 </select>
               </div>
               
@@ -1482,7 +1644,11 @@ export default function Dashboard() {
                     alignItems: 'center',
                     gap: '8px'
                   }}
-                  onClick={() => setShowExportModal(true)}
+                  onClick={() => {
+                    setExportBatchYear('');
+                    setExportSection('ALL');
+                    setShowExportModal(true);
+                  }}
                   onMouseEnter={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
                     target.style.backgroundColor = '#2563eb';
@@ -1501,20 +1667,90 @@ export default function Dashboard() {
                 <button
                   style={{ 
                     padding: '11px 20px',
-                    backgroundColor: '#3b82f6',
+                    backgroundColor: (() => {
+                      if (!currentBatch) return '#9ca3af';
+                      const isProcessed = existingSendDates.some((sd: any) => 
+                        sd.batch_year === currentBatch && sd.is_processed
+                      );
+                      return isProcessed ? '#9ca3af' : '#3b82f6';
+                    })(),
                     color: 'white',
                     border: 'none',
                     borderRadius: '10px',
                     fontSize: '14px',
                     fontWeight: '600',
-                    cursor: 'pointer',
+                    cursor: (() => {
+                      if (!currentBatch) return 'not-allowed';
+                      const isProcessed = existingSendDates.some((sd: any) => 
+                        sd.batch_year === currentBatch && sd.is_processed
+                      );
+                      return isProcessed ? 'not-allowed' : 'pointer';
+                    })(),
                     transition: 'all 0.2s ease',
                     boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px'
+                    gap: '8px',
+                    opacity: (() => {
+                      if (!currentBatch) return 0.6;
+                      const isProcessed = existingSendDates.some((sd: any) => 
+                        sd.batch_year === currentBatch && sd.is_processed
+                      );
+                      return isProcessed ? 0.6 : 1;
+                    })(),
                   }}
                   onClick={async () => {
+                    // Automatically determine the current batch (most recent batch)
+                    if (!currentBatch) {
+                      toast.warning('No OJT batches found. Please import OJT students first.');
+                      return;
+                    }
+                    
+                    // Check if previous batch's send date has passed
+                    if (previousBatchSendDatePassed) {
+                      // Automatically set the current batch as the target
+                      setSelectedBatchFilter(currentBatch.toString());
+                    } else {
+                      // Check if current batch already has a send date
+                      const currentBatchSendDate = existingSendDates.find((sd: any) => 
+                        sd.batch_year === currentBatch
+                      );
+                      
+                      if (currentBatchSendDate) {
+                        if (currentBatchSendDate.is_processed) {
+                          toast.error(`Cannot set send date. Batch ${currentBatch} has already been processed on ${new Date(currentBatchSendDate.processed_at || currentBatchSendDate.send_date).toLocaleDateString()}. Processed batches cannot be modified.`);
+                          return;
+                        } else {
+                          // Allow updating unprocessed send date
+                          setSelectedBatchFilter(currentBatch.toString());
+                        }
+                      } else {
+                        // No send date exists for current batch, check if previous batch needs to pass first
+                        if (previousBatch) {
+                          const prevBatchSendDate = existingSendDates.find((sd: any) => 
+                            sd.batch_year === previousBatch && !sd.is_processed
+                          );
+                          
+                          if (prevBatchSendDate) {
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const sendDate = new Date(prevBatchSendDate.send_date);
+                            sendDate.setHours(0, 0, 0, 0);
+                            
+                            if (sendDate >= today) {
+                              toast.warning(`Please wait until the previous batch (${previousBatch}) send date (${sendDate.toLocaleDateString()}) has passed before setting a send date for the current batch (${currentBatch}).`);
+                              return;
+                            }
+                          }
+                        }
+                        // Set current batch as target
+                        setSelectedBatchFilter(currentBatch.toString());
+                      }
+                    }
+                    
+                    // Use current batch for send date operations
+                    const batchYearToUse = currentBatch;
+                    
                     // Fetch existing send dates before showing modal
                     try {
                       const result = await getSendDates(coordinatorUsername);
@@ -1526,6 +1762,36 @@ export default function Dashboard() {
                         console.log(`   → Processed: ${processedCount}, Unprocessed: ${unprocessedCount}`);
                         console.log(`   → Selected batch: ${selectedBatchFilter}`);
                         setExistingSendDates(result.scheduled_dates);
+                        
+                        // Check again after fetching (in case it was updated)
+                        if (selectedBatchFilter !== 'ALL') {
+                          const batchYear = parseInt(selectedBatchFilter);
+                          const existingSendDate = result.scheduled_dates.find((sd: any) => 
+                            sd.batch_year === batchYear
+                          );
+                          
+                          if (existingSendDate) {
+                            // Check if send date is processed - if yes, block modification
+                            if (existingSendDate.is_processed) {
+                              toast.error(`Cannot set send date. Batch ${batchYear} has already been processed on ${new Date(existingSendDate.processed_at || existingSendDate.send_date).toLocaleDateString()}. Processed batches cannot be modified.`);
+                              return;
+                            }
+                            
+                            // Check if send date has passed - if yes, block modification
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const sendDate = new Date(existingSendDate.send_date);
+                            sendDate.setHours(0, 0, 0, 0);
+                            
+                            if (sendDate < today) {
+                              toast.error(`Cannot set send date. Batch ${batchYear} send date (${sendDate.toLocaleDateString()}) has already passed. Cannot modify past send dates.`);
+                              return;
+                            }
+                            
+                            // Send date exists but hasn't passed and is not processed - allow modification
+                            console.log(`✅ Batch ${batchYear} has unprocessed send date that hasn't passed - allowing modification`);
+                          }
+                        }
                       } else {
                         console.log('ℹ️ No scheduled dates found');
                         setExistingSendDates([]);
@@ -1535,31 +1801,62 @@ export default function Dashboard() {
                       setExistingSendDates([]);
                     }
                     
-                    // Check if all completed students are already sent to admin for this specific batch
+                    // Check if all completed students are already sent to admin for the current batch
                     try {
-                      const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
+                      const statusResult = await checkAllSentStatus(coordinatorUsername, batchYearToUse.toString());
                       console.log('🔍 All Sent Status:', statusResult);
                       if (statusResult.success) {
                         setAllDataSent(statusResult.all_sent);
                         setCompletedCount(statusResult.total_completed || 0);
-                        console.log(`✅ Batch ${selectedBatchFilter} - All data sent: ${statusResult.all_sent}, Completed: ${statusResult.total_completed}, Sent: ${statusResult.completed_sent}, Not Sent: ${statusResult.completed_not_sent}`);
+                        console.log(`✅ Batch ${batchYearToUse} - All data sent: ${statusResult.all_sent}, Completed: ${statusResult.total_completed}, Sent: ${statusResult.completed_sent}, Not Sent: ${statusResult.completed_not_sent}`);
                       }
                     } catch (error) {
                       console.error('❌ Error checking sent status:', error);
                       setAllDataSent(false);
                     }
                     
+                    // Show informational toast about date restriction when modal opens
+                    if (previousBatchSendDatePassed) {
+                      toast.info(`Previous batch (${previousBatch}) send date has passed. Setting send date for current batch (${batchYearToUse}).`);
+                    } else {
+                      toast.info('Only today or future dates allowed');
+                    }
+                    
                     setShowDateModal(true);
                   }}
                   onMouseEnter={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
-                    target.style.backgroundColor = '#2563eb';
-                    target.style.transform = 'translateY(-2px)';
-                    target.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
+                    if (selectedBatchFilter !== 'ALL') {
+                      const batchYear = parseInt(selectedBatchFilter);
+                      const hasSendDate = existingSendDates.some((sd: any) => 
+                        sd.batch_year === batchYear
+                      );
+                      if (!hasSendDate) {
+                        target.style.backgroundColor = '#2563eb';
+                        target.style.transform = 'translateY(-2px)';
+                        target.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
+                      }
+                    } else {
+                      target.style.backgroundColor = '#2563eb';
+                      target.style.transform = 'translateY(-2px)';
+                      target.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
+                    }
                   }}
                   onMouseLeave={(e) => {
                     const target = e.currentTarget as HTMLButtonElement;
-                    target.style.backgroundColor = '#3b82f6';
+                    if (selectedBatchFilter !== 'ALL') {
+                      const batchYear = parseInt(selectedBatchFilter);
+                      const hasSendDate = existingSendDates.some((sd: any) => 
+                        sd.batch_year === batchYear
+                      );
+                      if (hasSendDate) {
+                        target.style.backgroundColor = '#9ca3af';
+                      } else {
+                        target.style.backgroundColor = '#3b82f6';
+                      }
+                    } else {
+                      target.style.backgroundColor = '#3b82f6';
+                    }
                     target.style.transform = 'translateY(0)';
                     target.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
                   }}
@@ -1575,17 +1872,257 @@ export default function Dashboard() {
         {!showStats ? (
           selectedCard ? (
             <DetailsTable 
-              onBack={() => setSelectedCard(null)} 
+              onBack={() => {
+                setSelectedCard(null);
+                // If we came from a batch selection, restore it
+                if (selectedCard.year) {
+                  setSelectedBatch(selectedCard.year);
+                }
+              }} 
               selectedYear={selectedCard.year}
               selectedSection={selectedCard.section}
             />
+          ) : selectedBatch ? (
+            <div>
+              {/* Back Button */}
+              <div style={{ marginBottom: '24px', paddingLeft: '30px' }}>
+                <button
+                  onClick={() => setSelectedBatch(null)}
+                  style={{
+                    backgroundColor: 'transparent',
+                    color: '#1e293b',
+                    border: 'none',
+                    borderRadius: '16px',
+                    padding: '14px 24px',
+                    fontSize: '15px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: 'none',
+                    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                  }}
+                  onMouseEnter={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.transform = 'translateY(-2px)';
+                    target.style.backgroundColor = '#f8fafc';
+                  }}
+                  onMouseLeave={(e) => {
+                    const target = e.currentTarget as HTMLButtonElement;
+                    target.style.transform = 'translateY(0)';
+                    target.style.backgroundColor = 'transparent';
+                  }}
+                >
+                  <FaArrowLeft />
+                  Back
+                </button>
+              </div>
+              {/* Section Cards */}
+              <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+              gap: '24px',
+              marginBottom: '32px',
+              justifyItems: 'stretch',
+              paddingLeft: '30px',
+              width: '100%',
+              boxSizing: 'border-box'
+            }}>
+                {ojtYears
+                  .filter(yearData => yearData.year === selectedBatch)
+                  .map((yearData) => {
+                    const studentLabel = `${yearData.count} Student${yearData.count === 1 ? '' : 's'}`;
+                    const statusBreakdown = yearData.status_breakdown || {
+                      completed: 0,
+                      ongoing: 0,
+                      incomplete: 0,
+                      not_started: 0
+                    };
+                    return (
+                      <div
+                        key={`${yearData.year}-${yearData.section || 'default'}`}
+                        style={{
+                          backgroundColor: 'white',
+                          borderRadius: '20px',
+                          padding: '24px',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                          border: '1px solid rgba(226, 232, 240, 0.8)',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '16px',
+                          position: 'relative',
+                          overflow: 'visible',
+                          width: '100%',
+                          maxWidth: '100%',
+                          boxSizing: 'border-box'
+                        }}
+                        onClick={() => setSelectedCard({ year: yearData.year, section: yearData.section })}
+                        onMouseEnter={(e) => {
+                          const target = e.currentTarget as HTMLDivElement;
+                          target.style.transform = 'translateY(-6px) scale(1.02)';
+                          target.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
+                          target.style.borderColor = 'rgba(29, 78, 216, 0.3)';
+                        }}
+                        onMouseLeave={(e) => {
+                          const target = e.currentTarget as HTMLDivElement;
+                          target.style.transform = 'translateY(0) scale(1)';
+                          target.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                          target.style.borderColor = 'rgba(226, 232, 240, 0.8)';
+                        }}
+                      >
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '16px'
+                        }}>
+                          <div style={{
+                            width: '56px',
+                            height: '56px',
+                            borderRadius: '18px',
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#ffffff',
+                            fontSize: '24px',
+                            boxShadow: '0 10px 15px -3px rgba(102, 126, 234, 0.3), 0 4px 6px -2px rgba(102, 126, 234, 0.2)',
+                            flexShrink: 0
+                          }}>
+                            <FaUsers />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <h3 style={{ 
+                              margin: 0, 
+                              fontSize: '20px', 
+                              fontWeight: 700, 
+                              color: '#1e293b',
+                              letterSpacing: '-0.02em',
+                              lineHeight: '1.3',
+                              fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                            }}>
+                              Section : {yearData.section || 'N/A'}
+                            </h3>
+                          </div>
+                        </div>
+                        <div style={{
+                          marginTop: 'auto',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px'
+                        }}>
+                          {/* Total Students */}
+                          <div style={{
+                            background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                            border: '1px solid rgba(59, 130, 246, 0.2)',
+                            borderRadius: '14px',
+                            padding: '12px 16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#1e40af',
+                            fontWeight: 600,
+                            boxShadow: '0 1px 3px 0 rgba(59, 130, 246, 0.1)'
+                          }}>
+                            <span style={{ 
+                              fontSize: '16px', 
+                              fontWeight: 700,
+                              color: '#1e40af',
+                              letterSpacing: '-0.01em',
+                              fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                            }}>{studentLabel}</span>
+                          </div>
+                          
+                          {/* Status Breakdown */}
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 1fr',
+                            gap: '8px',
+                            fontSize: '11px'
+                          }}>
+                            {/* Completed */}
+                            <div style={{
+                              background: '#d1fae5',
+                              border: '1px solid #10b981',
+                              borderRadius: '8px',
+                              padding: '8px 10px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              color: '#065f46',
+                              fontWeight: 600
+                            }}>
+                              <span>Completed:</span>
+                              <span style={{ fontSize: '12px', fontWeight: 700 }}>{statusBreakdown.completed || 0}</span>
+                            </div>
+                            
+                            {/* Ongoing */}
+                            <div style={{
+                              background: '#dbeafe',
+                              border: '1px solid #3b82f6',
+                              borderRadius: '8px',
+                              padding: '8px 10px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              color: '#1e40af',
+                              fontWeight: 600
+                            }}>
+                              <span>Ongoing:</span>
+                              <span style={{ fontSize: '12px', fontWeight: 700 }}>{statusBreakdown.ongoing || 0}</span>
+                            </div>
+                            
+                            {/* Incomplete */}
+                            <div style={{
+                              background: '#fee2e2',
+                              border: '1px solid #ef4444',
+                              borderRadius: '8px',
+                              padding: '8px 10px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              color: '#991b1b',
+                              fontWeight: 600
+                            }}>
+                              <span>Incomplete:</span>
+                              <span style={{ fontSize: '12px', fontWeight: 700 }}>{statusBreakdown.incomplete || 0}</span>
+                            </div>
+                            
+                            {/* NOT STARTED */}
+                            <div style={{
+                              background: '#f3f4f6',
+                              border: '1px solid #9ca3af',
+                              borderRadius: '8px',
+                              padding: '8px 10px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              color: '#374151',
+                              fontWeight: 600
+                            }}>
+                              <span>Not Started:</span>
+                              <span style={{ fontSize: '12px', fontWeight: 700 }}>{statusBreakdown.not_started || 0}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
           ) : (
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
               gap: '24px',
               marginBottom: '32px',
-              justifyItems: 'start'
+              justifyItems: 'stretch',
+              paddingLeft: '30px',
+              width: '100%',
+              boxSizing: 'border-box'
             }}>
               {loading ? (
                 <div style={{
@@ -1618,8 +2155,7 @@ export default function Dashboard() {
                 </div>
               ) : ojtYears.filter(yearData => {
                 const batchMatch = selectedBatchFilter === 'ALL' || yearData.year.toString() === selectedBatchFilter;
-                const sectionMatch = selectedSectionFilter === 'ALL' || yearData.section === selectedSectionFilter;
-                return batchMatch && sectionMatch;
+                return batchMatch;
               }).length === 0 ? (
                 <div style={{
                   gridColumn: '1 / -1',
@@ -1638,16 +2174,62 @@ export default function Dashboard() {
                   No OJT data found for the selected filters.
                   </p>
                 </div>
-              ) : (
-                ojtYears.filter(yearData => {
+              ) : (() => {
+                // Group data by batch (year)
+                const filteredData = ojtYears.filter(yearData => {
                   const batchMatch = selectedBatchFilter === 'ALL' || yearData.year.toString() === selectedBatchFilter;
-                  const sectionMatch = selectedSectionFilter === 'ALL' || yearData.section === selectedSectionFilter;
-                  return batchMatch && sectionMatch;
-                }).map((yearData) => {
-                  const studentLabel = `${yearData.count} Student${yearData.count === 1 ? '' : 's'}`;
+                  return batchMatch;
+                });
+
+                // Group by batch year
+                const batchGroups = filteredData.reduce((acc, yearData) => {
+                  const batchYear = yearData.year;
+                  if (!acc[batchYear]) {
+                    acc[batchYear] = [];
+                  }
+                  acc[batchYear].push(yearData);
+                  return acc;
+                }, {} as Record<number, typeof filteredData>);
+
+                // Convert to array and calculate batch-level stats
+                // Deduplicate by batch year to ensure only one card per unique batch year
+                const batchCardsMap = new Map<number, { year: number; sectionCount: number; totalIncomplete: number }>();
+                
+                Object.entries(batchGroups).forEach(([year, sections]) => {
+                  const batchYear = parseInt(year);
+                  
+                  // Skip if we already have this batch year (prevent duplicates)
+                  if (batchCardsMap.has(batchYear)) {
+                    return;
+                  }
+                  
+                  const uniqueSections = new Set(sections.map(s => s.section).filter(Boolean));
+                  const sectionCount = uniqueSections.size;
+                  
+                  // Calculate total incomplete across all sections in this batch
+                  const totalIncomplete = sections.reduce((sum, section) => {
+                    const incomplete = section.status_breakdown?.incomplete || 0;
+                    return sum + incomplete;
+                  }, 0);
+
+                  batchCardsMap.set(batchYear, {
+                    year: batchYear,
+                    sectionCount,
+                    totalIncomplete
+                  });
+                });
+
+                // Convert map to array and sort by year (descending - newest first)
+                const batchCards = Array.from(batchCardsMap.values())
+                  .sort((a, b) => b.year - a.year);
+
+                return batchCards.map((batchData) => {
+                  const batchLabel = `CLASS OF ${batchData.year}-${batchData.year + 1}`;
+                  const sectionLabel = `${batchData.sectionCount} Section${batchData.sectionCount === 1 ? '' : 's'}`;
+                  
                   return (
                     <div
-                      key={`${yearData.year}-${yearData.section || 'default'}`}
+                      key={`batch-${batchData.year}`}
                       style={{
                         backgroundColor: 'white',
                         borderRadius: '20px',
@@ -1660,10 +2242,14 @@ export default function Dashboard() {
                         flexDirection: 'column',
                         gap: '16px',
                         position: 'relative',
-                        overflow: 'hidden',
-                        width: '320px'
+                        overflow: 'visible',
+                        width: '100%',
+                        maxWidth: '100%',
+                        boxSizing: 'border-box'
                       }}
-                      onClick={() => setSelectedCard({ year: yearData.year, section: yearData.section })}
+                      onClick={() => {
+                        setSelectedBatch(batchData.year);
+                      }}
                       onMouseEnter={(e) => {
                         const target = e.currentTarget as HTMLDivElement;
                         target.style.transform = 'translateY(-6px) scale(1.02)';
@@ -1718,35 +2304,66 @@ export default function Dashboard() {
                             lineHeight: '1.3',
                             fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
                           }}>
-                            Section : {yearData.section || 'N/A'}
+                            {batchLabel}
                           </h3>
                         </div>
                       </div>
                       <div style={{
                         marginTop: 'auto',
-                        background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-                        border: '1px solid rgba(59, 130, 246, 0.2)',
-                        borderRadius: '14px',
-                        padding: '14px 18px',
                         display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#1e40af',
-                        fontWeight: 600,
-                        boxShadow: '0 1px 3px 0 rgba(59, 130, 246, 0.1)'
+                        flexDirection: 'column',
+                        gap: '10px'
                       }}>
-                        <span style={{ 
-                          fontSize: '18px', 
-                          fontWeight: 700,
+                        {/* Total Sections */}
+                        <div style={{
+                          background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                          border: '1px solid rgba(59, 130, 246, 0.2)',
+                          borderRadius: '14px',
+                          padding: '12px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
                           color: '#1e40af',
-                          letterSpacing: '-0.01em',
-                          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-                        }}>{studentLabel}</span>
+                          fontWeight: 600,
+                          boxShadow: '0 1px 3px 0 rgba(59, 130, 246, 0.1)'
+                        }}>
+                          <span style={{ 
+                            fontSize: '16px', 
+                            fontWeight: 700,
+                            color: '#1e40af',
+                            letterSpacing: '-0.01em',
+                            fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                          }}>{sectionLabel}</span>
+                        </div>
+                        
+                        {/* Incomplete Count */}
+                        <div style={{
+                          background: '#fee2e2',
+                          border: '1px solid #ef4444',
+                          borderRadius: '14px',
+                          padding: '12px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#991b1b',
+                          fontWeight: 600,
+                          boxShadow: '0 1px 3px 0 rgba(239, 68, 68, 0.1)'
+                        }}>
+                          <span style={{ 
+                            fontSize: '16px', 
+                            fontWeight: 700,
+                            color: '#991b1b',
+                            letterSpacing: '-0.01em',
+                            fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                          }}>
+                            {batchData.totalIncomplete} Incomplete
+                          </span>
+                        </div>
                       </div>
                     </div>
                   );
-                })
-              )}
+                });
+              })()}
             </div>
           )
         ) : (
@@ -1814,6 +2431,7 @@ export default function Dashboard() {
                   setShowModal(false);
                   clearSelectedFiles();
                   setSelectedYear(null);
+                  setImportBatchYear('');
                 }}
                 style={{
                   position: 'absolute',
@@ -1876,6 +2494,78 @@ export default function Dashboard() {
             <div style={{ padding: '32px 40px 32px 28px' }}>
               {/* Form Fields */}
               <div style={{ marginBottom: '32px' }}>
+                {/* Batch Year Selection */}
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{ 
+                    display: 'block', 
+                    marginBottom: '8px', 
+                    fontWeight: '700', 
+                    color: '#1e293b',
+                    fontSize: '14px'
+                  }}>
+                    Batch Year <span style={{ color: '#dc2626', fontWeight: '600', fontSize: '12px' }}>*</span>
+                  </label>
+                  <select
+                    value={importBatchYear}
+                    onChange={(e) => {
+                      const selectedValue = e.target.value;
+                      if (!selectedValue || selectedValue.trim() === '') {
+                        setImportBatchYear('');
+                        return;
+                      }
+                      
+                      // Validate sequential batch year selection
+                      const validation = validateBatchYearSelection(selectedValue);
+                      if (!validation.isValid) {
+                        toast.error(validation.errorMessage || 'Invalid batch year selection.');
+                        // Reset to empty - React's controlled component will update the select
+                        setImportBatchYear('');
+                        return;
+                      }
+                      
+                      setImportBatchYear(selectedValue);
+                    }}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: importBatchYear ? '2px solid #e2e8f0' : '2px solid #dc2626',
+                      borderRadius: '12px',
+                      fontSize: '14px',
+                      color: '#000000',
+                      backgroundColor: 'white',
+                      transition: 'all 0.3s ease',
+                      outline: 'none',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      boxSizing: 'border-box'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#3b82f6';
+                      e.target.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      if (!importBatchYear) {
+                        e.target.style.borderColor = '#dc2626';
+                        e.target.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.1)';
+                      } else {
+                        e.target.style.borderColor = '#e2e8f0';
+                        e.target.style.boxShadow = 'none';
+                      }
+                    }}
+                  >
+                    <option value="" style={{ color: '#000000' }}>-- Select batch year (required) --</option>
+                    {Array.from({ length: 20 }, (_, i) => {
+                      const year = new Date().getFullYear() + i;
+                      return (
+                        <option key={year} value={year.toString()} style={{ color: '#000000' }}>
+                          {year} (CLASS OF {year}-{year + 1})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
                 {/* File Upload Field */}
                 <div style={{ marginBottom: '24px' }}>
                   <label style={{ 
@@ -2039,6 +2729,7 @@ export default function Dashboard() {
                   setShowModal(false);
                   clearSelectedFiles();
                   setSelectedYear(null);
+                  setImportBatchYear('');
                 }}
                 disabled={importLoading}
                   style={{
@@ -2181,7 +2872,7 @@ export default function Dashboard() {
                   fontWeight: '500',
                   opacity: '0.9'
                 }}>
-                  Schedule automatic processing for batch {selectedBatchFilter}
+                  Schedule automatic processing for batch {currentBatch ? `${currentBatch} (CLASS OF ${currentBatch}-${currentBatch + 1})` : 'N/A'}
                 </p>
               </div>
             </div>
@@ -2213,12 +2904,14 @@ export default function Dashboard() {
               
               {/* Batch Already Processed Warning */}
               {(() => {
-                // For specific batch selection
-                if (selectedBatchFilter !== 'ALL') {
-                  const processedBatch = existingSendDates.find(
-                    sd => sd.batch_year.toString() === selectedBatchFilter && sd.is_processed
-                  );
-                  return processedBatch && (
+                if (!currentBatch) return null;
+                
+                const processedBatch = existingSendDates.find(
+                  sd => sd.batch_year === currentBatch && sd.is_processed
+                );
+                
+                if (processedBatch) {
+                  return (
                     <div style={{
                       backgroundColor: '#fef2f2',
                       border: '2px solid #ef4444',
@@ -2231,7 +2924,7 @@ export default function Dashboard() {
                     }}>
                       <div style={{ flex: 1 }}>
                         <strong style={{ color: '#991b1b', fontSize: '13px', display: 'block', marginBottom: '5px' }}>
-                          Batch {selectedBatchFilter} Already Processed
+                          Batch {currentBatch} Already Processed
                         </strong>
                         <div style={{ color: '#b91c1c', fontSize: '12px', lineHeight: '1.4' }}>
                           This batch was processed on {new Date(processedBatch.processed_at || processedBatch.send_date).toLocaleDateString()}.
@@ -2245,44 +2938,31 @@ export default function Dashboard() {
                   );
                 }
                 
-                // For "ALL" selection - show if any batches are processed
-                if (selectedBatchFilter === 'ALL') {
-                  const processedBatches = existingSendDates.filter(sd => sd.is_processed);
-                  return processedBatches.length > 0 && (
-                    <div style={{
-                      backgroundColor: '#fef3c7',
-                      border: '2px solid #f59e0b',
-                      borderRadius: '24px',
-                      padding: '12px 16px',
-                      marginBottom: '16px',
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '12px'
-                    }}>
-                      <div style={{ flex: 1 }}>
-                        <strong style={{ color: '#92400e', fontSize: '13px', display: 'block', marginBottom: '5px' }}>
-                          Some Batches Already Processed
-                        </strong>
-                        <div style={{ color: '#78350f', fontSize: '12px', lineHeight: '1.4', marginBottom: '6px' }}>
-                          The following batches have already been processed and will be skipped:
-                        </div>
-                        <div style={{ color: '#78350f', fontSize: '12px', lineHeight: '1.5' }}>
-                          {processedBatches.map((batch, idx) => (
-                            <div key={idx} style={{ marginBottom: '2px' }}>
-                              • <strong>Batch {batch.batch_year}</strong> (processed on {new Date(batch.processed_at || batch.send_date).toLocaleDateString()})
-                            </div>
-                          ))}
-                        </div>
-                        <div style={{ marginTop: '6px', fontSize: '11px', color: '#92400e', fontStyle: 'italic' }}>
-                          Only unprocessed batches will be scheduled.
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-                
                 return null;
               })()}
+              
+              {/* Previous Batch Send Date Passed Info */}
+              {previousBatchSendDatePassed && currentBatch && (
+                <div style={{
+                  backgroundColor: '#dcfce7',
+                  border: '2px solid #22c55e',
+                  borderRadius: '24px',
+                  padding: '12px 16px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px'
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ color: '#166534', fontSize: '13px', display: 'block', marginBottom: '5px' }}>
+                      Previous Batch Send Date Has Passed
+                    </strong>
+                    <div style={{ color: '#15803d', fontSize: '12px', lineHeight: '1.4' }}>
+                      The send date for batch {previousBatch} has passed. You can now set a send date for the current batch ({currentBatch}).
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {/* All Data Already Sent Warning */}
               {allDataSent && (
@@ -2310,15 +2990,12 @@ export default function Dashboard() {
                 </div>
               )}
               
-              {/* Existing Schedule Warning - Only show unprocessed dates for selected batch */}
+              {/* Existing Schedule Warning - Only show unprocessed dates for current batch */}
               {(() => {
-                // Filter to show only schedules for the selected batch
-                const relevantSchedules = selectedBatchFilter === 'ALL'
-                  ? existingSendDates.filter(sd => !sd.is_processed)
-                  : existingSendDates.filter(sd => {
-                      const batchYear = parseInt(selectedBatchFilter);
-                      return sd.batch_year === batchYear && !sd.is_processed;
-                    });
+                if (!currentBatch) return false;
+                const relevantSchedules = existingSendDates.filter(sd => 
+                  sd.batch_year === currentBatch && !sd.is_processed
+                );
                 return relevantSchedules.length > 0 && !allDataSent;
               })() && (
                 <div style={{
@@ -2331,134 +3008,21 @@ export default function Dashboard() {
                 }}>
                   {/* X Button to Remove Schedule */}
                   <button
-                    onClick={async () => {
-                      if (!window.confirm('Are you sure you want to remove the scheduled send dates? This action cannot be undone.')) {
-                        return;
-                      }
-
-                      try {
-                        // If "ALL" is selected, remove schedules for all batches
-                        if (selectedBatchFilter === 'ALL') {
-                          let successCount = 0;
-                          let failCount = 0;
-                          const errors: string[] = [];
-
-                          // Get all unique years from existing UNPROCESSED send dates
-                          const yearsToRemove = [...new Set(existingSendDates.filter(sd => !sd.is_processed).map(sd => sd.batch_year))];
-
-                          for (const year of yearsToRemove) {
-                            try {
-                              const result = await deleteSendDate(coordinatorUsername, year);
-                              if (result.success) {
-                                successCount++;
-                                console.log(`✅ Removed schedule for batch ${year}`);
-                              } else {
-                                failCount++;
-                                errors.push(`Batch ${year}: ${result.message}`);
-                              }
-                            } catch (error: any) {
-                              console.error(`Error removing schedule for year ${year}:`, error);
-                              failCount++;
-                              errors.push(`Batch ${year}: ${error.message || 'Unknown error'}`);
-                            }
-                          }
-
-                          // Refresh the send dates list and status in real-time
-                          try {
-                            const result = await getSendDates(coordinatorUsername);
-                            if (result.success && result.scheduled_dates) {
-                              setExistingSendDates(result.scheduled_dates);
-                            } else {
-                              setExistingSendDates([]);
-                            }
-                            
-                            // Refresh all sent status
-                            const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
-                            if (statusResult.success) {
-                              setAllDataSent(statusResult.all_sent);
-                              setCompletedCount(statusResult.total_completed || 0);
-                            }
-                          } catch (error) {
-                            console.error('Error refreshing send dates:', error);
-                            setExistingSendDates([]);
-                          }
-
-                          if (successCount > 0) {
-                            const message = failCount > 0 
-                              ? `Schedules Removed!\n\n✓ Removed: ${successCount}\n✗ Failed: ${failCount}\n\n${errors.slice(0, 3).join('\n')}`
-                              : `All ${successCount} schedule(s) removed successfully!`;
-                            toast.success(message);
-                          } else {
-                            toast.error(`Failed to remove schedules.\n\n${errors.slice(0, 3).join('\n')}`);
-                          }
-                        } else {
-                          // Remove schedule for specific year
-                          const batchYear = parseInt(selectedBatchFilter);
-                          if (isNaN(batchYear)) {
-                            toast.error('Invalid batch year selected');
-                            return;
-                          }
-
-                          const result = await deleteSendDate(coordinatorUsername, batchYear);
-
-                          // Refresh the send dates list and status after removal in real-time
-                          try {
-                            const refreshResult = await getSendDates(coordinatorUsername);
-                            if (refreshResult.success && refreshResult.scheduled_dates) {
-                              setExistingSendDates(refreshResult.scheduled_dates);
-                            } else {
-                              setExistingSendDates([]);
-                            }
-                            
-                            // Refresh all sent status
-                            const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
-                            if (statusResult.success) {
-                              setAllDataSent(statusResult.all_sent);
-                              setCompletedCount(statusResult.total_completed || 0);
-                            }
-                          } catch (error) {
-                            console.error('Error refreshing send dates:', error);
-                            setExistingSendDates([]);
-                          }
-
-                          if (result.success) {
-                            const message = result.deleted_count > 0
-                              ? `Schedule removed successfully for batch ${selectedBatchFilter}!`
-                              : `No active schedule found for batch ${selectedBatchFilter} (already removed or never existed)`;
-                            toast.success(message);
-                          } else {
-                            toast.error(`Error: ${result.message}`);
-                          }
-                        }
-                      } catch (error: any) {
-                        console.error('Error removing schedule:', error);
-                        toast.error(`Failed to remove schedule: ${error.message || 'Please try again.'}`);
-                        
-                        // Still try to refresh the list
-                        try {
-                          const result = await getSendDates(coordinatorUsername);
-                          if (result.success && result.scheduled_dates) {
-                            setExistingSendDates(result.scheduled_dates);
-                          } else {
-                            setExistingSendDates([]);
-                          }
-                        } catch (refreshError) {
-                          console.error('Error refreshing send dates:', refreshError);
-                        }
-                      }
+                    onClick={() => {
+                      setShowRemoveConfirmModal(true);
                     }}
                     title="Remove scheduled send date"
                     style={{
                       position: 'absolute',
-                      top: '12px',
-                      right: '12px',
-                      width: '28px',
-                      height: '28px',
+                      top: '8px',
+                      right: '8px',
+                      width: '22px',
+                      height: '22px',
                       borderRadius: '50%',
                       border: 'none',
                       backgroundColor: '#dc2626',
                       color: 'white',
-                      fontSize: '16px',
+                      fontSize: '14px',
                       fontWeight: 'bold',
                       cursor: 'pointer',
                       display: 'flex',
@@ -2485,7 +3049,7 @@ export default function Dashboard() {
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
                     <div style={{ flex: 1 }}>
                       <strong style={{ color: '#92400e', fontSize: '13px', display: 'block', marginBottom: '6px' }}>
-                        Existing Scheduled Dates Found
+                        Existing Schedule
                       </strong>
                       <div style={{ color: '#78350f', fontSize: '12px', lineHeight: '1.5' }}>
                         {(() => {
@@ -2507,7 +3071,7 @@ export default function Dashboard() {
                         })()}
                       </div>
                       <div style={{ marginTop: '6px', fontSize: '11px', color: '#92400e', fontStyle: 'italic' }}>
-                        Set a new date below to update the existing schedule
+                        Set a new date to update
                       </div>
                     </div>
                   </div>
@@ -2685,39 +3249,20 @@ export default function Dashboard() {
               </button>
               <button
                   disabled={(() => {
-                    // Check if there's an existing unprocessed send date for the selected batch
-                    if (selectedBatchFilter === 'ALL') {
-                      // For "ALL", check if there are any unprocessed send dates
-                      return existingSendDates.filter(sd => !sd.is_processed).length > 0 && !allDataSent;
-                    } else {
-                      // For specific batch, check only that batch
-                      const batchYear = parseInt(selectedBatchFilter);
-                      const hasExistingForBatch = existingSendDates.some(
-                        sd => sd.batch_year === batchYear && !sd.is_processed
-                      );
-                      return hasExistingForBatch && !allDataSent;
+                    // Disable if no current batch
+                    if (!currentBatch) {
+                      return true;
                     }
+                    
+                    // Disable if current batch is already processed
+                    const processedBatch = existingSendDates.find(
+                      sd => sd.batch_year === currentBatch && sd.is_processed
+                    );
+                    return !!processedBatch || allDataSent; // Disable only if processed or all data sent
                   })()}
                   onClick={async () => {
-                    // Prevent action if there's an existing schedule for the selected batch
-                    const hasExistingSchedule = (() => {
-                      if (selectedBatchFilter === 'ALL') {
-                        return existingSendDates.filter(sd => !sd.is_processed).length > 0;
-                      } else {
-                        const batchYear = parseInt(selectedBatchFilter);
-                        return existingSendDates.some(
-                          sd => sd.batch_year === batchYear && !sd.is_processed
-                        );
-                      }
-                    })();
-                    
-                    if (hasExistingSchedule && !allDataSent) {
-                      const batchText = selectedBatchFilter === 'ALL' 
-                        ? 'one or more batches' 
-                        : `batch ${selectedBatchFilter}`;
-                      toast.warning(`⚠️ Existing Schedule Found!\n\nYou already have a scheduled date for ${batchText}.\n\nPlease remove the existing scheduled date first by clicking the ✕ button above.`);
-                      return;
-                    }
+                    // Note: We now allow updating unprocessed send dates, so we don't block here
+                    // The backend will handle updating existing unprocessed send dates
                     
                     if (allDataSent) {
                       toast.info('✅ All Completed OJT Data Already Sent!\n\nAll completed students have been sent to admin for approval.\nScheduling is not needed at this time.');
@@ -2729,133 +3274,71 @@ export default function Dashboard() {
                       return;
                     }
                     
+                    // Validate that the date is not in the past
+                    const selectedDate = new Date(sendDate);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0); // Reset time to compare dates only
+                    selectedDate.setHours(0, 0, 0, 0);
+                    
+                    if (selectedDate < today) {
+                      toast.warning('⚠️ Cannot schedule for a past date.\n\nPlease select today or a future date.');
+                      return;
+                    }
+                    
                     try {
-                      // If "ALL" is selected, schedule for all available years
-                      if (selectedBatchFilter === 'ALL') {
-                        let successCount = 0;
-                        let failCount = 0;
+                      // Always use the current batch (most recent batch)
+                      if (!currentBatch) {
+                        toast.warning('No OJT batches found to schedule');
+                        return;
+                      }
+                      
+                      // Validate that the date is not in the past
+                      const selectedDate = new Date(sendDate);
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0); // Reset time to compare dates only
+                      selectedDate.setHours(0, 0, 0, 0);
+                      
+                      if (selectedDate < today) {
+                        toast.warning('⚠️ Cannot schedule for a past date.\n\nPlease select today or a future date.');
+                        return;
+                      }
+                      
+                      const result = await setSendDate(
+                        coordinatorUsername,
+                        currentBatch,
+                        null,
+                        sendDate
+                      );
+                      
+                      if (result.success) {
+                        toast.success(`Send date set successfully for batch ${currentBatch} (CLASS OF ${currentBatch}-${currentBatch + 1})`);
+                        setShowDateModal(false);
+                        setSendDateState('');
                         
-                        // Get all unique years from the stats
-                        const yearsToProcess = [...new Set(ojtYears.map(y => y.year))];
-                        
-                        if (yearsToProcess.length === 0) {
-                          toast.warning('No OJT batches found to schedule');
-                          return;
-                        }
-                        
-                        const failedBatches: string[] = [];
-                        for (const year of yearsToProcess) {
-                          try {
-                            const result = await setSendDate(
-                              coordinatorUsername,
-                              year,
-                              null,
-                              sendDate
-                            );
-                            if (result.success) {
-                              successCount++;
-                            } else {
-                              failCount++;
-                              failedBatches.push(`${year}: ${result.message || 'Unknown error'}`);
-                            }
-                          } catch (error) {
-                            console.error(`Error scheduling year ${year}:`, error);
-                            failCount++;
-                            failedBatches.push(`${year}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                        // Refresh scheduled dates in real-time
+                        try {
+                          const refreshResult = await getSendDates(coordinatorUsername);
+                          if (refreshResult.success && refreshResult.scheduled_dates) {
+                            setExistingSendDates(refreshResult.scheduled_dates);
                           }
-                        }
-                        
-                        if (successCount > 0) {
-                          let message = `✅ Schedule Set Successfully!\n\nDate: ${sendDate}\nBatches scheduled: ${successCount}\nFailed: ${failCount}`;
-                          if (failedBatches.length > 0) {
-                            const processedBatchErrors = failedBatches.filter(fb => fb.includes('already been processed'));
-                            const otherErrors = failedBatches.filter(fb => !fb.includes('already been processed'));
-                            
-                            if (processedBatchErrors.length > 0) {
-                              message += `\n\n🔒 Already Processed (Skipped):\n${processedBatchErrors.map(fb => fb.split(': ')[0]).join(', ')}`;
-                            }
-                            if (otherErrors.length > 0) {
-                              message += `\n\n❌ Failed:\n${otherErrors.join('\n')}`;
-                            }
-                          }
-                          message += '\n\n📅 On this date, ALL completed OJT students from scheduled batches will be automatically sent to admin!';
-                          toast.success(message);
-                          setShowDateModal(false);
-                          setSendDateState('');
                           
-                          // Refresh scheduled dates in real-time
-                          try {
-                            const refreshResult = await getSendDates(coordinatorUsername);
-                            if (refreshResult.success && refreshResult.scheduled_dates) {
-                              setExistingSendDates(refreshResult.scheduled_dates);
-                            }
-                            
-                            // Refresh all sent status
-                            const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
-                            if (statusResult.success) {
-                              setAllDataSent(statusResult.all_sent);
-                              setCompletedCount(statusResult.total_completed || 0);
-                            }
-                          } catch (refreshError) {
-                            console.error('Error refreshing data:', refreshError);
+                          // Refresh all sent status
+                          const statusResult = await checkAllSentStatus(coordinatorUsername, currentBatch.toString());
+                          if (statusResult.success) {
+                            setAllDataSent(statusResult.all_sent);
+                            setCompletedCount(statusResult.total_completed || 0);
                           }
-                        } else {
-                          let errorMessage = '❌ Failed to schedule any batches.\n\n';
-                          const processedBatchErrors = failedBatches.filter(fb => fb.includes('already been processed'));
-                          const otherErrors = failedBatches.filter(fb => !fb.includes('already been processed'));
-                          
-                          if (processedBatchErrors.length > 0) {
-                            errorMessage += `🔒 Already Processed:\n${processedBatchErrors.map(fb => fb.split(': ')[0]).join(', ')}\n\n`;
-                            errorMessage += 'These batches have been completed and cannot be modified.\n\n';
-                          }
-                          if (otherErrors.length > 0) {
-                            errorMessage += `Other Errors:\n${otherErrors.join('\n')}`;
-                          }
-                          toast.error(errorMessage);
+                        } catch (refreshError) {
+                          console.error('Error refreshing data:', refreshError);
                         }
                       } else {
-                        // Schedule for specific year
-                        const batchYear = parseInt(selectedBatchFilter);
-                        if (isNaN(batchYear)) {
-                          toast.error('Invalid batch year selected');
-                          return;
-                        }
-                        
-                        const result = await setSendDate(
-                          coordinatorUsername,
-                          batchYear,
-                          null,
-                          sendDate
-                        );
-                        
-                        if (result.success) {
-                          toast.success(`Schedule Set Successfully!\n\nDate: ${sendDate}\nBatch: ${selectedBatchFilter}\n\nOn this date:\n• ALL completed OJT students will be automatically sent to admin\n• ALL ongoing students will be marked as incomplete`);
-                          setShowDateModal(false);
-                          setSendDateState('');
-                          
-                          // Refresh scheduled dates in real-time
-                          try {
-                            const refreshResult = await getSendDates(coordinatorUsername);
-                            if (refreshResult.success && refreshResult.scheduled_dates) {
-                              setExistingSendDates(refreshResult.scheduled_dates);
-                            }
-                            
-                            // Refresh all sent status
-                            const statusResult = await checkAllSentStatus(coordinatorUsername, selectedBatchFilter);
-                            if (statusResult.success) {
-                              setAllDataSent(statusResult.all_sent);
-                              setCompletedCount(statusResult.total_completed || 0);
-                            }
-                          } catch (refreshError) {
-                            console.error('Error refreshing data:', refreshError);
-                          }
+                        // Check if it's a processed batch error
+                        if (result.message && result.message.includes('already been processed')) {
+                          toast.warning(`🔒 Batch Already Processed\n\n${result.message}\n\n💡 Tip: Processed batches cannot be modified. You can only schedule unprocessed batches.`);
+                        } else if (result.message && result.message.includes('already has a send date')) {
+                          toast.error(`Cannot Set Send Date\n\n${result.message}\n\n💡 Each coordinator can only set a send date once per batch.`);
                         } else {
-                          // Check if it's a processed batch error
-                          if (result.message && result.message.includes('already been processed')) {
-                            toast.warning(`🔒 Batch Already Processed\n\n${result.message}\n\n💡 Tip: Processed batches cannot be modified. You can only schedule unprocessed batches.`);
-                          } else {
-                            toast.error(`Error: ${result.message}`);
-                          }
+                          toast.error(`Error: ${result.message}`);
                         }
                       }
                     } catch (error) {
@@ -2868,46 +3351,27 @@ export default function Dashboard() {
                   border: '2px solid #e5e7eb',
                     borderRadius: '24px',
                     background: (() => {
-                      if (allDataSent) return 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)';
-                      if (selectedBatchFilter === 'ALL') {
-                        return existingSendDates.filter(sd => !sd.is_processed).length > 0
-                          ? 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)'
-                          : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)';
-                      } else {
-                        const batchYear = parseInt(selectedBatchFilter);
-                        const hasExisting = existingSendDates.some(sd => sd.batch_year === batchYear && !sd.is_processed);
-                        return hasExisting
-                          ? 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)'
-                          : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)';
-                      }
+                      if (allDataSent || !currentBatch) return 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)';
+                      const isProcessed = existingSendDates.some(sd => sd.batch_year === currentBatch && sd.is_processed);
+                      return isProcessed
+                        ? 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)'
+                        : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)';
                     })(),
                   color: '#000000',
-                  cursor: (() => {
-                    if (allDataSent) return 'not-allowed';
-                    if (selectedBatchFilter === 'ALL') {
-                      return existingSendDates.filter(sd => !sd.is_processed).length > 0 ? 'not-allowed' : 'pointer';
-                    } else {
-                      const batchYear = parseInt(selectedBatchFilter);
-                      const hasExisting = existingSendDates.some(sd => sd.batch_year === batchYear && !sd.is_processed);
-                      return hasExisting ? 'not-allowed' : 'pointer';
-                    }
-                  })(),
+                    cursor: (() => {
+                      if (allDataSent || !currentBatch) return 'not-allowed';
+                      const isProcessed = existingSendDates.some(sd => sd.batch_year === currentBatch && sd.is_processed);
+                      return isProcessed ? 'not-allowed' : 'pointer';
+                    })(),
                     fontWeight: '700',
                     fontSize: '13px',
                     transition: 'all 0.3s ease',
                     boxShadow: (() => {
-                      if (allDataSent) return '0 4px 8px rgba(148, 163, 184, 0.2)';
-                      if (selectedBatchFilter === 'ALL') {
-                        return existingSendDates.filter(sd => !sd.is_processed).length > 0
-                          ? '0 4px 8px rgba(148, 163, 184, 0.2)'
-                          : '0 8px 16px rgba(59, 130, 246, 0.3)';
-                      } else {
-                        const batchYear = parseInt(selectedBatchFilter);
-                        const hasExisting = existingSendDates.some(sd => sd.batch_year === batchYear && !sd.is_processed);
-                        return hasExisting
-                          ? '0 4px 8px rgba(148, 163, 184, 0.2)'
-                          : '0 8px 16px rgba(59, 130, 246, 0.3)';
-                      }
+                      if (allDataSent || !currentBatch) return '0 4px 8px rgba(148, 163, 184, 0.2)';
+                      const isProcessed = existingSendDates.some(sd => sd.batch_year === currentBatch && sd.is_processed);
+                      return isProcessed
+                        ? '0 4px 8px rgba(148, 163, 184, 0.2)'
+                        : '0 8px 16px rgba(59, 130, 246, 0.3)';
                     })(),
                     position: 'relative',
                     overflow: 'hidden',
@@ -3169,6 +3633,84 @@ export default function Dashboard() {
 
             {/* Content */}
             <div style={{ padding: '32px' }}>
+              {/* Batch Year Selection - FIRST */}
+              <div style={{ marginBottom: '28px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: '#475569',
+                  marginBottom: '10px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Select Batch Year <span style={{ color: '#dc2626', fontWeight: '600', fontSize: '12px' }}>*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <select
+                    value={exportBatchYear}
+                    onChange={(e) => {
+                      setExportBatchYear(e.target.value);
+                      setExportSection('ALL'); // Reset section when batch changes
+                    }}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      paddingRight: '48px',
+                      borderRadius: '12px',
+                      border: exportBatchYear ? '2px solid #e2e8f0' : '2px solid #dc2626',
+                      fontSize: '15px',
+                      color: '#000000',
+                      backgroundColor: exportBatchYear ? '#f8fafc' : '#fff5f5',
+                      cursor: 'pointer',
+                      outline: 'none',
+                      transition: 'all 0.2s',
+                      fontWeight: '500',
+                      appearance: 'none',
+                      WebkitAppearance: 'none',
+                      MozAppearance: 'none'
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = '#f59e0b';
+                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(245, 158, 11, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      if (!exportBatchYear) {
+                        e.currentTarget.style.borderColor = '#dc2626';
+                        e.currentTarget.style.backgroundColor = '#fff5f5';
+                      } else {
+                        e.currentTarget.style.borderColor = '#e2e8f0';
+                        e.currentTarget.style.backgroundColor = '#f8fafc';
+                      }
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <option value="" style={{ color: '#000000' }}>-- Select batch year (required) --</option>
+                    {Array.from(new Set(ojtYears.map(y => y.year).filter(y => y !== null && y !== undefined)))
+                      .sort((a, b) => b - a) // Descending order (newest first)
+                      .map((year) => (
+                        <option key={year} value={year.toString()} style={{ color: '#000000' }}>
+                          {year} (CLASS OF {year}-{year + 1})
+                        </option>
+                      ))}
+                  </select>
+                  <div style={{
+                    position: 'absolute',
+                    right: '16px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    pointerEvents: 'none',
+                    color: '#94a3b8',
+                    fontSize: '14px'
+                  }}>
+                    ▼
+                  </div>
+                </div>
+              </div>
+
+              {/* Section Selection - SECOND (only enabled after batch is selected) */}
               <div style={{ marginBottom: '28px' }}>
                 <label style={{
                   display: 'block',
@@ -3185,6 +3727,7 @@ export default function Dashboard() {
                   <select
                     value={exportSection}
                     onChange={(e) => setExportSection(e.target.value)}
+                    disabled={!exportBatchYear}
                     style={{
                       width: '100%',
                       padding: '14px 16px',
@@ -3192,37 +3735,41 @@ export default function Dashboard() {
                       borderRadius: '12px',
                       border: '2px solid #e2e8f0',
                       fontSize: '15px',
-                      color: '#1e293b',
-                      backgroundColor: '#f8fafc',
-                      cursor: 'pointer',
+                      color: exportBatchYear ? '#1e293b' : '#9ca3af',
+                      backgroundColor: exportBatchYear ? '#f8fafc' : '#f1f5f9',
+                      cursor: exportBatchYear ? 'pointer' : 'not-allowed',
                       outline: 'none',
                       transition: 'all 0.2s',
                       fontWeight: '500',
                       appearance: 'none',
                       WebkitAppearance: 'none',
-                      MozAppearance: 'none'
+                      MozAppearance: 'none',
+                      opacity: exportBatchYear ? 1 : 0.6
                     }}
                     onFocus={(e) => {
-                      e.currentTarget.style.borderColor = '#f59e0b';
-                      e.currentTarget.style.backgroundColor = 'white';
-                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(245, 158, 11, 0.1)';
+                      if (exportBatchYear) {
+                        e.currentTarget.style.borderColor = '#f59e0b';
+                        e.currentTarget.style.backgroundColor = 'white';
+                        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(245, 158, 11, 0.1)';
+                      }
                     }}
                     onBlur={(e) => {
                       e.currentTarget.style.borderColor = '#e2e8f0';
-                      e.currentTarget.style.backgroundColor = '#f8fafc';
+                      e.currentTarget.style.backgroundColor = exportBatchYear ? '#f8fafc' : '#f1f5f9';
                       e.currentTarget.style.boxShadow = 'none';
                     }}
                   >
-                    <option value="ALL">📋 All Sections</option>
-                    {ojtYears
+                    <option value="ALL" style={{ color: '#000000' }}>📋 All Sections</option>
+                    {exportBatchYear ? ojtYears
+                      .filter(yearData => yearData.year && yearData.year.toString() === exportBatchYear)
                       .map(yearData => yearData.section || 'Unknown')
                       .filter((section, index, self) => self.indexOf(section) === index)
                       .sort()
                       .map((section) => (
-                        <option key={section} value={section}>
+                        <option key={section} value={section} style={{ color: '#000000' }}>
                           Section {section}
                         </option>
-                      ))}
+                      )) : []}
                   </select>
                   <div style={{
                     position: 'absolute',
@@ -3242,9 +3789,11 @@ export default function Dashboard() {
                   color: '#94a3b8',
                   fontStyle: 'italic'
                 }}>
-                  {exportSection === 'ALL' 
-                    ? 'Export all students from all sections' 
-                    : `Export only students from Section ${exportSection}`}
+                  {!exportBatchYear 
+                    ? 'Please select a batch year first to see available sections'
+                    : exportSection === 'ALL' 
+                      ? `Export all students from all sections in batch ${exportBatchYear} (CLASS OF ${exportBatchYear}-${parseInt(exportBatchYear) + 1})`
+                      : `Export only students from Section ${exportSection} in batch ${exportBatchYear} (CLASS OF ${exportBatchYear}-${parseInt(exportBatchYear) + 1})`}
                 </p>
               </div>
 
@@ -3283,21 +3832,29 @@ export default function Dashboard() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => exportStudentsForUpdate(exportSection)}
+                  onClick={() => {
+                    if (!exportBatchYear) {
+                      toast.error('Please select a batch year first.');
+                      return;
+                    }
+                    exportStudentsForUpdate(exportBatchYear, exportSection);
+                  }}
+                  disabled={!exportBatchYear}
                   style={{
                     padding: '12px 28px',
-                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    background: exportBatchYear ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%)',
                     color: 'white',
                     border: 'none',
                     borderRadius: '10px',
                     fontSize: '14px',
                     fontWeight: '700',
-                    cursor: 'pointer',
+                    cursor: exportBatchYear ? 'pointer' : 'not-allowed',
                     transition: 'all 0.2s',
-                    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
+                    boxShadow: exportBatchYear ? '0 4px 12px rgba(245, 158, 11, 0.3)' : 'none',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px'
+                    gap: '8px',
+                    opacity: exportBatchYear ? 1 : 0.6
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = 'translateY(-2px)';
@@ -3534,55 +4091,22 @@ export default function Dashboard() {
               color: '#475569',
               lineHeight: '1.6'
             }}>
-              <div style={{ marginBottom: '8px' }}>
-                <strong>Files processed:</strong> {importResult.filesProcessed}
-              </div>
-              {importResult.totalCreated > 0 && (
-                <div style={{ marginBottom: '8px' }}>
-                  <strong>Total students created:</strong> {importResult.totalCreated}
-                </div>
-              )}
-              {importResult.totalUpdated > 0 && (
-                <div style={{ marginBottom: '8px' }}>
-                  <strong>Total students updated:</strong> {importResult.totalUpdated}
-                </div>
-              )}
-              {importResult.batchYears && importResult.batchYears.length > 1 && (
-                <div style={{ marginBottom: '8px', color: '#059669' }}>
-                  <strong>📅 Batch Years:</strong> {importResult.batchYears.join(', ')} (Multiple batches imported)
-                </div>
-              )}
-              {importResult.batchYear && (!importResult.batchYears || importResult.batchYears.length === 1) && (
-                <div style={{ marginBottom: '8px' }}>
-                  <strong>📅 Batch Year:</strong> {importResult.batchYear}
-                </div>
-              )}
-              {importResult.sections && importResult.sections.length > 0 && (
-                <div style={{ marginBottom: '8px' }}>
-                  <strong>Sections:</strong> {importResult.sections.join(', ')}
-                </div>
-              )}
-              {importResult.fileResults && importResult.fileResults.length > 1 && (
-                <div style={{ marginBottom: '12px', marginTop: '12px', padding: '12px', backgroundColor: '#f3f4f6', borderRadius: '6px' }}>
-                  <strong style={{ display: 'block', marginBottom: '8px' }}>📋 File-by-File Results:</strong>
-                  {importResult.fileResults.map((fileResult: any, idx: number) => (
-                    <div key={idx} style={{ marginBottom: '6px', fontSize: '14px', paddingLeft: '12px', borderLeft: '3px solid #3b82f6' }}>
-                      <strong>{fileResult.fileName}:</strong> {fileResult.created} created, {fileResult.updated} updated
-                      {fileResult.batchYear && <span> (Batch {fileResult.batchYear})</span>}
-                      {fileResult.sections && fileResult.sections.length > 0 && <span> - Sections: {fileResult.sections.join(', ')}</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {importResult.failedFiles && importResult.failedFiles.length > 0 && (
-                <div style={{ marginBottom: '8px', color: '#dc2626' }}>
-                  <strong>⚠️ Failed files:</strong> {importResult.failedFiles.join(', ')}
-                </div>
-              )}
-              {importResult.passwords && importResult.passwords.length > 0 && (
-                <div style={{ marginBottom: '8px', color: '#059669' }}>
-                  <strong>📥 Password file downloaded:</strong> {importResult.passwords.length} student passwords
-                </div>
+              {importResult.totalCreated > 0 && importResult.totalUpdated > 0 ? (
+                <p style={{ margin: 0 }}>
+                  Successfully created {importResult.totalCreated} student{importResult.totalCreated !== 1 ? 's' : ''} and updated {importResult.totalUpdated} student{importResult.totalUpdated !== 1 ? 's' : ''}.
+                </p>
+              ) : importResult.totalCreated > 0 ? (
+                <p style={{ margin: 0 }}>
+                  Successfully created {importResult.totalCreated} student{importResult.totalCreated !== 1 ? 's' : ''}.
+                </p>
+              ) : importResult.totalUpdated > 0 ? (
+                <p style={{ margin: 0 }}>
+                  Successfully updated {importResult.totalUpdated} student{importResult.totalUpdated !== 1 ? 's' : ''}.
+                </p>
+              ) : (
+                <p style={{ margin: 0 }}>
+                  Import completed successfully.
+                </p>
               )}
             </div>
 
@@ -3676,6 +4200,100 @@ export default function Dashboard() {
             >
               Got it
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Schedule Confirmation Modal */}
+      {showRemoveConfirmModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(8px)'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            boxShadow: '0 32px 64px -12px rgba(0, 0, 0, 0.35)',
+            width: '420px',
+            maxWidth: '85vw',
+            border: '1px solid rgba(226, 232, 240, 0.8)'
+          }}>
+            <h3 style={{
+              margin: '0 0 16px 0',
+              fontSize: '20px',
+              fontWeight: 600,
+              color: '#1f2937'
+            }}>
+              Remove Schedule?
+            </h3>
+            <p style={{
+              margin: '0 0 24px 0',
+              fontSize: '14px',
+              color: '#6b7280',
+              lineHeight: '1.5'
+            }}>
+              Are you sure you want to remove the scheduled send dates? This action cannot be undone.
+            </p>
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => setShowRemoveConfirmModal(false)}
+                style={{
+                  padding: '10px 20px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  background: 'white',
+                  color: '#6b7280',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f9fafb';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'white';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRemoveSchedule}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: '#dc2626',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#b91c1c';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#dc2626';
+                }}
+              >
+                Remove
+              </button>
+            </div>
           </div>
         </div>
       )}

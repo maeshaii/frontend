@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../global/sidebar';
-import { generateSpecificStats, fetchAlumniEmploymentStats, fetchCoordinatorRequestsCount, getCalendarEventsByMonth, CalendarEventData, getRewardRequests } from '../../../services/api';
+import { generateSpecificStats, fetchAlumniEmploymentStats, fetchNewUsersCount, getCalendarEventsByMonth, CalendarEventData, getRewardRequests } from '../../../services/api';
 import { broadcastCoordinatorRequestCount } from '../utils/requestBadge';
 import { normalizeStatusCounts } from '../statistics/index';
 
@@ -113,20 +113,30 @@ const Dashboard = () => {
     };
   }, [selectedYear, selectedProgram]);
 
-  // Fetch coordinator requests count (Completed sent by coordinators)
+  // Fetch new users count (recently converted alumni)
   useEffect(() => {
-    const loadCoordinatorReq = async () => {
+    const loadNewUsers = async () => {
       try {
-        const res = await fetchCoordinatorRequestsCount();
-        const c = Number(res?.count) || 0;
-        setCoordinatorReqCount(c);
-        broadcastCoordinatorRequestCount(c);
+        const res = await fetchNewUsersCount();
+        const c = Number(res?.count || res?.new_users) || 0;
+
+        // Subtract acknowledged (seen) count to show only unseen items
+        let ack = 0;
+        try {
+          ack = Number(localStorage.getItem('ackNewUsersCount')) || 0;
+        } catch {
+          ack = 0;
+        }
+        const pending = Math.max(c - ack, 0);
+
+        setCoordinatorReqCount(pending);
+        broadcastCoordinatorRequestCount(pending);
       } catch (e) {
-        console.error('Error fetching coordinator requests count:', e);
+        console.error('Error fetching new users count:', e);
       }
     };
-    loadCoordinatorReq();
-    const interval = setInterval(loadCoordinatorReq, 10000);
+    loadNewUsers();
+    const interval = setInterval(loadNewUsers, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -586,7 +596,7 @@ const Dashboard = () => {
                   e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
                 }}
               >
-                <div style={{ fontSize: 16, opacity: 0.9 }}>OJT Submissions</div>
+                <div style={{ fontSize: 16, opacity: 0.9 }}>New User</div>
                 <div style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>
                   {statsLoading ? <div style={{ height: 28, borderRadius: 8, background: '#e5e7eb', width: 40, margin: '0 auto' }} /> : coordinatorReqCount}
                 </div>
