@@ -28,6 +28,8 @@ const Dashboard = () => {
   const [selectedProgram, setSelectedProgram] = useState<string>('ALL');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showEventModal, setShowEventModal] = useState(false);
+  const [statsViewMode, setStatsViewMode] = useState<'graph' | 'table'>('graph');
+  const [viewModeAlert, setViewModeAlert] = useState<{ show: boolean; pendingMode: 'graph' | 'table' | null }>({ show: false, pendingMode: null });
   const [calendarEvents, setCalendarEvents] = useState<{ [key: string]: CalendarEventData[] }>({});
   const [todayEventsReminder, setTodayEventsReminder] = useState<CalendarEventData[]>([]);
   const [showTodayReminderModal, setShowTodayReminderModal] = useState(false);
@@ -612,6 +614,76 @@ const Dashboard = () => {
                 </div>
               </div>
             </div>
+
+            {/* View Mode Toggle */}
+            <div style={{ 
+              display: 'flex', 
+              gap: 12, 
+              marginTop: 28,
+              justifyContent: 'flex-start'
+            }}>
+              <button
+                onClick={() => {
+                  if (statsViewMode !== 'graph') {
+                    setViewModeAlert({ show: true, pendingMode: 'graph' });
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 20px',
+                  borderRadius: 8,
+                  border: statsViewMode === 'graph' ? '2px solid #1c4e80' : '1px solid #d1d5db',
+                  background: statsViewMode === 'graph' ? '#1c4e80' : '#ffffff',
+                  color: statsViewMode === 'graph' ? '#ffffff' : '#374151',
+                  fontWeight: 600,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: statsViewMode === 'graph' ? '0 2px 8px rgba(28, 78, 128, 0.3)' : '0 1px 3px rgba(0,0,0,0.1)'
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 2a10 10 0 0 1 10 10"/>
+                  <path d="M12 12L12 2"/>
+                  <path d="M12 12L20.5 16"/>
+                </svg>
+                Graph
+              </button>
+              <button
+                onClick={() => {
+                  if (statsViewMode !== 'table') {
+                    setViewModeAlert({ show: true, pendingMode: 'table' });
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 20px',
+                  borderRadius: 8,
+                  border: statsViewMode === 'table' ? '2px solid #1c4e80' : '1px solid #d1d5db',
+                  background: statsViewMode === 'table' ? '#1c4e80' : '#ffffff',
+                  color: statsViewMode === 'table' ? '#ffffff' : '#374151',
+                  fontWeight: 600,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: statsViewMode === 'table' ? '0 2px 8px rgba(28, 78, 128, 0.3)' : '0 1px 3px rgba(0,0,0,0.1)'
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="3" y1="9" x2="21" y2="9"/>
+                  <line x1="3" y1="15" x2="21" y2="15"/>
+                  <line x1="9" y1="3" x2="9" y2="21"/>
+                  <line x1="15" y1="3" x2="15" y2="21"/>
+                </svg>
+                Table
+              </button>
+            </div>
           </div>
 
           {/* Calendar (right column, spanning both rows) */}
@@ -863,148 +935,298 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Charts Section */}
+        {/* Charts Section - Conditionally render based on statsViewMode */}
         <div style={chartContainerStyle}>
-          {/* Pie Chart - Left Side */}
-          <div style={pieChartStyle}>
-            <h3 style={{ margin: '0 0 16px 0', color: '#374151' }}>Employed vs. Unemployed Graduates</h3>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              height: '200px',
-              backgroundColor: '#f8fafc',
-              borderRadius: '8px',
-              border: '2px solid #d1d5db'
-            }}>
-              {/* Simple donut chart using CSS only */}
-              <div style={{ position: 'relative', width: 180, height: 180 }}>
-                {/* base circle */}
-                <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%' }}>
-                  {/* background ring */}
-                  <path
-                    d="M18 2.0845
-                       a 15.9155 15.9155 0 0 1 0 31.831
-                       a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke="#e5e7eb"
-                    strokeWidth="3.8"
-                  />
-                  {/* employed */}
-                  <path
-                    d="M18 2.0845
-                       a 15.9155 15.9155 0 0 1 0 31.831
-                       a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke={COLORS.employed}
-                    strokeWidth="3.8"
-                    style={{ transition: 'stroke-dasharray 0.6s ease' }}
-                    strokeDasharray={`${Math.round(employedPct)}, 100`}
-                  />
-                  {/* absorbed sits after employed */}
-                  <path
-                    d="M18 2.0845
-                       a 15.9155 15.9155 0 0 1 0 31.831
-                       a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke={COLORS.absorb}
-                    strokeWidth="3.8"
-                    style={{ transition: 'stroke-dasharray 0.6s ease' }}
-                    strokeDasharray={`${Math.round(absorbedPct)}, 100`}
-                    strokeDashoffset={-Math.round(employedPct)}
-                  />
-                  {/* unemployed after employed+absorbed */}
-                  <path
-                    d="M18 2.0845
-                       a 15.9155 15.9155 0 0 1 0 31.831
-                       a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke={COLORS.unemployed}
-                    strokeWidth="3.8"
-                    style={{ transition: 'stroke-dasharray 0.6s ease' }}
-                    strokeDasharray={`${Math.round(unemployedPct)}, 100`}
-                    strokeDashoffset={-(Math.round(employedPct + absorbedPct))}
-                  />
-                </svg>
-                {/* inner label */}
-                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: '#374151' }}>{statsLoading ? '…' : `${Math.round((employedPct + absorbedPct + unemployedPct))}%`}</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>Total</div>
+          {statsViewMode === 'graph' ? (
+            <>
+              {/* Pie Chart - Graph View */}
+              <div style={pieChartStyle}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#374151' }}>Employed vs. Unemployed Graduates</h3>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  height: '200px',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: '8px',
+                  border: '2px solid #d1d5db'
+                }}>
+                  {/* Simple donut chart using CSS only */}
+                  <div style={{ position: 'relative', width: 180, height: 180 }}>
+                    {/* base circle */}
+                    <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%' }}>
+                      {/* background ring */}
+                      <path
+                        d="M18 2.0845
+                           a 15.9155 15.9155 0 0 1 0 31.831
+                           a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none"
+                        stroke="#e5e7eb"
+                        strokeWidth="3.8"
+                      />
+                      {/* employed */}
+                      <path
+                        d="M18 2.0845
+                           a 15.9155 15.9155 0 0 1 0 31.831
+                           a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none"
+                        stroke={COLORS.employed}
+                        strokeWidth="3.8"
+                        style={{ transition: 'stroke-dasharray 0.6s ease' }}
+                        strokeDasharray={`${Math.round(employedPct)}, 100`}
+                      />
+                      {/* absorbed sits after employed */}
+                      <path
+                        d="M18 2.0845
+                           a 15.9155 15.9155 0 0 1 0 31.831
+                           a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none"
+                        stroke={COLORS.absorb}
+                        strokeWidth="3.8"
+                        style={{ transition: 'stroke-dasharray 0.6s ease' }}
+                        strokeDasharray={`${Math.round(absorbedPct)}, 100`}
+                        strokeDashoffset={-Math.round(employedPct)}
+                      />
+                      {/* unemployed after employed+absorbed */}
+                      <path
+                        d="M18 2.0845
+                           a 15.9155 15.9155 0 0 1 0 31.831
+                           a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none"
+                        stroke={COLORS.unemployed}
+                        strokeWidth="3.8"
+                        style={{ transition: 'stroke-dasharray 0.6s ease' }}
+                        strokeDasharray={`${Math.round(unemployedPct)}, 100`}
+                        strokeDashoffset={-(Math.round(employedPct + absorbedPct))}
+                      />
+                    </svg>
+                    {/* inner label */}
+                    <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: '#374151' }}>{statsLoading ? '…' : `${Math.round((employedPct + absorbedPct + unemployedPct))}%`}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280' }}>Total</div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            {/* Legend */}
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 12, fontSize: 12, color: '#374151' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: COLORS.employed, borderRadius: 2 }}></span>Employed ({Math.round(employedPct)}%)</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: COLORS.absorb, borderRadius: 2 }}></span>Absorbed ({Math.round(absorbedPct)}%)</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: COLORS.unemployed, borderRadius: 2 }}></span>Unemployed ({Math.round(unemployedPct)}%)</div>
-            </div>
+                {/* Legend */}
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 12, fontSize: 12, color: '#374151' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: COLORS.employed, borderRadius: 2 }}></span>Employed ({Math.round(employedPct)}%)</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: COLORS.absorb, borderRadius: 2 }}></span>Absorbed ({Math.round(absorbedPct)}%)</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, background: COLORS.unemployed, borderRadius: 2 }}></span>Unemployed ({Math.round(unemployedPct)}%)</div>
+                </div>
 
-            {/* Verse of the Day (moved below the pie chart) */}
-            <div style={{ marginTop: 16, background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb' }}>
-              <div style={{ color: '#0b2a55', fontWeight: 700, marginBottom: 6 }}>Verse of the Day</div>
-              <div style={{ color: '#374151', fontSize: 13, lineHeight: 1.5 }}>{verseLoading ? 'Loading…' : (verse?.text || '')}</div>
-              <div style={{ color: '#1c4e80', fontSize: 12, marginTop: 6, fontWeight: 600 }}>{verseLoading ? '' : (verse?.ref || '')}</div>
-            </div>
-          </div>
+                {/* Verse of the Day (moved below the pie chart) */}
+                <div style={{ marginTop: 16, background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb' }}>
+                  <div style={{ color: '#0b2a55', fontWeight: 700, marginBottom: 6 }}>Verse of the Day</div>
+                  <div style={{ color: '#374151', fontSize: 13, lineHeight: 1.5 }}>{verseLoading ? 'Loading…' : (verse?.text || '')}</div>
+                  <div style={{ color: '#1c4e80', fontSize: 12, marginTop: 6, fontWeight: 600 }}>{verseLoading ? '' : (verse?.ref || '')}</div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Statistics Overview - Table View */}
+              <div style={{ ...barChartStyle, flex: 2 }}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#374151' }}>Statistics Overview</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fed7aa', borderRadius: 12, padding: '12px 14px', border: '2px solid #f97316', cursor: 'pointer', transition: 'background 0.2s ease' }}
+                    onClick={() => navigate('/statistics')}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#fdba74'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#fed7aa'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: COLORS.employed }} />
+                      <div style={{ color: '#374151', fontWeight: 600 }}>Employed</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <div style={{ color: '#374151', fontSize: 12, fontWeight: 600 }}>{statsLoading ? '…' : `${employedCount} (${Math.round(employedPct)}%)`}</div>
+                      {prevSnapshot && (<Delta current={employedCount} prev={prevSnapshot.employed} />)}
+                    </div>
+                  </div>
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#bbf7d0', borderRadius: 12, padding: '12px 14px', border: '2px solid #22c55e', cursor: 'pointer', transition: 'background 0.2s ease' }}
+                    onClick={() => navigate('/statistics')}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#86efac'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#bbf7d0'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: COLORS.absorb }} />
+                      <div style={{ color: '#374151', fontWeight: 600 }}>Absorbed</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <div style={{ color: '#374151', fontSize: 12, fontWeight: 600 }}>{statsLoading ? '…' : `${absorbedCount} (${Math.round(absorbedPct)}%)`}</div>
+                      {prevSnapshot && (<Delta current={absorbedCount} prev={prevSnapshot.absorb} />)}
+                    </div>
+                  </div>
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fed7aa', borderRadius: 12, padding: '12px 14px', border: '2px solid #f97316', cursor: 'pointer', transition: 'background 0.2s ease' }}
+                    onClick={() => navigate('/statistics')}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#fdba74'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#fed7aa'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: COLORS.unemployed }} />
+                      <div style={{ color: '#374151', fontWeight: 600 }}>Unemployed</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <div style={{ color: '#374151', fontSize: 12, fontWeight: 600 }}>{statsLoading ? '…' : `${unemployedCount} (${Math.round(unemployedPct)}%)`}</div>
+                      {prevSnapshot && (<Delta current={unemployedCount} prev={prevSnapshot.unemployed} />)}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#bbf7d0', borderRadius: 12, padding: '12px 14px', border: '2px solid #22c55e' }}>
+                    <div style={{ color: '#374151', fontWeight: 700 }}>Total Alumni</div>
+                    <div style={{ color: '#374151', fontSize: 12, fontWeight: 600 }}>{statsLoading ? '…' : totalAlumni}</div>
+                  </div>
+                </div>
 
-          {/* Right Side: Small stats cards + Insights */}
-          <div style={barChartStyle}>
-            <h3 style={{ margin: '0 0 16px 0', color: '#374151' }}>Statistics Overview</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb', cursor: 'pointer', transition: 'background 0.2s ease' }}
-                onClick={() => navigate('/statistics')}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#eef2ff'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#f8fafc'; }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: COLORS.employed }} />
-                  <div style={{ color: '#374151', fontWeight: 600 }}>Employed</div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <div style={{ color: '#374151', fontSize: 12 }}>{statsLoading ? '…' : `${employedCount} (${Math.round(employedPct)}%)`}</div>
-                  {prevSnapshot && (<Delta current={employedCount} prev={prevSnapshot.employed} />)}
+                {/* Verse of the Day */}
+                <div style={{ marginTop: 16, background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb' }}>
+                  <div style={{ color: '#0b2a55', fontWeight: 700, marginBottom: 6 }}>Verse of the Day</div>
+                  <div style={{ color: '#374151', fontSize: 13, lineHeight: 1.5 }}>{verseLoading ? 'Loading…' : (verse?.text || '')}</div>
+                  <div style={{ color: '#1c4e80', fontSize: 12, marginTop: 6, fontWeight: 600 }}>{verseLoading ? '' : (verse?.ref || '')}</div>
                 </div>
               </div>
-              <div
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb', cursor: 'pointer', transition: 'background 0.2s ease' }}
-                onClick={() => navigate('/statistics')}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#eef2ff'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#f8fafc'; }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: COLORS.absorb }} />
-                  <div style={{ color: '#374151', fontWeight: 600 }}>Absorbed</div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <div style={{ color: '#374151', fontSize: 12 }}>{statsLoading ? '…' : `${absorbedCount} (${Math.round(absorbedPct)}%)`}</div>
-                  {prevSnapshot && (<Delta current={absorbedCount} prev={prevSnapshot.absorb} />)}
-                </div>
-              </div>
-              <div
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb', cursor: 'pointer', transition: 'background 0.2s ease' }}
-                onClick={() => navigate('/statistics')}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#eef2ff'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#f8fafc'; }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: COLORS.unemployed }} />
-                  <div style={{ color: '#374151', fontWeight: 600 }}>Unemployed</div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <div style={{ color: '#374151', fontSize: 12 }}>{statsLoading ? '…' : `${unemployedCount} (${Math.round(unemployedPct)}%)`}</div>
-                  {prevSnapshot && (<Delta current={unemployedCount} prev={prevSnapshot.unemployed} />)}
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', borderRadius: 12, padding: '12px 14px', border: '1px solid #e5e7eb' }}>
-                <div style={{ color: '#374151', fontWeight: 700 }}>Total Alumni</div>
-                <div style={{ color: '#374151', fontSize: 12 }}>{statsLoading ? '…' : totalAlumni}</div>
-              </div>
-              {/* Insights removed; verse displayed under pie chart */}
-            </div>
-          </div>
+            </>
+          )}
         </div>
+
+        {/* View Mode Alert Modal */}
+        {viewModeAlert.show && viewModeAlert.pendingMode && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              backdropFilter: 'blur(4px)',
+              animation: 'fadeIn 0.2s ease'
+            }}
+            onClick={() => setViewModeAlert({ show: false, pendingMode: null })}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                borderRadius: 16,
+                padding: 28,
+                width: '90%',
+                maxWidth: 400,
+                boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 16,
+                animation: 'slideUp 0.3s ease'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Icon */}
+              <div style={{
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                background: viewModeAlert.pendingMode === 'graph' ? 'linear-gradient(135deg, #1c4e80 0%, #2d6cb5 100%)' : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: viewModeAlert.pendingMode === 'graph' ? '0 4px 14px rgba(28, 78, 128, 0.4)' : '0 4px 14px rgba(34, 197, 94, 0.4)'
+              }}>
+                {viewModeAlert.pendingMode === 'graph' ? (
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 2a10 10 0 0 1 10 10"/>
+                    <path d="M12 12L12 2"/>
+                    <path d="M12 12L20.5 16"/>
+                  </svg>
+                ) : (
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="3" y1="9" x2="21" y2="9"/>
+                    <line x1="3" y1="15" x2="21" y2="15"/>
+                    <line x1="9" y1="3" x2="9" y2="21"/>
+                    <line x1="15" y1="3" x2="15" y2="21"/>
+                  </svg>
+                )}
+              </div>
+
+              {/* Title */}
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#1e293b', textAlign: 'center' }}>
+                Switch View?
+              </div>
+
+              {/* Message */}
+              <div style={{ fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 1.5 }}>
+                {viewModeAlert.pendingMode === 'graph' 
+                  ? 'Do you want to switch to Graph View? You will see the employment statistics as a visual chart.'
+                  : 'Do you want to switch to Table View? You will see the detailed statistics breakdown.'}
+              </div>
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: 12, marginTop: 8, width: '100%', justifyContent: 'center' }}>
+                <button
+                  onClick={() => setViewModeAlert({ show: false, pendingMode: null })}
+                  style={{
+                    padding: '12px 28px',
+                    borderRadius: 8,
+                    border: '1px solid #d1d5db',
+                    background: '#ffffff',
+                    color: '#374151',
+                    fontWeight: 600,
+                    fontSize: 14,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#9ca3af';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#ffffff';
+                    e.currentTarget.style.borderColor = '#d1d5db';
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (viewModeAlert.pendingMode) {
+                      setStatsViewMode(viewModeAlert.pendingMode);
+                    }
+                    setViewModeAlert({ show: false, pendingMode: null });
+                  }}
+                  style={{
+                    padding: '12px 28px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: viewModeAlert.pendingMode === 'graph' ? '#1c4e80' : '#22c55e',
+                    color: 'white',
+                    fontWeight: 600,
+                    fontSize: 14,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+                  }}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Today's Event Reminder Modal */}
         {showTodayReminderModal && todayEventsReminder.length > 0 && (

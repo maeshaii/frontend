@@ -37,6 +37,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType, AlignmentType, HeadingLevel, BorderStyle, ImageRun } from 'docx';
 import { saveAs } from 'file-saver';
+import { FaChartLine, FaChartBar } from 'react-icons/fa';
+import { BsTable, BsGrid3X3Gap } from 'react-icons/bs';
 
 // Import institutional images
 import ctuLogo from '../images/ctu_logo-removebg-preview.png';
@@ -90,6 +92,9 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   
   // Track if AI summaries are ready for export
   const [aiSummariesReady, setAiSummariesReady] = useState(false);
+  
+  // Report format state: 'graph', 'table', or 'both'
+  const [reportFormat, setReportFormat] = useState<'graph' | 'table' | 'both'>('both');
   
   // Toast notification state
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({
@@ -2251,10 +2256,16 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   const exportToPDF = async (
     statsByType: Record<string, any>,
     detailedDataByType: Record<string, any[]>,
-    exportType: string
+    exportType: string,
+    format: 'graph' | 'table' | 'both' = 'both'
   ) => {
     console.log('exportToPDF called - aiSummaries state:', JSON.stringify(aiSummaries));
     console.log('exportToPDF - statsByType:', Object.keys(statsByType));
+    console.log('exportToPDF - report format:', format);
+    
+    // Determine what to include based on format
+    const includeGraphs = format === 'graph' || format === 'both';
+    const includeTables = format === 'table' || format === 'both';
     
     const doc = new jsPDF('landscape', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -2412,126 +2423,133 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       doc.text('QPRO Statistics Summary', 20, yPosition);
       yPosition += 8;
 
-      const summaryData = [
-        ['Metric', 'Value', 'Percentage'],
-        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-        ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
-        ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
-        ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)],
-      ];
+      // Add summary table if tables are included
+      if (includeTables) {
+        const summaryData = [
+          ['Metric', 'Value', 'Percentage'],
+          ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+          ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+          ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
+          ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)],
+        ];
 
-      autoTable(doc, {
-        head: [summaryData[0]],
-        body: summaryData.slice(1),
-        startY: yPosition,
-        theme: 'grid',
-        headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 9 },
-      });
+        autoTable(doc, {
+          head: [summaryData[0]],
+          body: summaryData.slice(1),
+          startY: yPosition,
+          theme: 'grid',
+          headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+          styles: { fontSize: 9 },
+        });
 
-      yPosition = (doc as any).lastAutoTable.finalY + 10;
-      checkPageBreak(20);
+        yPosition = (doc as any).lastAutoTable.finalY + 10;
+        checkPageBreak(20);
 
-      // Add Employability Report by Program table
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Employability Report by Program', 20, yPosition);
-      yPosition += 8;
+        // Add Employability Report by Program table
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Employability Report by Program', 20, yPosition);
+        yPosition += 8;
 
-      const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
-      
-      // Prepare table data with two-row header
-      const breakdownHead = [
-        ['PROGRAMS', 'TOTAL', 'E', 'UE', 'NT', 'GT', 'FIRST QUARTER', '', '', 'SECOND QUARTER', '', '', 'THIRD QUARTER', '', '', 'FOURTH QUARTER', '', ''],
-        ['', '', '', '', '', '', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT']
-      ];
-      
-      const breakdownBody = programBreakdown.map(progData => [
-        progData.program,
-        progData.total,
-        progData.employed,
-        progData.unemployed,
-        progData.notTracked,
-        progData.trackingRate,
-        progData.q1.employed,
-        progData.q1.unemployed,
-        progData.q1.trackingRate,
-        progData.q2.employed,
-        progData.q2.unemployed,
-        progData.q2.trackingRate,
-        progData.q3.employed,
-        progData.q3.unemployed,
-        progData.q3.trackingRate,
-        progData.q4.employed,
-        progData.q4.unemployed,
-        progData.q4.trackingRate,
-      ]);
+        const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
+        
+        // Prepare table data with two-row header
+        const breakdownHead = [
+          ['PROGRAMS', 'TOTAL', 'E', 'UE', 'NT', 'GT', 'FIRST QUARTER', '', '', 'SECOND QUARTER', '', '', 'THIRD QUARTER', '', '', 'FOURTH QUARTER', '', ''],
+          ['', '', '', '', '', '', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT', 'E', 'UE', 'GT']
+        ];
+        
+        const breakdownBody = programBreakdown.map(progData => [
+          progData.program,
+          progData.total,
+          progData.employed,
+          progData.unemployed,
+          progData.notTracked,
+          progData.trackingRate,
+          progData.q1.employed,
+          progData.q1.unemployed,
+          progData.q1.trackingRate,
+          progData.q2.employed,
+          progData.q2.unemployed,
+          progData.q2.trackingRate,
+          progData.q3.employed,
+          progData.q3.unemployed,
+          progData.q3.trackingRate,
+          progData.q4.employed,
+          progData.q4.unemployed,
+          progData.q4.trackingRate,
+        ]);
 
-      autoTable(doc, {
-        head: breakdownHead,
-        body: breakdownBody,
-        startY: yPosition,
-        theme: 'grid',
-        headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 6, cellPadding: 1 },
-        margin: { left: 20, right: 20 },
-        // Let autoTable auto-size columns like Detailed Alumni Data table
-        didParseCell: (data: any) => {
-          // Apply white fill to TOTAL row
-          if (data.row.raw && Array.isArray(data.row.raw) && data.row.raw[0] === 'TOTAL') {
-            data.cell.styles.fillColor = [255, 255, 255];
-            data.cell.styles.textColor = 0;
-            data.cell.styles.fontStyle = 'bold';
-          }
-        },
-      });
+        autoTable(doc, {
+          head: breakdownHead,
+          body: breakdownBody,
+          startY: yPosition,
+          theme: 'grid',
+          headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+          styles: { fontSize: 6, cellPadding: 1 },
+          margin: { left: 20, right: 20 },
+          // Let autoTable auto-size columns like Detailed Alumni Data table
+          didParseCell: (data: any) => {
+            // Apply white fill to TOTAL row
+            if (data.row.raw && Array.isArray(data.row.raw) && data.row.raw[0] === 'TOTAL') {
+              data.cell.styles.fillColor = [255, 255, 255];
+              data.cell.styles.textColor = 0;
+              data.cell.styles.fontStyle = 'bold';
+            }
+          },
+        });
 
-      yPosition = (doc as any).lastAutoTable.finalY + 10;
+        yPosition = (doc as any).lastAutoTable.finalY + 10;
+      }
       
       // Add institutional footer after summary
       yPosition = await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
       
-      // Add Employment Tracing Chart after footer
-      addEmploymentChartAfterFooter();
-      
-      // Add AI Summary after chart
-      addAISummaryToPDF('QPRO');
-
-      // Detailed data
-      const detailedData = detailedDataByType['QPRO'] || [];
-      
-      // Add new page for detailed data only if we have data
-      if (detailedData.length > 0) {
-        doc.addPage();
-        yPosition = 20;
+      // Add Employment Tracing Chart after footer (if graphs are included)
+      if (includeGraphs) {
+        addEmploymentChartAfterFooter();
+        
+        // Add AI Summary after chart
+        addAISummaryToPDF('QPRO');
       }
-      if (detailedData.length > 0) {
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Detailed Alumni Data', 20, yPosition);
-        yPosition += 6;
 
-        // Use the same headers as Excel export for consistency
-        const headers = qproHeaders;
-        const rows = sortAlumniData(detailedData.map((row: any) => mapQPRORow(row)));
+      // Detailed data (if tables are included)
+      if (includeTables) {
+        const detailedData = detailedDataByType['QPRO'] || [];
+        
+        // Add new page for detailed data only if we have data
+        if (detailedData.length > 0) {
+          doc.addPage();
+          yPosition = 20;
+        }
+        if (detailedData.length > 0) {
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Detailed Alumni Data', 20, yPosition);
+          yPosition += 6;
 
-        autoTable(doc, {
-          head: [headers],
-          body: rows,
-          startY: yPosition,
-          theme: 'striped',
-          styles: { fontSize: 6, cellPadding: 1 },
-          headStyles: { fillColor: [29, 78, 137], textColor: 255 },
-          columnStyles: {
-            1: { cellWidth: 12 }, // Batch_Graduated
-            5: { cellWidth: 20 }, // Status
-            6: { cellWidth: 35 }, // Company
-            7: { cellWidth: 30 }, // Position
-            8: { cellWidth: 25 }, // Salary
-            9: { cellWidth: 20 }, // Sector
-            10: { cellWidth: 30 }, // Post graduate
-          },
-        });
+          // Use the same headers as Excel export for consistency
+          const headers = qproHeaders;
+          const rows = sortAlumniData(detailedData.map((row: any) => mapQPRORow(row)));
+
+          autoTable(doc, {
+            head: [headers],
+            body: rows,
+            startY: yPosition,
+            theme: 'striped',
+            styles: { fontSize: 6, cellPadding: 1 },
+            headStyles: { fillColor: [29, 78, 137], textColor: 255 },
+            columnStyles: {
+              1: { cellWidth: 12 }, // Batch_Graduated
+              5: { cellWidth: 20 }, // Status
+              6: { cellWidth: 35 }, // Company
+              7: { cellWidth: 30 }, // Position
+              8: { cellWidth: 25 }, // Salary
+              9: { cellWidth: 20 }, // Sector
+              10: { cellWidth: 30 }, // Post graduate
+            },
+          });
+        }
       }
     } else if (exportType === 'CHED' && statsByType['CHED']) {
       const stats = statsByType['CHED'];
@@ -2540,68 +2558,75 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       doc.text('CHED Statistics Summary', 20, yPosition);
       yPosition += 8;
 
-      const summaryData = [
-        ['Metric', 'Value', 'Percentage'],
-        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-        ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
-        ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
-        ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
-        ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
-      ];
+      // Add summary table if tables are included
+      if (includeTables) {
+        const summaryData = [
+          ['Metric', 'Value', 'Percentage'],
+          ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+          ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
+          ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
+          ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
+          ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
+        ];
 
-      autoTable(doc, {
-        head: [summaryData[0]],
-        body: summaryData.slice(1),
-        startY: yPosition,
-        theme: 'grid',
-        headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 9 },
-      });
+        autoTable(doc, {
+          head: [summaryData[0]],
+          body: summaryData.slice(1),
+          startY: yPosition,
+          theme: 'grid',
+          headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+          styles: { fontSize: 9 },
+        });
 
-      yPosition = (doc as any).lastAutoTable.finalY + 10;
+        yPosition = (doc as any).lastAutoTable.finalY + 10;
+      }
       
       // Add institutional footer after summary
       yPosition = await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
       
-      // Add CHED Chart after footer
-      addCHEDChartAfterFooter();
-      
-      // Add AI Summary after chart
-      addAISummaryToPDF('CHED');
+      // Add CHED Chart after footer (if graphs are included)
+      if (includeGraphs) {
+        addCHEDChartAfterFooter();
+        
+        // Add AI Summary after chart
+        addAISummaryToPDF('CHED');
+      }
 
-      // Detailed data for CHED
-      const detailedData = detailedDataByType['CHED'] || [];
-      if (detailedData.length > 0) {
-        // Add new page for detailed data
-        doc.addPage();
-        yPosition = 20; // Reset yPosition for new page
+      // Detailed data for CHED (if tables are included)
+      if (includeTables) {
+        const detailedData = detailedDataByType['CHED'] || [];
+        if (detailedData.length > 0) {
+          // Add new page for detailed data
+          doc.addPage();
+          yPosition = 20; // Reset yPosition for new page
 
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Detailed Alumni Data', 20, yPosition);
-        yPosition += 6;
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Detailed Alumni Data', 20, yPosition);
+          yPosition += 6;
 
-        // Use the same headers as Excel export for consistency
-        const headers = qproHeaders;
-        const rows = detailedData.map((row: any) => mapQPRORow(row));
+          // Use the same headers as Excel export for consistency
+          const headers = qproHeaders;
+          const rows = detailedData.map((row: any) => mapQPRORow(row));
 
-        autoTable(doc, {
-          head: [headers],
-          body: rows,
-          startY: yPosition,
-          theme: 'striped',
-          styles: { fontSize: 6, cellPadding: 1 },
-          headStyles: { fillColor: [29, 78, 137], textColor: 255 },
-          columnStyles: {
-            1: { cellWidth: 12 }, // Batch_Graduated
-            5: { cellWidth: 20 }, // Status
-            6: { cellWidth: 35 }, // Company
-            7: { cellWidth: 30 }, // Position
-            8: { cellWidth: 25 }, // Salary
-            9: { cellWidth: 20 }, // Sector
-            10: { cellWidth: 30 }, // Post graduate
-          },
-        });
+          autoTable(doc, {
+            head: [headers],
+            body: rows,
+            startY: yPosition,
+            theme: 'striped',
+            styles: { fontSize: 6, cellPadding: 1 },
+            headStyles: { fillColor: [29, 78, 137], textColor: 255 },
+            columnStyles: {
+              1: { cellWidth: 12 }, // Batch_Graduated
+              5: { cellWidth: 20 }, // Status
+              6: { cellWidth: 35 }, // Company
+              7: { cellWidth: 30 }, // Position
+              8: { cellWidth: 25 }, // Salary
+              9: { cellWidth: 20 }, // Sector
+              10: { cellWidth: 30 }, // Post graduate
+            },
+          });
+        }
       }
     } else if (exportType === 'AACUP' && statsByType['AACUP']) {
       const stats = statsByType['AACUP'];
@@ -2610,69 +2635,76 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       doc.text('AACUP Statistics Summary', 20, yPosition);
       yPosition += 8;
 
-      const summaryData = [
-        ['Metric', 'Value', 'Percentage'],
-        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-        ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
-        ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
-        ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
-        ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
-        ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)],
-      ];
+      // Add summary table if tables are included
+      if (includeTables) {
+        const summaryData = [
+          ['Metric', 'Value', 'Percentage'],
+          ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+          ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+          ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
+          ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+          ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
+          ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)],
+        ];
 
-      autoTable(doc, {
-        head: [summaryData[0]],
-        body: summaryData.slice(1),
-        startY: yPosition,
-        theme: 'grid',
-        headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 9 },
-      });
+        autoTable(doc, {
+          head: [summaryData[0]],
+          body: summaryData.slice(1),
+          startY: yPosition,
+          theme: 'grid',
+          headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+          styles: { fontSize: 9 },
+        });
 
-      yPosition = (doc as any).lastAutoTable.finalY + 10;
+        yPosition = (doc as any).lastAutoTable.finalY + 10;
+      }
       
       // Add institutional footer after summary
       yPosition = await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
       
-      // Add AACUP Chart after footer
-      addAACUPChartAfterFooter();
-      
-      // Add AI Summary after chart
-      addAISummaryToPDF('AACUP');
-
-      // Detailed data for AACUP
-      const detailedData = detailedDataByType['AACUP'] || [];
-      if (detailedData.length > 0) {
-        // Add new page for detailed data
-        doc.addPage();
-        yPosition = 20;
+      // Add AACUP Chart after footer (if graphs are included)
+      if (includeGraphs) {
+        addAACUPChartAfterFooter();
         
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Detailed Alumni Data', 20, yPosition);
-        yPosition += 6;
+        // Add AI Summary after chart
+        addAISummaryToPDF('AACUP');
+      }
 
-        // Use the same headers as Excel export for consistency
-        const headers = qproHeaders;
-        const rows = detailedData.map((row: any) => mapQPRORow(row));
+      // Detailed data for AACUP (if tables are included)
+      if (includeTables) {
+        const detailedData = detailedDataByType['AACUP'] || [];
+        if (detailedData.length > 0) {
+          // Add new page for detailed data
+          doc.addPage();
+          yPosition = 20;
+          
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Detailed Alumni Data', 20, yPosition);
+          yPosition += 6;
 
-        autoTable(doc, {
-          head: [headers],
-          body: rows,
-          startY: yPosition,
-          theme: 'striped',
-          styles: { fontSize: 6, cellPadding: 1 },
-          headStyles: { fillColor: [29, 78, 137], textColor: 255 },
-          columnStyles: {
-            1: { cellWidth: 12 }, // Batch_Graduated
-            5: { cellWidth: 20 }, // Status
-            6: { cellWidth: 35 }, // Company
-            7: { cellWidth: 30 }, // Position
-            8: { cellWidth: 25 }, // Salary
-            9: { cellWidth: 20 }, // Sector
-            10: { cellWidth: 30 }, // Post graduate
-          },
-        });
+          // Use the same headers as Excel export for consistency
+          const headers = qproHeaders;
+          const rows = detailedData.map((row: any) => mapQPRORow(row));
+
+          autoTable(doc, {
+            head: [headers],
+            body: rows,
+            startY: yPosition,
+            theme: 'striped',
+            styles: { fontSize: 6, cellPadding: 1 },
+            headStyles: { fillColor: [29, 78, 137], textColor: 255 },
+            columnStyles: {
+              1: { cellWidth: 12 }, // Batch_Graduated
+              5: { cellWidth: 20 }, // Status
+              6: { cellWidth: 35 }, // Company
+              7: { cellWidth: 30 }, // Position
+              8: { cellWidth: 25 }, // Salary
+              9: { cellWidth: 20 }, // Sector
+              10: { cellWidth: 30 }, // Post graduate
+            },
+          });
+        }
       }
     } else if (exportType === 'SUC' && statsByType['SUC']) {
       const stats = statsByType['SUC'];
@@ -2681,71 +2713,78 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       doc.text('SUC Statistics Summary', 20, yPosition);
       yPosition += 8;
 
-      const summaryData = [
-        ['Metric', 'Value', 'Percentage'],
-        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-        ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
-        ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
-        ['Average Salary', formatCurrencyForPDF(stats.average_salary), '--'],
-        ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
-        ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
-        ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
-        ['International', String(stats.international_count || 0), pct(stats.international_count, stats.total_alumni)],
-      ];
+      // Add summary table if tables are included
+      if (includeTables) {
+        const summaryData = [
+          ['Metric', 'Value', 'Percentage'],
+          ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+          ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+          ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
+          ['Average Salary', formatCurrencyForPDF(stats.average_salary), '--'],
+          ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
+          ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
+          ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
+          ['International', String(stats.international_count || 0), pct(stats.international_count, stats.total_alumni)],
+        ];
 
-      autoTable(doc, {
-        head: [summaryData[0]],
-        body: summaryData.slice(1),
-        startY: yPosition,
-        theme: 'grid',
-        headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 9 },
-      });
+        autoTable(doc, {
+          head: [summaryData[0]],
+          body: summaryData.slice(1),
+          startY: yPosition,
+          theme: 'grid',
+          headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+          styles: { fontSize: 9 },
+        });
 
-      yPosition = (doc as any).lastAutoTable.finalY + 10;
+        yPosition = (doc as any).lastAutoTable.finalY + 10;
+      }
       
       // Add institutional footer after summary
       yPosition = await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
       
-      // Add SUC Chart after footer
-      addSUCChartAfterFooter();
-      
-      // Add AI Summary after chart
-      addAISummaryToPDF('SUC');
-
-      // Detailed data for SUC
-      const detailedData = detailedDataByType['SUC'] || [];
-      if (detailedData.length > 0) {
-        // Add new page for detailed data
-        doc.addPage();
-        yPosition = 20;
+      // Add SUC Chart after footer (if graphs are included)
+      if (includeGraphs) {
+        addSUCChartAfterFooter();
         
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Detailed Alumni Data', 20, yPosition);
-        yPosition += 6;
+        // Add AI Summary after chart
+        addAISummaryToPDF('SUC');
+      }
 
-        // Use the same headers as Excel export for consistency
-        const headers = qproHeaders;
-        const rows = sortAlumniData(detailedData.map((row: any) => mapQPRORow(row)));
+      // Detailed data for SUC (if tables are included)
+      if (includeTables) {
+        const detailedData = detailedDataByType['SUC'] || [];
+        if (detailedData.length > 0) {
+          // Add new page for detailed data
+          doc.addPage();
+          yPosition = 20;
+          
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Detailed Alumni Data', 20, yPosition);
+          yPosition += 6;
 
-        autoTable(doc, {
-          head: [headers],
-          body: rows,
-          startY: yPosition,
-          theme: 'striped',
-          styles: { fontSize: 6, cellPadding: 1 },
-          headStyles: { fillColor: [29, 78, 137], textColor: 255 },
-          columnStyles: {
-            1: { cellWidth: 12 }, // Batch_Graduated
-            5: { cellWidth: 20 }, // Status
-            6: { cellWidth: 35 }, // Company
-            7: { cellWidth: 30 }, // Position
-            8: { cellWidth: 25 }, // Salary
-            9: { cellWidth: 20 }, // Sector
-            10: { cellWidth: 30 }, // Post graduate
-          },
-        });
+          // Use the same headers as Excel export for consistency
+          const headers = qproHeaders;
+          const rows = sortAlumniData(detailedData.map((row: any) => mapQPRORow(row)));
+
+          autoTable(doc, {
+            head: [headers],
+            body: rows,
+            startY: yPosition,
+            theme: 'striped',
+            styles: { fontSize: 6, cellPadding: 1 },
+            headStyles: { fillColor: [29, 78, 137], textColor: 255 },
+            columnStyles: {
+              1: { cellWidth: 12 }, // Batch_Graduated
+              5: { cellWidth: 20 }, // Status
+              6: { cellWidth: 35 }, // Company
+              7: { cellWidth: 30 }, // Position
+              8: { cellWidth: 25 }, // Salary
+              9: { cellWidth: 20 }, // Sector
+              10: { cellWidth: 30 }, // Post graduate
+            },
+          });
+        }
       }
     } else if (exportType === 'HIGH_POSITION' && statsByType['HIGH_POSITION']) {
       const stats = statsByType['HIGH_POSITION'];
@@ -2851,47 +2890,48 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // Handle multiple types or ALL - only export types that exist in statsByType
       const typesToExportPDF = Object.keys(statsByType).filter(type => statsByType[type] != null);
       
-      // PHASE 1: Summary for selected types
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      const headerText = typesToExportPDF.length === 5 
-        ? 'Complete Statistics Summary - All Types' 
-        : `Statistics Summary - ${typesToExportPDF.join(', ')}`;
-      doc.text(headerText, 20, yPosition);
-      yPosition += 10;
-
-      // First loop: Add ONLY summaries for selected types
-      for (const type of typesToExportPDF) {
-        const stats = statsByType[type];
-        if (!stats) continue;
-
-        checkPageBreak(60);
-
-        doc.setFontSize(12);
+      // PHASE 1: Summary for selected types (only if tables are included)
+      if (includeTables) {
+        doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
-        doc.text(`${type === 'HIGH_POSITION' ? 'High Position' : type} Statistics`, 20, yPosition);
-        yPosition += 6;
+        const headerText = typesToExportPDF.length === 5 
+          ? 'Complete Statistics Summary - All Types' 
+          : `Statistics Summary - ${typesToExportPDF.join(', ')}`;
+        doc.text(headerText, 20, yPosition);
+        yPosition += 10;
 
-        let summaryData: string[][] = [['Metric', 'Value', 'Percentage']];
+        // First loop: Add ONLY summaries for selected types
+        for (const type of typesToExportPDF) {
+          const stats = statsByType[type];
+          if (!stats) continue;
 
-        if (type === 'QPRO') {
-          summaryData.push(
-            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-            ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
-            ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
-            ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)]
-          );
-          
-          autoTable(doc, {
-            head: [summaryData[0]],
-            body: summaryData.slice(1),
-            startY: yPosition,
-            theme: 'grid',
-            headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
-            styles: { fontSize: 8 },
-          });
+          checkPageBreak(60);
 
-          yPosition = (doc as any).lastAutoTable.finalY + 10;
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text(`${type === 'HIGH_POSITION' ? 'High Position' : type} Statistics`, 20, yPosition);
+          yPosition += 6;
+
+          let summaryData: string[][] = [['Metric', 'Value', 'Percentage']];
+
+          if (type === 'QPRO') {
+            summaryData.push(
+              ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+              ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+              ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
+              ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)]
+            );
+            
+            autoTable(doc, {
+              head: [summaryData[0]],
+              body: summaryData.slice(1),
+              startY: yPosition,
+              theme: 'grid',
+              headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+              styles: { fontSize: 8 },
+            });
+
+            yPosition = (doc as any).lastAutoTable.finalY + 10;
           
           // Add Employability Report by Program table after QPRO summary
           checkPageBreak(20);
@@ -2977,107 +3017,112 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           );
         }
 
-        if (type !== 'QPRO') {
-          autoTable(doc, {
-            head: [summaryData[0]],
-            body: summaryData.slice(1),
-            startY: yPosition,
-            theme: 'grid',
-            headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
-            styles: { fontSize: 8 },
-          });
+          if (type !== 'QPRO') {
+            autoTable(doc, {
+              head: [summaryData[0]],
+              body: summaryData.slice(1),
+              startY: yPosition,
+              theme: 'grid',
+              headStyles: { fillColor: [29, 78, 137], textColor: 255, fontStyle: 'bold' },
+              styles: { fontSize: 8 },
+            });
 
-          yPosition = (doc as any).lastAutoTable.finalY + 10;
+            yPosition = (doc as any).lastAutoTable.finalY + 10;
+          }
         }
-      }
+      } // End of includeTables check for summary tables
 
       // PHASE 2: Add footer BEFORE all detailed data
       yPosition = await addInstitutionalFooterToPDF(doc, pageWidth, pageHeight);
       
-      // Add all relevant charts after footer
-      addAllChartsAfterFooter(typesToExportPDF);
-      
-      // Add new page for detailed data
-      doc.addPage();
-      yPosition = 20;
-
-      // PHASE 3: Add detailed alumni data for selected types only
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      const detailHeaderText = typesToExportPDF.length === 5 
-        ? 'Detailed Alumni Data - All Types' 
-        : `Detailed Alumni Data - ${typesToExportPDF.join(', ')}`;
-      doc.text(detailHeaderText, 20, yPosition);
-      yPosition += 10;
-
-      for (const type of typesToExportPDF) {
-        let detailedData = detailedDataByType[type] || [];
-        if (detailedData.length === 0) continue;
-        
-        // For HIGH_POSITION, filter to only show high position alumni
-        if (type === 'HIGH_POSITION') {
-          const stats = statsByType[type];
-          if (stats?.high_position_data && Array.isArray(stats.high_position_data) && stats.high_position_data.length > 0) {
-            detailedData = stats.high_position_data.map((hp: any) => ({
-              Program: hp.course || '',
-              Batch_Graduated: hp.year_graduated || hp.batch || '',
-              Last_Name: hp.name?.split(' ').slice(-1)[0] || '',
-              First_Name: hp.name?.split(' ')[0] || '',
-              Middle_Name: hp.name?.split(' ').slice(1, -1).join(' ') || '',
-              Company_Name_Current: hp.company || '',
-              Position_Current: hp.position || '',
-            }));
-          } else if (detailedData.length > 0) {
-            detailedData = detailedData.filter((alumnus: any) => {
-              const position = (alumnus.Position_Current || alumnus.position_current || '').toLowerCase();
-              return position.includes('manager') || position.includes('director') || 
-                     position.includes('ceo') || position.includes('president') || 
-                     position.includes('vp') || position.includes('vice president') ||
-                     position.includes('head') || position.includes('chief') ||
-                     position.includes('executive') || position.includes('senior');
-            });
-          }
-        }
-        
-        checkPageBreak(40);
-        
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`${type === 'HIGH_POSITION' ? 'High Position' : type} Detailed Alumni Data`, 20, yPosition);
-        yPosition += 6;
-
-        const headers = type === 'HIGH_POSITION' ? headersHighPosition : qproHeaders;
-        const rows = type === 'HIGH_POSITION' 
-          ? detailedData.map((row: any) => mapHighPositionRow(row))
-          : sortAlumniData(detailedData.map((row: any) => mapQPRORow(row)));
-
-        autoTable(doc, {
-          head: [headers],
-          body: rows,
-          startY: yPosition,
-          theme: 'striped',
-          styles: { fontSize: 6, cellPadding: 1 },
-          headStyles: { fillColor: [29, 78, 137], textColor: 255 },
-          columnStyles: type === 'HIGH_POSITION' ? {
-            0: { cellWidth: 15 }, // Program
-            1: { cellWidth: 12 }, // Batch_Graduated
-            2: { cellWidth: 15 }, // Last_Name
-            3: { cellWidth: 15 }, // First_Name
-            4: { cellWidth: 15 }, // Middle_Name
-            5: { cellWidth: 20 }, // Company_Name_Current
-            6: { cellWidth: 20 }, // Position_Current
-          } : {
-            5: { cellWidth: 20 }, // Status
-            6: { cellWidth: 35 }, // Company
-            7: { cellWidth: 30 }, // Position
-            8: { cellWidth: 25 }, // Salary
-            9: { cellWidth: 20 }, // Sector
-            10: { cellWidth: 30 }, // Post graduate
-          },
-        });
-
-        yPosition = (doc as any).lastAutoTable.finalY + 10;
+      // Add all relevant charts after footer (only if graphs are included)
+      if (includeGraphs) {
+        addAllChartsAfterFooter(typesToExportPDF);
       }
+      
+      // PHASE 3: Add detailed alumni data for selected types only (if tables are included)
+      if (includeTables) {
+        // Add new page for detailed data
+        doc.addPage();
+        yPosition = 20;
+
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        const detailHeaderText = typesToExportPDF.length === 5 
+          ? 'Detailed Alumni Data - All Types' 
+          : `Detailed Alumni Data - ${typesToExportPDF.join(', ')}`;
+        doc.text(detailHeaderText, 20, yPosition);
+        yPosition += 10;
+
+        for (const type of typesToExportPDF) {
+          let detailedData = detailedDataByType[type] || [];
+          if (detailedData.length === 0) continue;
+          
+          // For HIGH_POSITION, filter to only show high position alumni
+          if (type === 'HIGH_POSITION') {
+            const stats = statsByType[type];
+            if (stats?.high_position_data && Array.isArray(stats.high_position_data) && stats.high_position_data.length > 0) {
+              detailedData = stats.high_position_data.map((hp: any) => ({
+                Program: hp.course || '',
+                Batch_Graduated: hp.year_graduated || hp.batch || '',
+                Last_Name: hp.name?.split(' ').slice(-1)[0] || '',
+                First_Name: hp.name?.split(' ')[0] || '',
+                Middle_Name: hp.name?.split(' ').slice(1, -1).join(' ') || '',
+                Company_Name_Current: hp.company || '',
+                Position_Current: hp.position || '',
+              }));
+            } else if (detailedData.length > 0) {
+              detailedData = detailedData.filter((alumnus: any) => {
+                const position = (alumnus.Position_Current || alumnus.position_current || '').toLowerCase();
+                return position.includes('manager') || position.includes('director') || 
+                       position.includes('ceo') || position.includes('president') || 
+                       position.includes('vp') || position.includes('vice president') ||
+                       position.includes('head') || position.includes('chief') ||
+                       position.includes('executive') || position.includes('senior');
+              });
+            }
+          }
+          
+          checkPageBreak(40);
+          
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.text(`${type === 'HIGH_POSITION' ? 'High Position' : type} Detailed Alumni Data`, 20, yPosition);
+          yPosition += 6;
+
+          const headers = type === 'HIGH_POSITION' ? headersHighPosition : qproHeaders;
+          const rows = type === 'HIGH_POSITION' 
+            ? detailedData.map((row: any) => mapHighPositionRow(row))
+            : sortAlumniData(detailedData.map((row: any) => mapQPRORow(row)));
+
+          autoTable(doc, {
+            head: [headers],
+            body: rows,
+            startY: yPosition,
+            theme: 'striped',
+            styles: { fontSize: 6, cellPadding: 1 },
+            headStyles: { fillColor: [29, 78, 137], textColor: 255 },
+            columnStyles: type === 'HIGH_POSITION' ? {
+              0: { cellWidth: 15 }, // Program
+              1: { cellWidth: 12 }, // Batch_Graduated
+              2: { cellWidth: 15 }, // Last_Name
+              3: { cellWidth: 15 }, // First_Name
+              4: { cellWidth: 15 }, // Middle_Name
+              5: { cellWidth: 20 }, // Company_Name_Current
+              6: { cellWidth: 20 }, // Position_Current
+            } : {
+              5: { cellWidth: 20 }, // Status
+              6: { cellWidth: 35 }, // Company
+              7: { cellWidth: 30 }, // Position
+              8: { cellWidth: 25 }, // Salary
+              9: { cellWidth: 20 }, // Sector
+              10: { cellWidth: 30 }, // Post graduate
+            },
+          });
+
+          yPosition = (doc as any).lastAutoTable.finalY + 10;
+        }
+      } // End of includeTables check for detailed data
     }
 
     // Footer is now added BEFORE detailed data in each section above
@@ -3095,11 +3140,18 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
   const exportToWord = async (
     statsByType: Record<string, any>,
     detailedDataByType: Record<string, any[]>,
-    exportType: string
+    exportType: string,
+    format: 'graph' | 'table' | 'both' = 'both'
   ) => {
     const children: (Paragraph | Table)[] = [];
 
     const settings = reportSettings || {};
+    
+    // Determine what to include based on format
+    const includeGraphs = format === 'graph' || format === 'both';
+    const includeTables = format === 'table' || format === 'both';
+    
+    console.log('[Word Export] Report format:', format, 'includeGraphs:', includeGraphs, 'includeTables:', includeTables);
     
     // Skip header if disabled
     if (settings.header_enabled !== false) {
@@ -3805,28 +3857,33 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
     // Export based on type
     if (exportType === 'QPRO' && statsByType['QPRO']) {
       const stats = statsByType['QPRO'];
-      const summaryData = [
-        ['Metric', 'Value', 'Percentage'],
-        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-        ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
-        ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
-        ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)],
-      ];
-      children.push(...createSummaryTable('QPRO Statistics Summary', summaryData));
       
-      // Add Employability Report by Program table
-      const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
+      // Add summary table if tables are included
+      if (includeTables) {
+        const summaryData = [
+          ['Metric', 'Value', 'Percentage'],
+          ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+          ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+          ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
+          ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)],
+        ];
+        children.push(...createSummaryTable('QPRO Statistics Summary', summaryData));
+      }
       
-      children.push(
-        new Paragraph({
-          text: 'Employability Report by Program',
-          heading: HeadingLevel.HEADING_2,
-          spacing: { before: 240, after: 120 },
-        })
-      );
+      // Add Employability Report by Program table (if tables are included)
+      if (includeTables) {
+        const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
+        
+        children.push(
+          new Paragraph({
+            text: 'Employability Report by Program',
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 240, after: 120 },
+          })
+        );
 
-      // Create the breakdown table with two-row header
-      const breakdownRows = [
+        // Create the breakdown table with two-row header
+        const breakdownRows = [
         // First header row with merged cells for quarter headers
         new TableRow({
           children: [
@@ -4108,93 +4165,122 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         ),
       ];
 
-      children.push(
-        new Table({
-          rows: breakdownRows,
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          borders: {
-            top: { style: BorderStyle.SINGLE },
-            bottom: { style: BorderStyle.SINGLE },
-            left: { style: BorderStyle.SINGLE },
-            right: { style: BorderStyle.SINGLE },
-            insideHorizontal: { style: BorderStyle.SINGLE },
-            insideVertical: { style: BorderStyle.SINGLE },
-          },
-        })
-      );
+        children.push(
+          new Table({
+            rows: breakdownRows,
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE },
+              bottom: { style: BorderStyle.SINGLE },
+              left: { style: BorderStyle.SINGLE },
+              right: { style: BorderStyle.SINGLE },
+              insideHorizontal: { style: BorderStyle.SINGLE },
+              insideVertical: { style: BorderStyle.SINGLE },
+            },
+          })
+        );
+      } // End of includeTables check for QPRO Employability Report
       
       // Add footer BEFORE detailed alumni data
       children.push(...await addWordFooter());
       
-      // Add Employment Tracing Chart after footer
-      children.push(...getEmploymentChartElements());
+      // Add Employment Tracing Chart after footer (if graphs are included)
+      if (includeGraphs) {
+        children.push(...getEmploymentChartElements());
+      }
       
-      // Add detailed alumni data
-      const detailedData = detailedDataByType['QPRO'] || [];
-      children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
+      // Add detailed alumni data (if tables are included)
+      if (includeTables) {
+        const detailedData = detailedDataByType['QPRO'] || [];
+        children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
+      }
     } else if (exportType === 'CHED' && statsByType['CHED']) {
       const stats = statsByType['CHED'];
-      const summaryData = [
-        ['Metric', 'Value', 'Percentage'],
-        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-        ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
-        ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
-        ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
-      ];
-      children.push(...createSummaryTable('CHED Statistics Summary', summaryData));
+      
+      // Add summary table if tables are included
+      if (includeTables) {
+        const summaryData = [
+          ['Metric', 'Value', 'Percentage'],
+          ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+          ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
+          ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
+          ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
+        ];
+        children.push(...createSummaryTable('CHED Statistics Summary', summaryData));
+      }
       
       // Add footer BEFORE detailed alumni data
       children.push(...await addWordFooter());
       
-      // Add CHED Chart after footer
-      children.push(...getCHEDChartElements());
+      // Add CHED Chart after footer (if graphs are included)
+      if (includeGraphs) {
+        children.push(...getCHEDChartElements());
+      }
       
-      // Add detailed alumni data
-      const detailedData = detailedDataByType['CHED'] || [];
-      children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
+      // Add detailed alumni data (if tables are included)
+      if (includeTables) {
+        const detailedData = detailedDataByType['CHED'] || [];
+        children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
+      }
     } else if (exportType === 'AACUP' && statsByType['AACUP']) {
       const stats = statsByType['AACUP'];
-      const summaryData = [
-        ['Metric', 'Value', 'Percentage'],
-        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-        ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
-        ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
-        ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
-        ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
-        ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)],
-      ];
-      children.push(...createSummaryTable('AACUP Statistics Summary', summaryData));
+      
+      // Add summary table if tables are included
+      if (includeTables) {
+        const summaryData = [
+          ['Metric', 'Value', 'Percentage'],
+          ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+          ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+          ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
+          ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+          ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
+          ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)],
+        ];
+        children.push(...createSummaryTable('AACUP Statistics Summary', summaryData));
+      }
       
       // Add footer BEFORE detailed alumni data
       children.push(...await addWordFooter());
       
-      // Add AACUP Chart after footer
-      children.push(...getAACUPChartElements());
+      // Add AACUP Chart after footer (if graphs are included)
+      if (includeGraphs) {
+        children.push(...getAACUPChartElements());
+      }
       
-      // Add detailed alumni data
-      const detailedData = detailedDataByType['AACUP'] || [];
-      children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
+      // Add detailed alumni data (if tables are included)
+      if (includeTables) {
+        const detailedData = detailedDataByType['AACUP'] || [];
+        children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
+      }
     } else if (exportType === 'SUC' && statsByType['SUC']) {
       const stats = statsByType['SUC'];
-      const summaryData = [
-        ['Metric', 'Value', 'Percentage'],
-        ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-        ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
-        ['Average Salary', formatCurrencyForPDF(stats.average_salary), '--'],
-        ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
-        ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
-      ];
-      children.push(...createSummaryTable('SUC Statistics Summary', summaryData));
+      
+      // Add summary table if tables are included
+      if (includeTables) {
+        const summaryData = [
+          ['Metric', 'Value', 'Percentage'],
+          ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+          ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+          ['Average Salary', formatCurrencyForPDF(stats.average_salary), '--'],
+          ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
+          ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
+        ];
+        children.push(...createSummaryTable('SUC Statistics Summary', summaryData));
+      }
       
       // Add footer BEFORE detailed alumni data
       children.push(...await addWordFooter());
       
-      // Add SUC Chart after footer
-      children.push(...getSUCChartElements());
+      // Add SUC Chart after footer (if graphs are included)
+      if (includeGraphs) {
+        children.push(...getSUCChartElements());
+      }
       
-      // Add detailed alumni data
-      const detailedData = detailedDataByType['SUC'] || [];
-      children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
+      // Add detailed alumni data (if tables are included)
+      if (includeTables) {
+        const detailedData = detailedDataByType['SUC'] || [];
+        children.push(...createDetailedTable('Detailed Alumni Data', detailedData));
+      }
     } else if (exportType === 'HIGH_POSITION' && statsByType['HIGH_POSITION']) {
       const stats = statsByType['HIGH_POSITION'];
       const summaryData = [
@@ -4314,59 +4400,60 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // Handle multiple types or ALL - only export types that exist in statsByType
       const typesToExportWord = Object.keys(statsByType).filter(type => statsByType[type] != null);
       
-      // PHASE 1: Summary for selected types (summaries ONLY)
-      for (const type of typesToExportWord) {
-        const stats = statsByType[type];
-        if (!stats) continue;
+      // PHASE 1: Summary for selected types (summaries ONLY) - only if tables are included
+      if (includeTables) {
+        for (const type of typesToExportWord) {
+          const stats = statsByType[type];
+          if (!stats) continue;
 
-        let summaryData: string[][] = [['Metric', 'Value', 'Percentage']];
+          let summaryData: string[][] = [['Metric', 'Value', 'Percentage']];
 
-        if (type === 'QPRO') {
-          summaryData.push(
-            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-            ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
-            ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
-            ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)]
-          );
-        } else if (type === 'CHED') {
-          summaryData.push(
-            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-            ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
-            ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
-            ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
-            ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)]
-          );
-        } else if (type === 'SUC') {
-          summaryData.push(
-            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-            ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
-            ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
-            ['Average Salary', formatCurrencyForPDF(stats.average_salary), '--'],
-            ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
-            ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
-            ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
-            ['International', String(stats.international_count || 0), pct(stats.international_count, stats.total_alumni)]
-          );
-        } else if (type === 'AACUP') {
-          summaryData.push(
-            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-            ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
-            ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
-            ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
-            ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
-            ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)]
-          );
-        } else if (type === 'HIGH_POSITION') {
-          summaryData.push(
-            ['Total Alumni', String(stats.total_alumni || 0), '100%'],
-            ['High Position Alumni', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)]
-          );
-        }
+          if (type === 'QPRO') {
+            summaryData.push(
+              ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+              ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+              ['Unemployed', String(stats.unemployed_count || 0), pct(stats.unemployed_count, stats.total_alumni)],
+              ['Untracked', String(stats.untracked_count || 0), pct(stats.untracked_count, stats.total_alumni)]
+            );
+          } else if (type === 'CHED') {
+            summaryData.push(
+              ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+              ['Pursuing Further Study', String(stats.pursuing_further_study || 0), pct(stats.pursuing_further_study, stats.total_alumni)],
+              ['Not Pursuing', String((stats.total_alumni || 0) - (stats.pursuing_further_study || 0)), pct((stats.total_alumni || 0) - (stats.pursuing_further_study || 0), stats.total_alumni)],
+              ['Job Aligned', String(stats.job_aligned_count || 0), pct(stats.job_aligned_count, stats.total_alumni)],
+              ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)]
+            );
+          } else if (type === 'SUC') {
+            summaryData.push(
+              ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+              ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+              ['Other Positions', String((stats.total_alumni || 0) - (stats.high_position_count || 0)), pct((stats.total_alumni || 0) - (stats.high_position_count || 0), stats.total_alumni)],
+              ['Average Salary', formatCurrencyForPDF(stats.average_salary), '--'],
+              ['Government', String(stats.public_count || 0), pct(stats.public_count, stats.total_alumni)],
+              ['Private', String(stats.private_count || 0), pct(stats.private_count, stats.total_alumni)],
+              ['Local', String(stats.local_count || 0), pct(stats.local_count, stats.total_alumni)],
+              ['International', String(stats.international_count || 0), pct(stats.international_count, stats.total_alumni)]
+            );
+          } else if (type === 'AACUP') {
+            summaryData.push(
+              ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+              ['Employed', String(stats.employed_count || 0), pct(stats.employed_count, stats.total_alumni)],
+              ['Absorbed', String(stats.absorbed_count || 0), pct(stats.absorbed_count, stats.total_alumni)],
+              ['High Position', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)],
+              ['Self-Employed', String(stats.self_employed_count || 0), pct(stats.self_employed_count, stats.total_alumni)],
+              ['Awards Received', String(stats.awards_count || 0), pct(stats.awards_count, stats.total_alumni)]
+            );
+          } else if (type === 'HIGH_POSITION') {
+            summaryData.push(
+              ['Total Alumni', String(stats.total_alumni || 0), '100%'],
+              ['High Position Alumni', String(stats.high_position_count || 0), pct(stats.high_position_count, stats.total_alumni)]
+            );
+          }
 
-        children.push(...createSummaryTable(`${type === 'HIGH_POSITION' ? 'High Position' : type} Statistics`, summaryData));
-        
-        // Add Employability Report by Program table for QPRO in ALL export
-        if (type === 'QPRO') {
+          children.push(...createSummaryTable(`${type === 'HIGH_POSITION' ? 'High Position' : type} Statistics`, summaryData));
+          
+          // Add Employability Report by Program table for QPRO in ALL export
+          if (type === 'QPRO') {
           const programBreakdown = calculateQPROProgramBreakdown(detailedDataByType['QPRO'] || []);
           
           children.push(
@@ -4537,17 +4624,21 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
               },
             })
           );
+          }
         }
-      }
+      } // End of includeTables check for summary tables
 
       // PHASE 2: Add footer BEFORE all detailed data
       children.push(...await addWordFooter());
 
-      // Add all relevant charts after footer
-      children.push(...getAllChartElements(typesToExportWord));
+      // Add all relevant charts after footer (only if graphs are included)
+      if (includeGraphs) {
+        children.push(...getAllChartElements(typesToExportWord));
+      }
 
-      // PHASE 3: Add detailed alumni data for selected types only
-      for (const type of typesToExportWord) {
+      // PHASE 3: Add detailed alumni data for selected types only (if tables are included)
+      if (includeTables) {
+        for (const type of typesToExportWord) {
         let detailedData = detailedDataByType[type] || [];
         if (detailedData.length === 0) continue;
         
@@ -4637,9 +4728,10 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
             })
           );
         } else {
-          children.push(...createDetailedTable(`${type} Detailed Alumni Data`, detailedData));
+            children.push(...createDetailedTable(`${type} Detailed Alumni Data`, detailedData));
+          }
         }
-      }
+      } // End of includeTables check for detailed data
     }
 
     // ========================================
@@ -4722,7 +4814,8 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
       // Route to appropriate export function based on format
       if (format === 'pdf') {
         console.log('Exporting PDF with aiSummaries:', aiSummaries);
-        await exportToPDF(statsByType, detailedDataByType, exportType);
+        console.log('Report format:', reportFormat);
+        await exportToPDF(statsByType, detailedDataByType, exportType, reportFormat);
         setExporting(false);
         showToast('PDF exported successfully!');
         return;
@@ -4730,7 +4823,8 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
         console.log('[Word Export] Starting Word export...');
         console.log('[Word Export] aiSummaries state:', JSON.stringify(aiSummaries));
         console.log('[Word Export] Chart data lengths: QPRO=' + yearChartData.length + ', CHED=' + chedChartData.length + ', SUC=' + sucChartData.length + ', AACUP=' + aacupChartData.length);
-        await exportToWord(statsByType, detailedDataByType, exportType);
+        console.log('Report format:', reportFormat);
+        await exportToWord(statsByType, detailedDataByType, exportType, reportFormat);
         setExporting(false);
         showToast('Word document exported successfully!');
         return;
@@ -6478,104 +6572,182 @@ const GenerateStatsModal: React.FC<Props> = ({ onClose, onGenerate }) => {
           </div>
         </div>
 
+        {/* Statistics Report Row - Dropdown + Export Buttons */}
         <div style={{ marginBottom: 8, marginTop: 8 }}>
-          <label style={{ ...label, marginBottom: 0 }}>Statistics Report:</label>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, position: 'relative', zIndex: 50 }}>
-          {/* Multi-select Statistics Type Dropdown */}
-          <div style={{ flex: '0 0 200px', position: 'relative', zIndex: 9999, marginRight: 20 }} ref={typeDropdownRef}>
-            <div
-              onClick={() => setTypeDropdownOpen(!typeDropdownOpen)}
-              style={{
-                ...dropdown,
-                width: '100%',
-                cursor: 'pointer',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                userSelect: 'none',
-              }}
-            >
-              <span>{getTypesDisplayText()}</span>
-              <span style={{ marginLeft: 8, fontSize: 10 }}>{typeDropdownOpen ? '▲' : '▼'}</span>
-            </div>
-            {typeDropdownOpen && (
-              <div style={multiSelectDropdown}>
-              {typeOptions.map((type) => (
-                  <div
-                    key={type.value}
-                    style={multiSelectOption(
-                      type.value === 'ALL' 
-                        ? selectedTypes.includes('ALL') 
-                        : selectedTypes.includes(type.value as StatsType)
-                    )}
-                    onClick={() => toggleTypeSelection(type.value as StatsType)}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={
+          <label style={{ ...label, marginBottom: 8, display: 'block' }}>Statistics Report:</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {/* Multi-select Statistics Type Dropdown */}
+            <div style={{ position: 'relative', zIndex: 9999 }} ref={typeDropdownRef}>
+              <div
+                onClick={() => setTypeDropdownOpen(!typeDropdownOpen)}
+                style={{
+                  ...dropdown,
+                  width: '200px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  userSelect: 'none',
+                }}
+              >
+                <span>{getTypesDisplayText()}</span>
+                <span style={{ marginLeft: 8, fontSize: 10 }}>{typeDropdownOpen ? '▲' : '▼'}</span>
+              </div>
+              {typeDropdownOpen && (
+                <div style={multiSelectDropdown}>
+                {typeOptions.map((type) => (
+                    <div
+                      key={type.value}
+                      style={multiSelectOption(
                         type.value === 'ALL' 
                           ? selectedTypes.includes('ALL') 
                           : selectedTypes.includes(type.value as StatsType)
-                      }
-                      onChange={() => {}}
-                      style={{ marginRight: 8 }}
-                    />
-                  {type.label}
-                  </div>
-              ))}
-              </div>
-            )}
+                      )}
+                      onClick={() => toggleTypeSelection(type.value as StatsType)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={
+                          type.value === 'ALL' 
+                            ? selectedTypes.includes('ALL') 
+                            : selectedTypes.includes(type.value as StatsType)
+                        }
+                        onChange={() => {}}
+                        style={{ marginRight: 8 }}
+                      />
+                    {type.label}
+                    </div>
+                ))}
+                </div>
+              )}
+            </div>
+
+            {/* Export and Generate Buttons - beside dropdown */}
+            <button
+              style={{
+                ...exportButton, 
+                backgroundColor: '#28a745', 
+                opacity: (exporting || loading || needsRegenerate) ? 0.5 : 1,
+                cursor: (exporting || loading || needsRegenerate) ? 'not-allowed' : 'pointer'
+              }}
+              onClick={() => handleExportCompleteData('excel')}
+              disabled={exporting || loading || needsRegenerate || !aiSummariesReady}
+              title={needsRegenerate ? 'Please click Generate first' : !aiSummariesReady ? 'Waiting for AI Analysis to complete...' : 'Export data to Excel format'}
+            >
+              {exporting ? '⏳ Exporting...' : !aiSummariesReady && !needsRegenerate ? '⏳ AI Loading...' : '📊 Export Excel'}
+            </button>
+            <button
+              style={{
+                ...exportButton, 
+                backgroundColor: '#dc3545', 
+                opacity: (exporting || loading || needsRegenerate || !aiSummariesReady) ? 0.5 : 1,
+                cursor: (exporting || loading || needsRegenerate || !aiSummariesReady) ? 'not-allowed' : 'pointer'
+              }}
+              onClick={() => handleExportCompleteData('pdf')}
+              disabled={exporting || loading || needsRegenerate || !aiSummariesReady}
+              title={needsRegenerate ? 'Please click Generate first' : !aiSummariesReady ? 'Waiting for AI Analysis to complete...' : 'Export data to PDF format'}
+            >
+              {exporting ? '⏳ Exporting...' : !aiSummariesReady && !needsRegenerate ? '⏳ AI Loading...' : '📄 Export PDF'}
+            </button>
+            <button
+              style={{
+                ...exportButton, 
+                backgroundColor: '#0d6efd', 
+                opacity: (exporting || loading || needsRegenerate || !aiSummariesReady) ? 0.5 : 1,
+                cursor: (exporting || loading || needsRegenerate || !aiSummariesReady) ? 'not-allowed' : 'pointer'
+              }}
+              onClick={() => handleExportCompleteData('word')}
+              disabled={exporting || loading || needsRegenerate || !aiSummariesReady}
+              title={needsRegenerate ? 'Please click Generate first' : !aiSummariesReady ? 'Waiting for AI Analysis to complete...' : 'Export data to Word format'}
+            >
+              {exporting ? '⏳ Exporting...' : !aiSummariesReady && !needsRegenerate ? '⏳ AI Loading...' : '📝 Export Word'}
+            </button>
+            <button
+              style={generateButton}
+              onClick={handleGenerate}
+              disabled={loading}
+            >
+              Generate
+            </button>
           </div>
-          <button
-            style={{
-              ...exportButton, 
-              backgroundColor: '#28a745', 
-              marginRight: '8px',
-              opacity: (exporting || loading || needsRegenerate) ? 0.5 : 1,
-              cursor: (exporting || loading || needsRegenerate) ? 'not-allowed' : 'pointer'
-            }}
-            onClick={() => handleExportCompleteData('excel')}
-            disabled={exporting || loading || needsRegenerate || !aiSummariesReady}
-            title={needsRegenerate ? 'Please click Generate first' : !aiSummariesReady ? 'Waiting for AI Analysis to complete...' : 'Export data to Excel format'}
-          >
-            {exporting ? '⏳ Exporting...' : !aiSummariesReady && !needsRegenerate ? '⏳ AI Loading...' : '📊 Export Excel'}
-          </button>
-          <button
-            style={{
-              ...exportButton, 
-              backgroundColor: '#dc3545', 
-              marginRight: '8px',
-              opacity: (exporting || loading || needsRegenerate || !aiSummariesReady) ? 0.5 : 1,
-              cursor: (exporting || loading || needsRegenerate || !aiSummariesReady) ? 'not-allowed' : 'pointer'
-            }}
-            onClick={() => handleExportCompleteData('pdf')}
-            disabled={exporting || loading || needsRegenerate || !aiSummariesReady}
-            title={needsRegenerate ? 'Please click Generate first' : !aiSummariesReady ? 'Waiting for AI Analysis to complete...' : 'Export data to PDF format'}
-          >
-            {exporting ? '⏳ Exporting...' : !aiSummariesReady && !needsRegenerate ? '⏳ AI Loading...' : '📄 Export PDF'}
-          </button>
-          <button
-            style={{
-              ...exportButton, 
-              backgroundColor: '#0d6efd', 
-              marginRight: '8px',
-              opacity: (exporting || loading || needsRegenerate || !aiSummariesReady) ? 0.5 : 1,
-              cursor: (exporting || loading || needsRegenerate || !aiSummariesReady) ? 'not-allowed' : 'pointer'
-            }}
-            onClick={() => handleExportCompleteData('word')}
-            disabled={exporting || loading || needsRegenerate || !aiSummariesReady}
-            title={needsRegenerate ? 'Please click Generate first' : !aiSummariesReady ? 'Waiting for AI Analysis to complete...' : 'Export data to Word format'}
-          >
-            {exporting ? '⏳ Exporting...' : !aiSummariesReady && !needsRegenerate ? '⏳ AI Loading...' : '📝 Export Word'}
-          </button>
-          <button
-            style={generateButton}
-            onClick={handleGenerate}
-            disabled={loading}
-          >
-            Generate
-          </button>
+        </div>
+          
+        {/* Report Format Toggle - Below the dropdown row */}
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 12, color: '#6c757d', marginBottom: 6, display: 'block' }}>Report Format:</label>
+          <div style={{ 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            gap: 2,
+            backgroundColor: '#e9ecef',
+            borderRadius: 8,
+            padding: '3px',
+            border: '1px solid #dee2e6',
+          }}>
+            <button
+              onClick={() => setReportFormat('graph')}
+              style={{
+                padding: '6px 12px',
+                border: 'none',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                backgroundColor: reportFormat === 'graph' ? '#1D4E89' : 'transparent',
+                color: reportFormat === 'graph' ? 'white' : '#495057',
+                transition: 'all 0.2s ease',
+              }}
+              title="Export with graphs only"
+            >
+              <FaChartLine size={12} />
+              Graph
+            </button>
+            <button
+              onClick={() => setReportFormat('table')}
+              style={{
+                padding: '6px 12px',
+                border: 'none',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                backgroundColor: reportFormat === 'table' ? '#1D4E89' : 'transparent',
+                color: reportFormat === 'table' ? 'white' : '#495057',
+                transition: 'all 0.2s ease',
+              }}
+              title="Export with tables only"
+            >
+              <BsTable size={12} />
+              Table
+            </button>
+            <button
+              onClick={() => setReportFormat('both')}
+              style={{
+                padding: '6px 12px',
+                border: 'none',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                backgroundColor: reportFormat === 'both' ? '#1D4E89' : 'transparent',
+                color: reportFormat === 'both' ? 'white' : '#495057',
+                transition: 'all 0.2s ease',
+              }}
+              title="Export with both graphs and tables"
+            >
+              <BsGrid3X3Gap size={12} />
+              Both
+            </button>
+          </div>
         </div>
         </div>
 
